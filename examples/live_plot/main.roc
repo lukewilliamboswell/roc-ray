@@ -7,14 +7,14 @@ import rr.App
 import rr.Files
 import "assets/fonts/LiberationSans-Regular.ttf" as liberation_sans : List(U8)
 import rr.Camera
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Task
 import rr.Text
 
-## Walk a source tree from the working directory and plot every line of it,
-## while it is still being walked.
+## Walk a source tree and plot every line while it is still being discovered.
 ##
 ## Nothing about the dataset is known when this starts. There is no list of
 ## files: `Files.list!` reports one directory, the app decides which of its
@@ -89,7 +89,11 @@ import rr.Text
 ##
 ##     roc build examples/live_plot/main.roc --output live_plot
 ##     ./live_plot
+##
+## Run with `--record-demo` to plot a deterministic built-in source tree and
+## write `examples/gallery/live_plot.gif`.
 Model : {
+	demo : Bool,
 
 	## The one sprite behind every point, and the offscreen buffer it is
 	## painted into. A batch draws a single texture, so hundreds of differently
@@ -366,6 +370,96 @@ Msg : [
 Work : [ListDir(Str), ReadFile(Str, [New, Lane(U64)])]
 
 program = { init!, update!, render! }
+
+demo_frames : U64
+demo_frames = 150
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+live_plot_config : List(Str) -> App.Config
+live_plot_config = |args| {
+	base = App.default
+		.with_title("A tree, streamed - RocRay live plot")
+		.with_size({ width: 1240, height: 860 })
+		.with_min_size({ width: 980, height: 640 })
+		.with_resizable(Bool.True)
+		.with_frame_pacing(VSync)
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("live_plot.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
+## A small built-in tree for reproducible capture. Each file still enters as a
+## `FileRead` message and goes through the ordinary bounded parser.
+demo_paths : List(Str)
+demo_paths = [
+	"platform/App.roc",
+	"platform/Draw.roc",
+	"src/runtime.zig",
+	"src/capture.zig",
+	"examples/breakout.roc",
+	"examples/particles.roc",
+	"docs/guide.md",
+	"platform/Color.roc",
+	"src/render.zig",
+	"tests/host.c",
+	"examples/snake.roc",
+	"platform/Task.roc",
+	"scripts/gallery.py",
+	"docs/design.md",
+	"platform/Files.roc",
+	"src/input.zig",
+	"examples/plot.roc",
+	"README.md",
+]
+
+demo_bytes : U64 -> List(U8)
+demo_bytes = |file_index| {
+	lines = List.map_with_index(
+		List.repeat({}, 96),
+		|_unit, line_index| {
+			width = 12 + ((line_index * 29 + file_index * 17 + (line_index % 7) * 11) % 104)
+			Str.repeat(
+				if line_index % 5 == 0 {
+					"#"
+				} else {
+					"x"
+				},
+				width,
+			)
+		},
+	)
+	Str.to_utf8(Str.join_with(lines, "\n"))
+}
+
+demo_message : U64 -> Try(Msg, [None])
+demo_message = |cycle| {
+	interval = 6
+	if cycle % interval != 0 {
+		Err(None)
+	} else {
+		index = cycle / interval
+		match List.get(demo_paths, index) {
+			Ok(path) => Ok(FileRead(path, New, Ok(demo_bytes(index))))
+			Err(_) => Err(None)
+		}
+	}
+}
 
 # ---------------------------------------------------------------------------
 # The tree
@@ -1506,14 +1600,9 @@ other_mode = |mode|
 # ---------------------------------------------------------------------------
 
 init! : App.Init(Model, _)
-init! = App.init(
-	App.default
-		.with_title("A tree, streamed - RocRay live plot")
-		.with_size({ width: 1240, height: 860 })
-		.with_min_size({ width: 980, height: 640 })
-		.with_resizable(Bool.True)
-		.with_frame_pacing(VSync),
-	|_startup| {
+init! = App.init_for_args(
+	live_plot_config,
+	|startup| {
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
 		# is rasterised at the size it is loaded at, so a masthead drawn from a
 		# 15-pixel atlas is soft and a table label drawn from a 34-pixel one is
@@ -1539,6 +1628,7 @@ init! = App.init(
 				.prepare!()?
 
 		Ok({
+			demo: List.contains(App.args!(startup), record_demo_flag),
 			glow: glow,
 			pending: [],
 			in_flight: 0,
@@ -1581,11 +1671,23 @@ update! = |model, program_input| {
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
 	#    deal more work while it is at it.
-	settled_model = List.fold(program_input.messages, model, receive)
+	received = List.fold(program_input.messages, model, receive)
+	settled_model =
+		if model.demo {
+			match demo_message(program_input.time.cycle_count) {
+				Ok(message) => {
+					with_file = { ..received, walk: { ..received.walk, files_found: received.walk.files_found + 1 } }
+					receive(with_file, message)
+				}
+				Err(_) => received
+			}
+		} else {
+			received
+		}
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
 	primed =
-		if program_input.time.cycle_count == 0 {
+		if !model.demo and program_input.time.cycle_count == 0 {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
@@ -1606,7 +1708,11 @@ update! = |model, program_input| {
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
 	#    were dropped. At most one of these is outstanding.
-	refetched = request_refetch(viewed)
+	refetched = if model.demo {
+		viewed
+	} else {
+		request_refetch(viewed)
+	}
 
 	# 6. Start whatever fits -- unless the parser is already behind. The
 	#    in-flight budget bounds how many reads are *running*; this bounds how
@@ -1615,7 +1721,7 @@ update! = |model, program_input| {
 	#    a whole tree of bytes while the parser works through it one window at
 	#    a time.
 	ready =
-		if List.len(refetched.arrivals) >= arrival_limit {
+		if model.demo or List.len(refetched.arrivals) >= arrival_limit {
 			{ pending: refetched.pending, starting: [] }
 		} else {
 			take_ready(refetched.pending, refetched.in_flight)
@@ -1625,10 +1731,22 @@ update! = |model, program_input| {
 		start_work!(program_input, work)
 	}
 
-	if program_input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..refetched, pending: ready.pending, in_flight: refetched.in_flight + List.len(ready.starting) })
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if program_input.devices.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..refetched, pending: ready.pending, in_flight: refetched.in_flight + List.len(ready.starting) })
 	}
 }
 

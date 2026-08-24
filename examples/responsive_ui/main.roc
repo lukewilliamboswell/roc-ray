@@ -1,6 +1,7 @@
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Devices
@@ -9,7 +10,8 @@ import rr.Mouse
 import rr.Text
 import rr.Window
 
-## A settings screen that rearranges itself as the window resizes.
+## A settings screen that rearranges itself as the window resizes. Pass
+## `--record-demo` to record a deterministic tour of its panels.
 ##
 ## `layout_for` is a pure function of the surface size, and both callbacks call
 ## it: `update!` to decide what the pointer is over, `render!` to draw. Nothing
@@ -51,24 +53,50 @@ Model : {
 	simulation_nanos : U64,
 	monitors : List(Window.Monitor),
 	monitor_choice : U64,
+	demo : Bool,
 }
 
 program = { init!, update!, render! }
 
+demo_frames : U64
+demo_frames = 150
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+responsive_config : List(Str) -> App.Config
+responsive_config = |args| {
+	base =
+		App.default
+			.with_title("RocRay Responsive UI")
+			.with_size({ width: 960, height: 640 })
+			.with_resizable(Bool.True)
+			.with_min_size({ width: 480, height: 400 })
+			.with_exit_key(NoExitKey)
+			.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("responsive_ui.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
 init! : App.Init(Model, [ResourceLimit])
-init! = App.init(
-	App.default
-		.with_title("RocRay Responsive UI")
-		.with_size({ width: 960, height: 640 })
-		.with_resizable(Bool.True)
-	# The layout stops being usable below this, so keep the window manager
-	# out of that range. A minimum only binds on a resizable window.
-		.with_min_size({ width: 480, height: 400 })
-	# Escape is an ordinary key on a settings screen, so take it back from
-	# raylib and own shutdown ourselves.
-		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	responsive_config,
+	|startup| {
 		font = Draw.default_font!()
 		Ok({
 			ui: Box.box({
@@ -87,6 +115,7 @@ init! = App.init(
 			simulation_nanos: 0,
 			monitors: Window.monitors!(),
 			monitor_choice: 0,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
@@ -314,7 +343,13 @@ update! = |model, program_input| {
 	hover_controls = view.controls_bounds.contains(mouse)
 	Mouse.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
-	from_keyboard = keyboard_selection(model.selection, input)
+	cycle = program_input.time.cycle_count
+	selection_input =
+		if model.demo and cycle == 38 Devices.none.with_key_pressed(KeyDown)
+		else if model.demo and cycle == 78 Devices.none.with_key_pressed(KeyDown)
+		else if model.demo and cycle == 118 Devices.none.with_key_pressed(KeyUp)
+		else input
+	from_keyboard = keyboard_selection(model.selection, selection_input)
 	selection = if input.mouse.button_pressed(Left) and hover_display {
 		Display
 	} else if input.mouse.button_pressed(Left) and hover_audio {
@@ -331,7 +366,13 @@ update! = |model, program_input| {
 
 	# With `with_exit_key(NoExitKey)` no key closes the window on its
 	# own, so the app decides. Escape is left free for the UI to use.
-	if input.key_pressed(KeyQ) {
+	if model.demo {
+		match program_input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(1))
+			_ => Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
+		}
+	} else if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
 		Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })

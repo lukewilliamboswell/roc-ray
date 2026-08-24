@@ -9,6 +9,7 @@ import rr.Assets
 import rr.Audio
 import rr.Camera
 import rr.Color
+import rr.Capture
 import rr.Draw
 import rr.Devices
 import rr.Keys
@@ -25,6 +26,8 @@ import rr.Tilemap
 ## nothing else decides when a sound plays. Sprites, a follow camera with
 ## screen shake, looping music, and synthesized fallbacks for missing `.ogg`
 ## files round out the loop.
+##
+## Run with `--record-demo` to write a deterministic gallery GIF.
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
 	is_eq : _
 }
@@ -299,6 +302,8 @@ Model : {
 	level : Level,
 	sounds : Sounds,
 	world : World,
+	demo : Bool,
+	demo_frame : U64,
 }
 
 program = { init!, update!, render! }
@@ -415,10 +420,38 @@ fallback_exit_radius = 58
 burst_duration : F32
 burst_duration = 0.36
 
+demo_frames : U64
+demo_frames = 150
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+top_down_config : List(Str) -> App.Config
+top_down_config = |args| {
+	base = App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("top_down.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Quarter)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
 init! : App.Init(Model, _)
-init! = App.init(
-	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	top_down_config,
+	|startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
 		tiles = Assets.load_texture!(assets, "kenney-topdown/tiles.png")?
@@ -464,7 +497,12 @@ init! = App.init(
 		level = level_from_tilemap(tilemap)
 		sounds = make_sounds!()?
 		sounds.music.play!()
-		Ok(new_game(Draw.default_font!(), characters, tiles, level, sounds))
+		model = new_game(Draw.default_font!(), characters, tiles, level, sounds)
+		Ok({
+			..model,
+			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo_frame: 0,
+		})
 	},
 )
 
@@ -517,6 +555,8 @@ new_game = |font, characters, tiles, level, sounds| {
 	level,
 	sounds,
 	world: World.new(level),
+	demo: Bool.False,
+	demo_frame: 0,
 }
 
 fallback_sparks : List(World.Spark)
@@ -728,6 +768,31 @@ input_axis = |input| {
 	down = input.key_down(KeyDown) or input.key_down(KeyS)
 
 	{ x: axis(left, right), y: axis(up, down) }
+}
+
+## A short route through the arena, expressed as the same device snapshots the
+## interactive game consumes. It collects a spark, then dashes through the map
+## to show movement, animation, camera tracking, and screen shake.
+demo_input : U64 -> Devices.Snapshot
+demo_input = |frame| {
+	base =
+		if frame < 19 {
+			Devices.none.with_key_down(KeyD).with_key_down(KeyS)
+		} else if frame < 38 {
+			Devices.none.with_key_down(KeyW)
+		} else if frame < 76 {
+			Devices.none.with_key_down(KeyD)
+		} else if frame < 108 {
+			Devices.none.with_key_down(KeyS).with_key_down(KeyD)
+		} else {
+			Devices.none.with_key_down(KeyA)
+		}
+
+	if frame == 20 or frame == 43 or frame == 82 or frame == 116 {
+		base.with_key_pressed(KeySpace)
+	} else {
+		base
+	}
 }
 
 facing_from_input : Math.Vec2, Facing -> Facing
@@ -1086,8 +1151,9 @@ advance_playing = |model, input, dt| {
 restart_on_space : Model, Devices.Snapshot -> { model : Model, cues : List(Cue) }
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
+		fresh = new_game(model.font, model.characters, model.tiles, model.level, model.sounds)
 		{
-			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
+			model: { ..fresh, demo: model.demo, demo_frame: model.demo_frame },
 			cues: [MusicVolume(music_volume)],
 		}
 	} else {
@@ -1101,7 +1167,7 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	input = program_input.devices
+	input = if model.demo demo_input(model.demo_frame) else program_input.devices
 
 	next = match model.world.state {
 		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
@@ -1113,10 +1179,22 @@ update! = |model, program_input| {
 		perform_cue!(model, cue)
 	}
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok(next.model)
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if input.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..next.model, demo_frame: model.demo_frame + 1 })
 	}
 }
 

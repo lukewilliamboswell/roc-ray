@@ -5,12 +5,13 @@ app [Model, program] {
 
 import rr.App
 import rr.Assets
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
 
-## A sprite fountain that draws every particle in a single hosted call.
+## A sprite fountain that draws every particle in one hosted call.
 ##
 ## `frame.texture!` crosses the Roc/host boundary once per sprite, and at a few
 ## thousand sprites that crossing, not the GPU, is what a frame is spent on.
@@ -23,11 +24,13 @@ import rr.Text
 ## particle record can stay whatever the application wants it to be.
 ##
 ## Move the pointer to steer the emitter, hold Space for a wider spray, ESC quits.
+## Run with `--record-demo` to write a deterministic gallery GIF.
 Model : {
 	sprite : Draw.Texture,
 	particles : List(Particle),
 	instances : List(Draw.TextureInstance),
 	hud : Text.Prepared,
+	demo : Bool,
 }
 
 ## One particle. `seed` and `phase` are fixed per particle, so respawns are
@@ -49,6 +52,37 @@ program = { init!, update!, render! }
 
 particle_count : U64
 particle_count = 4000
+
+demo_frames : U64
+demo_frames = 125
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+particles_config : List(Str) -> App.Config
+particles_config = |args| {
+	base = App.default
+		.with_title("RocRay Particles")
+		.with_size({ width: 800, height: 600 })
+		.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("particles.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Quarter)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
 
 sprite_source : Math.Rect
 sprite_source = Math.rect(0, 0, 8, 8)
@@ -124,12 +158,9 @@ to_instance = |particle| {
 }
 
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed])
-init! = App.init(
-	App.default
-		.with_title("RocRay Particles")
-		.with_size({ width: 800, height: 600 })
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	particles_config,
+	|startup| {
 		sprite = Assets.generate_color_texture!({ width: 8, height: 8, color: Color.white })?
 		font = Draw.default_font!()
 		Ok({
@@ -137,6 +168,7 @@ init! = App.init(
 			particles: initial_particles,
 			instances: List.map(initial_particles, to_instance),
 			hud: Text.from("4000 sprites, one hosted call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
@@ -146,10 +178,13 @@ update! = |model, program_input| {
 	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
 	dt = F32.min(program_input.time.elapsed_seconds, 0.05)
-	spread = if input.key_down(KeySpace) 1.9 else 0.7
+	spread = if model.demo or input.key_down(KeySpace) 1.9 else 0.7
 	pointer = input.mouse.position()
 	emitter =
-		if pointer.x == 0 and pointer.y == 0 {
+		if model.demo {
+			phase = U64.to_f32(program_input.time.cycle_count) * 0.055
+			{ x: 400 + F32.sin(phase) * 170, y: 205 + F32.cos(phase * 0.7) * 45 }
+		} else if pointer.x == 0 and pointer.y == 0 {
 			{ x: I32.to_f32(program_input.window.size.width) / 2, y: I32.to_f32(program_input.window.size.height) / 3 }
 		} else {
 			pointer
@@ -157,10 +192,22 @@ update! = |model, program_input| {
 
 	particles = List.map(model.particles, |particle| step_particle(particle, emitter, spread, dt))
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, particles: particles, instances: List.map(particles, to_instance) })
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if input.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..model, particles: particles, instances: List.map(particles, to_instance) })
 	}
 }
 

@@ -7,6 +7,7 @@ import rr.App
 import rr.Assets
 import rr.Audio
 import rr.Color
+import rr.Capture
 import rr.Draw
 import rr.Devices
 import rr.Math
@@ -21,6 +22,8 @@ import rr.Text
 ## editor is pure -- it returns the next model and a list of `Edit`s -- so what
 ## changed and what to do about it can never come apart, and `update!` is the
 ## thin shell that performs them.
+##
+## Run with `--record-demo` to paint a deterministic gallery GIF.
 PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
@@ -32,6 +35,8 @@ Model : {
 	palette : U64,
 	last_cell : PaintState,
 	mouse : Math.Vec2,
+	demo : Bool,
+	demo_frame : U64,
 	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
 }
 
@@ -54,6 +59,34 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
+
+demo_frames : U64
+demo_frames = 100
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+generated_assets_config : List(Str) -> App.Config
+generated_assets_config = |args| {
+	base = App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("generated_assets.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
 
 ## The brush is quiet next to the tone it is generated from. Named once, because
 ## every `Play` edit has to state it: a `Playback` carries volume, pitch, and pan
@@ -87,9 +120,9 @@ initial_pixels = List.map_with_index(
 )
 
 init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
-init! = App.init(
-	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	generated_assets_config,
+	|startup| {
 		font = Draw.default_font!()
 		texture = Assets.generate_color_texture!({ width: 16, height: 16, color: Color.white })?
 		Assets.update_texture!(texture, initial_pixels)?
@@ -103,6 +136,8 @@ init! = App.init(
 			palette: 1,
 			last_cell: Idle,
 			mouse: { x: 0, y: 0 },
+			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo_frame: 0,
 			ui: Box.box({
 				title: Text.from("Pixel Workshop", font).size(26).prepare!()?,
 				help: Text.from("Drag to paint  |  1-4 pick a colour  |  C restores the design  |  ESC quits", font).size(14).prepare!()?,
@@ -115,6 +150,31 @@ init! = App.init(
 palette_from_input : U64, Devices.Snapshot -> U64
 palette_from_input = |current, input|
 	if input.key_pressed(Key1) 0 else if input.key_pressed(Key2) 1 else if input.key_pressed(Key3) 2 else if input.key_pressed(Key4) 3 else current
+
+## Paints a deterministic ribbon through the editor's normal device-input
+## path, changing colour as it crosses each quarter of the grid.
+demo_input : U64 -> Devices.Snapshot
+demo_input = |frame| {
+	cell = frame % (grid_side * grid_side)
+	row = cell // grid_side
+	zigzag_col = cell % grid_side
+	col = if row % 2 == 0 zigzag_col else grid_side - 1 - zigzag_col
+	point = {
+		x: canvas_x + (U64.to_f32(col) + 0.5) * cell_size,
+		y: canvas_y + (U64.to_f32(row) + 0.5) * cell_size,
+	}
+	palette_key = match (frame // 25) % 4 {
+		0 => Key2
+		1 => Key3
+		2 => Key4
+		_ => Key1
+	}
+
+	Devices.none
+		.with_mouse_position(point)
+		.with_mouse_button_down(Left)
+		.with_key_pressed(palette_key)
+}
 
 cell_at : Math.Vec2 -> Try(U64, [Outside])
 cell_at = |point| {
@@ -261,7 +321,7 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	input = program_input.devices
+	input = if model.demo demo_input(model.demo_frame) else program_input.devices
 
 	next = update_editor(model, input)
 	for edit in next.edits {
@@ -276,10 +336,22 @@ update! = |model, program_input| {
 		},
 	)
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..next.model, mouse })
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if input.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..next.model, mouse, demo_frame: model.demo_frame + 1 })
 	}
 }
 

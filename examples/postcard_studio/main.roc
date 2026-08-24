@@ -10,6 +10,7 @@ import rr.Text
 
 ## A tiny postcard maker: choose a colourway, move the sun, and export the
 ## composition as `postcards/sunrise.png` at twice the window's resolution.
+## Pass `--record-demo` to record a deterministic tour of the colourways.
 ##
 ## The postcard is composed once, into an offscreen render target 1440x960, and
 ## the window shows that target scaled down to fit. Pressing S exports the
@@ -33,6 +34,7 @@ Model : {
 	theme : U64,
 	sun : Math.Vec2,
 	status : Text.Prepared,
+	demo : Bool,
 }
 
 Msg : [PostcardExported(Try({}, Capture.TextureExportError))]
@@ -53,14 +55,43 @@ poster_width = 1440
 poster_height : F32
 poster_height = 960
 
+demo_frames : U64
+demo_frames = 125
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+postcard_config : List(Str) -> App.Config
+postcard_config = |args| {
+	base =
+		App.default
+			.with_title("RocRay Postcard Studio")
+			.with_size({ width: 720, height: 480 })
+			.with_output_dir("postcards")
+			.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("postcard_studio.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
 init! : App.Init(Model, [ResourceLimit, RenderTextureLoadFailed])
-init! = App.init(
-	App.default
-		.with_title("RocRay Postcard Studio")
-		.with_size({ width: 720, height: 480 })
-		.with_output_dir("postcards")
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	postcard_config,
+	|startup| {
 		font = Draw.default_font!()
 		idle = Text.from("Ready to export 1440x960", font).size(14).prepare!()?
 		Ok({
@@ -79,6 +110,7 @@ init! = App.init(
 			theme: 0,
 			sun: { x: 520, y: 170 },
 			status: idle,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
@@ -97,19 +129,29 @@ update! = |model, program_input| {
 			},
 	)
 
+	cycle = program_input.time.cycle_count
 	theme =
-		if input.key_pressed(Key1) 0
+		if resolved.demo {
+			if cycle < 42 0 else if cycle < 84 1 else 2
+		} else if input.key_pressed(Key1) 0
 		else if input.key_pressed(Key2) 1
 		else if input.key_pressed(Key3) 2
 		else resolved.theme
 
 	# Exports itself once early on as well, so a run with no keyboard -- the
 	# headless sweep -- still takes the export path.
-	save = input.key_pressed(KeyS) or program_input.time.cycle_count == 3
+	save = input.key_pressed(KeyS) or (resolved.demo == Bool.False and cycle == 3)
+	sun =
+		if resolved.demo {
+			phase = U64.to_f32(cycle % demo_frames) / U64.to_f32(demo_frames)
+			{ x: 110 + phase * 500, y: 145 + F32.abs(phase * 2 - 1) * 90 }
+		} else {
+			input.mouse.position()
+		}
 	next = {
 		..resolved,
 		theme,
-		sun: input.mouse.position(),
+		sun,
 		status: if save chrome.saving else resolved.status,
 	}
 
@@ -117,7 +159,13 @@ update! = |model, program_input| {
 		Task.spawn!(program_input, || PostcardExported(Capture.screenshot_texture!(next.poster, "sunrise.png")))
 	}
 
-	if input.key_pressed(KeyEscape) {
+	if resolved.demo {
+		match program_input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(1))
+			_ => Ok(next)
+		}
+	} else if input.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {
 		Ok(next)

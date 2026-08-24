@@ -38,15 +38,33 @@ DoomPresentation := [].{
 		}
 	}
 
+	decoration : DoomWorld.Decoration -> Try(DoomAssets.SpriteView, [MissingDecorationSpriteMapping(DoomWorld.ThingKind), MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
+	decoration = |value| {
+		match decoration_mapping(value.kind) {
+			Err(MissingDecorationSpriteMapping(kind)) => Err(MissingDecorationSpriteMapping(kind))
+			Ok(mapping) => match DoomAssets.sprite(mapping.sprite, mapping.frame, 1) {
+				Err(MissingSprite(details)) => Err(MissingSprite(details))
+				Ok(view) => Ok(view)
+			}
+		}
+	}
+
 	## Resolve a first-person weapon frame from the presentation sprite families
 	## deliberately admitted by the E1M1 extraction.
-	weapon : DoomWorld.Weapon, U64 -> Try(DoomAssets.SpriteView, [MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
+	weapon : DoomWorld.Weapon, U64 -> Try(DoomAssets.SpriteView, [MissingWeaponSpriteMapping(DoomWorld.Weapon), MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
 	weapon = |weapon_kind, phase| {
-		mapping = match weapon_kind {
-			Pistol => { sprite: "PISG", frame: frame_at(["A", "B", "C", "D", "E"], phase) }
-			Shotgun => { sprite: "SHTG", frame: frame_at(["A", "B", "C", "D"], phase) }
+		mapping_result = match weapon_kind {
+			Pistol => Ok({ sprite: "PISG", frame: frame_at(["A", "B", "C", "D", "E"], phase) })
+			Shotgun => Ok({ sprite: "SHTG", frame: frame_at(["A", "B", "C", "D"], phase) })
+			_ => Err(MissingWeaponSpriteMapping(weapon_kind))
 		}
-		DoomAssets.sprite(mapping.sprite, mapping.frame, 1)
+		match mapping_result {
+			Err(MissingWeaponSpriteMapping(kind)) => Err(MissingWeaponSpriteMapping(kind))
+			Ok(mapping) => match DoomAssets.sprite(mapping.sprite, mapping.frame, 1) {
+				Err(MissingSprite(details)) => Err(MissingSprite(details))
+				Ok(view) => Ok(view)
+			}
+		}
 	}
 
 	effect : Effect, U64 -> Try(DoomAssets.SpriteView, [MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
@@ -138,6 +156,8 @@ actor_mapping = |actor_value| {
 		ZombieMan => Ok("POSS")
 		ShotgunGuy => Ok("SPOS")
 		Imp => Ok("TROO")
+		Demon => Ok("SARG")
+		Spectre => Ok("SARG")
 		Barrel => Ok(if actor_value.state.mode == Dead "BEXP" else "BAR1")
 		_ => Err(MissingActorSpriteMapping(actor_value.kind))
 	}?
@@ -179,7 +199,39 @@ pickup_mapping = |kind, tic|
 		BlueKeyPickup => Ok({ sprite: "BKEY", frame: frame_at(["A", "B"], tic) })
 		YellowKeyPickup => Ok({ sprite: "YKEY", frame: frame_at(["A", "B"], tic) })
 		RedKeyPickup => Ok({ sprite: "RKEY", frame: frame_at(["A", "B"], tic) })
+		BackpackPickup => Ok({ sprite: "BPAK", frame: "A" })
+		ChaingunPickup => Ok({ sprite: "MGUN", frame: "A" })
+		RocketLauncherPickup => Ok({ sprite: "LAUN", frame: "A" })
+		PlasmaRiflePickup => Ok({ sprite: "PLAS", frame: "A" })
+		ChainsawPickup => Ok({ sprite: "CSAW", frame: "A" })
+		RocketPickup => Ok({ sprite: "ROCK", frame: "A" })
+		SoulSpherePickup => Ok({ sprite: "SOUL", frame: frame_at(["A", "B", "C", "D"], tic) })
+		BerserkPickup => Ok({ sprite: "PSTR", frame: "A" })
+		ComputerMapPickup => Ok({ sprite: "PMAP", frame: frame_at(["A", "B", "C", "D"], tic) })
+		LightAmpPickup => Ok({ sprite: "PVIS", frame: frame_at(["A", "B"], tic) })
+		BulletBoxPickup => Ok({ sprite: "AMMO", frame: "A" })
+		ShellBoxPickup => Ok({ sprite: "SBOX", frame: "A" })
+		CellPackPickup => Ok({ sprite: "CELP", frame: "A" })
 		_ => Err(MissingPickupSpriteMapping(kind))
+	}
+
+decoration_mapping = |kind|
+	match kind {
+		BloodyMess => Ok({ sprite: "PLAY", frame: "W" })
+		DeadPlayer => Ok({ sprite: "PLAY", frame: "N" })
+		DeadFormerHuman => Ok({ sprite: "POSS", frame: "L" })
+		DeadDemon => Ok({ sprite: "SARG", frame: "N" })
+		DeadImp => Ok({ sprite: "TROO", frame: "M" })
+		DeadShotgunGuy => Ok({ sprite: "SPOS", frame: "L" })
+		GorePool => Ok({ sprite: "POL5", frame: "A" })
+		Candle => Ok({ sprite: "CAND", frame: "A" })
+		BurntTree => Ok({ sprite: "TRE1", frame: "A" })
+		Stalagmite => Ok({ sprite: "SMIT", frame: "A" })
+		TechPillar => Ok({ sprite: "ELEC", frame: "A" })
+		LargeTree => Ok({ sprite: "TRE2", frame: "A" })
+		HangingBody => Ok({ sprite: "GOR4", frame: "A" })
+		FloorLamp => Ok({ sprite: "COLU", frame: "A" })
+		_ => Err(MissingDecorationSpriteMapping(kind))
 	}
 
 chase_frame = |remaining|
@@ -219,7 +271,12 @@ expect {
 			Ok(Visible(_)) => Bool.True
 			_ => Bool.False
 		})
-	actors_ok and pickups_ok and List.len(spawned.actors) > 0 and List.len(spawned.pickups) > 0
+	decorations_ok = List.all(spawned.decorations, |value|
+		match DoomPresentation.decoration(value) {
+			Ok(_) => Bool.True
+			Err(_) => Bool.False
+		})
+	actors_ok and pickups_ok and decorations_ok and List.is_empty(spawned.unsupported) and List.len(spawned.actors) > 0 and List.len(spawned.pickups) > 0 and List.len(spawned.decorations) > 0
 }
 
 expect {

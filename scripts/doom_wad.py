@@ -506,6 +506,12 @@ def thing_coverage(map_data: dict[str, object]) -> list[dict[str, object]]:
     coverage = []
     for editor_type in sorted(counts):
         semantic, classification, status = THING_SEMANTICS[editor_type]
+        if editor_type in {9, 58, 2035, 3001, 3002, 3004}:
+            status = "implemented_actor"
+        elif classification == "decorative":
+            status = "implemented_decoration"
+        elif classification == "gameplay":
+            status = "implemented_pickup"
         coverage.append({"editor_type": editor_type, "count": counts[editor_type], "semantic_kind": semantic,
                          "classification": classification, "sprite_prefix": THING_SPRITES[editor_type],
                          "implementation_status": status})

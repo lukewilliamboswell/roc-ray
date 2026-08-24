@@ -109,5 +109,8 @@
     "TRE2",
     "TROO"
   ],
-  "sprite_lump_count": 384
+  "sprite_lump_count": 384,
+  "music_lump": "D_E1M1",
+  "music_path": "music/e1m1.mid",
+  "music_sha256": "f24cda4e8311e5938b544705a6c931767c56c368a48e51c252c4e8153ca06e13"
 }

@@ -4,8 +4,7 @@
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so the nominal types are shared either way.
 ##
-## Pass `input.devices` directly to these helpers; there is nothing to
-## construct.
+## Query these pure values from `input.devices.gamepads`.
 import rrt.Gamepad as RrtGamepad
 
 Gamepad := [].{

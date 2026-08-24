@@ -1,13 +1,7 @@
 ## Pointer state sampled into one host-cycle input.
 ##
-## The host stores one packed state byte per raylib mouse button code `0`
-## through `6`: bit 0 is held, bit 1 is pressed during the input interval, and
-## bit 2 is released during it. Read them through the receivers --
-## `input.devices.mouse.position()`, `button_down`, `button_pressed` -- rather
-## than through the bytes.
-##
-## Pass `input.devices.mouse` directly to these helpers; there is nothing to
-## construct.
+## Pass `input.devices.mouse` directly to the pure position, movement, wheel,
+## and button-state receivers.
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.

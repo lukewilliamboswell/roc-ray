@@ -1,9 +1,5 @@
 ## Run an external program and read back what it produced.
 ##
-## This is the escape hatch to tools this platform will never vendor: `ffmpeg`
-## to mux a recording into an MP4, `magick` to convert a sprite sheet, a solver
-## or a data preprocessor that already knows a format the app does not.
-##
 ## A command is built and then run:
 ##
 ## ```roc
@@ -26,42 +22,22 @@
 ## startup, and in tasks, where it parks the task; it is refused in `update!`
 ## and `render!`.
 ##
-## A non-zero exit code is not an error. It arrives as `Ok(output)` carrying
-## that code, because a program's exit status is one of the things it is trying
-## to tell the caller: `grep` says "no match" with `1`, `ffmpeg` says "bad
-## arguments" with `1`, and a test runner says how many tests failed. Only a
-## run that produced no exit status at all -- no such program, no permission to
-## start it, the deadline expired, more output than the app allowed -- is an
-## `Err`. That is the same rule `Http` follows for a 404.
+## A non-zero exit code is a completed run and arrives as `Ok(output)`. `Err`
+## means the process did not produce an exit status, such as a spawn failure,
+## timeout, or output-limit violation.
 ##
-## No shell is involved. `program` is the executable and `args` are handed to
-## it one by one, so nothing here splits on spaces, expands `*`, follows a
-## pipe, or reads a redirect. A command line that needs any of that names a
-## shell as the program and passes the line as one argument.
+## No shell is involved. `program` names the executable and `args` are passed
+## verbatim; spaces, globs, pipes, and redirects are not interpreted.
 ##
-## Authority: running a program grants that program this process's own
-## authority. The child inherits the user account, the working directory, and
-## (unless `with_clear_envs` says otherwise) the environment; nothing here
-## restricts which executable may be named or what it may then do. `Cmd` is
-## unrestricted in exactly the way `Files` is -- an app that can read
-## `/etc/hosts` can run `/bin/sh` -- and it is deliberately more than that,
-## because a program the app starts is not bound by any of this platform's
-## rules. The one output root this platform enforces belongs to `Capture`, and
-## a subprocess trivially defeats it. Depend on `Cmd` when the app is trusted
-## with the machine it runs on, and not otherwise.
+## A child inherits this process's user, working directory, and, unless
+## `with_clear_envs` is used, environment. `Cmd` does not restrict executable
+## paths or child authority; use it only in apps trusted with the host machine.
 ##
-## What the child does not inherit is its streams. Standard input is closed, so
-## a program that would have prompted reads end of stream instead of competing
-## with the application for the terminal, and both output streams are captured
-## rather than passed through, so a chatty tool cannot write over an app that
-## is using `Stdout` itself.
+## Standard input is closed. Standard output and error are captured up to the
+## configured limits rather than inherited.
 ##
-## Shutdown kills a running child. Shutdown cancels every live task, and a
-## task parked in `run!` is interrupted through this facility's own mechanism:
-## the host terminates the child it started, the parked task resumes on the
-## cancelled path, and nothing is left running behind the app. A child that has
-## already replaced itself with something detached is outside that guarantee,
-## exactly as forced process termination is.
+## Orderly shutdown terminates children still managed by the host. Detached
+## descendants and forced process termination are outside this guarantee.
 import CmdHost
 
 Cmd := {

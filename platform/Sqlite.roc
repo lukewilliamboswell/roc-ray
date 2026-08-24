@@ -1,102 +1,21 @@
-## A SQLite database: queries, prepared statements, and their typed outcomes.
+## SQLite connections, prepared statements, queries, and typed outcomes.
 ##
-## This is what makes a visualization address a dataset rather than a file. A
-## query returns rows, not a blob to parse, so the database does the filtering
-## and aggregation and the app draws the answer.
+## All database effects wait. They are legal in `init!`, where they block
+## startup, and in tasks, where they park the task. They are refused in
+## `update!` and `render!`.
 ##
-## These effects wait. Every one of them is legal in `init!`, where it blocks
-## startup until the answer is in -- which is what opening a database and
-## loading the first screen of data wants -- and in tasks, where it parks the
-## task while the frame loop keeps drawing. They are refused in `update!` and
-## `render!`, with a message naming the effect and the fix.
+## Use the free `query!` and `execute!` functions for one-off SQL. Retain a
+## prepared `Stmt` when reusing the same query or command. Transactions use
+## explicit `BEGIN`, `COMMIT`, and `ROLLBACK` SQL.
 ##
-## That refusal holds even for a query that usually finishes in well under a
-## millisecond. What a query costs depends on the page cache, the size of the
-## result, and whether another process holds the write lock -- a contended
-## write can wait for the whole `busy_timeout_ms`. An effect is classified by
-## what it can do, not by what it usually does.
+## `Db` and `Stmt` are reference-counted host resources. Final release closes
+## them automatically; `Db.close!` provides deliberate early closure. Paths
+## are resolved from the process working directory and are not sandboxed.
+## `":memory:"` creates a private in-memory database.
 ##
-## ```roc
-## init! : App.Init(Model, [StoreFailed])
-## init! = App.init(
-##     App.default.with_title("scores"),
-##     |_startup| {
-##         db = Sqlite.Db.open!("scores.db") ? |_err| StoreFailed
-##         Sqlite.exec_script!(db, "CREATE TABLE IF NOT EXISTS runs(name TEXT, score INTEGER)") ? |_err| StoreFailed
-##         rows = Sqlite.query!({ db, query: "SELECT name, score FROM runs", bindings: [] }) ? |_err| StoreFailed
-##         leader = match List.first(rows) {
-##             Ok(row) => Sqlite.Row.str(row, "name") ? |_err| StoreFailed
-##             Err(_) => "nobody"
-##         }
-##         Ok({ db, rows, leader })
-##     },
-## )
-##
-## update! = |model, input| {
-##     if input.devices.key_pressed(KeyEnter) {
-##         Task.spawn!(
-##             input,
-##             || match Sqlite.execute!({
-##                 db: model.db,
-##                 query: "INSERT INTO runs VALUES (:name, :score)",
-##                 bindings: [
-##                     { name: ":name", value: String("player") },
-##                     { name: ":score", value: Integer(10) },
-##                 ],
-##             }) {
-##                 Ok(_outcome) => Saved
-##                 Err(SqliteErr(code, message)) => SaveFailed("${Sqlite.errcode_to_str(code)} (${message})")
-##                 Err(_) => SaveFailed("the platform refused the write")
-##             },
-##         )
-##     }
-##     Ok(model)
-## }
-## ```
-##
-## Each call fails with a union of its own, and none of those unions is open, so
-## `?` cannot merge them: every one is mapped to the app's own `StoreFailed`
-## before it propagates. `examples/sqlite_scores` maps them to a `Str` through
-## `Sqlite.errcode_to_str` instead, which is what an app that shows the reason
-## on screen wants.
-##
-## Two shapes reach the same effects. The handle receivers -- `Sqlite.Db.open!`,
-## `Sqlite.Stmt.query!`, `Sqlite.Stmt.execute!` -- run a statement the app
-## prepared once and kept, which is what a query run every frame or every save
-## wants: the parse and the plan are paid at `prepare!`. The free functions
-## take a record naming the connection and the SQL --
-## `Sqlite.query!({ db, query, bindings })` -- and prepare, run, and discard the
-## statement in one call, which is what a one-off wants: a schema change, a
-## screen loaded once, a query whose text the app just built.
-##
-## Transactions are SQL, so they are written as SQL. `Sqlite.exec_script!(db,
-## "BEGIN")`, then the parameterised `execute!` calls, then
-## `Sqlite.exec_script!(db, "COMMIT")` -- N inserts through one prepared
-## statement inside one transaction is how a bulk write stays fast, because
-## SQLite otherwise pays a disk sync per statement. `"ROLLBACK"` undoes the
-## batch when one of those calls fails; a task that ends without committing
-## leaves the transaction open on that connection, so match every `BEGIN`.
-##
-## A `Db` is a reference-counted handle to a host-owned connection. Copying it
-## shares the connection; releasing the last reference closes it, so there is
-## no `close` to remember. `Sqlite.Db.close!` exists only for the app that
-## wants to pay a large WAL checkpoint at a moment it chooses rather than
-## whenever the handle happens to go out of scope.
-##
-## Paths are used as the app gives them, resolved against the process working
-## directory, exactly as `Files` resolves one, and nothing here is sandboxed.
-## `":memory:"` opens a private in-memory database, which is what tests want.
-##
-## Eight connections and sixty-four prepared statements may be open at once;
-## past that, `open!` and `prepare!` answer `TooManyConnections` and
-## `TooManyStatements`. A single query may return at most a million cells and
-## sixteen megabytes of text and blobs, which `Config.max_result_bytes`
-## changes per connection. Those caps are refusals rather than truncations: a
-## result cut short decodes into wrong data rather than into an error.
-##
-## SQL is the app's to write. This module does not build queries, cache
-## results, or interpret a schema; it binds parameters, runs statements, and
-## hands back rows.
+## At most eight connections and sixty-four statements may be open. Queries
+## refuse results above one million cells or `Config.max_result_bytes` rather
+## than truncating them. The default byte limit is sixteen megabytes.
 import SqliteHost
 
 Sqlite := [].{

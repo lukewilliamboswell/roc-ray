@@ -1,4 +1,4 @@
-## What the window looked like this cycle, and how to change it.
+## Sampled window state and window-management effects.
 ##
 ## The size here is the logical drawing size: it matches mouse coordinates and
 ## raylib drawing units, and on a HiDPI display it is smaller than the actual
@@ -7,16 +7,9 @@
 ## framebuffer, so a `960 x 640` window on a display with a scale of `2` records
 ## `1920 x 1280` pixels.
 ##
-## Use `focused` and `minimized` to pause input or skip expensive work while the
-## window is inactive.
-##
-## The two verbs mean different things. A `suggest_*` call asks the window
-## manager for something it may decline, reshape, or apply later --
-## `suggest_size!`, `suggest_min_size!`, `suggest_position!`,
-## `suggest_monitor!` -- so nothing here reports what happened and the next
-## `Snapshot` is the authoritative answer. A `set_*` call changes something the
-## host itself owns -- `set_target_fps!`, `set_clipboard_text!` -- and takes
-## effect as asked.
+## `suggest_*` effects request geometry that the window manager may alter or
+## decline; a later `Snapshot` is authoritative. `set_*` effects change state
+## controlled by the host.
 import rrt.Window as RrtWindow
 import HostHost
 

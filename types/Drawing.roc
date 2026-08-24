@@ -1,12 +1,8 @@
-## The shapes a drawing call takes, and the interface a UI package draws
-## through.
+## Pure drawing configuration and the interface used by rendering packages.
 ##
-## Everything here is a plain record or tag union. `Draw` re-exports these, so
-## an app writes `Draw.filled(Color.white)` and never names this module. A
-## package that renders widgets does name it: `Drawable` is the set of calls
-## such a package needs from whatever frame it is handed, so the package can be
-## written once and used with any frame that offers them -- the platform's
-## `Draw.Frame`, or a recording frame a test supplies.
+## Apps use the platform's `Draw` re-exports. Rendering packages can accept
+## `Drawable`, which is implemented by `Draw.Frame` and by compatible test or
+## recording frames.
 import Color
 import Font
 import Math

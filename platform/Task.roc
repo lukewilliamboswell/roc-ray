@@ -1,10 +1,8 @@
-## Work that waits, running alongside the frame loop.
+## Work that waits without blocking the frame loop.
 ##
-## A task is an effectful closure handed to `Task.spawn!` from `update!` (or
-## from another task). The host runs it on its own stack, on the frame thread,
-## and delivers its return value on a later `Input.messages`. Effects that
-## wait -- `Task.sleep!`, `Files.read_text!`, `Http.send!` -- park the task
-## rather than the frame.
+## Spawn tasks from `update!` or another task. Waiting effects park the task;
+## its single return value arrives on a later `Input.messages`. Tasks run
+## serially on the frame thread, so pure computation still blocks frames.
 ##
 ## ```roc
 ## update! = |model, input| {
@@ -21,16 +19,6 @@
 ## }
 ## ```
 ##
-## Because a task is straight-line code, a multi-step operation is an ordinary
-## function -- load, then parse, then fetch, with `?` propagating failures --
-## rather than a state machine spread across message variants. A task cannot
-## read or write the model, so whatever the model must learn has to be in the
-## message it returns.
-##
-## Tasks buy overlap for waiting, not for computing. They share the frame
-## thread and yield only at a waiting effect, so a long pure computation inside
-## one stalls the frame exactly as it would inside `update!`.
-##
 ## Thirty-two tasks run at once. A spawn past that is queued and started in
 ## submission order as a slot frees, so spawning never fails and no closure is
 ## dropped. At shutdown live tasks are cancelled, queued closures are dropped,
@@ -43,25 +31,15 @@ Task := [].{
 	## Start a task. Its message arrives on a later `Input.messages`, in the
 	## order the tasks finished.
 	##
-	## The first argument is the `App.Input` that `update!` was handed. It is
-	## never read: it is the witness that pins the closure's return type to the
-	## app's own `Msg`. Without it `msg` stays free at the call site, the
-	## closure compiles at whatever type its body alone implies -- often a
-	## single-tag union with no discriminant -- while the host decodes the
-	## result as the app's real `Msg`, producing the wrong tag or a misread
-	## payload. Only the platform's entry module can name the `requires` bound
-	## `Msg`, so an `App.Input` is how every other module names it. Pass the
-	## input the callback already has; there is nothing to construct.
+	## Pass the current `App.Input` as the first argument. It pins the closure's
+	## return type to the app's `Msg`; it is not otherwise read.
 	##
 	## A task closure may capture the input, so a task can spawn more tasks.
 	##
-	## When the task starts is the host's choice. It may run up to its first
-	## waiting effect before `spawn!` returns, or in the host's turn after
-	## `update!` returns; either way it has reached its first wait, or finished,
-	## before `render!` of the same cycle. Its code and its synchronous effects
-	## can therefore interleave with the rest of the `update!` that spawned it,
-	## so do not assume an order between the two. The only order a task promises
-	## is its message's: on a later cycle, after every task that finished first.
+	## The task may start before `spawn!` returns or after `update!`; it reaches
+	## its first wait or finishes before that cycle's `render!`. Do not assume
+	## ordering between its synchronous work and the spawning `update!`.
+	## Messages are delivered in task-completion order.
 	##
 	## When the same kind of work can be in flight more than once, a reply can
 	## arrive after a newer one. Put a generation counter or id in the message

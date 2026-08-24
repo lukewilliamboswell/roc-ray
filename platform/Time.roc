@@ -1,28 +1,12 @@
-## Helpers for working with the cycle's simulation clock, and with the
-## calendar the world outside the app keeps.
+## Simulation-time helpers and wall-clock timestamps.
 ##
-## Animation and physics use `input.time`, not wall time. The host samples one
-## `Cycle` per call to `update!`, and every app that moves something should
-## derive that movement from it: a value read from the calendar or a
-## wall-clock timer is not the timeline the platform paces, replays, or holds
-## to a fixed step while a capture records.
+## Use `input.time` for animation and simulation. The host samples one `Cycle`
+## per `update!`; `elapsed_seconds` is the simulation duration of that cycle.
 ##
-## For the common "move per cycle" case, use `input.time.elapsed_seconds`
-## directly -- simulation seconds since the preceding input -- without touching
-## the helpers below.
+## `now!` reads the nondeterministic wall clock. It is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`; it does not wait.
 ##
-## `Timestamp` and `now!` are the other clock: what time it is in the world,
-## for stamping a filename, rendering a date, or correlating a log line with
-## something outside the process. It is explicitly nondeterministic, and it is
-## never a substitute for `Cycle`. `now!` is legal in `init!`, `update!`, and
-## tasks; it is refused in `render!`, which is given the model rather than an
-## input and should draw the instant the model already decided on. It does not
-## wait, so it needs no task of its own.
-##
-## The `Cycle` helpers live in the companion `roc-ray-types` package so
-## reusable packages can depend on them without depending on this platform, and
-## this module re-exports them. `Timestamp` is this platform's own: reading the
-## world's clock is an effect, so it lives where the effects do.
+## `Cycle` and its pure helpers are re-exported from `roc-ray-types`.
 import rrt.Time as RrtTime
 import TimeHost
 

@@ -1,6 +1,6 @@
 ## Short sound effects, streamed music, and procedural tones.
 ##
-## Load or generate resources in `init!` and keep the opaque values in your
+## Load or generate resources in `init!` and keep the opaque values in the
 ## model. Sound and music are distinct types, so they cannot be mixed by
 ## accident. Their final Roc reference automatically unloads the host resource.
 ##
@@ -17,17 +17,11 @@
 ## }
 ## ```
 ##
-## `load_sound!` and `load_music!` take a path used as the app gives it,
-## resolved against the process working directory. There is no `Assets.Store`
-## here: an audio path is not resolved through a store handle and is not
-## confined to one, so a packaged app should build the path from something it
-## controls rather than from the directory it happened to be launched in.
+## `load_sound!` and `load_music!` resolve paths against the process working
+## directory; they do not use or enforce an `Assets.Store` root.
 ##
-## A `Sound` is decoded into memory and played from there, so it suits short
-## effects. A `Music` is streamed, so it suits a long track; the platform reads
-## the file once, keeps the encoded bytes for the stream's lifetime, and
-## advances every active stream once per frame, with nothing for the app to
-## pump.
+## `Sound` is decoded into memory for short effects. `Music` streams encoded
+## bytes for long tracks and is advanced automatically each frame.
 ##
 ## The two loaders read the disk, so they wait: `load_sound!` and `load_music!`
 ## are legal in `init!`, where they block startup, and in tasks, where they

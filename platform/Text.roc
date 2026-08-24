@@ -1,10 +1,4 @@
-## Fonts, text measurement, and prepared text drawing.
-##
-## A string is described once and drawn many times. `Text.from` starts a
-## `Builder`, the `size`, `spacing` and `font` receivers adjust it, and
-## `prepare!` hands the host the UTF-8 bytes, the style, and the measured
-## bounds. What comes back is a `Prepared`, which every later frame draws with
-## no encoding, no measuring, and no allocation:
+## Prepare text once, then measure and draw it without per-frame allocation.
 ##
 ## ```roc
 ## title = Text.from("Hello", font).size(38).prepare!()?
@@ -14,27 +8,12 @@
 ## model.title.draw!(frame, { pos: { x: 400, y: 60 }, color: Color.white, align: Text.align_top_center })
 ## ```
 ##
-## `align` says which point of the text `pos` names, so centring a title needs
-## no measurement at the call site. When one is wanted anyway -- to size a
-## panel around the text, or to hit-test it -- `prepared.bounds()`
-## answers the size the host measured, and `Draw.Font.measure` answers the same
-## question for a string that was never prepared. Both are pure, so layout can
-## be decided in `update!` and kept in the model.
+## `Prepared.bounds` returns the measured size. `Placement.align` selects which
+## point of those bounds its `pos` identifies.
 ##
-## Most calls have a receiver form and a free-function form:
-## `prepared.draw!(frame, placement)` and `Text.draw_prepared!(frame, cfg)` are
-## the same drawing call, and `builder.prepare!()` and
-## `Text.prepare_builder!(builder)` are the same preparation. Prefer the
-## receiver. Note that the two draw forms take the frame in different
-## positions: the receiver's own value comes first, so the frame is its second
-## argument, while the free function takes the frame first as every other free
-## drawing function does.
-##
-## The two halves live in different phases. Preparing text allocates a host
-## resource: it is legal in `init!`, `update!`, and tasks, and refused in
-## `render!`. Drawing prepared text is legal in `render!` only, inside the
-## frame scope the host opens around it. Prepare the strings an app draws
-## repeatedly once, in `init!`, and keep the `Prepared` values in the model.
+## Preparation is legal in `init!`, `update!`, and tasks, and refused in
+## `render!`. Drawing requires `Draw.Frame` and is legal only in `render!`.
+## Retain repeatedly drawn `Prepared` values in the model.
 import Color
 import Draw
 import DrawHost

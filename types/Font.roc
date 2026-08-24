@@ -1,17 +1,11 @@
-## A font's handle and its metric snapshot, and raylib-compatible text
-## measurement over them.
+## Font handles, metric snapshots, and pure text measurement.
 ##
-## `measure` is the whole point: it answers the size a string will occupy at a
-## given font size and letter spacing, following raylib's own rules, without
-## calling the host. A layout pass can therefore run in a pure function, in a
-## test, or in a package that does not depend on the platform.
+## `measure` follows the host renderer's layout rules without calling the host,
+## so packages and tests can calculate text bounds purely.
 ##
-## A `Font` pairs an opaque native handle with the scalar metrics taken when it
-## loaded: the atlas's base size, the extra line spacing, and one entry per
-## rasterized glyph, sorted by codepoint. The metrics are ordinary data, so a
-## package can read them and a test can write them down; the handle is opaque,
-## so only the host can mint one. Loading a font is an effect and lives in the
-## platform's `Draw`, which re-exports this type as `Draw.Font`.
+## `Font` pairs an opaque host handle with immutable scalar and glyph metrics.
+## Only the platform can load a live font; it re-exports this type as
+## `Draw.Font`.
 import unicode.Scalar
 
 Font := {

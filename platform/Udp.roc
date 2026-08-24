@@ -1,12 +1,11 @@
-## UDP sockets, for multiplayer, livecoding, and streaming data.
+## Non-blocking UDP sends and task-based batched receives.
 ##
 ## A socket is bound once and kept in the model. `bind!` and `send!` are legal
 ## in `init!`, `update!`, and tasks, and refused in `render!`, which draws.
 ## `receive!` waits: it is legal in `init!`, where it blocks startup, and in
 ## tasks, where it parks the task; it is refused in `update!` and `render!`.
 ##
-## So sending belongs in `update!` beside the rest of a frame's work, and
-## receiving belongs in a task:
+## Send from `update!`; receive from a task:
 ##
 ## ```roc
 ## Msg : [Arrived(List(Udp.Datagram)), ReceiveFailed(Udp.ReceiveError)]
@@ -31,28 +30,12 @@
 ## }
 ## ```
 ##
-## `listening` is set from whether this cycle's input answered rather than
-## latched to true, so the next `update!` starts the next listener. A failed
-## `send!` is counted rather than propagated: `WouldBlock` is a full send
-## buffer, an ordinary condition on a busy link, and a position update would
-## rather skip a frame than end the app.
+## `receive!` parks until one datagram arrives, then drains an arrival-ordered
+## bounded batch. Start the next receive task after that message arrives.
 ##
-## A task delivers exactly one message, so the loop is "receive, answer, and
-## let `update!` start the next one" rather than a task that loops forever. A
-## task that never returns never delivers anything.
-##
-## That is also why `receive!` answers with a whole batch. It parks until the
-## first datagram arrives and then drains what the kernel already has, so one
-## message carries a frame's worth of traffic in arrival order. A receive that
-## answered with a single datagram would cap a respawned listener at one
-## datagram per frame, which is far below what even a small game needs.
-##
-## Datagrams that arrive while no `receive!` is pending are not lost: they wait
-## in the operating system's own buffer, and the next `receive!` returns them
-## immediately. They are lost when that buffer overflows, silently, with no
-## report -- that is the UDP contract, and sequence numbers in the payload are
-## the app's answer to it. Delivery, ordering, and duplication are not promised
-## by the protocol and are not added here.
+## The operating-system socket buffer retains datagrams between receives and
+## may drop them silently on overflow. UDP does not guarantee delivery,
+## ordering, or uniqueness.
 ##
 ## Framing, retransmission, serialization, discovery, and session state are the
 ## app's or a package's. This module moves bytes and nothing else.

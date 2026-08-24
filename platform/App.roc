@@ -1,5 +1,4 @@
-## The shape of a RocRay program: its three callbacks, its startup
-## configuration, and the input each cycle folds in.
+## Application callbacks, startup configuration, and per-cycle input.
 ##
 ## An app provides three callbacks:
 ##
@@ -7,9 +6,8 @@
 ## program = { init!, update!, render! }
 ## ```
 ##
-## `init!` runs once, after the window, renderer, and audio device are ready.
-## It reads startup configuration, loads the resources the app will hold, and
-## returns the first model. Use `App.init` to pair a `Config` with it.
+## `init!` runs once after host facilities are ready and returns the first
+## model. Use `App.init` to pair a `Config` with the callback.
 ##
 ## `update!` runs once per host cycle. It receives the model and one
 ## `App.Input`, calls host effects directly, starts tasks, and returns the next
@@ -18,67 +16,26 @@
 ## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
 ## change the model or reach host work of any other kind.
 ##
-## Where an effect may be called: the host knows which callback it is inside,
-## and every effect documents the phases it is legal in. Three rules cover
-## nearly all of them. An effect that changes host state -- the cursor, the
-## window, audio, a recording, a loaded resource -- is legal in `init!`,
-## `update!`, and tasks, and refused in `render!`. An effect that draws is
-## legal in `render!` only, inside the frame scope the host opens around it.
-## An effect that waits -- `Files.read_text!`, `Http.send!`, `Task.sleep!` --
-## is legal in `init!`, where it blocks startup, and in tasks, where it parks
-## the task; it is refused in `update!` and `render!`.
-##
-## Those rules are the summary; each effect's own page is the authority, and
-## one waiting effect has a narrower set than the rule. `Capture.screenshot!`
-## is legal only in a task: what it waits for is the end of a frame, and
-## `init!` returns before the frame loop has drawn one, so there is nothing
-## for it to wait on there.
-##
-## Every loader that reads a file waits, so it belongs in `init!` or in a task:
-## `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
-## `Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!` and
-## `Tilemap.load_tmx!`. The constructors that take bytes the app already holds
-## -- `Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
-## `Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait and are legal
-## in `update!`. To load after startup, read the file on a task and build the
-## resource in `update!` when the message arrives, or call the loader inside
-## the task.
+## Each effect documents its legal phases. Host-state effects are legal in
+## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
+## Waiting effects are legal in `init!`, where they block startup, and in tasks,
+## where they park the task. `Capture.screenshot!` is task-only because it
+## waits for a frame to finish.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
 ## a runtime outcome: it stops the app at once with a message naming the
 ## effect, the phase it was called from, and where it belongs.
 ##
-## Saturation is a runtime outcome and is reported three different ways,
-## because three different things are full. `ResourceLimit` is one of the
-## host's fixed resource tables -- textures, sounds, fonts, shaders, prepared
-## text -- and is answered by releasing something the app no longer holds.
-## `Busy` is a delivery slot rather than a resource: `Files` has 32 for the
-## byte lists it hands over, and `Cmd` bounds how many children run at once, so
-## the same call later can succeed with nothing released.
-## `Sqlite.TooManyConnections` is the eight-connection cap on open databases.
-## None of the three is a retry loop's cue on its own; each says which of the
-## three kinds of room ran out.
-##
-## How messages arrive: work that waits belongs on a task.
+## Work that waits belongs on a task.
 ## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
 ## host an effectful closure to run on its own stack. When the closure returns,
 ## its value is delivered as a message on `input.messages` in a later cycle, in
 ## the order the tasks finished. A task cannot read or write the model, so its
 ## message is the only thing it can say. See `Task`.
 ##
-## Testing: `update!` is effectful and an `expect` cannot call it, so the
-## decisions live in pure functions and those are what a test exercises. Three
-## naming conventions supply the values such a test needs.
-## `App.Input.for_tests({})` is the composite input, neutral in every field and
-## customized one field at a time with the `with_*` receivers; `for_tests` is
-## what any composite input value is called. `Devices.none` and
-## `Devices.empty` are the device snapshots, and `none`/`empty` is what a
-## neutral device sample is called -- build a test's input from `none`, which
-## is writable, and seed a model with `empty`. Every host resource an app can
-## hold has a resource-free `stub` -- `Draw.Font.stub`, `Audio.Sound.stub`,
-## `Assets.Store.stub`, `Text.Prepared.stub` -- so a `Model` full of assets can
-## be written down in a pure test. A `stub` reaches the host and is treated as
-## a released resource, so it is never a way to test loading or lifetime.
+## For pure tests, build input with `App.Input.for_tests({})` and its `with_*`
+## receivers. Host resource types provide inert `stub` values for constructing
+## models; stubs cannot test loading or resource lifetime.
 import HostHost
 import Keys
 import Mouse

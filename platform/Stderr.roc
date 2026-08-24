@@ -1,41 +1,14 @@
-## Writing to the process's standard error, and the typed outcome of a write.
+## Queued writes to standard error.
 ##
-## Standard error is where an app says something went wrong while standard
-## output is carrying the answer someone is piping elsewhere, so a diagnostic
-## does not corrupt the data stream. Everything else about it -- the bound, the
-## phases, the newline, the absence of buffering -- is the same as `Stdout`,
-## and the two are deliberately interchangeable at the call site.
+## Each call copies one complete payload into a separate 256-KiB host-owned
+## queue and returns immediately. Writes are legal in `init!`, `update!`, and
+## tasks, and refused in `render!`.
 ##
-## These effects are queued. A call copies the bytes into a host-owned queue of
-## its own -- the two streams do not share one -- and returns; one host thread
-## drains both queues and does the writing. Every one of them is legal in
-## `init!`, in `update!`, and in tasks; they are refused in `render!`, with a
-## message naming the effect and the fix. Standard error is usually unbuffered
-## and usually a terminal, but it can be redirected into a pipe like any other
-## descriptor, and the queue is what keeps that off the frame thread:
-##
-## ```roc
-## update! = |model, _input| {
-##     if model.asset_failed {
-##         _ = Stderr.line!("asset ${model.asset_name} failed to load")
-##         Err(Exit(1))
-##     } else {
-##         Ok(model)
-##     }
-## }
-## ```
-##
-## The queue holds 256 kibibytes, which is also the largest a single payload can
-## be. A payload past that is `TooLarge`; one that does not fit right now is
-## `BufferFull` with nothing queued, so a refusal never leaves half a line in
-## the pipe. What is queued when the app exits is drained before the process
-## does, so a diagnostic written in the same `update!` that returns
-## `Err(Exit(1))` still reaches the terminal.
-##
-## The compiler's own `dbg`, `expect`, and crash output also goes here, written
-## directly by the runtime rather than through this module. Ordering between
-## the two is not defined, and this module is the app's channel rather than a
-## replacement for either.
+## Oversized payloads return `TooLarge`; insufficient free space returns
+## `BufferFull`. Nothing is partially queued. Accepted writes preserve order
+## and are drained during orderly shutdown, but eventual delivery is not
+## reported. Ordering against compiler `dbg`, `expect`, and crash output is
+## undefined.
 import StdioHost
 
 Stderr := [].{

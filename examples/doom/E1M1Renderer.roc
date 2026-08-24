@@ -133,12 +133,15 @@ E1M1Renderer := [].{
 			u1 = atlas_u_local(U64.to_f64(rect.width), rect)
 			v0 = atlas_v_local(0, rect)
 			v1 = atlas_v_local(U64.to_f64(rect.height), rect)
-			$vertices = List.concat($vertices, [
-				{ position: { x: edge.point.x, y: low, z: edge.point.z }, uv: { x: u0, y: v1 }, tint },
-				{ position: { x: next.x, y: low, z: next.z }, uv: { x: u1, y: v1 }, tint },
-				{ position: { x: next.x, y: high, z: next.z }, uv: { x: u1, y: v0 }, tint },
-				{ position: { x: edge.point.x, y: high, z: edge.point.z }, uv: { x: u0, y: v0 }, tint },
-			])
+			$vertices = List.concat(
+				$vertices,
+				[
+					{ position: { x: edge.point.x, y: low, z: edge.point.z }, uv: { x: u0, y: v1 }, tint },
+					{ position: { x: next.x, y: low, z: next.z }, uv: { x: u1, y: v1 }, tint },
+					{ position: { x: next.x, y: high, z: next.z }, uv: { x: u1, y: v0 }, tint },
+					{ position: { x: edge.point.x, y: high, z: edge.point.z }, uv: { x: u0, y: v0 }, tint },
+				],
+			)
 			$indices = List.concat($indices, [offset, offset + 2, offset + 1, offset, offset + 3, offset + 2])
 		}
 		Ok({ vertices: $vertices, indices: $indices })
@@ -153,7 +156,8 @@ E1M1Renderer := [].{
 		length = sqrt(dx * dx + dy * dy)
 		height = I64.to_f64(wall.top - wall.bottom)
 		horizontal = tile_runs(length, I64.to_f64(wall.x_offset), U64.to_f64(rect.width), 0, [])
-		vertical = tile_runs(height, I64.to_f64(wall.y_offset), U64.to_f64(rect.height), 0, [])
+		bottom_row = wall_texture_row(wall, wall.bottom, rect.height)
+		vertical = descending_tile_runs(height, bottom_row, U64.to_f64(rect.height), 0, [])
 		var $vertices = []
 		var $indices = []
 		for x_run in horizontal {
@@ -180,6 +184,17 @@ E1M1Renderer := [].{
 			}
 		}
 		Ok({ vertices: $vertices, indices: $indices })
+	}
+
+	## Doom wall texture rows increase downward. This returns the unwrapped row
+	## at a world height; atlas splitting applies wrapping afterwards.
+	wall_texture_row : DoomMap.WallSpan, I64, U64 -> F64
+	wall_texture_row = |wall, world_height, texture_height| {
+		anchor = match wall.vertical_peg {
+			TopAt(height) => I64.to_f64(height)
+			BottomAt(height) => I64.to_f64(height) + U64.to_f64(texture_height)
+		}
+		anchor + I64.to_f64(wall.y_offset) - I64.to_f64(world_height)
 	}
 
 	light_tint : I64 -> Tint
@@ -261,6 +276,22 @@ tile_runs = |total, offset, period, position, runs| {
 		amount = F64.min(total - position, period - local)
 		run = { from: position, to: position + amount, uv_from: local, uv_to: local + amount }
 		tile_runs(total, offset, period, position + amount, List.append(runs, run))
+	}
+}
+
+# Split upward-moving wall geometry at descending texture-row seams. At a
+# seam, row `period` and row zero denote the same atlas edge but belong to
+# adjacent quads, avoiding filtering across unrelated atlas entries.
+descending_tile_runs : F64, F64, F64, F64, List(TileRun) -> List(TileRun)
+descending_tile_runs = |total, bottom_row, period, position, runs| {
+	if position >= total {
+		runs
+	} else {
+		wrapped = wrap(bottom_row - position, period)
+		uv_from = if wrapped <= 0.000001 period else wrapped
+		amount = F64.min(total - position, uv_from)
+		run = { from: position, to: position + amount, uv_from, uv_to: uv_from - amount }
+		descending_tile_runs(total, bottom_row, period, position + amount, List.append(runs, run))
 	}
 }
 
@@ -392,6 +423,7 @@ expect {
 		texture: "AQCOMP01",
 		x_offset: 0,
 		y_offset: 0,
+		vertical_peg: TopAt(128),
 		sector: 0,
 		light_level: 144,
 		flags: DoomMap.line_flags(1),
@@ -404,6 +436,30 @@ expect {
 			and List.len(wall.indices) == List.len(wall.vertices) / 4 * 6
 				and wall_first.tint == { r: 144, g: 144, b: 144, a: 255 }
 					and List.all(wall.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
+}
+
+expect {
+	base : DoomMap.WallSpan
+	base = {
+		linedef: 0,
+		side: Right,
+		kind: Middle,
+		start: { x: 0, y: 0 },
+		end: { x: 64, y: 0 },
+		bottom: 16,
+		top: 80,
+		texture: "AQCOMP01",
+		x_offset: 0,
+		y_offset: 7,
+		vertical_peg: TopAt(80),
+		sector: 0,
+		light_level: 160,
+		flags: DoomMap.line_flags(0),
+		special: NoSpecial,
+	}
+	top_pegged = E1M1Renderer.wall_texture_row(base, 80, 64)
+	bottom_pegged = E1M1Renderer.wall_texture_row({ ..base, vertical_peg: BottomAt(16) }, 16, 64)
+	top_pegged == 7 and bottom_pegged == 71
 }
 
 expect {
@@ -424,14 +480,20 @@ expect {
 	match activated {
 		Activated(opening) => {
 			door = List.get(opening.doors, 0) ?? crash "E1M1 door missing"
+			mid_state = DoomLevel.tick(opening)
 			closed_geometry = E1M1Renderer.sector_surfaces(map, initial, door.sector) ?? crash "door flat missing"
-			mid_geometry = E1M1Renderer.sector_surfaces(map, DoomLevel.tick(opening), door.sector) ?? crash "door flat missing"
+			mid_geometry = E1M1Renderer.sector_surfaces(map, mid_state, door.sector) ?? crash "door flat missing"
 			open_geometry = E1M1Renderer.sector_surfaces(map, advance_level(opening, 80), door.sector) ?? crash "door flat missing"
 			initial_extent = line_wall_extent(map.wall_spans_at(initial.heights), 55)
-			mid_extent = line_wall_extent(map.wall_spans_at(DoomLevel.tick(opening).heights), 55)
+			mid_walls = map.wall_spans_at(mid_state.heights)
+			mid_extent = line_wall_extent(mid_walls, 55)
+			closed_door_wall = List.find_first(map.wall_spans_at(initial.heights), |span| span.linedef == 55 and span.kind == Upper) ?? crash "closed door wall missing"
+			mid_door_wall = List.find_first(mid_walls, |span| span.linedef == 55 and span.kind == Upper) ?? crash "moving door wall missing"
 			max_geometry_y(mid_geometry) == max_geometry_y(closed_geometry) + 2 * E1M1Renderer.doom_scale
 				and max_geometry_y(open_geometry) == I64.to_f32(door.open) * E1M1Renderer.doom_scale
-				and mid_extent != initial_extent
+					and mid_extent != initial_extent
+						and closed_door_wall.vertical_peg == BottomAt(door.closed)
+							and mid_door_wall.vertical_peg == BottomAt(door.closed + 2)
 		}
 		_ => Bool.False
 	}
@@ -464,9 +526,18 @@ expect {
 expect {
 	map = DoomMap.e1m1
 	state0 = DoomLevel.initial(map)
-	state1 = match DoomLevel.use_line(map, state0, 55, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) { Activated(value) => value, _ => state0 }
-	state2 = match DoomLevel.use_line(map, state1, 753, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) { Activated(value) => value, _ => state1 }
-	state3 = match DoomLevel.cross_line(map, state2, 593) { Activated(value) => value, _ => state2 }
+	state1 = match DoomLevel.use_line(map, state0, 55, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) {
+		Activated(value) => value
+		_ => state0
+	}
+	state2 = match DoomLevel.use_line(map, state1, 753, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) {
+		Activated(value) => value
+		_ => state1
+	}
+	state3 = match DoomLevel.cross_line(map, state2, 593) {
+		Activated(value) => value
+		_ => state2
+	}
 	worst = advance_level(state3, 70)
 	static = E1M1Renderer.build_static(map) ?? crash "static geometry missing"
 	dynamic = E1M1Renderer.build_dynamic(map, worst) ?? crash "dynamic geometry missing"
@@ -474,12 +545,12 @@ expect {
 	dynamic_counts = geometry_counts(dynamic)
 	List.len(DoomLevel.dynamic_sectors(map)) <= 20
 		and List.len(dynamic) <= 2
-		and static_counts.vertices <= 20000
-		and static_counts.indices <= 30000
-		and dynamic_counts.vertices <= 1024
-		and dynamic_counts.indices <= 1536
-		and dynamic_counts.vertices < static_counts.vertices
-		and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
+			and static_counts.vertices <= 20000
+				and static_counts.indices <= 30000
+					and dynamic_counts.vertices <= 1024
+						and dynamic_counts.indices <= 1536
+							and dynamic_counts.vertices < static_counts.vertices
+								and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
 }
 
 expect {
@@ -500,8 +571,8 @@ expect {
 	first_vertex = List.get(geometry.vertices, 0) ?? crash "masked wall vertex missing"
 	List.len(masked) > 0
 		and first.kind == Middle
-		and first.flags.two_sided
-		and List.len(static) > 0
-		and first_vertex.tint.r == U64.to_u8_wrap(I64.to_u64_wrap(first.light_level))
-		and List.all(geometry.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
+			and first.flags.two_sided
+				and List.len(static) > 0
+					and first_vertex.tint.r == U64.to_u8_wrap(I64.to_u64_wrap(first.light_level))
+						and List.all(geometry.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
 }

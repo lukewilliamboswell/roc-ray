@@ -40,7 +40,16 @@ DoomMap := [].{
 		shown_on_map : Bool,
 	}
 	Special : [NoSpecial, Special({ number : U64, tag : U64 })]
-	SurfaceOrientation := [Floor, Ceiling].{ is_eq : _ }
+	SurfaceOrientation := [Floor, Ceiling].{
+		is_eq : _
+	}
+
+	## The world-height edge to which texture row zero is pegged. `BottomAt`
+	## requires the renderer to add the decoded texture height before applying
+	## the sidedef's vertical offset.
+	VerticalPeg := [TopAt(I64), BottomAt(I64)].{
+		is_eq : _
+	}
 	SurfacePolygon : { subsector : U64, sector : U64, orientation : SurfaceOrientation, vertices : List(SurfacePoint), height : I64, flat : Str, light_level : I64 }
 	SectorHeights : { floor : I64, ceiling : I64 }
 	BlockingSegment : { linedef : U64, start : Vertex, end : Vertex, flags : LineFlags, special : Special }
@@ -56,6 +65,7 @@ DoomMap := [].{
 		texture : Str,
 		x_offset : I64,
 		y_offset : I64,
+		vertical_peg : VerticalPeg,
 		sector : U64,
 		light_level : I64,
 		flags : LineFlags,
@@ -318,15 +328,21 @@ side_spans = |raw, line, line_index, side_name, own_ref, other_ref|
 			common : SpanCommon
 			common = { linedef: line_index, side: side_name, start, end, x_offset: own.x_offset, y_offset: own.y_offset, sector: own.sector, light_level: sector.light_level, flags: DoomMap.line_flags(line.flags), special: if line.special == 0 NoSpecial else Special({ number: line.special, tag: line.tag }) }
 			match other_ref {
-				Err(Null) => texture_span(own.middle_texture, common, Middle, sector.floor_height, sector.ceiling_height)
+				Err(Null) => {
+					peg = if common.flags.lower_unpegged BottomAt(sector.floor_height) else TopAt(sector.ceiling_height)
+					texture_span(own.middle_texture, common, Middle, sector.floor_height, sector.ceiling_height, peg)
+				}
 				Ok(other_index) => {
 					other = List.get(raw.sidedefs, other_index) ?? crash "validated sidedef missing"
 					other_sector = List.get(raw.sectors, other.sector) ?? crash "validated sector missing"
-					upper = if sector.ceiling_height > other_sector.ceiling_height texture_span(own.upper_texture, common, Upper, other_sector.ceiling_height, sector.ceiling_height) else []
-					lower = if sector.floor_height < other_sector.floor_height texture_span(own.lower_texture, common, Lower, sector.floor_height, other_sector.floor_height) else []
+					upper_peg = if common.flags.upper_unpegged TopAt(sector.ceiling_height) else BottomAt(other_sector.ceiling_height)
+					lower_peg = if common.flags.lower_unpegged TopAt(sector.ceiling_height) else TopAt(other_sector.floor_height)
+					upper = if sector.ceiling_height > other_sector.ceiling_height texture_span(own.upper_texture, common, Upper, other_sector.ceiling_height, sector.ceiling_height, upper_peg) else []
+					lower = if sector.floor_height < other_sector.floor_height texture_span(own.lower_texture, common, Lower, sector.floor_height, other_sector.floor_height, lower_peg) else []
 					opening_bottom = I64.max(sector.floor_height, other_sector.floor_height)
 					opening_top = I64.min(sector.ceiling_height, other_sector.ceiling_height)
-					middle = if opening_top > opening_bottom texture_span(own.middle_texture, common, Middle, opening_bottom, opening_top) else []
+					middle_peg = if common.flags.lower_unpegged BottomAt(opening_bottom) else TopAt(opening_top)
+					middle = if opening_top > opening_bottom texture_span(own.middle_texture, common, Middle, opening_bottom, opening_top, middle_peg) else []
 					List.concat(List.concat(lower, middle), upper)
 				}
 			}
@@ -335,11 +351,11 @@ side_spans = |raw, line, line_index, side_name, own_ref, other_ref|
 
 SpanCommon : { linedef : U64, side : DoomMap.Side, start : DoomMap.Vertex, end : DoomMap.Vertex, x_offset : I64, y_offset : I64, sector : U64, light_level : I64, flags : DoomMap.LineFlags, special : DoomMap.Special }
 
-texture_span : Try(Str, [Null]), SpanCommon, DoomMap.WallKind, I64, I64 -> List(DoomMap.WallSpan)
-texture_span = |texture, common, kind, bottom, top|
+texture_span : Try(Str, [Null]), SpanCommon, DoomMap.WallKind, I64, I64, DoomMap.VerticalPeg -> List(DoomMap.WallSpan)
+texture_span = |texture, common, kind, bottom, top, vertical_peg|
 	match texture {
 		Err(Null) => []
-		Ok(name) => if top <= bottom [] else [{ linedef: common.linedef, side: common.side, kind, start: common.start, end: common.end, bottom, top, texture: name, x_offset: common.x_offset, y_offset: common.y_offset, sector: common.sector, light_level: common.light_level, flags: common.flags, special: common.special }]
+		Ok(name) => if top <= bottom [] else [{ linedef: common.linedef, side: common.side, kind, start: common.start, end: common.end, bottom, top, texture: name, x_offset: common.x_offset, y_offset: common.y_offset, vertical_peg, sector: common.sector, light_level: common.light_level, flags: common.flags, special: common.special }]
 	}
 
 fixture_sector = |floor_height, ceiling_height, light_level| { floor_height, ceiling_height, floor_flat: "FLOOR", ceiling_flat: "CEIL", light_level, special: 0, tag: 0 }
@@ -385,7 +401,15 @@ expect {
 	map = DoomMap.validate(raw) ?? crash "fixture should validate"
 	spans = map.wall_spans()
 	span = List.get(spans, 0) ?? crash "one-sided wall missing"
-	List.len(spans) == 1 and span.kind == Middle and span.bottom == 0 and span.top == 128 and span.texture == "STONE" and span.special == Special({ number: 1, tag: 7 })
+	List.len(spans) == 1 and span.kind == Middle and span.bottom == 0 and span.top == 128 and span.texture == "STONE" and span.vertical_peg == TopAt(128) and span.special == Special({ number: 1, tag: 7 })
+}
+
+expect {
+	plain = DoomMap.validate(fixture(fixture_line(0, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(-16, 112, 160)])) ?? crash "plain wall"
+	unpegged = DoomMap.validate(fixture(fixture_line(0x0010, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(-16, 112, 160)])) ?? crash "unpegged wall"
+	plain_span = List.get(plain.wall_spans(), 0) ?? crash "plain span"
+	unpegged_span = List.get(unpegged.wall_spans(), 0) ?? crash "unpegged span"
+	plain_span.vertical_peg == TopAt(112) and unpegged_span.vertical_peg == BottomAt(-16)
 }
 
 expect {
@@ -397,10 +421,23 @@ expect {
 	map = DoomMap.validate(raw) ?? crash "fixture should validate"
 	spans = map.wall_spans()
 	List.len(spans) == 3
-		and List.any(spans, |span| span.side == Right and span.kind == Lower and span.bottom == 0 and span.top == 32 and span.texture == "LOWER_A")
-			and List.any(spans, |span| span.side == Right and span.kind == Middle and span.bottom == 32 and span.top == 128 and span.texture == "MASK_A")
-				and List.any(spans, |span| span.side == Right and span.kind == Upper and span.bottom == 128 and span.top == 192 and span.texture == "UPPER_A")
+		and List.any(spans, |span| span.side == Right and span.kind == Lower and span.bottom == 0 and span.top == 32 and span.texture == "LOWER_A" and span.vertical_peg == TopAt(32))
+			and List.any(spans, |span| span.side == Right and span.kind == Middle and span.bottom == 32 and span.top == 128 and span.texture == "MASK_A" and span.vertical_peg == TopAt(128))
+				and List.any(spans, |span| span.side == Right and span.kind == Upper and span.bottom == 128 and span.top == 192 and span.texture == "UPPER_A" and span.vertical_peg == BottomAt(128))
 					and !(List.any(spans, |span| span.side == Left))
+}
+
+expect {
+	raw = fixture(
+		fixture_line(0x001c, Ok(1)),
+		[fixture_side(0, Ok("UPPER_A"), Ok("LOWER_A"), Ok("MASK_A")), fixture_side(1, Err(Null), Err(Null), Err(Null))],
+		[fixture_sector(0, 192, 192), fixture_sector(32, 128, 96)],
+	)
+	map = DoomMap.validate(raw) ?? crash "unpegged portal should validate"
+	spans = map.wall_spans()
+	List.any(spans, |span| span.kind == Upper and span.vertical_peg == TopAt(192))
+		and List.any(spans, |span| span.kind == Lower and span.vertical_peg == TopAt(192))
+			and List.any(spans, |span| span.kind == Middle and span.vertical_peg == BottomAt(32))
 }
 
 expect {
@@ -496,15 +533,15 @@ expect {
 	start = map.player_start() ?? crash "player start missing"
 	List.len(surfaces) == 2
 		and floor.flat == "FLOOR"
-		and floor.height == -16
-		and floor.light_level == 144
-		and signed_area(floor.vertices) > 0
-		and ceiling.flat == "CEIL"
-		and ceiling.height == 112
-		and signed_area(ceiling.vertices) < 0
-		and List.len(map.blocking_segments()) == 4
-		and start.position == { x: 16, y: 24 }
-		and start.angle == 90
+			and floor.height == -16
+				and floor.light_level == 144
+					and signed_area(floor.vertices) > 0
+						and ceiling.flat == "CEIL"
+							and ceiling.height == 112
+								and signed_area(ceiling.vertices) < 0
+									and List.len(map.blocking_segments()) == 4
+										and start.position == { x: 16, y: 24 }
+											and start.angle == 90
 }
 
 expect {
@@ -528,10 +565,19 @@ expect {
 expect {
 	map = DoomMap.e1m1
 	surfaces = map.surface_polygons()
+	walls = map.wall_spans()
+	line48 = List.find_first(walls, |span| span.linedef == 48 and span.side == Right) ?? crash "real lower-unpegged middle missing"
+	line76 = List.find_first(walls, |span| span.linedef == 76 and span.side == Right and span.kind == Upper) ?? crash "real upper-unpegged upper missing"
+	line133_upper = List.find_first(walls, |span| span.linedef == 133 and span.side == Right and span.kind == Upper) ?? crash "real doubly-unpegged upper missing"
+	line133_lower = List.find_first(walls, |span| span.linedef == 133 and span.side == Right and span.kind == Lower) ?? crash "real doubly-unpegged lower missing"
 	List.len(surfaces) == 1364
 		and List.len(map.blocking_segments()) > 100
-		and match map.player_start() {
-			Ok(start) => start.angle >= 0 and start.angle < 360
-			Err(_) => Bool.False
-		}
+			and line48.vertical_peg == BottomAt(-128)
+				and line76.vertical_peg == TopAt(128)
+					and line133_upper.vertical_peg == TopAt(384)
+						and line133_lower.vertical_peg == TopAt(384)
+							and match map.player_start() {
+								Ok(start) => start.angle >= 0 and start.angle < 360
+								Err(_) => Bool.False
+							}
 }

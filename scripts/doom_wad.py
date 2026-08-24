@@ -56,8 +56,8 @@ GAMEPLAY_SOUNDS = {
 # null; unknown types fail extraction rather than silently losing artwork.
 THING_SPRITES: dict[int, str | None] = {
     1: None, 2: None, 3: None, 4: None, 5: "BKEY", 8: "BPAK", 9: "SPOS",
-    10: "PLAY", 11: None, 12: "PLAY", 15: "POSS", 17: "SARG", 18: "HEAD",
-    19: "SKUL", 20: "TROO", 21: "SPOS", 24: "POL5", 26: "CAND",
+    10: "PLAY", 11: None, 12: "PLAY", 15: "PLAY", 17: "CELP", 18: "POSS",
+    19: "SPOS", 20: "TROO", 21: "SARG", 24: "POL5", 26: "CAND",
     43: "TRE1", 47: "SMIT", 48: "ELEC", 54: "TRE2", 58: "SARG", 60: "GOR4",
     2001: "SHOT", 2002: "MGUN", 2003: "LAUN", 2004: "PLAS", 2005: "CSAW",
     2007: "CLIP", 2008: "SHEL", 2010: "ROCK", 2011: "STIM", 2012: "MEDI",
@@ -65,6 +65,16 @@ THING_SPRITES: dict[int, str | None] = {
     2023: "PSTR", 2028: "COLU", 2035: "BAR1", 2046: "PMAP", 2047: "PVIS",
     2048: "AMMO", 2049: "SBOX", 3001: "TROO", 3002: "SARG", 3004: "POSS",
 }
+
+THING_SEMANTICS = {
+    1:("Player 1 start","start","start_consumed"),2:("Player 2 start","start","start_ignored"),3:("Player 3 start","start","start_ignored"),4:("Player 4 start","start","start_ignored"),
+    5:("Blue keycard","gameplay","implemented_pickup"),8:("Backpack","gameplay","gameplay_unimplemented"),9:("Shotgun guy","gameplay","implemented_actor"),
+    10:("Bloody mess 1","decorative","decorative_ignored"),11:("Deathmatch start","start","start_ignored"),12:("Bloody mess 2","decorative","decorative_ignored"),15:("Dead player","decorative","decorative_ignored"),
+    17:("Cell charge pack","gameplay","gameplay_unimplemented"),18:("Dead former human","decorative","decorative_ignored"),19:("Dead shotgun guy","decorative","decorative_ignored"),20:("Dead imp","decorative","decorative_ignored"),21:("Dead demon","decorative","decorative_ignored"),24:("Pool of blood and flesh","decorative","decorative_ignored"),26:("Candle","decorative","decorative_ignored"),43:("Burnt tree","decorative","decorative_ignored"),47:("Stalagmite","decorative","decorative_ignored"),48:("Tech pillar","decorative","decorative_ignored"),54:("Large brown tree","decorative","decorative_ignored"),58:("Spectre","gameplay","gameplay_unimplemented"),60:("Hanging victim, arms out","decorative","decorative_ignored"),
+    2001:("Shotgun","gameplay","implemented_pickup"),2002:("Chaingun","gameplay","gameplay_unimplemented"),2003:("Rocket launcher","gameplay","gameplay_unimplemented"),2004:("Plasma rifle","gameplay","gameplay_unimplemented"),2005:("Chainsaw","gameplay","gameplay_unimplemented"),2007:("Ammo clip","gameplay","implemented_pickup"),2008:("Shotgun shells","gameplay","implemented_pickup"),2010:("Rocket","gameplay","gameplay_unimplemented"),2011:("Stimpack","gameplay","implemented_pickup"),2012:("Medikit","gameplay","implemented_pickup"),2013:("Soul sphere","gameplay","gameplay_unimplemented"),2014:("Health bonus","gameplay","implemented_pickup"),2015:("Armor bonus","gameplay","implemented_pickup"),2018:("Green armor","gameplay","implemented_pickup"),2019:("Blue armor","gameplay","implemented_pickup"),2023:("Berserk","gameplay","gameplay_unimplemented"),2028:("Floor lamp","decorative","decorative_ignored"),2035:("Explosive barrel","gameplay","implemented_actor"),2046:("Computer map","gameplay","gameplay_unimplemented"),2047:("Light amplification visor","gameplay","gameplay_unimplemented"),2048:("Box of bullets","gameplay","gameplay_unimplemented"),2049:("Box of shells","gameplay","gameplay_unimplemented"),3001:("Imp","gameplay","implemented_actor"),3002:("Demon","gameplay","gameplay_unimplemented"),3004:("Former human","gameplay","implemented_actor"),
+}
+if set(THING_SEMANTICS) != set(THING_SPRITES):
+    raise RuntimeError("thing semantic and sprite tables differ")
 
 
 def digest(data: bytes) -> str:
@@ -487,6 +497,35 @@ def doom_sound_wav(data: bytes, lump_name: str) -> tuple[bytes, int, int]:
     return wav, sample_rate, sample_count
 
 
+def thing_coverage(map_data: dict[str, object]) -> list[dict[str, object]]:
+    counts = Counter(thing["type"] for thing in map_data["things"])
+    unknown = set(counts) - set(THING_SEMANTICS)
+    absent = set(THING_SEMANTICS) - set(counts)
+    if unknown or absent:
+        raise ValueError(f"pinned E1M1 thing inventory changed: unknown={sorted(unknown)}, absent={sorted(absent)}")
+    coverage = []
+    for editor_type in sorted(counts):
+        semantic, classification, status = THING_SEMANTICS[editor_type]
+        coverage.append({"editor_type": editor_type, "count": counts[editor_type], "semantic_kind": semantic,
+                         "classification": classification, "sprite_prefix": THING_SPRITES[editor_type],
+                         "implementation_status": status})
+    if sum(entry["count"] for entry in coverage) != 292:
+        raise ValueError("pinned E1M1 no longer contains exactly 292 things")
+    return coverage
+
+
+def coverage_markdown(coverage: list[dict[str, object]]) -> str:
+    lines = ["# Freedoom Phase 1 E1M1 thing coverage", "",
+             "Generated by `scripts/doom_wad.py` from the pinned WAD. Do not edit by hand.", "",
+             "| Editor type | Count | Semantic kind | Class | Sprite | Implementation status |",
+             "|---:|---:|---|---|---|---|"]
+    for entry in coverage:
+        sprite = entry["sprite_prefix"] or "—"
+        lines.append(f"| {entry['editor_type']} | {entry['count']} | {entry['semantic_kind']} | {entry['classification']} | {sprite} | `{entry['implementation_status']}` |")
+    lines += ["", f"Total: **{sum(entry['count'] for entry in coverage)} things across {len(coverage)} editor types.**", ""]
+    return "\n".join(lines)
+
+
 def build(output: Path, supplied_zip: Path | None) -> None:
     archive = obtain_zip(supplied_zip)
     if digest(archive) != ZIP_SHA256:
@@ -497,9 +536,12 @@ def build(output: Path, supplied_zip: Path | None) -> None:
         raise ValueError("Freedoom Phase 1 WAD checksum mismatch")
     wad = Wad(wad_bytes)
     map_data, textures, flats, prefixes = parse_map(wad)
+    coverage = thing_coverage(map_data)
     prefixes.update(PRESENTATION_SPRITES)
     output.mkdir(parents=True, exist_ok=True)
     (output / "map.json").write_text(json.dumps(map_data, indent=2) + "\n")
+    (output / "thing_coverage.json").write_text(json.dumps({"map": MAP_NAME, "thing_count": 292, "entries": coverage}, indent=2) + "\n")
+    (output / "THING_COVERAGE.md").write_text(coverage_markdown(coverage))
     world = write_atlas(output / "world_atlas.png", world_images(wad, textures, flats))
     sprites = write_atlas(output / "sprite_atlas.png", sprite_images(wad, prefixes))
     (output / "world_atlas.json").write_text(json.dumps(world, indent=2) + "\n")
@@ -533,6 +575,7 @@ def build(output: Path, supplied_zip: Path | None) -> None:
     manifest = {"project": "Freedoom: Phase 1", "version": VERSION, "release_url": ZIP_URL,
                 "release_zip_sha256": ZIP_SHA256, "wad_member": WAD_MEMBER, "wad_sha256": WAD_SHA256,
                 "map": MAP_NAME, "map_stats": stats, "thing_type_counts": dict(sorted(Counter(t["type"] for t in map_data["things"]).items())),
+                "thing_coverage_path": "thing_coverage.json", "thing_coverage_markdown_path": "THING_COVERAGE.md",
                 "subsector_polygon_count": len(polygon_sizes),
                 "subsector_polygon_point_count": sum(polygon_sizes),
                 "subsector_polygon_min_points": min(polygon_sizes),

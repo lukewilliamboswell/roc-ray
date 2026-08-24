@@ -172,6 +172,7 @@ def build(output: Path, supplied_archive: Path | None) -> None:
             source_files[source] = sha256(data)
         (license_dir / "COPYING.adoc").write_bytes(member_bytes(archive, "COPYING.adoc"))
         (attribution_dir / "CREDITS").write_bytes(member_bytes(archive, "CREDITS"))
+        (attribution_dir / "CREDITS-MUSIC").write_bytes(member_bytes(archive, "CREDITS-MUSIC"))
 
     manifest = {
         "project": "Freedoom",

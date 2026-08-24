@@ -56,7 +56,12 @@ The source manifest records the pinned release, archive checksum, exact selected
 upstream paths, and each selected file's checksum. Keep the licence, credits,
 manifest, and this notice with redistributed generated assets.
 
-Freedoom 0.13.0 supplies its music as MIDI files. RocRay's music loader does not
-load MIDI, and reproducible rendering would require pinning a synthesizer and a
-separately licensed soundfont. This pipeline therefore deliberately includes no
-music rather than adding a heavyweight or legally ambiguous conversion step.
+Freedoom 0.13.0 supplies its music as MIDI files. The WAD stage extracts E1M1's
+exact standard MIDI to `generated/e1m1/music/e1m1.mid`, but RocRay's music
+loader does not load MIDI. TinySoundFont and TinyMidiLoader are permissively
+licensed and small enough to vendor; they do not include the instrument samples
+that determine rendered output. A reproducible renderer must also pin and ship
+an SF2 soundfont. No suitably small soundfont with clear source, redistribution,
+modification, and generated-audio terms has yet been selected and audited.
+Until that licensing and size decision is sound, the pipeline retains and
+checksums the MIDI rather than committing environment-dependent synthesis.

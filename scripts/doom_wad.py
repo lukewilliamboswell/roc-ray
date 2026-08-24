@@ -252,7 +252,17 @@ def sprite_images(wad: Wad, prefixes: set[str]) -> dict[str, tuple[Image.Image, 
                 image = doom_picture(wad.data[offset : offset + size], colors)
             except (IndexError, struct.error, ValueError):
                 continue
-            output[name] = (image, {"kind": "sprite", "doom_name": name})
+            aliases = []
+            suffix = name[4:]
+            if len(suffix) not in (2, 4) or not suffix[0].isalpha() or not suffix[1].isdigit():
+                raise ValueError(f"unexpected Doom sprite lump name: {name}")
+            aliases.append({"frame": suffix[0], "angle": int(suffix[1]), "mirrored": False})
+            if len(suffix) == 4:
+                if not suffix[2].isalpha() or not suffix[3].isdigit():
+                    raise ValueError(f"unexpected Doom sprite lump name: {name}")
+                aliases.append({"frame": suffix[2], "angle": int(suffix[3]), "mirrored": True})
+            output[name] = (image, {"kind": "sprite", "doom_name": name,
+                                   "sprite": name[:4], "aliases": aliases})
     missing = sorted(prefix for prefix in prefixes if not any(name.startswith(prefix) for name in output))
     if missing:
         raise ValueError(f"no sprite lumps found for prefixes: {missing}")
@@ -276,11 +286,12 @@ def write_atlas(path: Path, images: dict[str, tuple[Image.Image, dict[str, objec
     used_height = y + row_height + padding
     height = max(64, 1 << math.ceil(math.log2(used_height)))
     atlas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    entries = {}
+    entries = []
     for name in sorted(placements):
         px, py, image, metadata = placements[name]
         atlas.alpha_composite(image, (px, py))
-        entries[name] = {"x": px, "y": py, "width": image.width, "height": image.height, **metadata}
+        entries.append({"name": name, "rect": {"x": px, "y": py, "width": image.width,
+                                                "height": image.height}, **metadata})
     atlas.save(path, format="PNG", compress_level=9, optimize=False)
     return {"width": width, "height": height, "entries": entries}
 
@@ -309,12 +320,19 @@ def build(output: Path, supplied_zip: Path | None) -> None:
     sprites = write_atlas(output / "sprite_atlas.png", sprite_images(wad, prefixes))
     (output / "world_atlas.json").write_text(json.dumps(world, indent=2) + "\n")
     (output / "sprite_atlas.json").write_text(json.dumps(sprites, indent=2) + "\n")
+    music_dir = output / "music"
+    music_dir.mkdir(exist_ok=True)
+    midi = wad.last("D_E1M1")
+    if not midi.startswith(b"MThd"):
+        raise ValueError("D_E1M1 is not a standard MIDI file")
+    (music_dir / "e1m1.mid").write_bytes(midi)
     stats = {key: len(map_data[key]) for key in ("vertices", "linedefs", "sidedefs", "sectors", "things", "segs", "subsectors", "nodes")}
     manifest = {"project": "Freedoom: Phase 1", "version": VERSION, "release_url": ZIP_URL,
                 "release_zip_sha256": ZIP_SHA256, "wad_member": WAD_MEMBER, "wad_sha256": WAD_SHA256,
                 "map": MAP_NAME, "map_stats": stats, "thing_type_counts": dict(sorted(Counter(t["type"] for t in map_data["things"]).items())),
                 "texture_count": len(textures), "flat_count": len(flats), "sprite_prefixes": sorted(prefixes),
-                "sprite_lump_count": len(sprites["entries"])}
+                "sprite_lump_count": len(sprites["entries"]), "music_lump": "D_E1M1",
+                "music_path": "music/e1m1.mid", "music_sha256": digest(midi)}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 

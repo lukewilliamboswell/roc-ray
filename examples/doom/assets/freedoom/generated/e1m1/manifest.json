@@ -143,6 +143,459 @@
     "STTPRCNT"
   ],
   "hud_graphic_lump_count": 88,
+  "gameplay_sounds": [
+    {
+      "name": "effect/barrel_explosion",
+      "lump": "DSBAREXP",
+      "path": "sounds/effect_barrel_explosion.wav",
+      "sample_rate": 22050,
+      "sample_count": 22458,
+      "source_sha256": "833a731d91a38c535dcfc59d0b813ef24fdf7b538f9b44bc1ed3f03ab500bebc",
+      "wav_sha256": "832fd642e8d95f6d12be139bb665129e44826d55f915ba596c5eb25a38d83951"
+    },
+    {
+      "name": "effect/imp_explosion",
+      "lump": "DSFIRXPL",
+      "path": "sounds/effect_imp_explosion.wav",
+      "sample_rate": 22050,
+      "sample_count": 22505,
+      "source_sha256": "5f896682c787651249e3624c773420fe2a28633a6e18cc208837448f1ca8b92b",
+      "wav_sha256": "742a5cf62dba8211409bbe759174d70dc094c3d717382977401bfbfb19363012"
+    },
+    {
+      "name": "effect/imp_projectile",
+      "lump": "DSFIRSHT",
+      "path": "sounds/effect_imp_projectile.wav",
+      "sample_rate": 22050,
+      "sample_count": 44009,
+      "source_sha256": "3095e724545aa65f86f9fc890ca6ec944f5279a39f0b7059e7ac3995e83019e0",
+      "wav_sha256": "2a78b58368924ec94d74e73fa2202064572244caa94459f6d15dbaafcc0e0b58"
+    },
+    {
+      "name": "monster/former_human_active",
+      "lump": "DSPOSACT",
+      "path": "sounds/monster_former_human_active.wav",
+      "sample_rate": 22050,
+      "sample_count": 31040,
+      "source_sha256": "a02ad9faeda8ceb87d4a52013f476e0ea372353cf3b671ab82f1379715050e0a",
+      "wav_sha256": "a8414e57eee75850d225e37d36887733a0fcb9952ae4edf90c0161f8047711f7"
+    },
+    {
+      "name": "monster/former_human_attack",
+      "lump": "DSPISTOL",
+      "path": "sounds/monster_former_human_attack.wav",
+      "sample_rate": 22050,
+      "sample_count": 11026,
+      "source_sha256": "0cbea6c250ca8273153389266fca3698f6268488a9423ec5ac38e81d4114b2af",
+      "wav_sha256": "e778900a8e0fc2d7d3defe4545e5e20fb506b638f747345427983a8d7d32154c"
+    },
+    {
+      "name": "monster/former_human_death_1",
+      "lump": "DSPODTH1",
+      "path": "sounds/monster_former_human_death_1.wav",
+      "sample_rate": 22050,
+      "sample_count": 37116,
+      "source_sha256": "184bd143f5e5261db896dc32eeff228c92f7288e5032cb27c04a06d06a20ae1b",
+      "wav_sha256": "102a501d5b0efcd5a21b544d3f50db96721621ad3cca3a68405c1ab0bb5d440b"
+    },
+    {
+      "name": "monster/former_human_death_2",
+      "lump": "DSPODTH2",
+      "path": "sounds/monster_former_human_death_2.wav",
+      "sample_rate": 22050,
+      "sample_count": 16231,
+      "source_sha256": "793724fb6dde998efe0698f8671e9ba072522c6958115e36c357bb156c54d9fa",
+      "wav_sha256": "516590e4a7e706825fdf8b36aa1e1ca9a4a96e87f7871e78a0a02ff5f07e779e"
+    },
+    {
+      "name": "monster/former_human_death_3",
+      "lump": "DSPODTH3",
+      "path": "sounds/monster_former_human_death_3.wav",
+      "sample_rate": 22050,
+      "sample_count": 17492,
+      "source_sha256": "3911784e36824c78b0bdc0d07d776f38fdaa74379c6282915add9c422b6ff11f",
+      "wav_sha256": "259a66c1332ef85f9d4435ac8f46973aaf5eb2f12830ce8f94b0bf331f16d03b"
+    },
+    {
+      "name": "monster/former_human_pain",
+      "lump": "DSPOPAIN",
+      "path": "sounds/monster_former_human_pain.wav",
+      "sample_rate": 11025,
+      "sample_count": 4608,
+      "source_sha256": "ced291c1ae5951dde4a33d2e304276c7e82851739164fb2231d229f0371a255f",
+      "wav_sha256": "7433bb4943b45f4c415f4091d9e0dddcb2da726ff867316bd7f37b8dc80d4ab5"
+    },
+    {
+      "name": "monster/former_human_sight_1",
+      "lump": "DSPOSIT1",
+      "path": "sounds/monster_former_human_sight_1.wav",
+      "sample_rate": 22050,
+      "sample_count": 31429,
+      "source_sha256": "d1fa7a5f52fc082c4d654c3b6e7cc05eb5278f8f1f3269df6f4fc03d740118b0",
+      "wav_sha256": "dea89dce4485c60abbcb9417dcf998cb6edea98f4cd86ade64a1f2217e411856"
+    },
+    {
+      "name": "monster/former_human_sight_2",
+      "lump": "DSPOSIT2",
+      "path": "sounds/monster_former_human_sight_2.wav",
+      "sample_rate": 22050,
+      "sample_count": 18925,
+      "source_sha256": "7e3057ec3d1ce65ab60a29398ae0d21738ea5937d0c29e00a44aadb7a3cce87d",
+      "wav_sha256": "4316567ef0c3f0134c6f32f32dab810142796ac3169d968829116d922f0aebd0"
+    },
+    {
+      "name": "monster/former_human_sight_3",
+      "lump": "DSPOSIT3",
+      "path": "sounds/monster_former_human_sight_3.wav",
+      "sample_rate": 22050,
+      "sample_count": 18848,
+      "source_sha256": "2d32ffede8847909d8caf83d23118a4fe2c9b67f1b6c2634726d1918fec214b5",
+      "wav_sha256": "8bf34c60b16d4c4136dad6e6e1f983a71d95491578271540b57b3f1db782a256"
+    },
+    {
+      "name": "monster/imp_active",
+      "lump": "DSBGACT",
+      "path": "sounds/monster_imp_active.wav",
+      "sample_rate": 11025,
+      "sample_count": 10688,
+      "source_sha256": "61fe2c8dc37d8828ebd664402d8826406fc21f35f458338a561df595991cd274",
+      "wav_sha256": "60e075c4ac953c7339d54b099b68d7089c0d455f88cf203d8c314327be5fa379"
+    },
+    {
+      "name": "monster/imp_death_1",
+      "lump": "DSBGDTH1",
+      "path": "sounds/monster_imp_death_1.wav",
+      "sample_rate": 11025,
+      "sample_count": 9297,
+      "source_sha256": "8f3ad4ec5c1ddd82d63edb8a7ed8c3dcad15e5c597f50ab12517f9447664de76",
+      "wav_sha256": "870895e2a3e69d7d6968076f787e373ed4ec67af5a20510a9af2c72fcddc66a5"
+    },
+    {
+      "name": "monster/imp_death_2",
+      "lump": "DSBGDTH2",
+      "path": "sounds/monster_imp_death_2.wav",
+      "sample_rate": 11025,
+      "sample_count": 8715,
+      "source_sha256": "30abe706e3f8731939abe602d7036fa5838ef2986a1eb6e3cb546d844b4be9d4",
+      "wav_sha256": "7e7535dbb44502bdc74b8cb760cab46e8b6e70e50bb3b1e489961a77fb322aaa"
+    },
+    {
+      "name": "monster/imp_melee",
+      "lump": "DSCLAW",
+      "path": "sounds/monster_imp_melee.wav",
+      "sample_rate": 22050,
+      "sample_count": 9635,
+      "source_sha256": "6ac8e0c2c1e7e2ca3156f8de7ada8a1ae036abac18b87e80517fba7ce3286a4a",
+      "wav_sha256": "432b1122d267b761ee10cee5b607d774d8b0257fff7b983eb27c5530744de164"
+    },
+    {
+      "name": "monster/imp_pain",
+      "lump": "DSDMPAIN",
+      "path": "sounds/monster_imp_pain.wav",
+      "sample_rate": 22050,
+      "sample_count": 19062,
+      "source_sha256": "8907e6b34499ab38223a132c88266352c642c04e27d247b3c8a3fe49270da1d0",
+      "wav_sha256": "d53dde4aabea043171357e17d3a96296d67eb6056b8f175d04efa1ad8402a62e"
+    },
+    {
+      "name": "monster/imp_ranged_attack",
+      "lump": "DSFIRSHT",
+      "path": "sounds/monster_imp_ranged_attack.wav",
+      "sample_rate": 22050,
+      "sample_count": 44009,
+      "source_sha256": "3095e724545aa65f86f9fc890ca6ec944f5279a39f0b7059e7ac3995e83019e0",
+      "wav_sha256": "2a78b58368924ec94d74e73fa2202064572244caa94459f6d15dbaafcc0e0b58"
+    },
+    {
+      "name": "monster/imp_sight_1",
+      "lump": "DSBGSIT1",
+      "path": "sounds/monster_imp_sight_1.wav",
+      "sample_rate": 11025,
+      "sample_count": 8554,
+      "source_sha256": "f7af8e6eeb6378430284d2e9a582cec4bde5244afdcb2c2687fd51461ea87234",
+      "wav_sha256": "871891bc852b739964b2cf14174605156335ff7b1e735c029daa27dd262801c8"
+    },
+    {
+      "name": "monster/imp_sight_2",
+      "lump": "DSBGSIT2",
+      "path": "sounds/monster_imp_sight_2.wav",
+      "sample_rate": 11025,
+      "sample_count": 10323,
+      "source_sha256": "c24f0640311289e028fc5c8a3a1face50600bba4f399f0390a199b9695018e5d",
+      "wav_sha256": "c4069c9a4bd83f8bca8860aa11a4720dee5ba280c7802ba1ea15563b6a44e4f5"
+    },
+    {
+      "name": "monster/shotgun_guy_active",
+      "lump": "DSPOSACT",
+      "path": "sounds/monster_shotgun_guy_active.wav",
+      "sample_rate": 22050,
+      "sample_count": 31040,
+      "source_sha256": "a02ad9faeda8ceb87d4a52013f476e0ea372353cf3b671ab82f1379715050e0a",
+      "wav_sha256": "a8414e57eee75850d225e37d36887733a0fcb9952ae4edf90c0161f8047711f7"
+    },
+    {
+      "name": "monster/shotgun_guy_attack",
+      "lump": "DSSHOTGN",
+      "path": "sounds/monster_shotgun_guy_attack.wav",
+      "sample_rate": 11025,
+      "sample_count": 11191,
+      "source_sha256": "cf90aefbea186cb0c5208b8e108ed1cf5cfea2b6fc59a3af1f76702b1d88b821",
+      "wav_sha256": "e67298a23a2b9a9bfff626bfb1315e10cb1de1f1bb867262c3eb6c4df9706a3f"
+    },
+    {
+      "name": "monster/shotgun_guy_death_1",
+      "lump": "DSPODTH1",
+      "path": "sounds/monster_shotgun_guy_death_1.wav",
+      "sample_rate": 22050,
+      "sample_count": 37116,
+      "source_sha256": "184bd143f5e5261db896dc32eeff228c92f7288e5032cb27c04a06d06a20ae1b",
+      "wav_sha256": "102a501d5b0efcd5a21b544d3f50db96721621ad3cca3a68405c1ab0bb5d440b"
+    },
+    {
+      "name": "monster/shotgun_guy_death_2",
+      "lump": "DSPODTH2",
+      "path": "sounds/monster_shotgun_guy_death_2.wav",
+      "sample_rate": 22050,
+      "sample_count": 16231,
+      "source_sha256": "793724fb6dde998efe0698f8671e9ba072522c6958115e36c357bb156c54d9fa",
+      "wav_sha256": "516590e4a7e706825fdf8b36aa1e1ca9a4a96e87f7871e78a0a02ff5f07e779e"
+    },
+    {
+      "name": "monster/shotgun_guy_death_3",
+      "lump": "DSPODTH3",
+      "path": "sounds/monster_shotgun_guy_death_3.wav",
+      "sample_rate": 22050,
+      "sample_count": 17492,
+      "source_sha256": "3911784e36824c78b0bdc0d07d776f38fdaa74379c6282915add9c422b6ff11f",
+      "wav_sha256": "259a66c1332ef85f9d4435ac8f46973aaf5eb2f12830ce8f94b0bf331f16d03b"
+    },
+    {
+      "name": "monster/shotgun_guy_pain",
+      "lump": "DSPOPAIN",
+      "path": "sounds/monster_shotgun_guy_pain.wav",
+      "sample_rate": 11025,
+      "sample_count": 4608,
+      "source_sha256": "ced291c1ae5951dde4a33d2e304276c7e82851739164fb2231d229f0371a255f",
+      "wav_sha256": "7433bb4943b45f4c415f4091d9e0dddcb2da726ff867316bd7f37b8dc80d4ab5"
+    },
+    {
+      "name": "monster/shotgun_guy_sight_1",
+      "lump": "DSPOSIT1",
+      "path": "sounds/monster_shotgun_guy_sight_1.wav",
+      "sample_rate": 22050,
+      "sample_count": 31429,
+      "source_sha256": "d1fa7a5f52fc082c4d654c3b6e7cc05eb5278f8f1f3269df6f4fc03d740118b0",
+      "wav_sha256": "dea89dce4485c60abbcb9417dcf998cb6edea98f4cd86ade64a1f2217e411856"
+    },
+    {
+      "name": "monster/shotgun_guy_sight_2",
+      "lump": "DSPOSIT2",
+      "path": "sounds/monster_shotgun_guy_sight_2.wav",
+      "sample_rate": 22050,
+      "sample_count": 18925,
+      "source_sha256": "7e3057ec3d1ce65ab60a29398ae0d21738ea5937d0c29e00a44aadb7a3cce87d",
+      "wav_sha256": "4316567ef0c3f0134c6f32f32dab810142796ac3169d968829116d922f0aebd0"
+    },
+    {
+      "name": "monster/shotgun_guy_sight_3",
+      "lump": "DSPOSIT3",
+      "path": "sounds/monster_shotgun_guy_sight_3.wav",
+      "sample_rate": 22050,
+      "sample_count": 18848,
+      "source_sha256": "2d32ffede8847909d8caf83d23118a4fe2c9b67f1b6c2634726d1918fec214b5",
+      "wav_sha256": "8bf34c60b16d4c4136dad6e6e1f983a71d95491578271540b57b3f1db782a256"
+    },
+    {
+      "name": "pickup/item",
+      "lump": "DSITEMUP",
+      "path": "sounds/pickup_item.wav",
+      "sample_rate": 11025,
+      "sample_count": 2205,
+      "source_sha256": "11c28431a06b113a9795623957cc7c860e59ed446f21c56d261f8ea0a0b09aee",
+      "wav_sha256": "d7432219b669b472dd3904567329451003fd9adbb192f305778123ebedb0b6c6"
+    },
+    {
+      "name": "pickup/key",
+      "lump": "DSITEMUP",
+      "path": "sounds/pickup_key.wav",
+      "sample_rate": 11025,
+      "sample_count": 2205,
+      "source_sha256": "11c28431a06b113a9795623957cc7c860e59ed446f21c56d261f8ea0a0b09aee",
+      "wav_sha256": "d7432219b669b472dd3904567329451003fd9adbb192f305778123ebedb0b6c6"
+    },
+    {
+      "name": "pickup/powerup",
+      "lump": "DSGETPOW",
+      "path": "sounds/pickup_powerup.wav",
+      "sample_rate": 11025,
+      "sample_count": 4512,
+      "source_sha256": "6816bdbe6f84c9baeacb66c0273f2112e34b815defa7689ec2abe33fd494282c",
+      "wav_sha256": "ca8e0f2168ba94e990646aaa1ff28b17f52901b3dcdeda7c8b62b033a23f101d"
+    },
+    {
+      "name": "pickup/weapon",
+      "lump": "DSWPNUP",
+      "path": "sounds/pickup_weapon.wav",
+      "sample_rate": 11025,
+      "sample_count": 5732,
+      "source_sha256": "8abd10663c37330f3fae3fc0b74b74dbd658aae25ef16f04b03c458a47f81bec",
+      "wav_sha256": "b34577a03cacc48e4d3496e5b7c2bb6f7d7193befd9d65e8626ff09cc1d8fabe"
+    },
+    {
+      "name": "player/death",
+      "lump": "DSPLDETH",
+      "path": "sounds/player_death.wav",
+      "sample_rate": 11025,
+      "sample_count": 8273,
+      "source_sha256": "59d26838c23c343d7be6a857bc41069596a766b491ef13845dd45ea4c274f354",
+      "wav_sha256": "bd054e396d1b93bf53b1efc74c2179a49daea3f9007e10849ce491eb5e81084f"
+    },
+    {
+      "name": "player/death_high",
+      "lump": "DSPDIEHI",
+      "path": "sounds/player_death_high.wav",
+      "sample_rate": 11025,
+      "sample_count": 8901,
+      "source_sha256": "96cd96f60b0a54fd36a9f9f62f0b1429e3387636251156d3edf5be97792f7c7e",
+      "wav_sha256": "8ae66da57f8305dd147c09eafc07d130375f3e7d79200ceb550cda27c3494990"
+    },
+    {
+      "name": "player/no_way",
+      "lump": "DSNOWAY",
+      "path": "sounds/player_no_way.wav",
+      "sample_rate": 22050,
+      "sample_count": 8530,
+      "source_sha256": "ebdc236d2631897a7e71221552603f733e3268f7bedc8be5a9369ce4891e4997",
+      "wav_sha256": "eca5734b7dcebe9bc6b548996c391149d44a36fa6e62da56e81e2bf5d89ba2db"
+    },
+    {
+      "name": "player/oof",
+      "lump": "DSOOF",
+      "path": "sounds/player_oof.wav",
+      "sample_rate": 22050,
+      "sample_count": 7875,
+      "source_sha256": "6f52e5c7ae7ed85a1a9158be96f38a3d06e0a5e7a826c037519b8724bf99875d",
+      "wav_sha256": "bc42ef54cfb3843e710794c12b01b8f0d1d16780501973dfe5603049e289b07c"
+    },
+    {
+      "name": "player/pain",
+      "lump": "DSPLPAIN",
+      "path": "sounds/player_pain.wav",
+      "sample_rate": 22050,
+      "sample_count": 17856,
+      "source_sha256": "c5d987c24a88f7256f478ed572f03e7338f6ac124442ba2ab76e2459b4e30384",
+      "wav_sha256": "fbe66281e87c9411437ea49a3779d2c67d9966c693085c30d5597c664f75901d"
+    },
+    {
+      "name": "weapon/pistol",
+      "lump": "DSPISTOL",
+      "path": "sounds/weapon_pistol.wav",
+      "sample_rate": 22050,
+      "sample_count": 11026,
+      "source_sha256": "0cbea6c250ca8273153389266fca3698f6268488a9423ec5ac38e81d4114b2af",
+      "wav_sha256": "e778900a8e0fc2d7d3defe4545e5e20fb506b638f747345427983a8d7d32154c"
+    },
+    {
+      "name": "weapon/shotgun",
+      "lump": "DSSHOTGN",
+      "path": "sounds/weapon_shotgun.wav",
+      "sample_rate": 11025,
+      "sample_count": 11191,
+      "source_sha256": "cf90aefbea186cb0c5208b8e108ed1cf5cfea2b6fc59a3af1f76702b1d88b821",
+      "wav_sha256": "e67298a23a2b9a9bfff626bfb1315e10cb1de1f1bb867262c3eb6c4df9706a3f"
+    },
+    {
+      "name": "weapon/shotgun_cock",
+      "lump": "DSSGCOCK",
+      "path": "sounds/weapon_shotgun_cock.wav",
+      "sample_rate": 11025,
+      "sample_count": 5108,
+      "source_sha256": "d58da4eafb3ce3dba00b191454db4763795c950f9a681b85326e0f4ba6da0673",
+      "wav_sha256": "f3119137317b663e55e325b25453b6024d11f00ea4e6ba5470e80a9eb5c83778"
+    },
+    {
+      "name": "world/blazing_door_close",
+      "lump": "DSBDCLS",
+      "path": "sounds/world_blazing_door_close.wav",
+      "sample_rate": 22050,
+      "sample_count": 16128,
+      "source_sha256": "7db20cc312150c12eddaefea6285014abfd3bbed84f8879630362d0b632036e2",
+      "wav_sha256": "8e912a845d89656dbcec0c909a8a14a941c06b73b7f9dfa8e6f27d467d7db7d7"
+    },
+    {
+      "name": "world/blazing_door_open",
+      "lump": "DSBDOPN",
+      "path": "sounds/world_blazing_door_open.wav",
+      "sample_rate": 22050,
+      "sample_count": 18528,
+      "source_sha256": "93c3bd3f7da0913345291fb1c7daca42230254013d60964a9fa54bc6023e6c42",
+      "wav_sha256": "3cb2960130ec813d4cd877f5f6061d3143f7a25810a8552a49eab142f579ab19"
+    },
+    {
+      "name": "world/door_close",
+      "lump": "DSDORCLS",
+      "path": "sounds/world_door_close.wav",
+      "sample_rate": 22050,
+      "sample_count": 36651,
+      "source_sha256": "b16b9c5734eb1195ab4dac0fdefc906822a80904adc5f2bf09fe8fc72ca66ba5",
+      "wav_sha256": "eb02543094dfa5cd30f1e2fda64a8235217887048bb50f64f6783491f9efcaca"
+    },
+    {
+      "name": "world/door_open",
+      "lump": "DSDOROPN",
+      "path": "sounds/world_door_open.wav",
+      "sample_rate": 22050,
+      "sample_count": 36371,
+      "source_sha256": "3685bbe308904ac6f14ebdae847cd0e66a3bd805b3362c1fc03db15576efe0b7",
+      "wav_sha256": "e87050dab5cb680ce5532873f3178d3556162e5b8acc2baa131d8f3ad63b7763"
+    },
+    {
+      "name": "world/platform_move",
+      "lump": "DSSTNMOV",
+      "path": "sounds/world_platform_move.wav",
+      "sample_rate": 11025,
+      "sample_count": 2965,
+      "source_sha256": "a31304ab33ad35d9f318c614eef034d0acc63d4be95e49579897766ca3e36876",
+      "wav_sha256": "db209c7c155b6677021acd3b2e3fa9915021539e0623d1c647e3182a493375a7"
+    },
+    {
+      "name": "world/platform_start",
+      "lump": "DSPSTART",
+      "path": "sounds/world_platform_start.wav",
+      "sample_rate": 22050,
+      "sample_count": 26492,
+      "source_sha256": "ef1259d05f513cf7e448a3d5b98f29dbff3cd494a6e56e89a37c1d45d3fb9553",
+      "wav_sha256": "a51e6fe4eae0d96bd14e19e8fa76e8d9cc44740a78fd6aa11d3bb818cce4c0c0"
+    },
+    {
+      "name": "world/platform_stop",
+      "lump": "DSPSTOP",
+      "path": "sounds/world_platform_stop.wav",
+      "sample_rate": 22050,
+      "sample_count": 24293,
+      "source_sha256": "36369db520fa0cb7888c276c18f9f041dc3e36b6fd37d838a335ecc6410f5c9c",
+      "wav_sha256": "59e2a55141191668bcfe356b0cf9504c1a49200887dacd751336e96cbc329697"
+    },
+    {
+      "name": "world/switch_off",
+      "lump": "DSSWTCHX",
+      "path": "sounds/world_switch_off.wav",
+      "sample_rate": 22050,
+      "sample_count": 8529,
+      "source_sha256": "80fc87b47376493664d8a1a013e2904ae7bd6df32042ce3aeba459a381c5fac2",
+      "wav_sha256": "9ddbfa7ff9dc0d6a27365f797ceda4623a0eda2963f351808823de90a7fc3065"
+    },
+    {
+      "name": "world/switch_on",
+      "lump": "DSSWTCHN",
+      "path": "sounds/world_switch_on.wav",
+      "sample_rate": 22050,
+      "sample_count": 18003,
+      "source_sha256": "4836df44486a3d53c35a1e336f6e81b491fcd18fa6a7a24a51df54d7fdf18904",
+      "wav_sha256": "9080ba172035cfaed97226de25af9b6cbce43d44381aab3fa7b4270d13b3771d"
+    }
+  ],
+  "gameplay_sound_count": 50,
   "music_lump": "D_E1M1",
   "music_path": "music/e1m1.mid",
   "music_sha256": "f24cda4e8311e5938b544705a6c931767c56c368a48e51c252c4e8153ca06e13"

@@ -15,6 +15,7 @@ import rr.Color
 import rr.Draw
 import rr.Mouse
 import rr.Task
+import DoomControls
 import DoomLevel
 import DoomMap
 import DoomPresentation
@@ -141,12 +142,11 @@ update! = |model, input| {
 			input.devices.key_down(KeyS) or input.devices.key_down(KeyDown),
 			50,
 		)
-		side = signed_command(
-			input.devices.key_down(KeyD) or input.devices.key_down(KeyRight),
+		side = DoomControls.side(
 			input.devices.key_down(KeyA) or input.devices.key_down(KeyLeft),
-			40,
+			input.devices.key_down(KeyD) or input.devices.key_down(KeyRight),
 		)
-		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
+		turn = DoomControls.turn(input.devices.mouse.delta().x)
 		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
 		weapon_slot = if input.devices.key_pressed(Key2) SelectSlot(2) else if input.devices.key_pressed(Key3) SelectSlot(3) else if input.devices.key_pressed(Key4) SelectSlot(4) else if input.devices.key_pressed(Key5) SelectSlot(5) else if input.devices.key_pressed(Key6) SelectSlot(6) else if input.devices.key_pressed(Key8) SelectSlot(8) else KeepWeapon
 		previous_pos = model.world.doom.player.sim.state.pos
@@ -517,8 +517,6 @@ signed_command = |positive, negative, magnitude|
 	if positive and !(negative) magnitude else if negative and !(positive) 0 - magnitude else 0
 
 advance_level = |level, tics| if tics == 0 level else advance_level(DoomLevel.tick(level), tics - 1)
-
-mouse_turns_per_pixel = 0.0004
 
 logical_width = 320
 

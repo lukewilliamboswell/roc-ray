@@ -15,14 +15,14 @@ DoomRuntime := [].{
 	Aggro : { hunter : U64, target : U64 }
 	Explosion : { pos : DoomSim.Vec2, remaining : U64 }
 	WeaponState : { cooldown : U64, phase : U64 }
-	World : { doom : DoomWorld.World, skill : DoomWorld.Skill, projectiles : List(Projectile), explosions : List(Explosion), sound_origins : List(DoomSim.Vec2), aggro : List(Aggro), next_projectile_id : U64, weapon : WeaponState, phase : Phase }
+	World : { doom : DoomWorld.World, skill : DoomWorld.Skill, projectiles : List(Projectile), explosions : List(Explosion), sound_origins : List(DoomSim.Vec2), aggro : List(Aggro), next_projectile_id : U64, weapon : WeaponState, secrets_found : U64, visited_secret_sectors : List(U64), phase : Phase }
 	Advance : { world : World, tics : U64, dropped : Bool, fired : Bool, projectile_saturated : Bool }
 
 	initial : DoomWorld.World -> World
 	initial = |doom| initial_for_skill(doom, Medium)
 
 	initial_for_skill : DoomWorld.World, DoomWorld.Skill -> World
-	initial_for_skill = |doom, skill| { doom, skill, projectiles: [], explosions: [], sound_origins: [], aggro: [], next_projectile_id: 0, weapon: { cooldown: 0, phase: 0 }, phase: if doom.player.health <= 0 Dead else Playing }
+	initial_for_skill = |doom, skill| { doom, skill, projectiles: [], explosions: [], sound_origins: [], aggro: [], next_projectile_id: 0, weapon: { cooldown: 0, phase: 0 }, secrets_found: 0, visited_secret_sectors: [], phase: if doom.player.health <= 0 Dead else Playing }
 
 	advance : World, F32, DoomSim.Command, List(DoomSim.Segment) -> Advance
 	advance = |world, elapsed, command, blockers| {
@@ -67,7 +67,7 @@ DoomRuntime := [].{
 				heard0 = heard_actor_ids(map, sources, $next.doom.actors)
 				heard = if will_fire List.append(heard0, player_sound_id) else heard0
 				result = tic_hearing_in_map_with_intercepts($next, heard, extra_blockers, map, level, intercepts)
-				$next = apply_sector_hazard(result.world, map, $tic)
+				$next = discover_secret(apply_sector_hazard(result.world, map, $tic), map)
 				$tic = $tic + 1
 				$saturated = $saturated or result.projectile_saturated
 				$fired = $fired or result.fired
@@ -165,7 +165,7 @@ DoomRuntime := [].{
 			}
 		}
 		player0 = damage_player_for_skill(DoomWorld.tick_player_powers(world.doom.player), $damage + projectile_step.damage, world.skill)
-		collected = if player0.health <= 0 { player: player0, pickups: world.doom.pickups } else collect_nearby(player0, world.doom.pickups)
+		collected = if player0.health <= 0 { player: player0, pickups: world.doom.pickups } else collect_nearby(player0, world.doom.pickups, world.skill)
 		doom = { ..world.doom, player: collected.player, actors: $actors, pickups: collected.pickups, rng: $rng }
 		world0 = { ..world, doom, projectiles: projectile_step.projectiles, explosions: $explosions, sound_origins: $sound_origins, aggro: hit_result.aggro, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }
 		firing = List.contains(heard_actors, player_sound_id)
@@ -306,12 +306,12 @@ distance_to_segment_squared = |point, segment| {
 	DoomSim.distance_squared(point, DoomSim.add(segment.start, DoomSim.scale(along, amount)))
 }
 
-collect_nearby = |player, pickups| {
+collect_nearby = |player, pickups, skill| {
 	var $player = player
 	var $pickups = []
 	for pickup in pickups {
 		if !(pickup.taken) and DoomSim.distance_squared(player.sim.state.pos, pickup.pos) <= DoomRuntime.player_pickup_radius * DoomRuntime.player_pickup_radius {
-			result = DoomWorld.collect($player, pickup)
+			result = DoomWorld.collect_for_skill($player, pickup, skill)
 			$player = result.player
 			$pickups = List.append($pickups, result.pickup)
 		} else {
@@ -518,6 +518,15 @@ apply_sector_hazard = |world, map, tic| {
 		player = damage_player_for_skill(world.doom.player, damage, world.skill)
 		{ ..world, doom: { ..world.doom, player }, phase: if player.health <= 0 Dead else world.phase }
 	}
+}
+
+discover_secret = |world, map| {
+	pos = world.doom.player.sim.state.pos
+	sector = DoomLevel.sector_at(map, { x: F32.to_f64(pos.x), y: F32.to_f64(pos.y) }) ?? return world
+	value = List.get(map.raw().sectors, sector) ?? return world
+	if value.special == 9 and !(List.contains(world.visited_secret_sectors, sector)) {
+		{ ..world, secrets_found: world.secrets_found + 1, visited_secret_sectors: List.append(world.visited_secret_sectors, sector) }
+	} else world
 }
 
 damage_player_for_skill = |player, damage, skill|
@@ -808,6 +817,16 @@ expect {
 	closed_actor = List.get(closed.doom.actors, 0) ?? actor
 	opened_actor = List.get(opened.doom.actors, 0) ?? actor
 	closed_actor.state.mode == Look and opened_actor.state.mode == Chase
+}
+
+expect {
+	player = DoomWorld.player({ x: 508, y: 800 }, DoomSim.Angle.from_turns(0))
+	doom : DoomWorld.World
+	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	initial = DoomRuntime.initial(doom)
+	first = discover_secret(initial, DoomMap.e1m1)
+	second = discover_secret(first, DoomMap.e1m1)
+	first.secrets_found == 1 and second.secrets_found == 1 and List.len(second.visited_secret_sectors) == 1
 }
 
 expect {

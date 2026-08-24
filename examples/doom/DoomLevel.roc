@@ -15,7 +15,8 @@ DoomLevel := [].{
 		is_eq : _
 	}
 	Lift : { sector : U64, low : I64, high : I64, speed : I64, phase : LiftPhase }
-	State : { heights : List(SectorHeights), incident_lines : List(List(U64)), doors : List(Door), floors : List(FloorMover), lifts : List(Lift) }
+	LightFlash : { sector : U64, low : I64, high : I64, count : U64, dark : Bool }
+	State : { heights : List(SectorHeights), incident_lines : List(List(U64)), doors : List(Door), floors : List(FloorMover), lifts : List(Lift), tic : U64, light_rng : U8, light_flashes : List(LightFlash) }
 	UseResult : [Activated(State), Exit, Locked([Blue, Yellow, Red]), NotUsable]
 	Portal : { from_sector : U64, to_sector : U64, bottom : I64, top : I64, step : I64, traversable : Bool }
 	CollisionSegment : { linedef : U64, start : Point, end : Point }
@@ -29,6 +30,9 @@ DoomLevel := [].{
 			doors: [],
 			floors: [],
 			lifts: [],
+			tic: 0,
+			light_rng: 0,
+			light_flashes: initial_light_flashes(raw, 0, []),
 		}
 	}
 
@@ -49,6 +53,20 @@ DoomLevel := [].{
 	heights_for = |state, sector| match List.get(state.heights, sector) {
 		Ok(value) => Ok(value)
 		Err(_) => Err(SectorOutOfRange(sector))
+	}
+
+	light_for : DoomMap.Map, State, U64 -> Try(I64, [SectorOutOfRange(U64)])
+	light_for = |map, state, sector| {
+		raw_sector = List.get(map.raw().sectors, sector) ?? return Err(SectorOutOfRange(sector))
+		if raw_sector.special == 12 {
+			low = lowest_adjacent_light(map.raw(), sector, 0, raw_sector.light_level)
+			Ok(if state.tic == 0 or state.tic % 20 >= 16 raw_sector.light_level else low)
+		} else {
+			match List.find_first(state.light_flashes, |flash| flash.sector == sector) {
+				Ok(flash) => Ok(if flash.dark flash.low else flash.high)
+				Err(_) => Ok(raw_sector.light_level)
+			}
+		}
 	}
 
 	## Evaluate a two-sided line from one of its sectors. A portal is passable
@@ -101,7 +119,16 @@ DoomLevel := [].{
 	## Sectors whose planes can move under the supported E1M1 specials. Render
 	## adapters use this stable set to keep them out of retained static geometry.
 	dynamic_sectors : DoomMap.Map -> List(U64)
-	dynamic_sectors = |map| dynamic_sectors_from(map.raw(), initial(map), 0, [])
+	dynamic_sectors = |map| {
+		raw = map.raw()
+		var $result = dynamic_sectors_from(raw, initial(map), 0, [])
+		for entry in List.map_with_index(raw.sectors, |sector, index| { sector, index }) {
+			if (entry.sector.special == 1 or entry.sector.special == 12) and !(List.contains($result, entry.index)) {
+				$result = List.append($result, entry.index)
+			}
+		}
+		$result
+	}
 
 	## Activate the E1M1 use-line door vocabulary. Specials 1 and 117 are
 	## ordinary/blazing local doors; 26 is the blue-key variant; 62 opens all
@@ -139,7 +166,9 @@ DoomLevel := [].{
 	tick = |state| {
 		doors_advanced = tick_doors(state, state.doors, [], 0)
 		floors_advanced = tick_floors(doors_advanced, doors_advanced.floors, [], 0)
-		tick_lifts(floors_advanced, floors_advanced.lifts, [], 0)
+		lifts_advanced = tick_lifts(floors_advanced, floors_advanced.lifts, [], 0)
+		light = tick_light_flashes(lifts_advanced.light_flashes, lifts_advanced.light_rng, [], 0)
+		{ ..lifts_advanced, tic: lifts_advanced.tic + 1, light_rng: light.rng, light_flashes: light.flashes }
 	}
 }
 
@@ -252,6 +281,47 @@ side_sector = |raw, side_ref|
 	match side_ref {
 		Err(Null) => Err(NoSector)
 		Ok(index) => Ok((List.get(raw.sidedefs, index) ?? crash "validated sidedef missing").sector)
+	}
+
+lowest_adjacent_light = |raw, sector, line_index, found|
+	match List.get(raw.linedefs, line_index) {
+		Err(_) => found
+		Ok(line) => {
+			right = side_sector(raw, line.right_sidedef)
+			left = side_sector(raw, line.left_sidedef)
+			other = if right == Ok(sector) left else if left == Ok(sector) right else Err(NotAdjacent)
+			next = match other {
+				Ok(index) => I64.min(found, (List.get(raw.sectors, index) ?? crash "adjacent sector missing").light_level)
+				Err(_) => found
+			}
+			lowest_adjacent_light(raw, sector, line_index + 1, next)
+		}
+	}
+
+initial_light_flashes = |raw, sector, result|
+	match List.get(raw.sectors, sector) {
+		Err(_) => result
+		Ok(value) => {
+			next = if value.special == 1 {
+				List.append(result, { sector, low: lowest_adjacent_light(raw, sector, 0, value.light_level), high: value.light_level, count: 64, dark: Bool.False })
+			} else result
+			initial_light_flashes(raw, sector + 1, next)
+		}
+	}
+
+tick_light_flashes = |remaining, rng, result, index|
+	match List.get(remaining, index) {
+		Err(_) => { flashes: result, rng }
+		Ok(flash) => {
+			if flash.count > 1 {
+				tick_light_flashes(remaining, rng, List.append(result, { ..flash, count: flash.count - 1 }), index + 1)
+			} else {
+				next_rng = U16.to_u8_wrap(U8.to_u16(rng) * 73 + 41)
+				dark = !(flash.dark)
+				count = if dark 7 + U8.to_u64(next_rng % 8) else 64 + U8.to_u64(next_rng % 64)
+				tick_light_flashes(remaining, next_rng, List.append(result, { ..flash, count, dark }), index + 1)
+			}
+		}
 	}
 
 dynamic_sectors_from = |raw, state, index, result|
@@ -533,6 +603,25 @@ expect {
 		List.map_with_index(map.raw().sectors, |_sector, index| index),
 		|sector| DoomLevel.collision_segments(map, $opened, sector) == collision_segments_from(map, map.raw(), $opened, sector, 0),
 	)
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	var $after64 = initial
+	for _ in List.repeat({}, 64) {
+		$after64 = DoomLevel.tick($after64)
+	}
+	flash_bright = DoomLevel.light_for(map, initial, 32) ?? -1
+	flash_dark = DoomLevel.light_for(map, $after64, 32) ?? -1
+	strobe_initial = DoomLevel.light_for(map, initial, 90) ?? -1
+	strobe_dark = DoomLevel.light_for(map, DoomLevel.tick(initial), 90) ?? -1
+	var $after16 = initial
+	for _ in List.repeat({}, 16) {
+		$after16 = DoomLevel.tick($after16)
+	}
+	strobe_bright = DoomLevel.light_for(map, $after16, 90) ?? -1
+	flash_dark < flash_bright and $after64.light_rng != 0 and strobe_dark < strobe_initial and strobe_bright == strobe_initial
 }
 
 expect {

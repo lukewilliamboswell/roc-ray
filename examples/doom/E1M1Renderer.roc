@@ -63,11 +63,12 @@ E1M1Renderer := [].{
 			List.keep_if(map.surface_polygons(), |surface| List.contains(dynamic, surface.sector)),
 			|surface| {
 				heights = DoomLevel.heights_for(state, surface.sector) ?? crash "level state sector mismatch"
-				{ ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling }
+				light_level = DoomLevel.light_for(map, state, surface.sector) ?? crash "level light sector mismatch"
+				{ ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling, light_level }
 			},
 		)
 		all_walls = map.wall_spans_at(state.heights)
-		walls = List.keep_if(all_walls, |wall| line_touches_any(raw, wall.linedef, dynamic) and !(masked_middle(wall)))
+		walls = List.map(List.keep_if(all_walls, |wall| line_touches_any(raw, wall.linedef, dynamic) and !(masked_middle(wall))), |wall| { ..wall, light_level: DoomLevel.light_for(map, state, wall.sector) ?? wall.light_level })
 		build(surfaces, walls)
 	}
 
@@ -81,7 +82,7 @@ E1M1Renderer := [].{
 	build_masked_dynamic = |map, state| {
 		dynamic = DoomLevel.dynamic_sectors(map)
 		raw = map.raw()
-		walls = List.keep_if(map.wall_spans_at(state.heights), |wall| line_touches_any(raw, wall.linedef, dynamic) and masked_middle(wall))
+		walls = List.map(List.keep_if(map.wall_spans_at(state.heights), |wall| line_touches_any(raw, wall.linedef, dynamic) and masked_middle(wall)), |wall| { ..wall, light_level: DoomLevel.light_for(map, state, wall.sector) ?? wall.light_level })
 		build([], walls)
 	}
 
@@ -89,7 +90,7 @@ E1M1Renderer := [].{
 		heights = DoomLevel.heights_for(state, sector) ?? crash "level state sector mismatch"
 		surfaces = List.map(
 			List.keep_if(map.surface_polygons(), |surface| surface.sector == sector),
-			|surface| { ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling },
+			|surface| { ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling, light_level: DoomLevel.light_for(map, state, sector) ?? surface.light_level },
 		)
 		build(surfaces, [])
 	}
@@ -543,12 +544,12 @@ expect {
 	dynamic = E1M1Renderer.build_dynamic(map, worst) ?? crash "dynamic geometry missing"
 	static_counts = geometry_counts(static)
 	dynamic_counts = geometry_counts(dynamic)
-	List.len(DoomLevel.dynamic_sectors(map)) <= 20
-		and List.len(dynamic) <= 2
+	List.len(DoomLevel.dynamic_sectors(map)) <= 32
+		and List.len(dynamic) <= 4
 			and static_counts.vertices <= 20000
 				and static_counts.indices <= 30000
-					and dynamic_counts.vertices <= 1024
-						and dynamic_counts.indices <= 1536
+					and dynamic_counts.vertices <= 4096
+						and dynamic_counts.indices <= 6144
 							and dynamic_counts.vertices < static_counts.vertices
 								and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
 }

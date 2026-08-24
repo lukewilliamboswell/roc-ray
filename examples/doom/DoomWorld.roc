@@ -401,6 +401,17 @@ DoomWorld := [].{
 		}
 	}
 
+	collect_for_skill : Player, Pickup, Skill -> { player : Player, pickup : Pickup, collected : Bool }
+	collect_for_skill = |value, pickup, skill| {
+		first = collect(value, pickup)
+		if !(first.collected) or !(skill == Baby or skill == Nightmare) or !(grants_ammo(pickup.kind)) {
+			first
+		} else {
+			second = apply_pickup(first.player, pickup.kind)
+			{ player: second.player, pickup: first.pickup, collected: Bool.True }
+		}
+	}
+
 	## One host-cycle fold: player simulation determines the number of 35 Hz
 	## tics, then actor state and optional firing advance exactly that many times.
 	advance : World, F32, DoomSim.Command, List(DoomSim.Segment) -> Advance
@@ -499,6 +510,22 @@ DoomWorld := [].{
 	ambush_flag = 8.U64
 	multiplayer_flag = 16.U64
 }
+
+grants_ammo = |kind|
+	match kind {
+		ClipPickup => Bool.True
+		ShellPickup => Bool.True
+		ShotgunPickup => Bool.True
+		BackpackPickup => Bool.True
+		ChaingunPickup => Bool.True
+		RocketLauncherPickup => Bool.True
+		PlasmaRiflePickup => Bool.True
+		RocketPickup => Bool.True
+		BulletBoxPickup => Bool.True
+		ShellBoxPickup => Bool.True
+		CellPackPickup => Bool.True
+		_ => Bool.False
+	}
 
 apply_pickup = |player, kind|
 	match kind {
@@ -761,6 +788,16 @@ expect {
 	pickup = { id: 0, kind: ShotgunPickup, pos: base.sim.state.pos, taken: Bool.False }
 	result = DoomWorld.collect(base, pickup)
 	result.collected and result.player.weapon == Shotgun and DoomWorld.owns(result.player, Shotgun) and !(DoomWorld.owns(base, Shotgun))
+}
+
+expect {
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	clip : DoomWorld.Pickup
+	clip = { id: 0, kind: ClipPickup, pos: base.sim.state.pos, taken: Bool.False }
+	medium = DoomWorld.collect_for_skill(base, clip, Medium)
+	baby = DoomWorld.collect_for_skill(base, clip, Baby)
+	nightmare = DoomWorld.collect_for_skill(base, clip, Nightmare)
+	medium.player.ammo.bullets == 60 and baby.player.ammo.bullets == 70 and nightmare.player.ammo.bullets == 70
 }
 
 expect {

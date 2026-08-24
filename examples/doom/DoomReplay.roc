@@ -38,7 +38,9 @@ DoomReplay := [].{
 	replay : List(F32) -> Result
 	replay = |partitions| replay_runs(initial({}), runs, partitions, decoration_segments(DoomWorld.spawn(DoomMap.e1m1.raw().things, Baby).decorations), 0)
 
-	golden_checksum = 2481569275.U64
+	# Regenerated after the final Baby pickup and deterministic level/runtime
+	# semantics; terminal inventory is unchanged, but intermediate state differs.
+	golden_checksum = 2433127720.U64
 }
 
 command_in_runs = |runs, tic, index|

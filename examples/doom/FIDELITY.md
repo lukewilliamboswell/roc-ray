@@ -19,7 +19,7 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
 | Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Positional effects and a reproducibly rendered or natively synthesized Freedoom track accompany a complete run |
-| Whole level | Chocolate Doom running the same pinned WAD | A recorded start-to-exit input trace completes E1M1; state checkpoints are asserted and representative native frames are structurally validated, not compared with Chocolate Doom |
+| Whole level | Chocolate Doom running the same pinned WAD | The frozen `DoomReplay` ordinary-command fixture completes E1M1 and asserts route/state checkpoints; representative native frames are structurally validated, not compared with Chocolate Doom |
 
 ## Reference map
 

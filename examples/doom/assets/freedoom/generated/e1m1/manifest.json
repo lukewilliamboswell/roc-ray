@@ -598,5 +598,107 @@
   "gameplay_sound_count": 50,
   "music_lump": "D_E1M1",
   "music_path": "music/e1m1.mid",
-  "music_sha256": "f24cda4e8311e5938b544705a6c931767c56c368a48e51c252c4e8153ca06e13"
+  "music_sha256": "f24cda4e8311e5938b544705a6c931767c56c368a48e51c252c4e8153ca06e13",
+  "music_render_path": "music/e1m1.wav",
+  "music_render_sha256": "2e42172ef55fa081ddc103f53c428d9afa926f032abd9574ce6a9e118fdbcfde",
+  "music_requirements": {
+    "programs": [
+      {
+        "midi_program": 30,
+        "program_index": 29,
+        "name": "Overdriven Guitar"
+      },
+      {
+        "midi_program": 36,
+        "program_index": 35,
+        "name": "Fretless Bass"
+      },
+      {
+        "midi_program": 39,
+        "program_index": 38,
+        "name": "Synth Bass 1"
+      },
+      {
+        "midi_program": 51,
+        "program_index": 50,
+        "name": "Synth Strings 1"
+      },
+      {
+        "midi_program": 81,
+        "program_index": 80,
+        "name": "Lead 1 (square)"
+      },
+      {
+        "midi_program": 82,
+        "program_index": 81,
+        "name": "Lead 2 (sawtooth)"
+      },
+      {
+        "midi_program": 88,
+        "program_index": 87,
+        "name": "Lead 8 (bass + lead)"
+      },
+      {
+        "midi_program": 101,
+        "program_index": 100,
+        "name": "FX 5 (brightness)"
+      }
+    ],
+    "percussion": [
+      {
+        "midi_note": 27,
+        "name": "High Q"
+      },
+      {
+        "midi_note": 29,
+        "name": "Scratch Push"
+      },
+      {
+        "midi_note": 30,
+        "name": "Scratch Pull"
+      },
+      {
+        "midi_note": 36,
+        "name": "Bass Drum 1"
+      },
+      {
+        "midi_note": 38,
+        "name": "Acoustic Snare"
+      },
+      {
+        "midi_note": 39,
+        "name": "Hand Clap"
+      },
+      {
+        "midi_note": 40,
+        "name": "Electric Snare"
+      },
+      {
+        "midi_note": 42,
+        "name": "Closed Hi-Hat"
+      },
+      {
+        "midi_note": 44,
+        "name": "Pedal Hi-Hat"
+      },
+      {
+        "midi_note": 46,
+        "name": "Open Hi-Hat"
+      },
+      {
+        "midi_note": 49,
+        "name": "Crash Cymbal 1"
+      },
+      {
+        "midi_note": 53,
+        "name": "Ride Bell"
+      },
+      {
+        "midi_note": 57,
+        "name": "Crash Cymbal 2"
+      }
+    ],
+    "renderer": "project-authored deterministic integer oscillator bank",
+    "sample_rate": 11025
+  }
 }

@@ -36,6 +36,16 @@ DoomSprites := [].{
 		Ok(billboard(pos, viewer, view, Bool.False))
 	}
 
+	decoration_geometry : DoomWorld.Decoration, DoomSim.Vec2 -> Try(Geometry, [MissingDecorationSpriteMapping(DoomWorld.ThingKind), MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
+	decoration_geometry = |decoration, viewer| {
+		view = match DoomPresentation.decoration(decoration) {
+			Ok(value) => value
+			Err(MissingDecorationSpriteMapping(kind)) => return Err(MissingDecorationSpriteMapping(kind))
+			Err(MissingSprite(details)) => return Err(MissingSprite(details))
+		}
+		Ok(billboard(decoration.pos, viewer, view, Bool.False))
+	}
+
 	## Doom aliases: 1 front, 3 left, 5 back, 7 right, with even-numbered
 	## diagonals. Mirroring is metadata, not inferred from the requested bucket.
 	facing_alias : DoomSim.Angle, DoomSim.Vec2, DoomSim.Vec2 -> U64

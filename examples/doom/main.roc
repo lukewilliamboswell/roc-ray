@@ -30,6 +30,7 @@ RenderGeometry : {
 
 Model : {
 	world : DoomRuntime.World,
+	decorations : List(DoomWorld.Decoration),
 	level : DoomLevel.State,
 	blockers : List(DoomSim.Segment),
 	batches : List(RenderGeometry),
@@ -77,7 +78,9 @@ init! = App.init(
 		masked_batches = List.map(E1M1Renderer.build_masked_static(map) ?? crash "generated masked E1M1 atlas is incomplete", render_geometry)
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
-		world = initial_runtime(map, position, angle)
+		runtime = initial_runtime(map, position, angle)
+		world = runtime.world
+		decorations = runtime.decorations
 		level = DoomLevel.initial(map)
 		blockers = List.map(
 			map.blocking_segments(),
@@ -86,7 +89,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, level, blockers, batches, masked_batches, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
 	},
 )
 
@@ -98,10 +101,12 @@ update! = |model, input| {
 		start = DoomMap.e1m1.player_start() ?? crash "validated E1M1 player start missing"
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
-		world = initial_runtime(DoomMap.e1m1, position, angle)
+		runtime = initial_runtime(DoomMap.e1m1, position, angle)
+		world = runtime.world
+		decorations = runtime.decorations
 		level = DoomLevel.initial(DoomMap.e1m1)
-		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, level, position)
-		Ok({ ..model, world, level, blockers, flashes: DoomView.initial })
+		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, position), decoration_segments(decorations))
+		Ok({ ..model, world, decorations, level, blockers, flashes: DoomView.initial })
 	} else {
 		forward = signed_command(
 			input.devices.key_down(KeyW) or input.devices.key_down(KeyUp),
@@ -116,7 +121,7 @@ update! = |model, input| {
 		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
 		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
 		previous_pos = model.world.doom.player.sim.state.pos
-		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos)
+		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos), decoration_segments(model.decorations))
 		advanced = DoomRuntime.advance(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers)
 		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
@@ -181,7 +186,7 @@ draw_logical! = |model, frame| {
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: dynamic.vertices, indices: dynamic.indices })
 			}
 			masked_dynamic = E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, model.level) ?? crash "generated dynamic masked E1M1 atlas is incomplete"
-			sprites = sprite_geometry(model.world, model.level, state.pos)
+			sprites = sprite_geometry(model.world, model.decorations, model.level, state.pos)
 			scene.with_shader!(
 				model.sprite_shader,
 				|cutout| {
@@ -205,8 +210,8 @@ draw_logical! = |model, frame| {
 	Ok({})
 }
 
-sprite_geometry : DoomRuntime.World, DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
-sprite_geometry = |world, level, viewer| {
+sprite_geometry : DoomRuntime.World, List(DoomWorld.Decoration), DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
+sprite_geometry = |world, decorations, level, viewer| {
 	var $geometry = { vertices: [], indices: [] }
 	for actor in world.doom.actors {
 		primitive = DoomSprites.actor_geometry(actor, viewer) ?? crash "generated E1M1 actor has no sprite mapping"
@@ -228,6 +233,10 @@ sprite_geometry = |world, level, viewer| {
 		phase = (DoomRuntime.explosion_lifetime - explosion.remaining) / 3
 		primitive = DoomSprites.effect_geometry(ImpExplosion, explosion.pos, viewer, phase) ?? crash "Imp explosion sprite missing"
 		$geometry = append_sprite($geometry, place_above_floor(render_sprite_geometry(primitive), level, explosion.pos, 20))
+	}
+	for decoration in decorations {
+		primitive = DoomSprites.decoration_geometry(decoration, viewer) ?? crash "generated E1M1 decoration has no sprite mapping"
+		$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, decoration.pos))
 	}
 	$geometry
 }
@@ -288,6 +297,10 @@ draw_hud! = |frame, atlas, world, flashes| {
 	ammo = match player.weapon {
 		Pistol => player.ammo.bullets
 		Shotgun => player.ammo.shells
+		Chaingun => player.ammo.bullets
+		RocketLauncher => player.ammo.rockets
+		PlasmaRifle => player.ammo.cells
+		Chainsaw => 0
 	}
 	bar = DoomPresentation.hud(StatusBar) ?? crash "generated status bar sprite missing"
 	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: 0, y: size.height - hud_height, width: 320, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
@@ -356,9 +369,27 @@ overlay! = |frame, size, title, subtitle| {
 
 initial_runtime = |map, position, angle| {
 	spawned = DoomWorld.spawn(map.raw().things, Medium)
+	if !(List.is_empty(spawned.unsupported)) {
+		crash "validated E1M1 contains unsupported thing types"
+	}
 	doom : DoomWorld.World
 	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
-	DoomRuntime.initial(doom)
+	{ world: DoomRuntime.initial(doom), decorations: spawned.decorations }
+}
+
+decoration_segments = |decorations| {
+	var $segments = []
+	for decoration in decorations {
+		if decoration.blocking {
+			r = 16
+			a = { x: decoration.pos.x - r, y: decoration.pos.y - r }
+			b = { x: decoration.pos.x + r, y: decoration.pos.y - r }
+			c = { x: decoration.pos.x + r, y: decoration.pos.y + r }
+			d = { x: decoration.pos.x - r, y: decoration.pos.y + r }
+			$segments = List.concat($segments, [{ start: a, end: b }, { start: b, end: c }, { start: c, end: d }, { start: d, end: a }])
+		}
+	}
+	$segments
 }
 
 ## Resolve the independently testable mesh module's structural tint into the

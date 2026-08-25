@@ -1,4 +1,4 @@
-app [target] { fuzz: platform "../../../../../../roc-fuzz/platform/main.roc" }
+app [target] { fuzz: platform "../../../roc-fuzz/platform/main.roc" }
 
 ## Property fuzzing for the pure `DoomWorld` inventory/combat layer.
 ##

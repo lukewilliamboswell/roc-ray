@@ -1,4 +1,4 @@
-app [target] { fuzz: platform "/home/lbw/Documents/Github/roc-fuzz/platform/main.roc" }
+app [target] { fuzz: platform "../../../roc-fuzz/platform/main.roc" }
 
 import fuzz.Fuzz
 import DoomMap

@@ -1,4 +1,4 @@
-app [target] { fuzz: platform "../../../../../../roc-fuzz/platform/main.roc" }
+app [target] { fuzz: platform "../../../roc-fuzz/platform/main.roc" }
 
 ## Partition invariance of the `DoomTrace` oracle.
 ##

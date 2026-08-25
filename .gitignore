@@ -140,3 +140,9 @@ postcards/
 # Databases written by the sqlite example and probe
 sqlite_scores_out/
 probe_out/
+
+# Doom fuzz targets: keep sources and the findings backlog, not binaries or corpora
+examples/doom/fuzz_*
+!examples/doom/fuzz_*.roc
+!examples/doom/FUZZ_FINDINGS.md
+examples/doom/.roc-fuzz/

@@ -134,7 +134,6 @@ platform ""
 		"roc_draw_rectangle_raw": DrawHost.rectangle!,
 		"roc_draw_rounded_rectangle_lines_raw": DrawHost.rounded_rectangle_lines!,
 		"roc_draw_rounded_rectangle_raw": DrawHost.rounded_rectangle!,
-		"roc_draw_text_aligned_raw": DrawHost.text_aligned!,
 		"roc_draw_text_raw": DrawHost.text!,
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,

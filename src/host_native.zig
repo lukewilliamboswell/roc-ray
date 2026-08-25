@@ -5671,32 +5671,6 @@ fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
     hostedDrawTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) callconv(.c) void {
-    enforcePhase("Draw.text_at!", during_render);
-    defer args.text.decref(host);
-    defer releaseResourceBox(host, args.font);
-    if (active_headless) return;
-
-    const text_slice = args.text.asSlice();
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return;
-    defer text.deinit();
-
-    raylib.drawTextAlignedZ(
-        text.ptr,
-        fontForHandle(args.font),
-        .{ .x = args.pos.x, .y = args.pos.y },
-        args.size,
-        args.spacing,
-        args.color,
-        .{ .x = args.align_x, .y = args.align_y },
-    );
-}
-
-fn exportedDrawTextAlignedRaw(args: abi.DrawHostText_alignedArgs) callconv(.c) void {
-    hostedDrawTextAlignedRaw(activeHost(), args);
-}
-
 fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     enforcePhase("Draw.texture!", during_render);
     defer args.texture.decref(activeHost());
@@ -7299,7 +7273,6 @@ comptime {
         @export(&hostedDrawRectangleRaw, .{ .name = "roc_draw_rectangle_raw" });
         @export(&hostedDrawRoundedRectangleLinesRaw, .{ .name = "roc_draw_rounded_rectangle_lines_raw" });
         @export(&hostedDrawRoundedRectangleRaw, .{ .name = "roc_draw_rounded_rectangle_raw" });
-        @export(&exportedDrawTextAlignedRaw, .{ .name = "roc_draw_text_aligned_raw" });
         @export(&exportedDrawTextRaw, .{ .name = "roc_draw_text_raw" });
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });

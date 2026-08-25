@@ -64,7 +64,6 @@ DrawHost := [].{
 	PolygonLines : { points : List(Math.Vec2), color : Color.Rgba, thickness : F32 }
 	Fps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle }
-	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle, align_x : F32, align_y : F32 }
 	GlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
 	FontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(GlyphMetric) }
 	FrameSize : { width : F32, height : F32 }
@@ -130,7 +129,6 @@ DrawHost := [].{
 	rounded_rectangle! : RoundedRectangle => {}
 	rounded_rectangle_lines! : RoundedRectangleLines => {}
 	text! : Text => {}
-	text_aligned! : TextAligned => {}
 	draw_texture! : TextureDraw => {}
 	draw_texture_instances! : TextureInstances => {}
 	draw_texture_quad! : TextureQuad => {}

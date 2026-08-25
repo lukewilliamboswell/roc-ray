@@ -30,8 +30,8 @@
 ## Most shapes support equivalent receiver and free-function forms, such as
 ## `frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`.
 ##
-## `Draw.text!` draws without a layout pass. Use `Text` to measure, wrap, align,
-## or prepare text.
+## `Draw.text!` draws at an already-resolved top-left origin without a layout
+## pass. Use `Text` for optional anchor alignment or prepared text.
 import Assets
 import Camera
 import Color
@@ -367,19 +367,7 @@ Draw := [].{
 	## Text measurement result.
 	TextSize : Font.Size
 
-	## Horizontal text anchor.
-	HAlign : [Left, Center, Right]
-
-	## Vertical text anchor.
-	VAlign : [Top, Middle, Bottom]
-
-	## Horizontal and vertical text anchor.
-	TextAlign : {
-		horizontal : HAlign,
-		vertical : VAlign,
-	}
-
-	## Fully configured text draw.
+	## Fully configured text draw at a resolved top-left origin.
 	Text : {
 		pos : Vector2,
 		text : Str,
@@ -387,7 +375,6 @@ Draw := [].{
 		spacing : F32,
 		color : Color.Rgba,
 		font : Font,
-		align : TextAlign,
 	}
 
 	## Built-in-font text intended for quick diagnostics.
@@ -882,90 +869,6 @@ Draw := [].{
 	default_spacing : F32
 	default_spacing = 1
 
-	## Top-left text anchor.
-	##
-	## These nine constants and `align_offset` are the older alignment set, for
-	## `Draw.text_at!`. `Text.align_top_left` and its siblings are the ones to
-	## reach for: they are the same nine anchors, and they are what
-	## `Text.Prepared.draw!` takes.
-	align_top_left : TextAlign
-	align_top_left = { horizontal: Left, vertical: Top }
-
-	## Top-center text anchor.
-	align_top_center : TextAlign
-	align_top_center = { horizontal: Center, vertical: Top }
-
-	## Top-right text anchor.
-	align_top_right : TextAlign
-	align_top_right = { horizontal: Right, vertical: Top }
-
-	## Centered text anchor.
-	align_center : TextAlign
-	align_center = { horizontal: Center, vertical: Middle }
-
-	## Middle-left text anchor.
-	align_middle_left : TextAlign
-	align_middle_left = { horizontal: Left, vertical: Middle }
-
-	## Middle-right text anchor.
-	align_middle_right : TextAlign
-	align_middle_right = { horizontal: Right, vertical: Middle }
-
-	## Bottom-left text anchor.
-	align_bottom_left : TextAlign
-	align_bottom_left = { horizontal: Left, vertical: Bottom }
-
-	## Bottom-center text anchor.
-	align_bottom_center : TextAlign
-	align_bottom_center = { horizontal: Center, vertical: Bottom }
-
-	## Bottom-right text anchor.
-	align_bottom_right : TextAlign
-	align_bottom_right = { horizontal: Right, vertical: Bottom }
-
-	## Convert a measured size and alignment into an anchor offset.
-	align_offset : TextSize, TextAlign -> Vector2
-	align_offset = |size, align| {
-		x = match align.horizontal {
-			Left => 0
-			Center => size.width * 0.5
-			Right => size.width
-		}
-
-		y = match align.vertical {
-			Top => 0
-			Middle => size.height * 0.5
-			Bottom => size.height
-		}
-
-		{ x, y }
-	}
-
-	## Find the top-left text origin for an anchored position.
-	origin_for : Vector2, TextSize, TextAlign -> Vector2
-	origin_for = |pos, size, align| {
-		offset = Draw.align_offset(size, align)
-		{ x: pos.x - offset.x, y: pos.y - offset.y }
-	}
-
-	## Convert text alignment into horizontal and vertical factors from 0 to 1.
-	align_factor : TextAlign -> Vector2
-	align_factor = |align| {
-		x = match align.horizontal {
-			Left => 0
-			Center => 0.5
-			Right => 1
-		}
-
-		y = match align.vertical {
-			Top => 0
-			Middle => 0.5
-			Bottom => 1
-		}
-
-		{ x, y }
-	}
-
 	## Find the top-left position that centers measured text in a rectangle.
 	center_in_rect : Rectangle, TextSize -> Vector2
 	center_in_rect = |rect, size| {
@@ -1364,71 +1267,54 @@ Draw := [].{
 		}
 	}
 
-	## Draw text using explicit font, spacing, color, and anchor alignment.
+	## Draw text using an explicit font, spacing, color, and resolved top-left
+	## origin. This performs no measurement or alignment pass.
 	##
 	## Legal in `render!` only.
 	text! : Frame, Text => {}
-	text! = |_frame, cfg| {
-		align = Draw.align_factor(cfg.align)
-		DrawHost.text_aligned!({
+	text! = |_frame, cfg|
+		DrawHost.text!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
 			font: cfg.font.handle,
-			align_x: align.x,
-			align_y: align.y,
 		})
-	}
 
 	## Draw top-left aligned text with the built-in font and default spacing.
 	##
 	## Legal in `render!` only.
 	debug_text! : Frame, DebugText => {}
-	debug_text! = |_frame, cfg|
-		DrawHost.text_aligned!({
-			pos: cfg.pos,
-			text: cfg.text,
-			size: cfg.size,
-			spacing: Draw.default_spacing,
-			color: cfg.color,
-			font: Font.stub.handle,
-			align_x: 0,
-			align_y: 0,
-		})
+	debug_text! = |frame, cfg|
+		Draw.text!(
+			frame,
+			{
+				pos: cfg.pos,
+				text: cfg.text,
+				size: cfg.size,
+				spacing: Draw.default_spacing,
+				color: cfg.color,
+				font: Font.stub,
+			},
+		)
 
 	## Draw simple top-left aligned text with the built-in font.
 	##
 	## Legal in `render!` only.
 	text_at! : Frame, SimpleText => {}
-	text_at! = |_frame, cfg|
-		DrawHost.text_aligned!({
-			pos: cfg.pos,
-			text: cfg.text,
-			size: cfg.size,
-			spacing: Draw.default_spacing,
-			color: cfg.color,
-			font: Font.stub.handle,
-			align_x: 0,
-			align_y: 0,
-		})
-
-	## Draw simple text centered on its position.
-	##
-	## Legal in `render!` only.
-	text_centered! : Frame, SimpleText => {}
-	text_centered! = |_frame, cfg|
-		DrawHost.text_aligned!({
-			pos: cfg.pos,
-			text: cfg.text,
-			size: cfg.size,
-			spacing: Draw.default_spacing,
-			color: cfg.color,
-			font: Font.stub.handle,
-			align_x: 0.5,
-			align_y: 0.5,
-		})
+	text_at! = |frame, cfg|
+		Draw.text!(
+			frame,
+			{
+				pos: cfg.pos,
+				text: cfg.text,
+				size: cfg.size,
+				spacing: Draw.default_spacing,
+				color: cfg.color,
+				font: Font.stub,
+			},
+		)
 
 }
 
@@ -1486,9 +1372,6 @@ normalized_color = |color| {
 	w: U8.to_f32(color.a) / 255,
 }
 
-expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
-expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
-expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
 expect match Draw.ProjectiveQuad.from_corners({

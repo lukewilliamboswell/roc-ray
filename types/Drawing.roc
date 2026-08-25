@@ -13,7 +13,7 @@ frame.Drawable :
 		frame.clear! : frame, Color.Rgba => {},
 		frame.rectangle! : frame, { x : F32, y : F32, width : F32, height : F32, style : { fill : [NoFill, Fill(Color.Rgba)], stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })] } } => {},
 		frame.rounded_rectangle! : frame, { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, style : { fill : [NoFill, Fill(Color.Rgba)], stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })] } } => {},
-		frame.text! : frame, { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align : { horizontal : [Left, Center, Right], vertical : [Top, Middle, Bottom] } } => {},
+		frame.text! : frame, { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font } => {},
 		frame.texture! : frame, Drawing.TextureDraw => {},
 		frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 	]
@@ -39,17 +39,8 @@ Drawing := [].{
 	## approximate each corner arc.
 	RoundedRectangle : { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, style : ShapeStyle }
 
-	## Which horizontal edge or center of a text box `pos` refers to.
-	HAlign : [Left, Center, Right]
-
-	## Which vertical edge or center of a text box `pos` refers to.
-	VAlign : [Top, Middle, Bottom]
-
-	## Where `pos` sits within the text it places, in both axes at once.
-	TextAlign : { horizontal : HAlign, vertical : VAlign }
-
-	## A string, where to put it, and how to paint it.
-	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align : TextAlign }
+	## A string, its resolved top-left origin, and how to paint it.
+	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font }
 
 	## One textured quad: which part of the texture to read (`source`), where to
 	## put it (`dest`), the point within `dest` that `rotation` turns around

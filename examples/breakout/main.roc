@@ -589,12 +589,12 @@ draw_bodies! = |frame, game| {
 
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
-	model.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon, align: Text.align_top_left })
-	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
+	model.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon })
+	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
+	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
 	if model.demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
 	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
-	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: (Middle, Center) })
 }
 
 # A prompt that fades in and out on its own clock, so a waiting screen still has
@@ -606,7 +606,7 @@ draw_state_overlay! : Draw.Frame, Model => {}
 draw_state_overlay! = |frame, model|
 	match model.game.state {
 		Ready =>
-			model.launch_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 350 }, color: Color.with_alpha(hud_color, prompt_alpha(model)), align: Text.align_center })
+			model.launch_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 350 }, color: Color.with_alpha(hud_color, prompt_alpha(model)), align: (Middle, Center) })
 		Playing => {}
 		Won => draw_banner!(frame, model, model.won_line, Color.from_hex_rgb(0x4ce0b3))
 		GameOver => draw_banner!(frame, model, model.over_line, Color.from_hex_rgb(0xff4f7d))
@@ -615,6 +615,6 @@ draw_state_overlay! = |frame, model|
 draw_banner! : Draw.Frame, Model, Text.Prepared, Color.Rgba => {}
 draw_banner! = |frame, model, line, accent| {
 	frame.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
-	line.draw!(frame, { pos: { x: screen_w * 0.5, y: 318 }, color: accent, align: Text.align_center })
-	model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 362 }, color: Color.with_alpha(hint_color, prompt_alpha(model)), align: Text.align_center })
+	line.draw!(frame, { pos: { x: screen_w * 0.5, y: 318 }, color: accent, align: (Middle, Center) })
+	model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 362 }, color: Color.with_alpha(hint_color, prompt_alpha(model)), align: (Middle, Center) })
 }

@@ -1271,7 +1271,9 @@ draw_spawn! : Draw.Frame, Level, Text.Font => {}
 draw_spawn! = |frame, level, font| {
 	frame.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
 	frame.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
-	frame.text!({ pos: { x: level.spawn.x, y: level.spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font, align: Draw.align_top_center })
+	Text.from("START", font)
+		.size(18)
+		.draw!(frame, { pos: { x: level.spawn.x, y: level.spawn.y + 63 }, color: Color.with_alpha(Color.white, 190), align: (Top, Center) })
 }
 
 draw_exit! : Draw.Frame, Level, World, Text.Font => {}
@@ -1281,7 +1283,9 @@ draw_exit! = |frame, level, world, font| {
 	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
 	frame.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
 	frame.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
-	frame.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font, align: Draw.align_top_center })
+	Text.from(if is_open "EXIT OPEN" else "LOCKED EXIT", font)
+		.size(19)
+		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: (Top, Center) })
 }
 
 draw_obstacle! : Draw.Frame, Draw.Texture, World.Obstacle => {}
@@ -1438,14 +1442,14 @@ draw_hud! = |frame, level, world, font| {
 	is_open = gate_is_open(world.gate)
 
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
+	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font })
+	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 	draw_bar!(frame, 196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
 	draw_bar!(frame, 510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
-	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
 
 	if world.flash > 0 {
 		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })
@@ -1455,17 +1459,17 @@ draw_hud! = |frame, level, world, font| {
 
 	match world.state {
 		Playing => {}
-		Won => draw_modal!(frame, "All sparks recovered", "Press SPACE to run again", Color.from_hex_rgb(0x43aa8b))
-		GameOver => draw_modal!(frame, "Spark Run ended", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
+		Won => draw_modal!(frame, font, "All sparks recovered", "Press SPACE to run again", Color.from_hex_rgb(0x43aa8b))
+		GameOver => draw_modal!(frame, font, "Spark Run ended", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
 	}
 }
 
-draw_modal! : Draw.Frame, Str, Str, Color.Rgba => {}
-draw_modal! = |frame, title, subtitle, accent| {
+draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
+draw_modal! = |frame, font, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
 	frame.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
-	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 276 }, text: title, size: 30, color: Color.white })
-	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
+	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
+	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
 }
 
 approx : F32, F32 -> Bool

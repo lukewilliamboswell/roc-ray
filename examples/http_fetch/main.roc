@@ -182,8 +182,8 @@ render! = |model, frame| {
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
 	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
 
-	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink, align: Text.align_top_left })
-	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted })
 
 	width = size.width - 88
 	accent = state_color(model.state)
@@ -213,7 +213,7 @@ render! = |model, frame| {
 		},
 	)?
 
-	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
 	Ok({})
 }
 

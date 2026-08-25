@@ -1,11 +1,16 @@
-## Prepare text once, then measure and draw it without per-frame allocation.
+## Align and draw immediate text, or prepare it once to draw repeatedly without
+## per-frame allocation.
 ##
 ## ```roc
 ## title = Text.from("Hello", font).size(38).prepare!()?
 ## ```
 ##
 ## ```roc
-## model.title.draw!(frame, { pos: { x: 400, y: 60 }, color: Color.white, align: Text.align_top_center })
+## Text.from("Score", font).size(24).draw!(frame, { pos, color: Color.white, align: (Top, Right) })
+## ```
+##
+## ```roc
+## model.title.draw!(frame, { pos: { x: 400, y: 60 }, color: Color.white, align: (Top, Center) })
 ## ```
 ##
 ## `Prepared.bounds` returns the measured size. `Placement.align` selects which
@@ -33,12 +38,8 @@ Text := [].{
 	## Which vertical edge or centre of the text `pos` names.
 	VAlign : [Top, Middle, Bottom]
 
-	## Where `pos` sits within the text, in both axes at once. The nine
-	## `align_*` values below are every combination, named.
-	Align : {
-		horizontal : HAlign,
-		vertical : VAlign,
-	}
+	## Where `pos` sits within the text, as `(vertical, horizontal)`.
+	Align : (VAlign, HAlign)
 
 	## A measured width and height, in the same logical units as every drawing
 	## call. This is `Draw.TextSize` and the types package's `Font.Size` under a
@@ -54,14 +55,16 @@ Text := [].{
 	Placement : {
 		pos : Math.Vec2,
 		color : Color.Rgba,
-		align : Align,
+		align : Align ?? (Top, Left),
 	}
 
-	## A string and the style to prepare it with. Start one with `Text.from`,
-	## adjust it with the receivers below, and finish it with `prepare!`.
+	## A string and its drawing style. Start one with `Text.from`, adjust it with
+	## the receivers below, then draw it immediately or finish it with
+	## `prepare!` for repeated drawing.
 	##
-	## A builder is a plain description, so building one costs nothing and it
-	## can be assembled anywhere. Only `prepare!` reaches the host.
+	## A builder is a plain description, so building and measuring one costs
+	## nothing and it can be assembled anywhere. `draw!` and `prepare!` are the
+	## operations that reach the host.
 	Builder :: {
 		content : Str,
 		size : F32,
@@ -85,6 +88,29 @@ Text := [].{
 		## Draw this text in a different font.
 		font : Builder, RrtFont.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
+
+		## Measure this description from the font's immutable metric snapshot,
+		## resolve `placement.align`, and draw it immediately.
+		##
+		## Legal in `render!` only. This is an alignment convenience for text
+		## that does not need a retained `Prepared` resource; `Draw.text!` is the
+		## lower-level operation for callers that already resolved the origin.
+		draw! : Builder, Draw.Frame, Placement => {}
+		draw! = |builder, frame, placement| {
+			measured = builder.font.measure({ text: builder.content, size: builder.size, spacing: builder.spacing })
+			pos = Text.origin_for(placement.pos, measured, placement.align)
+			Draw.text!(
+				frame,
+				{
+					pos,
+					text: builder.content,
+					size: builder.size,
+					spacing: builder.spacing,
+					color: placement.color,
+					font: builder.font,
+				},
+			)
+		}
 
 		## Cache immutable UTF-8 text, font and style, and measurement in the
 		## host.
@@ -156,7 +182,7 @@ Text := [].{
 	default_spacing = Draw.default_spacing
 
 	## Start describing a string drawn in a font. Adjust the result with
-	## `size`, `spacing` and `font`, then call `prepare!`.
+	## `size`, `spacing` and `font`, then draw or prepare it.
 	from : Str, RrtFont.Font -> Builder
 	from = |content, font| {
 		content,
@@ -192,58 +218,21 @@ Text := [].{
 		}
 	}
 
-	## Anchor `pos` at the top-left corner of the text.
-	##
-	## These nine constants are the ones to use with `Placement`. `Draw` has a
-	## set under the same names for `Draw.text_at!`, which draws an unprepared
-	## string.
-	align_top_left : Align
-	align_top_left = { horizontal: Left, vertical: Top }
-
-	## Anchor `pos` at the top edge, centred horizontally.
-	align_top_center : Align
-	align_top_center = { horizontal: Center, vertical: Top }
-
-	## Anchor `pos` at the top-right corner of the text.
-	align_top_right : Align
-	align_top_right = { horizontal: Right, vertical: Top }
-
-	## Anchor `pos` at the centre of the text, in both axes.
-	align_center : Align
-	align_center = { horizontal: Center, vertical: Middle }
-
-	## Anchor `pos` at the left edge, centred vertically.
-	align_middle_left : Align
-	align_middle_left = { horizontal: Left, vertical: Middle }
-
-	## Anchor `pos` at the right edge, centred vertically.
-	align_middle_right : Align
-	align_middle_right = { horizontal: Right, vertical: Middle }
-
-	## Anchor `pos` at the bottom-left corner of the text.
-	align_bottom_left : Align
-	align_bottom_left = { horizontal: Left, vertical: Bottom }
-
-	## Anchor `pos` at the bottom edge, centred horizontally.
-	align_bottom_center : Align
-	align_bottom_center = { horizontal: Center, vertical: Bottom }
-
-	## Anchor `pos` at the bottom-right corner of the text.
-	align_bottom_right : Align
-	align_bottom_right = { horizontal: Right, vertical: Bottom }
-
 	## How far the anchor named by an `Align` sits from the text's top-left
 	## corner, for a text of this size. `origin_for` is what a draw uses; this
 	## is the piece it is built from.
 	align_offset : Size, Align -> Math.Vec2
 	align_offset = |size, align| {
-		x = match align.horizontal {
+		vertical = align.0
+		horizontal = align.1
+
+		x = match horizontal {
 			Left => 0
 			Center => size.width * 0.5
 			Right => size.width
 		}
 
-		y = match align.vertical {
+		y = match vertical {
 			Top => 0
 			Middle => size.height * 0.5
 			Bottom => size.height
@@ -268,7 +257,7 @@ Text := [].{
 	## Prefer the receiver. This form takes the frame first, like every other
 	## free drawing function, and takes the text as a field of its config
 	## record rather than as its own argument.
-	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align } => {}
+	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align ?? (Top, Left) } => {}
 	draw_prepared! = |_frame, cfg| {
 		Prepared.(prepared) = cfg.text
 		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
@@ -276,7 +265,12 @@ Text := [].{
 	}
 }
 
-expect Text.align_offset({ width: 100, height: 40 }, Text.align_center) == { x: 50, y: 20 }
+expect Text.align_offset({ width: 100, height: 40 }, (Middle, Center)) == { x: 50, y: 20 }
+
+default_placement : Text.Placement
+default_placement = { pos: { x: 0, y: 0 }, color: Color.white }
+
+expect default_placement.align == (Top, Left)
 
 ## Prepared text keeps the size the host measured while preparing it, and the
 ## stub has no measurement to keep. Zeroed bounds are the honest answer: they
@@ -285,5 +279,5 @@ expect Text.Prepared.stub.bounds() == { width: 0, height: 0 }
 
 ## With no bounds, every alignment resolves to the placement point itself, which
 ## is what makes drawing a stub harmless in a layout that does happen to run.
-expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_center) == { x: 40, y: 12 }
-expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_bottom_right) == { x: 40, y: 12 }
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), (Middle, Center)) == { x: 40, y: 12 }
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), (Bottom, Right)) == { x: 40, y: 12 }

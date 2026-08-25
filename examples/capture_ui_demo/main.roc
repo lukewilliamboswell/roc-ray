@@ -282,7 +282,7 @@ render! = |model, frame| {
 	over_toggle = inside(model.mouse, toggle_button)
 
 	frame.clear!(theme.bg)
-	model.title.draw!(frame, { pos: { x: 40, y: 22 }, color: theme.ink, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 40, y: 22 }, color: theme.ink })
 	frame.text_at!({ pos: { x: 40, y: 54 }, text: "A scripted pointer and keyboard on the real input path", size: 13, color: theme.muted })
 	frame.rounded_rectangle!({ x: widget_panel.x, y: widget_panel.y, width: widget_panel.width, height: widget_panel.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 
@@ -293,7 +293,7 @@ render! = |model, frame| {
 
 	match List.get(model.field_labels, model.typed) {
 		Ok(label) => {
-			label.draw!(frame, { pos: field_text_origin, color: theme.ink, align: Text.align_top_left })
+			label.draw!(frame, { pos: field_text_origin, color: theme.ink })
 			if model.focused and caret_visible(model.frame) {
 				draw_caret!(frame, field_text_origin.x + label.bounds().width + 3)
 			}
@@ -303,7 +303,7 @@ render! = |model, frame| {
 	}
 
 	match List.get(model.counter_labels, U64.to_u64(model.clicks)) {
-		Ok(label) => label.draw!(frame, { pos: { x: 40, y: 92 }, color: Color.from_hex_rgb(0x3ddc97), align: Text.align_top_left })
+		Ok(label) => label.draw!(frame, { pos: { x: 40, y: 92 }, color: Color.from_hex_rgb(0x3ddc97) })
 		Err(_) => {}
 	}
 
@@ -430,7 +430,7 @@ draw_button! = |frame, box, hovered, active, label| {
 		{
 			pos: { x: box.x + box.width / 2, y: box.y + box.height / 2 - 10 },
 			color: if active Color.from_hex_rgb(0x08131f) else theme.ink,
-			align: Text.align_top_center,
+			align: (Top, Center),
 		},
 	)
 }

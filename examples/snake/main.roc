@@ -545,9 +545,11 @@ draw_board! = |frame| {
 
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
-	model.title.draw!(frame, { pos: { x: board_x, y: 26 }, color: snake_head, align: Text.align_top_left })
-	frame.text!({ pos: { x: screen_w - board_x, y: 30 }, text: "SCORE ${U64.to_str(model.score)}", size: 24, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xd7e3ff), font: model.font, align: Draw.align_top_right })
-	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })
+	model.title.draw!(frame, { pos: { x: board_x, y: 26 }, color: snake_head })
+	Text.from("SCORE ${U64.to_str(model.score)}", model.font)
+		.size(24)
+		.draw!(frame, { pos: { x: screen_w - board_x, y: 30 }, color: Color.from_hex_rgb(0xd7e3ff), align: (Top, Right) })
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: (Middle, Center) })
 }
 
 draw_game_over! : Draw.Frame, Model => {}
@@ -557,10 +559,10 @@ draw_game_over! = |frame, model|
 		GameOver => {
 			board_w = I32.to_f32(grid_cols) * cell_size
 			frame.rectangle!({ x: board_x - 8, y: 236, width: board_w + 16, height: 140, style: Draw.filled(Color.with_alpha(field_bottom, 225)) })
-			model.over_title.draw!(frame, { pos: { x: screen_w * 0.5, y: 282 }, color: food_neon, align: Text.align_center })
+			model.over_title.draw!(frame, { pos: { x: screen_w * 0.5, y: 282 }, color: food_neon, align: (Middle, Center) })
 			# The prompt breathes on the same clock as the food, so a waiting
 			# screen still has a heartbeat.
 			prompt_alpha = F32.to_u8_wrap(150 + 105 * food_pulse(model))
-			model.over_hint.draw!(frame, { pos: { x: screen_w * 0.5, y: 336 }, color: Color.with_alpha(hint_color, prompt_alpha), align: Text.align_center })
+			model.over_hint.draw!(frame, { pos: { x: screen_w * 0.5, y: 336 }, color: Color.with_alpha(hint_color, prompt_alpha), align: (Middle, Center) })
 		}
 	}

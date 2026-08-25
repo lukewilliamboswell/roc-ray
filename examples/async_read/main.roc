@@ -162,15 +162,15 @@ expect
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	size = draw_backdrop!(frame)
-	model.title.draw!(frame, { pos: { x: 44, y: 40 }, color: ink, align: Text.align_top_left })
-	model.subtitle.draw!(frame, { pos: { x: 44, y: 76 }, color: muted, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 44, y: 40 }, color: ink })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 76 }, color: muted })
 
 	card_width = size.width - 88
 	draw_row!(frame, { y: 128, width: card_width, accent: accent_read, label: "Files.read_text!", path: small_path, phase: string_phase(model.small), value: describe_string(model.small), elapsed: model.elapsed })
 	draw_row!(frame, { y: 216, width: card_width, accent: accent_bytes, label: "Files.read_bytes!", path: large_path, phase: bytes_phase(model.large), value: describe_bytes(model.large), elapsed: model.elapsed })
 	draw_row!(frame, { y: 304, width: card_width, accent: accent_meta, label: "Files.metadata!", path: small_path, phase: meta_phase(model.meta), value: describe_meta(model.meta), elapsed: model.elapsed })
 
-	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
 	Ok({})
 }
 

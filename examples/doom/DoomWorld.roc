@@ -327,8 +327,12 @@ DoomWorld := [].{
 
 	damage_actor : Actor, I64 -> Actor
 	damage_actor = |value, amount| {
-		health = I64.max(0, value.health - I64.max(0, amount))
-		if health <= 0 { ..value, health, state: state(Dead) } else { ..value, health, state: state(Pain) }
+		if amount <= 0 {
+			value
+		} else {
+			health = I64.max(0, value.health - amount)
+			if health <= 0 { ..value, health, state: state(Dead) } else { ..value, health, state: state(Pain) }
+		}
 	}
 
 	## Apply damage and consume one gameplay random byte for Doom-style pain
@@ -988,4 +992,16 @@ expect {
 	sphere = at(full, SoulSpherePickup)
 	bonus = at(full, HealthBonusPickup)
 	full.health == 200 and sphere.collected and sphere.player.health == 200 and bonus.collected and bonus.player.health == 200
+}
+
+expect {
+	# W4: non-positive damage is a no-op and never restarts the pain state.
+	actor = DoomWorld.actor(1, Imp, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	var $chasing = actor
+	for _ in List.repeat({}, 12) {
+		$chasing = DoomWorld.tick_actor($chasing)
+	}
+	zero = DoomWorld.damage_actor($chasing, 0)
+	negative = DoomWorld.damage_actor($chasing, -5)
+	$chasing.state.mode == Chase and zero.state.mode == Chase and zero.state.remaining == $chasing.state.remaining and negative.health == $chasing.health and negative.state.mode == Chase
 }

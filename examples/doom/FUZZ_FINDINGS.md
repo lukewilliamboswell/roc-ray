@@ -278,6 +278,7 @@ suspected live-height sector swap in `activate_local_door`; not reached.
 
 ### W4. `damage_actor(actor, amount <= 0)` restarts the Pain state
 - Severity: domain-gap (low)
+- **Status: FIXED** — early return for `amount <= 0`; regression expect in `DoomWorld.roc`; the previously disabled `fuzz_world` check is now live (60 s / 714 k execs clean).
 - Location: `DoomWorld.roc:334-338`
 - Input: damage 0 on a chasing Imp → `{ mode: Pain }`, resetting its countdown.
 - Root cause: the `else` branch is unconditional; the amount is already

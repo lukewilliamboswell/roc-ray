@@ -430,9 +430,9 @@ test_actor = |input| {
 					if amount <= 0 and a.state.mode != Dead and plain.state.mode == Dead {
 						crash "PROPERTY: non-positive damage killed actor ${ctx}"
 					}
-					if Bool.False and amount <= 0 and a.state.mode != Dead and plain.state.mode == Pain {
-						# GUARD B4: damage_actor(_, <=0) unconditionally enters Pain (disabled check).
-						crash "FIDELITY: non-positive damage entered pain ${Str.inspect(amount)} ${ctx}"
+					if amount <= 0 and a.state.mode != Dead and plain.state.mode != a.state.mode {
+						# W4 fixed: damage_actor(_, <= 0) is a no-op.
+						crash "PROPERTY: non-positive damage changed state ${Str.inspect(amount)} ${ctx}"
 					}
 					if rolled.entered_pain and rolled.actor.state.mode != Pain {
 						crash "PROPERTY: entered_pain without Pain state ${ctx}"

@@ -11,6 +11,12 @@ Gamepad := [].{
 
 	## Gamepad input sampled once per host-cycle input for every slot.
 	##
+	## Sampled, unlike the keyboard and mouse: raylib polls gamepads once per
+	## cycle with no event callback to record from, so the pressed and released
+	## bits come from comparing two samples and a button pressed and released
+	## between two cycles is lost. Hold a button for at least one cycle to be
+	## sure it registers.
+	##
 	## Declared in the `roc-ray-types` package's `Gamepad` and re-exported here,
 	## which is also where its receivers are documented.
 	Snapshot : RrtGamepad.Snapshot
@@ -47,11 +53,14 @@ Gamepad := [].{
 	button_up : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_up = RrtGamepad.button_up
 
-	## Check if a gamepad button was pressed during this input interval.
+	## Check if a gamepad button went from up to down between the previous
+	## sample and this one. Sampled, so a press and release inside one cycle
+	## is not seen; see `Snapshot`.
 	button_pressed : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_pressed = RrtGamepad.button_pressed
 
-	## Check if a gamepad button was released during this input interval.
+	## Check if a gamepad button went from down to up between the previous
+	## sample and this one, with the same caveat as `button_pressed`.
 	button_released : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_released = RrtGamepad.button_released
 

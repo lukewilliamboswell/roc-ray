@@ -334,6 +334,41 @@ reports overflow explicitly or documents that it is intentionally lossy and
 what is coalesced. "Latest value" is sufficient for state; silently losing an
 edge or a message is not equivalent.
 
+The `devices` snapshot is where the two kinds meet, and its fields are
+classified as follows. On the desktop host the interval events are recorded by
+the host's own callbacks, chained behind raylib's on the window: raylib keeps
+levels, not queues -- its key and mouse-button callbacks store the latest
+action, its scroll callback overwrites the wheel, and its character queue holds
+sixteen per poll -- so anything that happened between two polls would collapse
+into whatever came last. Recording at the callback is what makes the guarantee
+below hold independently of frame timing.
+
+| Field | Kind | Source | Capacity and coalescing |
+| --- | --- | --- | --- |
+| `keys` held bit, `mouse` held bits, `mouse` position and delta | State sample | raylib's level at the cycle boundary | Latest value |
+| `keys` and `mouse.buttons` pressed and released bits | Interval event | Window-system key and mouse-button callbacks | Per key or button, at least one press and at least one release since the previous input; several of one key coalesce into one bit, count and order not retained; auto-repeat is not a press |
+| `mouse` wheel | Interval event | Window-system scroll callback | Every notch in the interval summed |
+| `text_input` | Interval event | Window-system character callback | 32 codepoints in the order typed; `text_input_overflow` set when more arrived and the rest were discarded |
+| `gamepads` held bits and axes | State sample | raylib's per-cycle gamepad poll | Latest value |
+| `gamepads` pressed and released bits | Sampled edge | Comparison of two consecutive polls | Intentionally lossy: a press and release between two polls is not seen; there is no callback to record from |
+
+The guarantee this gives an application is that every key, mouse-button,
+scroll and character event that reaches the process is either delivered in
+the next `Input` or reported as an overflow -- never silently lost -- with a
+latency of at most one cycle. A key tapped between two cycles is pressed and
+released in one input and held in neither; a button released and pressed
+again between two cycles is released and pressed in one input and held in
+both. Order across sources within one interval -- a character relative to a
+key edge, one key relative to another -- is not defined, and clicks in one
+interval all share the boundary pointer position. Gamepad buttons carry no
+such guarantee and say so.
+
+A scripted keyboard (`Keys.set_source!`, `--host-keys`) is the same derivation
+over a scripted level, with a scripted tap recorded as an edge inside the
+cycle, so a headless or windowed test can state the between-polls case that a
+level per cycle could never express, and hardware edges are shut out entirely
+while a script is the source.
+
 `App.Input(msg)` is also the type witness that ties a task's message to the
 application's own `Msg`. Only the platform's entry module can name the
 `requires` bound, so any public function whose signature mentions `msg` and

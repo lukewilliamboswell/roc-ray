@@ -1,10 +1,12 @@
-## Pointer state sampled into one host-cycle input.
+## Pointer state and button events for one host-cycle input.
 ##
 ## Pass `input.devices.mouse` directly to the pure position, movement, wheel,
 ## and button-state receivers.
 Mouse := [].{
 
-	## Mouse input sampled once at the start of the current frame.
+	## Mouse input for one cycle. Position, movement and the held bits are
+	## samples at the cycle boundary; the pressed and released bits and the
+	## wheel are events recorded since the previous input.
 	Snapshot := {
 		buttons : List(U8),
 		left : Bool,
@@ -25,11 +27,12 @@ Mouse := [].{
 		button_up : Snapshot, Button -> Bool
 		button_up = |mouse, button| Mouse.button_up(mouse, button)
 
-		## Whether a button was pressed during this input interval.
+		## Whether a button was pressed at least once since the previous input.
+		## A click that began and ended between two cycles still counts.
 		button_pressed : Snapshot, Button -> Bool
 		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
 
-		## Whether a button was released during this input interval.
+		## Whether a button was released at least once since the previous input.
 		button_released : Snapshot, Button -> Bool
 		button_released = |mouse, button| Mouse.button_released(mouse, button)
 
@@ -41,7 +44,8 @@ Mouse := [].{
 		delta : Snapshot -> { x : F32, y : F32 }
 		delta = |mouse| Mouse.delta(mouse)
 
-		## Horizontal and vertical wheel movement for this input interval.
+		## Horizontal and vertical wheel movement since the previous input,
+		## every notch in the interval summed.
 		wheel_delta : Snapshot -> { x : F32, y : F32 }
 		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
 	}
@@ -73,7 +77,8 @@ Mouse := [].{
 	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
 	delta = |mouse| { x: mouse.delta_x, y: mouse.delta_y }
 
-	## Horizontal and vertical wheel movement retained for this input interval.
+	## Horizontal and vertical wheel movement since the previous input, every
+	## notch in the interval summed.
 	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
 	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
 
@@ -103,11 +108,13 @@ Mouse := [].{
 	button_up : { buttons : List(U8), ..state }, Button -> Bool
 	button_up = |mouse, button| !(button_down(mouse, button))
 
-	## Check if a mouse button was pressed during this input interval.
+	## Check if a mouse button was pressed at least once since the previous
+	## input. A click that began and ended between two cycles still counts.
 	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
 	button_pressed = |mouse, button| button_state(mouse.buttons, button, 2)
 
-	## Check if a mouse button was released during this input interval.
+	## Check if a mouse button was released at least once since the previous
+	## input.
 	button_released : { buttons : List(U8), ..state }, Button -> Bool
 	button_released = |mouse, button| button_state(mouse.buttons, button, 4)
 

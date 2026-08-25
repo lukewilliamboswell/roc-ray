@@ -3,7 +3,10 @@
 ## The host samples up to four gamepads once per host cycle. Queries are pure
 ## and do not cross the host boundary or allocate.
 ## Button state uses the same bits as keyboard and mouse input: held is `1`,
-## pressed is `2`, released is `4`.
+## pressed is `2`, released is `4`. Unlike keyboard and mouse edges, which are
+## recorded from the window system's events, gamepad edges come from comparing
+## two consecutive samples: a button pressed and released between two cycles
+## is not seen. Hold a button for at least one cycle to be sure it registers.
 ##
 ## Resolve a `View` from the current `input.devices` during `update!`. Retaining
 ## a view also retains that snapshot's sampled lists.
@@ -78,11 +81,13 @@ Gamepad := [].{
 		button_up : View, Button -> Bool
 		button_up = |pad, button| !(pad.button_down(button))
 
-		## Whether a button was pressed during this input interval.
+		## Whether a button went from up to down between the previous sample and
+		## this one. Sampled, so a press and release inside one cycle is lost.
 		button_pressed : View, Button -> Bool
 		button_pressed = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 2)
 
-		## Whether a button was released during this input interval.
+		## Whether a button went from down to up between the previous sample and
+		## this one, with the same caveat as `button_pressed`.
 		button_released : View, Button -> Bool
 		button_released = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 4)
 
@@ -128,11 +133,13 @@ Gamepad := [].{
 	button_up : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_up = |snapshot, gamepad, button| !(button_down(snapshot, gamepad, button))
 
-	## Whether a button was pressed during this input interval.
+	## Whether a button went from up to down between the previous sample and
+	## this one. Sampled, so a press and release inside one cycle is lost.
 	button_pressed : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_pressed = |snapshot, gamepad, button| button_state(snapshot, gamepad, button, 2)
 
-	## Whether a button was released during this input interval.
+	## Whether a button went from down to up between the previous sample and
+	## this one, with the same caveat as `button_pressed`.
 	button_released : { buttons : List(U8), ..state }, Id, Button -> Bool
 	button_released = |snapshot, gamepad, button| button_state(snapshot, gamepad, button, 4)
 

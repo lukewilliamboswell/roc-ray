@@ -47,9 +47,12 @@ The host reserves a few `--host-` switches for unattended runs. `--host-frames=N
 ends a real windowed run after N cycles, `--host-hidden` opens that window
 hidden, and `--host-keys=3:S,4:LEFT+X` / `--host-text=5:hi` script the keyboard
 and typed text on the cycles they name (a key is a character, one of a few names
-such as `LEFT` or `SPACE`, or a raw key code). They are what the windowed sweep
-below drives the examples with; `--host-headless` and `--host-headless-frames=N`
-select the stub backend instead, which draws nothing.
+such as `LEFT` or `SPACE`, or a raw key code; a `^` suffix, as in `3:ESCAPE^`,
+taps the key inside that cycle -- pressed and released in one input, never
+held -- which is what a hardware key that went down and up between two polls
+looks like). They are what the windowed sweep below drives the examples with;
+`--host-headless` and `--host-headless-frames=N` select the stub backend
+instead, which draws nothing.
 
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:

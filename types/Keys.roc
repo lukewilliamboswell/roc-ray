@@ -268,19 +268,23 @@ Keys := [].{
 			Raw(code) => code
 		}
 
-	## Check if a specific key is currently held down. Pass `host` directly.
+	## Check if a specific key is held down at the cycle boundary. A state
+	## sample. Pass `host` directly.
 	key_down : { keys : List(U8), ..state }, Key -> Bool
 	key_down = |host, key| key_state(host.keys, key, 1)
 
-	## Check if a specific key is currently not pressed (up). Pass `host` directly.
+	## Check if a specific key is up at the cycle boundary. Pass `host` directly.
 	key_up : { keys : List(U8), ..state }, Key -> Bool
 	key_up = |host, key| !(key_down(host, key))
 
-	## Check if a key was pressed during this input interval. Pass `host` directly.
+	## Check if a key was pressed at least once since the previous input. An
+	## interval event: a key tapped between two cycles is pressed and released
+	## in the next input and held in neither. Pass `host` directly.
 	key_pressed : { keys : List(U8), ..state }, Key -> Bool
 	key_pressed = |host, key| key_state(host.keys, key, 2)
 
-	## Check if a key was released during this input interval. Pass `host` directly.
+	## Check if a key was released at least once since the previous input. Pass
+	## `host` directly.
 	key_released : { keys : List(U8), ..state }, Key -> Bool
 	key_released = |host, key| key_state(host.keys, key, 4)
 

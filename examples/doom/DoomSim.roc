@@ -268,8 +268,17 @@ DoomSim := [].{
 	tau = 6.2831855
 }
 
+## Reduce turns into [0, 1) without iterating: any F32 of magnitude 2^24 or
+## more is a whole number of turns, and a non-finite turn is treated as none.
 wrap_turn : F32 -> F32
-wrap_turn = |value| if value >= 1 wrap_turn(value - 1) else if value < 0 wrap_turn(value + 1) else value
+wrap_turn = |value|
+	if !(F32.is_finite(value)) or F32.abs(value) >= 16777216 {
+		0
+	} else {
+		fraction = value - I64.to_f32(F32.to_i64_wrap(value))
+		wrapped = if fraction < 0 fraction + 1 else fraction
+		if wrapped >= 1 0 else wrapped
+	}
 
 approx : F32, F32 -> Bool
 approx = |a, b| F32.abs(a - b) < 0.0001
@@ -320,4 +329,25 @@ expect {
 	wall = { start: { x: 2, y: -10 }, end: { x: 2, y: 10 } }
 	result = DoomSim.move_with_slide({ x: 1.5, y: 0 }, { x: 1, y: 1 }, 0.5, [wall])
 	approx(result.x, 1.5) and approx(result.y, 1)
+}
+
+expect {
+	# S1: turn normalisation is total. A non-finite turn never becomes a
+	# non-finite angle.
+	nan = DoomSim.Angle.from_turns(F32.from_bits(2143289344))
+	positive_inf = DoomSim.Angle.from_turns(F32.from_bits(2139095040))
+	negative_inf = DoomSim.Angle.from_turns(F32.from_bits(4286578688))
+	huge = DoomSim.Angle.from_turns(-4.03e16)
+	large = DoomSim.Angle.from_turns(1234567.75)
+	tiny_negative = DoomSim.Angle.from_turns(-0.00000001)
+	in_range = |angle| F32.is_finite(angle.turns()) and angle.turns() >= 0 and angle.turns() < 1
+	in_range(nan)
+		and in_range(positive_inf)
+			and in_range(negative_inf)
+				and in_range(huge)
+					and in_range(large)
+						and approx(large.turns(), 0.75)
+							and in_range(tiny_negative)
+								and approx(DoomSim.Angle.from_turns(-0.25).turns(), 0.75)
+									and approx(DoomSim.Angle.from_turns(2.5).turns(), 0.5)
 }

@@ -7,9 +7,9 @@ import DoomSim
 # "PROPERTY: <name>" message so the runner captures it; guards below exclude
 # already-recorded bugs so a campaign can keep looking for the next one.
 
-## B1 guard: `wrap_turn` recurses by +/-1, so |turns| >= 2^24 or a non-finite
-## value never terminates. Exclude those inputs from the Angle property.
-guard_angle_hang = Bool.True
+## S1 (fixed): `wrap_turn` used to recurse by +/-1 and hang for |turns| >= 2^24
+## or non-finite input. The guard excluded those inputs from the Angle property.
+guard_angle_hang = Bool.False
 
 ## B3 guard: the slide path is not swept against the other blockers, so a
 ## slide can clip a second segment's corner. Only report grazes deeper than

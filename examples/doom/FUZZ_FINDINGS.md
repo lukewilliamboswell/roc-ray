@@ -35,6 +35,7 @@ divergence), **fidelity** (differs from vanilla Doom, arguably by design),
 
 ### S1. `Angle.from_turns` hangs for |turns| ≥ 2^24 or ±Inf, and passes NaN through
 - Severity: hang
+- **Status: FIXED** — `wrap_turn` reduces via `to_i64_wrap` in one step, treats non-finite and |v| ≥ 2^24 as zero turns; regression expect in `DoomSim.roc`; `fuzz_sim` 90 s / 4.6 M execs clean with `guard_angle_hang` off.
 - Location: `DoomSim.roc:272` (`wrap_turn`), via `Angle.from_turns` (:14) and `Angle.add` (:20)
 - Property: `from_turns(t).turns()` terminates and is in [0, 1) for every F32.
 - Input: `turn = F32.from_bits(3675212096)` = −4.03e16 → libFuzzer timeout.

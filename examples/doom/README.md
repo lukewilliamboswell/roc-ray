@@ -20,7 +20,7 @@ switches. Number keys `2`, `3`, `4`, `5`, `6`, and `8` select owned weapons.
 
 `author_replay.roc` is the bounded offline authoring controller used to discover
 a legal route. It is intentionally adaptive and is not regression evidence.
-`DoomReplay.roc` contains the frozen 883-tic Baby-skill ordinary-command trace;
+`DoomReplay.roc` contains the frozen 789-tic Baby-skill ordinary-command trace;
 its single full-route test replays those fixed commands through the normal
 runtime and asserts the exit, checkpoints, final state, and checksum. The
 shorter `DoomTrace.roc` test proves host-cycle partition invariance without

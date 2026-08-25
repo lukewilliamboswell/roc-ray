@@ -146,6 +146,15 @@ bounds, not a universal frame-time guarantee across machines or backends.
 - Damage resolves before pickup contact each tic, and lethal damage prevents a
   same-tic health pickup from reviving the player; corpse/death-camera motion is
   not modeled beyond the terminal runtime phase.
+- Doors follow `EV_VerticalDoor` on re-use: using a moving door reverses it
+  and keeps its original closed height, and tagged door specials leave an
+  active door alone. Linedef type 62 is the switch form of the lower-wait-
+  raise lift, as in vanilla. The replay and authoring harnesses have no use
+  button, so they emulate the game's edge-triggered `E`: a usable line is
+  pressed when it first comes into reach and again only once no door is
+  moving. Wall sliding is swept against every blocker and retries along the
+  second wall at a corner (`P_SlideMove`'s shape), so corners are rounded
+  rather than clipped or tunnelled.
 - The checked-in trace proves partition invariance and regression stability for
   this implementation. A Chocolate Doom run of the identical command stream is
   still required before calling it a cross-engine golden comparison.

@@ -213,7 +213,17 @@ DoomRuntime := [].{
 	}
 
 	use_forward : DoomMap.Map, DoomLevel.State, DoomSim.Vec2, DoomSim.Angle, DoomWorld.Keys -> DoomLevel.UseResult
-	use_forward = |map, level, pos, angle, keys| {
+	use_forward = |map, level, pos, angle, keys|
+		match usable_line_ahead(map, pos, angle) {
+			Ok(index) => DoomLevel.use_line(map, level, index, keys)
+			Err(NoUsableLine) => NotUsable
+		}
+
+	## The nearest special linedef within use reach of the facing direction.
+	## Callers that press use repeatedly (replay and authoring harnesses) key
+	## their edge detection on this so a moving door is not reversed every tic.
+	usable_line_ahead : DoomMap.Map, DoomSim.Vec2, DoomSim.Angle -> Try(U64, [NoUsableLine])
+	usable_line_ahead = |map, pos, angle| {
 		raw = map.raw()
 		end = DoomSim.add(pos, DoomSim.scale(angle.forward(), use_distance))
 		var $line = Err(NoUsableLine)
@@ -230,10 +240,7 @@ DoomRuntime := [].{
 				}
 			}
 		}
-		match $line {
-			Ok(index) => DoomLevel.use_line(map, level, index, keys)
-			Err(NoUsableLine) => NotUsable
-		}
+		$line
 	}
 
 	player_pickup_radius = 20

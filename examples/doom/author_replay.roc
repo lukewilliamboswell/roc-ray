@@ -14,9 +14,12 @@ import DoomRuntime
 import DoomSim
 import DoomWorld
 
-Run : { world : DoomRuntime.World, level : DoomLevel.State, decorations : List(DoomWorld.Decoration), route_index : U64, tics : U64, runs : List(CommandRun), visited : List(U64) }
+Run : { world : DoomRuntime.World, level : DoomLevel.State, decorations : List(DoomWorld.Decoration), route_index : U64, tics : U64, runs : List(CommandRun), visited : List(U64), used_line : Try(U64, [NoUsableLine]) }
+
 CommandRun : { count : U64, command : DoomSim.Command }
+
 Model : { run : Run, printed : Bool }
+
 Msg : []
 
 program = { init!, update!, render! }
@@ -26,7 +29,9 @@ init! = App.init(App.default.with_title("E1M1 replay author").with_visible(Bool.
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, _input| {
-	if model.printed { Err(Exit(if model.run.world.phase == Exited 0 else 1)) } else {
+	if model.printed {
+		Err(Exit(if model.run.world.phase == Exited 0 else 1))
+	} else {
 		_ = Stdout.line!(summary(model.run))
 		_ = Stdout.line!(encode_runs(model.run.runs, 0, ""))
 		Ok({ ..model, printed: Bool.True })
@@ -48,7 +53,7 @@ initial = |_unit| {
 	player = DoomWorld.player({ x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }, DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360))
 	doom : DoomWorld.World
 	doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
-	{ world: DoomRuntime.initial_for_skill(doom, Baby), level: DoomLevel.initial(map), decorations: spawned.decorations, route_index: 0, tics: 0, runs: [], visited: [140] }
+	{ world: DoomRuntime.initial_for_skill(doom, Baby), level: DoomLevel.initial(map), decorations: spawned.decorations, route_index: 0, tics: 0, runs: [], visited: [140], used_line: Err(NoUsableLine) }
 }
 
 author = |initial_run, _zero| {
@@ -73,29 +78,59 @@ author_tic = |run| {
 	using_special = route_line.special != 0 and DoomSim.distance_squared(pos, target) < 64 * 64
 	combat_target = if can_fire(run.world.doom.player) and !(using_special) closest_visible_actor(run.world.doom.actors, pos, blockers) else Err(NoActor)
 	planned = match combat_target {
-		Ok(actor) => combat_move(run.world.doom.player.sim.state, actor.pos, match supply { Ok(pickup) => pickup.pos, Err(_) => target })
-		Err(_) => steer(run.world.doom.player.sim.state, match supply { Ok(pickup) => pickup.pos, Err(_) => target }, Bool.False)
+		Ok(actor) => combat_move(
+			run.world.doom.player.sim.state,
+			actor.pos,
+			match supply {
+				Ok(pickup) => pickup.pos
+				Err(_) => target
+			},
+		)
+		Err(_) => steer(
+			run.world.doom.player.sim.state,
+			match supply {
+				Ok(pickup) => pickup.pos
+				Err(_) => target
+			},
+			Bool.False,
+		)
 	}
 	movement = match closest_projectile(run.world.projectiles, pos) {
 		Ok(projectile) => evade_projectile(run.world.doom.player.sim.state, projectile.momentum, target)
 		Err(_) => planned
 	}
 	weapon_slot = match combat_target {
-		Ok(actor) => if DoomWorld.owns(run.world.doom.player, Shotgun) and run.world.doom.player.ammo.shells > 0 and DoomSim.distance_squared(pos, actor.pos) < 192 * 192 { SelectSlot(3) } else if run.world.doom.player.ammo.bullets > 0 { SelectSlot(2) } else KeepWeapon
+		Ok(actor) => if DoomWorld.owns(run.world.doom.player, Shotgun) and run.world.doom.player.ammo.shells > 0 and DoomSim.distance_squared(pos, actor.pos) < 192 * 192 {
+			SelectSlot(3)
+		} else if run.world.doom.player.ammo.bullets > 0 {
+			SelectSlot(2)
+		} else KeepWeapon
 		Err(_) => KeepWeapon
 	}
 	command = { ..movement, weapon_slot }
 	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, decorations, map, run.level)
 	new_pos = advanced.world.doom.player.sim.state.pos
 	crossed = DoomRuntime.cross_specials(map, run.level, pos, new_pos)
-	use_result = DoomRuntime.use_forward(map, crossed.level, new_pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
-	level0 = match use_result { Activated(next) => next, _ => crossed.level }
-	exited = crossed.exited or match use_result { Exit => Bool.True, _ => Bool.False }
+	# Press use once per newly reachable line, and again once no door is
+	# moving, matching DoomReplay's edge rule.
+	ahead = DoomRuntime.usable_line_ahead(map, new_pos, advanced.world.doom.player.sim.state.angle)
+	use_result = match ahead {
+		Ok(line) if ahead != run.used_line or List.is_empty(crossed.level.doors) => DoomLevel.use_line(map, crossed.level, line, advanced.world.doom.player.keys)
+		_ => NotUsable
+	}
+	level0 = match use_result {
+		Activated(next) => next
+		_ => crossed.level
+	}
+	exited = crossed.exited or match use_result {
+		Exit => Bool.True
+		_ => Bool.False
+	}
 	world = if exited { ..advanced.world, phase: Exited } else advanced.world
 	new_sector = DoomLevel.sector_at(map, { x: F32.to_f64(new_pos.x), y: F32.to_f64(new_pos.y) }) ?? sector
 	last_sector = List.last(run.visited) ?? sector
 	visited = if new_sector == last_sector run.visited else List.append(run.visited, new_sector)
-	{ ..run, world, level: advance_level(level0, advanced.tics), route_index, tics: run.tics + advanced.tics, runs: append_run(run.runs, command), visited }
+	{ ..run, world, level: advance_level(level0, advanced.tics), route_index, tics: run.tics + advanced.tics, runs: append_run(run.runs, command), visited, used_line: ahead }
 }
 
 closest_projectile = |projectiles, pos| {
@@ -127,7 +162,9 @@ evade_projectile = |state, momentum, target| {
 recover_route_index = |sector, current| {
 	var $found = current
 	for pair in List.map_with_index(route_sectors, |value, index| { value, index }) {
-		if pair.value == sector { $found = pair.index }
+		if pair.value == sector {
+			$found = pair.index
+		}
 	}
 	$found
 }
@@ -235,7 +272,9 @@ closest_supply = |pickups, player, pos, sector, blockers| {
 
 append_run = |runs, command|
 	match List.last(runs) {
-		Ok(last) => if last.command == command { (List.replace(runs, List.len(runs) - 1, { ..last, count: last.count + 1 }) ?? { list: runs, prev: last }).list } else List.append(runs, { count: 1, command })
+		Ok(last) => if last.command == command {
+			(List.replace(runs, List.len(runs) - 1, { ..last, count: last.count + 1 }) ?? { list: runs, prev: last }).list
+		} else List.append(runs, { count: 1, command })
 		Err(_) => [{ count: 1, command }]
 	}
 
@@ -258,21 +297,40 @@ advance_level = |level, count| if count == 0 level else advance_level(DoomLevel.
 
 summary = |run| {
 	p = run.world.doom.player.sim.state.pos
-	s = DoomLevel.sector_at(DoomMap.e1m1, { x:F32.to_f64(p.x), y:F32.to_f64(p.y) }) ?? 9999
-	phase = match run.world.phase { Playing => "Playing", Dead => "Dead", Exited => "Exited" }
+	s = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(p.x), y: F32.to_f64(p.y) }) ?? 9999
+	phase = match run.world.phase {
+		Playing => "Playing"
+		Dead => "Dead"
+		Exited => "Exited"
+	}
 	"phase=${phase} tics=${U64.to_str(run.tics)} sector=${U64.to_str(s)} route=${U64.to_str(run.route_index)} pos=${F32.to_str(p.x)},${F32.to_str(p.y)} health=${I64.to_str(run.world.doom.player.health)} armor=${I64.to_str(run.world.doom.player.armor)} bullets=${I64.to_str(run.world.doom.player.ammo.bullets)} shells=${I64.to_str(run.world.doom.player.ammo.shells)} runs=${U64.to_str(List.len(run.runs))} visited=${join_u64(run.visited, 0, "")}"
 }
 
 join_u64 = |values, index, text|
-	match List.get(values, index) { Err(_) => text, Ok(value) => join_u64(values, index + 1, "${text}${if index == 0 "" else ","}${U64.to_str(value)}") }
-
-encode_runs = |runs, index, text|
-	match List.get(runs,index) {
+	match List.get(values, index) {
 		Err(_) => text
-		Ok(r) => encode_runs(runs,index+1,"${text}${U64.to_str(r.count)}:${I16.to_str(r.command.forward)},${I16.to_str(r.command.side)},${F32.to_str(r.command.turn)},${if r.command.fire "1" else "0"},${match r.command.weapon_slot { KeepWeapon => "-", SelectSlot(slot) => U8.to_str(slot) }};")
+		Ok(value) => join_u64(values, index + 1, "${text}${if index == 0 "" else ","}${U64.to_str(value)}")
 	}
 
-route_sectors = [140,141,91,150,98,142,17,93,10,9,13,12,37,34,8,135,63,64,68,66,67]
-portal_lines = [834,837,564,593,594,1084,573,577,55,62,76,248,203,201,1006,386,391,389,396,405]
+encode_runs = |runs, index, text|
+	match List.get(runs, index) {
+		Err(_) => text
+		Ok(r) => encode_runs(
+			runs,
+			index + 1,
+			"${text}${U64.to_str(r.count)}:${I16.to_str(r.command.forward)},${I16.to_str(r.command.side)},${F32.to_str(r.command.turn)},${if r.command.fire "1" else "0"},${
+				match r.command.weapon_slot {
+					KeepWeapon => "-"
+					SelectSlot(slot) => U8.to_str(slot)
+				}
+			};",
+		)
+	}
+
+route_sectors = [140, 141, 91, 150, 98, 142, 17, 93, 10, 9, 13, 12, 37, 34, 8, 135, 63, 64, 68, 66, 67]
+
+portal_lines = [834, 837, 564, 593, 594, 1084, 573, 577, 55, 62, 76, 248, 203, 201, 1006, 386, 391, 389, 396, 405]
+
 exit_line = 407
+
 max_tics = 900.U64

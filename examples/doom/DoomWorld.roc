@@ -533,14 +533,14 @@ apply_pickup = |player, kind|
 		ShellPickup => give_shells(player, 4)
 		StimpackPickup => give_health(player, 10, DoomWorld.max_health)
 		MedikitPickup => give_health(player, 25, DoomWorld.max_health)
-		HealthBonusPickup => give_health(player, 1, 200)
+		HealthBonusPickup => { player: give_health(player, 1, 200).player, collected: Bool.True }
 		ArmorBonusPickup => { player: { ..player, armor: I64.min(200, player.armor + 1), armor_kind: if player.armor_kind == NoArmor GreenArmor else player.armor_kind }, collected: Bool.True }
 		GreenArmorPickup => if player.armor >= 100 { player, collected: Bool.False } else { player: { ..player, armor: 100, armor_kind: GreenArmor }, collected: Bool.True }
 		BlueArmorPickup => if player.armor >= 200 { player, collected: Bool.False } else { player: { ..player, armor: 200, armor_kind: BlueArmor }, collected: Bool.True }
 		BlueKeyPickup => { player: { ..player, keys: { ..player.keys, blue: Bool.True } }, collected: !(player.keys.blue) }
 		YellowKeyPickup => { player: { ..player, keys: { ..player.keys, yellow: Bool.True } }, collected: !(player.keys.yellow) }
 		RedKeyPickup => { player: { ..player, keys: { ..player.keys, red: Bool.True } }, collected: !(player.keys.red) }
-		ShotgunPickup => acquire_weapon(give_shells(player, 8).player, Shotgun)
+		ShotgunPickup => acquire_weapon(give_shells(player, 8), Shotgun)
 		BackpackPickup => {
 			ammo = {
 				bullets: I64.min(DoomWorld.max_bullets * 2, player.ammo.bullets + 10),
@@ -550,12 +550,12 @@ apply_pickup = |player, kind|
 			}
 			{ player: { ..player, backpack: Bool.True, ammo }, collected: Bool.True }
 		}
-		ChaingunPickup => acquire_weapon(give_bullets(player, 20).player, Chaingun)
-		RocketLauncherPickup => acquire_weapon(give_rockets(player, 2).player, RocketLauncher)
-		PlasmaRiflePickup => acquire_weapon(give_cells(player, 40).player, PlasmaRifle)
-		ChainsawPickup => acquire_weapon(player, Chainsaw)
+		ChaingunPickup => acquire_weapon(give_bullets(player, 20), Chaingun)
+		RocketLauncherPickup => acquire_weapon(give_rockets(player, 2), RocketLauncher)
+		PlasmaRiflePickup => acquire_weapon(give_cells(player, 40), PlasmaRifle)
+		ChainsawPickup => acquire_weapon({ player, collected: Bool.False }, Chainsaw)
 		RocketPickup => give_rockets(player, 1)
-		SoulSpherePickup => give_health(player, 100, 200)
+		SoulSpherePickup => { player: give_health(player, 100, 200).player, collected: Bool.True }
 		BerserkPickup => { player: { ..player, health: I64.max(player.health, DoomWorld.max_health), berserk: Bool.True }, collected: Bool.True }
 		ComputerMapPickup => { player: { ..player, computer_map: Bool.True }, collected: !(player.computer_map) }
 		LightAmpPickup => { player: { ..player, light_amp_tics: 4200 }, collected: Bool.True }
@@ -565,7 +565,10 @@ apply_pickup = |player, kind|
 		_ => { player, collected: Bool.False }
 	}
 
-acquire_weapon = |player, weapon| {
+## Vanilla `P_GiveWeapon`: a weapon is taken when it is new or when its
+## bundled ammo was accepted; an owned weapon over full ammo stays on the map.
+acquire_weapon = |given, weapon| {
+	player = given.player
 	already_owned = owns_weapon(player, weapon)
 	weapons = match weapon {
 		Pistol => { ..player.weapons, pistol: Bool.True }
@@ -575,7 +578,7 @@ acquire_weapon = |player, weapon| {
 		PlasmaRifle => { ..player.weapons, plasma_rifle: Bool.True }
 		Chainsaw => { ..player.weapons, chainsaw: Bool.True }
 	}
-	{ player: { ..player, weapons, weapon: if already_owned player.weapon else weapon }, collected: Bool.True }
+	{ player: { ..player, weapons, weapon: if already_owned player.weapon else weapon }, collected: !(already_owned) or given.collected }
 }
 
 owns_weapon = |player, weapon|
@@ -958,4 +961,31 @@ expect {
 						and !(medikit.collected)
 							and berserk.player.health == 200
 								and berserk.player.berserk
+}
+
+expect {
+	# W2: an owned weapon with full ammo is left on the map (vanilla
+	# P_GiveWeapon returns false), while a weapon that only tops up ammo or a
+	# newly acquired one is collected.
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	at = |player, kind| DoomWorld.collect(player, { id: 0, kind, pos: player.sim.state.pos, taken: Bool.False })
+	first = at(base, ShotgunPickup)
+	var $player = first.player
+	for _ in List.repeat({}, 8) {
+		$player = at($player, ShotgunPickup).player
+	}
+	full = at($player, ShotgunPickup)
+	saw = at(base, ChainsawPickup)
+	saw_again = at(saw.player, ChainsawPickup)
+	first.collected and $player.ammo.shells == 50 and !(full.collected) and saw.collected and !(saw_again.collected)
+}
+
+expect {
+	# W3: soulspheres and health bonuses are always taken, even at 200 health.
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	at = |player, kind| DoomWorld.collect(player, { id: 0, kind, pos: player.sim.state.pos, taken: Bool.False })
+	full = at(base, SoulSpherePickup).player
+	sphere = at(full, SoulSpherePickup)
+	bonus = at(full, HealthBonusPickup)
+	full.health == 200 and sphere.collected and sphere.player.health == 200 and bonus.collected and bonus.player.health == 200
 }

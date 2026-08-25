@@ -256,6 +256,7 @@ suspected live-height sector swap in `activate_local_door`; not reached.
 
 ### W2. Weapon pickups always report `collected`, even when owned with full ammo
 - Severity: fidelity (contract violation of the `collected` flag)
+- **Status: FIXED** — `acquire_weapon` takes the ammo result and reports `!already_owned or ammo_given`; regression expect in `DoomWorld.roc`; `fuzz_world` 90 s / 1.0 M execs clean with weapons checked against `vanilla_accepts`.
 - Location: `DoomWorld.roc:568-579` (`acquire_weapon`), all five weapon kinds
 - Input: 20 × `ShotgunPickup`; at #7 the player is unchanged (shotgun owned,
   shells 50) yet `collected = True`, so the item is removed.
@@ -267,6 +268,7 @@ suspected live-height sector swap in `activate_local_door`; not reached.
 
 ### W3. SoulSphere / HealthBonus are refused at health 200
 - Severity: fidelity (minor)
+- **Status: FIXED** — both kinds now report `collected: True` unconditionally; same expect/campaign as W2.
 - Location: `DoomWorld.roc:535, 555` via `give_health`
 - Input: `[SoulSpherePickup, SoulSpherePickup]` — second reports `collected: False`.
 - Root cause: `collected: next > health` conflates "state changed" with

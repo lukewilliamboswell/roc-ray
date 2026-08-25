@@ -2,8 +2,14 @@
 
 Bugs collected by property-based fuzzing of the pure Doom modules with
 [roc-fuzz](https://github.com/lukewilliamboswell/roc-fuzz) on 2026-08-25.
-**Nothing here has been fixed**; this file is the backlog. Each entry names the
-property that failed, the minimal input, the root cause, and a suggested fix.
+Each entry names the property that failed, the minimal input, the root cause,
+and the fix. **Status (2026-08-25):** every Doom finding (S1–S4, M1–M3, L1–L2,
+W1–W4) is fixed with a red-green regression `expect` beside the code and a
+clean fuzz campaign with the corresponding guard removed; the fuzz targets no
+longer carry per-bug guards. The toolchain findings (T1–T4) remain open; the
+one workaround still in a target is `guard_dynamic_sectors` in `fuzz_map.roc`.
+The frozen replay route was re-authored (883 → 789 tics) because the door,
+lift and sliding fixes changed the legal route.
 
 Targets live beside the modules and build with the pinned nightly
 (`nightly-2026-08-23-fb208ba`) against a sibling checkout of roc-fuzz:
@@ -51,6 +57,7 @@ divergence), **fidelity** (differs from vanilla Doom, arguably by design),
 
 ### S2. `DoomSim.sqrt` is inaccurate outside roughly [1e-7, 1e7]
 - Severity: wrong-result (fidelity)
+- **Status: FIXED** — `sqrt` delegates to the builtin `F32.sqrt` (non-positive input stays 0); regression expect in `DoomSim.roc`; `fuzz_sim` 60 s / 3.2 M execs clean with `guard_sqrt` off.
 - Location: `DoomSim.roc:233-244` (`sqrt`); consumers `length` (:222), `normalize` (:226)
 - Property: within 1e-4 relative of `F32.sqrt` for finite v in (0, 1e8].
 - Input: `sqrt(1e-45)` = 6.1e-5 (true 3.7e-23); by hand `sqrt(1e8)` = 10784
@@ -66,6 +73,7 @@ divergence), **fidelity** (differs from vanilla Doom, arguably by design),
 
 ### S3. Wall slide is not swept against other blockers: corners get clipped
 - Severity: wrong-result
+- **Status: FIXED** — `move_with_slide` picks the earliest-hit blocker and rejects a slide whose *path* deepens penetration of any blocker (`path_deepens_penetration`); regression expect from both fuzz repros in `DoomSim.roc`; `fuzz_sim` 120 s / 3.0 M execs clean with `guard_graze` and `guard_multi_blocker` off.
 - Location: `DoomSim.roc:141-160` (`move_with_slide`), the
   `any_deeper_penetration` acceptance at :156
 - Property: starting clear of all blockers, no point on the centre path of one
@@ -90,6 +98,7 @@ divergence), **fidelity** (differs from vanilla Doom, arguably by design),
 
 ### S4. A slide can tunnel completely through a second blocker
 - Severity: wrong-result (tunnelling)
+- **Status: FIXED** — same change as S3.
 - Location: as S3.
 - Property: the centre path of one tic never properly crosses a blocker when the tic started clear.
 - Input:
@@ -127,6 +136,7 @@ Core property: **anything `DoomMap.validate` accepts is safe to query.**
 
 ### M1. Cyclic BSP node graphs pass validation and hang `DoomLevel.sector_at`
 - Severity: hang
+- **Status: FIXED** — `validate_child` requires node children to precede their parent (`NodeChildNotEarlier`); regression expect in `DoomMap.roc`; `fuzz_map` now asserts validation rejects cyclic graphs.
 - Location: `DoomMap.roc:208-223` (`validate_nodes`/`validate_child`); hang in `DoomLevel.roc:193` (`descend`)
 - Input (found in < 10 s): a single node whose `right_child` and `left_child`
   are both `{ kind: "node", index: 0 }`; any query point hangs.
@@ -140,6 +150,7 @@ Core property: **anything `DoomMap.validate` accepts is safe to query.**
 
 ### M2. Tagged specials 2/23/62/88 crash when the tagged sector has no two-sided line
 - Severity: crash
+- **Status: FIXED** — `lowest_adjacent_ceiling/floor` return `Try`; sectors with no adjacent sector are skipped and a tagged special that moves nothing answers `NotUsable`; regression expect in `DoomLevel.roc`.
 - Location: `DoomLevel.roc:466` (`lowest_adjacent_ceiling`: `crash "door sector has no adjacent sector"`)
   and `:485` (`lowest_adjacent_floor`), via `activate_tagged_doors/floors/lifts`
 - Input: one two-sided linedef (special 2, tag 1) whose sidedefs both name
@@ -156,6 +167,7 @@ Core property: **anything `DoomMap.validate` accepts is safe to query.**
 
 ### M3. Coordinate-equal vertices yield zero-length blocking/collision segments
 - Severity: domain-gap
+- **Status: FIXED** — `validate_linedefs`/`validate_segs` compare coordinates (`same_position`); regression expect in `DoomMap.roc`; `fuzz_map` now asserts validation rejects them.
 - Location: `DoomMap.roc:147` (`validate_linedefs` compares vertex *indices*); same in `validate_segs` (:187)
 - Input: `vertices: [{-32,-32}, {-32,-32}]`, one one-sided linedef 0→1.
   Artifact: `ERHDAAAAAMMBANDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQw8PDw8PDAAQRAAAAAAAAAP/+////////////////ASsBz8/Pz8///w==`
@@ -191,6 +203,7 @@ and JSON-spliced strings: always `Ok`/`Err`, never crash or hang.
 
 ### L1. Special 62 is implemented as a permanent door; on E1M1 its tags name the lift sectors
 - Severity: fidelity + wrong-result
+- **Status: FIXED** — `use_line` routes 62 to `activate_tagged_lifts`; a fresh door also clamps `open` to at least its current ceiling; regression expect in `DoomLevel.roc`; `fuzz_level` 100 seeds clean with `guard_special_62` off.
 - Location: `DoomLevel.roc:151` (`62 => activate_tagged_doors(...)`) and the doc comment at :139-141
 - Property: every active door has `open >= closed`.
 - Input: `UseLine(1064)` (special 62, tag 2) from the initial state creates
@@ -331,6 +344,17 @@ These are not Doom bugs but they bound what the campaigns could prove and
 affect the shipped example, which is also a compiled build.
 
 ### T1. Native codegen: `{ ..state, field: x }` in a callee frees the caller's list
+- **Status: NOT REPRODUCED in isolation (2026-08-25 follow-up).** Two standalone
+  roc-fuzz targets built the described shape — a recursive walk over
+  `{ heights : List(I64), floors : List(Item), tic : U64 }` returning
+  `{ ..state, floors: next }`, with and without a `List.replace` on the sibling
+  list inside the recursion, and a caller that keeps using its own `floors`
+  afterwards — and ran 16 M and 6 M executions clean under the same nightly.
+  After the L1/L2/M2 fixes the compiled `fuzz_level` binary also ran 401 full
+  streams (45 s) with no corruption. The garbage `dynamic_sectors` indices seen
+  from `fuzz_map` (below) and the T2 segfault remain the concrete evidence; the
+  trigger is narrower than "any record spread in a callee". Keep the
+  interpreter driver for `fuzz_level` until T2 is understood.
 - Standalone repro (no Doom code): a record `{ heights : List(I64), floors : List(Item), tic : U64 }`,
   a recursive `walk` ending in `{ ..state, floors: next }`, and a caller that
   keeps using `state.floors` afterwards. Compiled: the caller's `floors` holds

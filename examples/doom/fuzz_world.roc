@@ -233,29 +233,22 @@ test_pickups = |input| {
 		ctx = "after pickup #${Str.inspect($index)} ${Str.inspect(kind)}"
 		check_player(after, ctx)
 		changed = !(same_player(after, before))
-		# W2 fixed: weapon pickups now follow P_GiveWeapon, so they are checked against vanilla.
-		# GUARD (contract-only, vanilla-consistent): Berserk/LightAmp always collect.
 		is_weapon = kind == ShotgunPickup or kind == ChaingunPickup or kind == RocketLauncherPickup or kind == PlasmaRiflePickup or kind == ChainsawPickup
-		# GUARD B2: Stimpack/Medikit/Berserk clamp health above 100 DOWN to 100.
-		guard_b2 = Bool.False # W1 fixed: give_health refuses at or above cap
-		# GUARD B3 (fidelity): SoulSphere/HealthBonus at health 200 are refused; vanilla always takes them.
-		guard_b3 = Bool.False # W3 fixed: SoulSphere/HealthBonus are always taken
-		# GUARD (contract-only, vanilla-consistent): ArmorBonus at 200 armor collects without change.
-		guard_armor = before.armor >= 200 and kind == ArmorBonusPickup
-		# Contract-only (vanilla-consistent): these collect without necessarily changing state.
-		guard_b1 = is_weapon or kind == BerserkPickup or kind == LightAmpPickup or kind == SoulSpherePickup or kind == HealthBonusPickup or guard_b2 or guard_armor
-		if after.health < before.health and !(guard_b2) {
+		# These kinds are consumed without necessarily changing the player
+		# (vanilla-consistent), so "collected iff changed" does not apply to them.
+		always_consumed = is_weapon or kind == BerserkPickup or kind == LightAmpPickup or kind == SoulSpherePickup or kind == HealthBonusPickup or (before.armor >= 200 and kind == ArmorBonusPickup)
+		if after.health < before.health {
 			crash "PROPERTY: pickup lowered health ${ctx} ${Str.inspect(before.health)} -> ${Str.inspect(after.health)}"
 		}
 		# P1b: collected iff state changed (module's own contract, both directions)
-		if result.collected != changed and !(guard_b1) {
+		if result.collected != changed and !(always_consumed) {
 			crash "PROPERTY: collected=${Str.inspect(result.collected)} but changed=${Str.inspect(changed)} ${ctx} before=${Str.inspect(before)}"
 		}
 		if result.collected != result.pickup.taken {
 			crash "PROPERTY: pickup.taken disagrees with collected ${ctx}"
 		}
 		# P1c: vanilla fidelity of the accept decision
-		if result.collected != vanilla_accepts(before, kind) and !(guard_b2) and !(guard_b3) {
+		if result.collected != vanilla_accepts(before, kind) {
 			crash "FIDELITY: collected=${Str.inspect(result.collected)} vanilla=${Str.inspect(vanilla_accepts(before, kind))} ${ctx} before=${Str.inspect(before)}"
 		}
 		# monotonic: keys/weapons/backpack never lost

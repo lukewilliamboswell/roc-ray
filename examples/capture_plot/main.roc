@@ -86,13 +86,13 @@ render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
 
-	model.title.draw!(frame, { pos: { x: 32, y: 26 }, color: ink, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 32, y: 26 }, color: ink })
 
 	# A recording indicator that reads at a glance in the finished file: the
 	# dot pulses on the same fixed step the frames are captured on.
 	pulse = 4 + 2 * F32.sin(model.elapsed * 6)
 	frame.circle!({ center: { x: 38, y: 66 }, radius: pulse, style: Draw.filled(rec) })
-	model.status.draw!(frame, { pos: { x: 52, y: 58 }, color: muted, align: Text.align_top_left })
+	model.status.draw!(frame, { pos: { x: 52, y: 58 }, color: muted })
 
 	draw_progress!(frame, { x: size.width - 232, y: 34, width: 200 }, model.frames)
 	draw_bars!(frame, model.elapsed, size)

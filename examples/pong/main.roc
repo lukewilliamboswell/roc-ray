@@ -277,13 +277,13 @@ render! = |model, frame| {
 		winner_index = if model.left_score >= win_score 0 else 1
 		winner_color = if winner_index == 0 left_neon else right_neon
 		match List.get(model.win_lines, winner_index) {
-			Ok(line) => line.draw!(frame, { pos: { x: screen_w * 0.5, y: 268 }, color: winner_color, align: Text.align_center })
+			Ok(line) => line.draw!(frame, { pos: { x: screen_w * 0.5, y: 268 }, color: winner_color, align: (Middle, Center) })
 			Err(_) => {}
 		}
-		model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: hint_color, align: Text.align_center })
+		model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: hint_color, align: (Middle, Center) })
 	} else {}
 
-	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 26 }, color: hint_color, align: Text.align_center })
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 26 }, color: hint_color, align: (Middle, Center) })
 
 	Ok({})
 }
@@ -344,7 +344,7 @@ draw_scores! : Draw.Frame, Model => {}
 draw_scores! = |frame, model| {
 	draw_score! = |score, x, color|
 		match List.get(model.digits, score) {
-			Ok(glyph) => glyph.draw!(frame, { pos: { x: x, y: 30 }, color: color, align: Text.align_top_center })
+			Ok(glyph) => glyph.draw!(frame, { pos: { x: x, y: 30 }, color: color, align: (Top, Center) })
 			Err(_) => {}
 		}
 

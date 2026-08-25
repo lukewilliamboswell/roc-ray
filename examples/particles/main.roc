@@ -209,7 +209,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
 	frame.texture_instances!(model.sprite, model.instances)
-	model.hud.draw!(frame, { pos: { x: 24, y: 24 }, color: Color.from_hex_rgb(0xa8b4cc), align: Text.align_top_left })
+	model.hud.draw!(frame, { pos: { x: 24, y: 24 }, color: Color.from_hex_rgb(0xa8b4cc) })
 
 	Ok({})
 }

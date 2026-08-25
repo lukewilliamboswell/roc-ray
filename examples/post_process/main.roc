@@ -73,10 +73,10 @@ render! = |model, frame| {
 			target_frame.rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
 			Text.from("offscreen + shader", model.font)
 				.size(48)
-				.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: Text.align_center })
+				.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: (Middle, Center) })
 			Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", model.font)
 				.size(18)
-				.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: Text.align_center })
+				.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: (Middle, Center) })
 			target_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {

@@ -201,8 +201,8 @@ render! = |model, frame| {
 				},
 			)
 
-			card.title.draw!(poster, { pos: { x: 84, y: 80 }, color: colors.ink, align: Text.align_top_left })
-			card.subtitle.draw!(poster, { pos: { x: 88, y: 172 }, color: Color.with_alpha(colors.ink, 210), align: Text.align_top_left })
+			card.title.draw!(poster, { pos: { x: 84, y: 80 }, color: colors.ink })
+			card.subtitle.draw!(poster, { pos: { x: 88, y: 172 }, color: Color.with_alpha(colors.ink, 210) })
 			Ok({})
 		},
 	)?
@@ -224,8 +224,8 @@ render! = |model, frame| {
 	frame.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 1, style: Draw.filled(Color.with_alpha(colors.ink, 60)) })
 
 	chrome = Box.unbox(model.chrome)
-	chrome.help.draw!(frame, { pos: { x: 24, y: window_height - 23 }, color: Color.with_alpha(colors.ink, 170), align: Text.align_middle_left })
-	model.status.draw!(frame, { pos: { x: 696, y: window_height - 23 }, color: colors.ink, align: Text.align_middle_right })
+	chrome.help.draw!(frame, { pos: { x: 24, y: window_height - 23 }, color: Color.with_alpha(colors.ink, 170), align: (Middle, Left) })
+	model.status.draw!(frame, { pos: { x: 696, y: window_height - 23 }, color: colors.ink, align: (Middle, Right) })
 
 	Ok({})
 }

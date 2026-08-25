@@ -291,7 +291,7 @@ draw_swatch! = |frame, font, index, selected, mouse| {
 	}
 	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
 	Text.from(U64.to_str(index + 1), font)
-		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if chosen theme.ink else theme.faint, align: Text.align_center })
+		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if chosen theme.ink else theme.faint, align: (Middle, Center) })
 }
 
 ## Perform one edit. A mismatched upload is a programmer error -- the editor
@@ -357,7 +357,7 @@ render! = |model, frame| {
 	ui = Box.unbox(model.ui)
 
 	frame.clear!(theme.bg)
-	ui.title.draw!(frame, { pos: { x: canvas_x, y: 12 }, color: theme.ink, align: Text.align_top_left })
+	ui.title.draw!(frame, { pos: { x: canvas_x, y: 12 }, color: theme.ink })
 	frame.text_at!({ pos: { x: canvas_x, y: 42 }, text: "Canvas, palette and brush sound all generated at startup", size: 13, color: theme.muted })
 
 	# A card under the canvas, so the pixel art sits on a surface instead of
@@ -383,12 +383,12 @@ render! = |model, frame| {
 	}
 
 	frame.rounded_rectangle!({ x: 594, y: 108, width: 150, height: 348, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
-	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: theme.ink, align: Text.align_top_left })
+	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: theme.ink })
 	draw_swatch!(frame, model.font, 0, model.palette, model.mouse)
 	draw_swatch!(frame, model.font, 1, model.palette, model.mouse)
 	draw_swatch!(frame, model.font, 2, model.palette, model.mouse)
 	draw_swatch!(frame, model.font, 3, model.palette, model.mouse)
-	ui.help.draw!(frame, { pos: { x: canvas_x, y: 562 }, color: theme.faint, align: Text.align_top_left })
+	ui.help.draw!(frame, { pos: { x: canvas_x, y: 562 }, color: theme.faint })
 
 	Ok({})
 }

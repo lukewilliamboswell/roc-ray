@@ -175,12 +175,12 @@ draw_hud! : Draw.Frame, Model, Math.Vec2 => {}
 draw_hud! = |frame, model, mouse_world| {
 	hud = Box.unbox(model.hud)
 	frame.rounded_rectangle!({ x: 16, y: 16, width: 340, height: 122, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x0b1219), 215), Color.with_alpha(Color.white, 40), 1) })
-	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
-	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
+	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white })
+	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8) })
 	frame.line!({ start: { x: 32, y: 84 }, end: { x: 340, y: 84 }, stroke: Draw.stroke(Color.with_alpha(Color.white, 30), 1) })
 	# Show the pointer coordinates in both spaces for direct comparison.
 	frame.text_at!({ pos: { x: 32, y: 92 }, text: "world ${coord(mouse_world.x)}, ${coord(mouse_world.y)}   zoom ${coord(model.zoom * 100)}%", size: 14, color: Color.from_hex_rgb(0xffd166) })
-	hud.help.draw!(frame, { pos: { x: 32, y: 114 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
+	hud.help.draw!(frame, { pos: { x: 32, y: 114 }, color: Color.from_hex_rgb(0x8fa3b8) })
 }
 
 ## Whole units, so the readout does not jitter its own width every frame.

@@ -207,8 +207,8 @@ render! = |model, frame| {
 	}
 	draw_pointer!(frame, model.pointer, accent_local, "you", 13)
 
-	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink, align: Text.align_top_left })
-	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted })
 
 	local = Udp.Socket.local_address(model.socket)
 	frame.rounded_rectangle!({ x: 44, y: 112, width: 384, height: 96, radius: 0.12, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
@@ -219,7 +219,7 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 64, y: 178 }, text: "${U64.to_str(model.received)} received", size: 14, color: muted })
 	frame.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if model.dropped == 0 muted else accent_bad })
 
-	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
 	Ok({})
 }
 

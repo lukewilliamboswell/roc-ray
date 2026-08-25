@@ -134,7 +134,7 @@ render! = |model, frame| {
 	frame.circle!({ center: model.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
 
 	frame.rounded_rectangle!({ x: 150, y: 552, width: 500, height: 34, radius: 10, segments: 8, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
-	model.guide.draw!(frame, { pos: { x: 400, y: 559 }, color: Color.ray_white, align: Text.align_top_center })
+	model.guide.draw!(frame, { pos: { x: 400, y: 559 }, color: Color.ray_white, align: (Top, Center) })
 
 	Ok({})
 }

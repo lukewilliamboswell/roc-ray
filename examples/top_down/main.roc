@@ -1273,7 +1273,7 @@ draw_spawn! = |frame, level, font| {
 	frame.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
 	Text.from("START", font)
 		.size(18)
-		.draw!(frame, { pos: { x: level.spawn.x, y: level.spawn.y + 63 }, color: Color.with_alpha(Color.white, 190), align: Text.align_top_center })
+		.draw!(frame, { pos: { x: level.spawn.x, y: level.spawn.y + 63 }, color: Color.with_alpha(Color.white, 190), align: (Top, Center) })
 }
 
 draw_exit! : Draw.Frame, Level, World, Text.Font => {}
@@ -1285,7 +1285,7 @@ draw_exit! = |frame, level, world, font| {
 	frame.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
 	Text.from(if is_open "EXIT OPEN" else "LOCKED EXIT", font)
 		.size(19)
-		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: Text.align_top_center })
+		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: (Top, Center) })
 }
 
 draw_obstacle! : Draw.Frame, Draw.Texture, World.Obstacle => {}
@@ -1468,8 +1468,8 @@ draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, font, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
 	frame.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
-	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: Text.align_center })
-	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: Text.align_center })
+	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
+	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
 }
 
 approx : F32, F32 -> Bool

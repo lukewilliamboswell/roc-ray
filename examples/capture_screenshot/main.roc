@@ -149,8 +149,8 @@ render! = |model, frame| {
 	frame.circle!({ center: center, radius: 94, style: Draw.outlined(Color.with_alpha(accent, 45), 1) })
 	frame.circle!({ center: { x: center.x + 56, y: center.y - 56 }, radius: 7, style: Draw.filled(accent) })
 
-	model.title.draw!(frame, { pos: { x: 36, y: 34 }, color: ink, align: Text.align_top_left })
-	model.subtitle.draw!(frame, { pos: { x: 36, y: 68 }, color: muted, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 36, y: 34 }, color: ink })
+	model.subtitle.draw!(frame, { pos: { x: 36, y: 68 }, color: muted })
 
 	# The outcome card. Its accent is the whole report: green for a file on
 	# disk, amber for the sandbox refusing a path, red for a write that failed.
@@ -160,9 +160,9 @@ render! = |model, frame| {
 	frame.circle!({ center: { x: 78, y: 272 }, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
 	frame.circle!({ center: { x: 78, y: 272 }, radius: 5, style: Draw.filled(color) })
 	frame.text_at!({ pos: { x: 108, y: 250 }, text: outcome_label(model.outcome), size: 13, color: faint })
-	outcome_text(model).draw!(frame, { pos: { x: 108, y: 270 }, color: color, align: Text.align_top_left })
+	outcome_text(model).draw!(frame, { pos: { x: 108, y: 270 }, color: color })
 
-	model.help.draw!(frame, { pos: { x: 36, y: size.height - 38 }, color: faint, align: Text.align_top_left })
+	model.help.draw!(frame, { pos: { x: 36, y: size.height - 38 }, color: faint })
 	Ok({})
 }
 

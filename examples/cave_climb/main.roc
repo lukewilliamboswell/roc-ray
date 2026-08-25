@@ -1070,8 +1070,8 @@ draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, font, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
 	frame.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
-	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: Text.align_center })
-	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: Text.align_center })
+	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
+	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
 }
 
 expect physics_distance(Physics.point_xy(0, 0), Physics.point_xy(3, 4)) == 5

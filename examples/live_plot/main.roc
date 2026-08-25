@@ -2312,9 +2312,9 @@ draw_masthead! : Draw.Frame, Model => {}
 draw_masthead! = |frame, model| {
 	fade = ease_out(model.entrance)
 
-	model.eyebrow.draw!(frame, { pos: { x: margin, y: 26 }, color: fade_to(ink_faint, fade), align: Text.align_top_left })
-	model.title.draw!(frame, { pos: { x: margin, y: 40 }, color: fade_to(ink, fade), align: Text.align_top_left })
-	model.deck.draw!(frame, { pos: { x: margin, y: 84 }, color: fade_to(ink_dim, fade), align: Text.align_top_left })
+	model.eyebrow.draw!(frame, { pos: { x: margin, y: 26 }, color: fade_to(ink_faint, fade) })
+	model.title.draw!(frame, { pos: { x: margin, y: 40 }, color: fade_to(ink, fade) })
+	model.deck.draw!(frame, { pos: { x: margin, y: 84 }, color: fade_to(ink_dim, fade) })
 
 	draw_graphs!(frame, model, fade)
 
@@ -2706,7 +2706,7 @@ draw_footer! = |frame, model| {
 
 	frame.line!({ start: { x: margin, y: bottom - 46 }, end: { x: model.screen.x - margin, y: bottom - 46 }, stroke: Draw.stroke(rule, 1) })
 
-	model.hint.draw!(frame, { pos: { x: margin, y: bottom - 34 }, color: fade_to(ink_faint, fade), align: Text.align_top_left })
+	model.hint.draw!(frame, { pos: { x: margin, y: bottom - 34 }, color: fade_to(ink_faint, fade) })
 	text_right!(
 		frame,
 		model.small,
@@ -2728,7 +2728,7 @@ text_left! = |frame, font, pos, content, size, spacing, color|
 
 text_right! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_right! = |frame, font, pos, content, size, spacing, color|
-	Text.from(content, font).size(size).spacing(spacing).draw!(frame, { pos, color, align: Text.align_top_right })
+	Text.from(content, font).size(size).spacing(spacing).draw!(frame, { pos, color, align: (Top, Right) })
 
 ## The entrance fades the furniture up rather than sliding it, so nothing in the
 ## figure ever moves except the data.

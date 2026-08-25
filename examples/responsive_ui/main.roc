@@ -222,13 +222,13 @@ draw_menu_item! = |frame, bounds, label, selected, hovered| {
 	if selected {
 		frame.rounded_rectangle!({ x: bounds.x + 8, y: bounds.y + 10, width: 4, height: bounds.height - 20, radius: 2, segments: 4, style: Draw.filled(theme.accent) })
 	}
-	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: Text.align_middle_left })
+	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: (Middle, Left) })
 }
 
 draw_key! : Draw.Frame, Text.Font, F32, F32, Str => {}
 draw_key! = |frame, font, x, y, label| {
 	frame.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(theme.panel_high, theme.edge, 2) })
-	Text.from(label, font).size(18).draw!(frame, { pos: { x: x + 34, y: y + 22 }, color: theme.ink, align: Text.align_center })
+	Text.from(label, font).size(18).draw!(frame, { pos: { x: x + 34, y: y + 22 }, color: theme.ink, align: (Middle, Center) })
 }
 
 draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, Draw.FrameSize, Model => {}
@@ -243,7 +243,7 @@ draw_preview! = |frame, bounds, selection, ui, screen, model| {
 	}
 	# The preview reads as a card of its own, not as a hole in the background.
 	frame.rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, style: Draw.outlined(theme.edge, 2) })
-	body.draw!(frame, { pos: { x: bounds.x + 28, y: bounds.y + 28 }, color: theme.ink, align: Text.align_top_left })
+	body.draw!(frame, { pos: { x: bounds.x + 28, y: bounds.y + 28 }, color: theme.ink })
 
 	match selection {
 		Display => {
@@ -382,8 +382,8 @@ render! = |model, frame| {
 	hover_controls = view.controls_bounds.contains(model.mouse)
 
 	frame.clear!(theme.bg)
-	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: theme.ink, align: Text.align_top_left })
-	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: theme.muted, align: Text.align_top_left })
+	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: theme.ink })
+	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: theme.muted })
 	# A hairline under the header, drawn to the live width so it follows a resize.
 	frame.rectangle!({ x: view.margin, y: 96, width: screen.width - view.margin * 2, height: 1, style: Draw.filled(theme.edge) })
 	frame.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
@@ -397,7 +397,7 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: theme.faint, align: Text.align_bottom_left })
+	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: theme.faint, align: (Bottom, Left) })
 
 	Ok({})
 }

@@ -249,7 +249,7 @@ chip! = |frame, font, cfg| {
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
 	Text.from(cfg.label, font)
 		.size(17)
-		.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: Text.align_center })
+		.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: (Middle, Center) })
 }
 
 ## A small square light next to a label, for the signals that are on or off

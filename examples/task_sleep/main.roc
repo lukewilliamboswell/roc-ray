@@ -125,10 +125,10 @@ render! = |model, frame| {
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x1b2136), color_bottom: Color.from_hex_rgb(0x0a0c15) })
 	frame.circle_gradient!({ center, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 40), color_outer: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 0) })
 
-	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
+	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white })
 	frame.text_at!({ pos: { x: 40, y: 78 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
 	frame.text_at!({ pos: { x: 40, y: 106 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
-	model.hint.draw!(frame, { pos: { x: 40, y: 552 }, color: Color.from_hex_rgb(0x6b7590), align: Text.align_top_left })
+	model.hint.draw!(frame, { pos: { x: 40, y: 552 }, color: Color.from_hex_rgb(0x6b7590) })
 
 	# The track, then the arc the sleeper has used up so far.
 	frame.circle!({ center, radius: 150, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })

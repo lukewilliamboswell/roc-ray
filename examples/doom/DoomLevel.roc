@@ -107,6 +107,37 @@ DoomLevel := [].{
 		collision_segments_indexed(map, map.raw(), state, sector, lines, 0)
 	}
 
+	## Return each currently blocking map boundary once, in linedef order. A
+	## two-sided boundary is retained when either traversal direction is closed.
+	global_collision_segments : DoomMap.Map, State -> List(CollisionSegment)
+	global_collision_segments = |map, state| {
+		raw = map.raw()
+		var $segments = List.with_capacity(List.len(raw.linedefs))
+		var $linedef = 0.U64
+		for line in raw.linedefs {
+			blocks = match line.left_sidedef {
+				Err(Null) => Bool.True
+				Ok(left_index) => {
+					right_index = line.right_sidedef ?? crash "validated two-sided linedef missing right side"
+					right_sector = (List.get(raw.sidedefs, right_index) ?? crash "validated right sidedef missing").sector
+					left_sector = (List.get(raw.sidedefs, left_index) ?? crash "validated left sidedef missing").sector
+					right = List.get(state.heights, right_sector) ?? crash "sector state missing"
+					left = List.get(state.heights, left_sector) ?? crash "sector state missing"
+					floor_delta = I64.abs(right.floor - left.floor)
+					opening = I64.min(right.ceiling, left.ceiling) - I64.max(right.floor, left.floor)
+					DoomMap.line_flags(line.flags).blocks_players or floor_delta > 24 or opening < 56
+				}
+			}
+			if blocks {
+				a = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
+				b = List.get(raw.vertices, line.end_vertex) ?? crash "validated vertex missing"
+				$segments = List.append($segments, { linedef: $linedef, start: { x: I64.to_f64(a.x), y: I64.to_f64(a.y) }, end: { x: I64.to_f64(b.x), y: I64.to_f64(b.y) } })
+			}
+			$linedef = $linedef + 1
+		}
+		$segments
+	}
+
 	collision_candidate_count : State, U64 -> U64
 	collision_candidate_count = |state, sector| List.len(List.get(state.incident_lines, sector) ?? [])
 
@@ -271,7 +302,7 @@ collision_segments_indexed = |map, raw, state, sector, lines, offset|
 				List.prepend(rest, { linedef: index, start: { x: I64.to_f64(a.x), y: I64.to_f64(a.y) }, end: { x: I64.to_f64(b.x), y: I64.to_f64(b.y) } })
 			} else rest
 		}
-	}
+		}
 
 collision_segments_from = |map, raw, state, sector, index|
 	match List.get(raw.linedefs, index) {
@@ -788,12 +819,16 @@ expect {
 			opened = DoomLevel.portal(map, opened_state, 55, from_sector) ?? crash "door portal missing"
 			closed_segments = DoomLevel.collision_segments(map, initial, from_sector)
 			opened_segments = DoomLevel.collision_segments(map, opened_state, from_sector)
+			closed_global = DoomLevel.global_collision_segments(map, initial)
+			opened_global = DoomLevel.global_collision_segments(map, opened_state)
 			!(closed.traversable)
 				and opened.traversable
 					and opened.step <= 24
 						and opened.top - opened.bottom >= 56
 							and List.any(closed_segments, |segment| segment.linedef == 55)
 								and !(List.any(opened_segments, |segment| segment.linedef == 55))
+									and List.any(closed_global, |segment| segment.linedef == 55)
+										and !(List.any(opened_global, |segment| segment.linedef == 55))
 		}
 		_ => Bool.False
 	}

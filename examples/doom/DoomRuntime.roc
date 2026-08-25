@@ -269,23 +269,13 @@ heard_actor_ids = |map, sources, actors| {
 # Build one bounded intercept set per simulation tic. Each linedef appears at
 # most once even though a two-sided boundary is discoverable from both sectors.
 global_map_blockers = |map, level| {
-	var $linedefs = []
-	var $segments = []
-	for indexed in List.map_with_index(map.raw().sectors, |_sector, index| index) {
-		for segment in DoomLevel.collision_segments(map, level, indexed) {
-			if !(List.contains($linedefs, segment.linedef)) {
-				$linedefs = List.append($linedefs, segment.linedef)
-				$segments = List.append(
-					$segments,
-					{
-						start: { x: F64.to_f32_wrap(segment.start.x), y: F64.to_f32_wrap(segment.start.y) },
-						end: { x: F64.to_f32_wrap(segment.end.x), y: F64.to_f32_wrap(segment.end.y) },
-					},
-				)
-			}
-		}
-	}
-	$segments
+	List.map(
+		DoomLevel.global_collision_segments(map, level),
+		|segment| {
+			start: { x: F64.to_f32_wrap(segment.start.x), y: F64.to_f32_wrap(segment.start.y) },
+			end: { x: F64.to_f32_wrap(segment.end.x), y: F64.to_f32_wrap(segment.end.y) },
+		},
+	)
 }
 
 actor_blocker_cache = |map, level, actors, extra_blockers| {

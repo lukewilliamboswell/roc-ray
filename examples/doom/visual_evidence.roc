@@ -1,4 +1,5 @@
-## Native visual-evidence harness for the navigable Freedoom E1M1.\n## Renders from its real Doom map lumps. The app owns
+## Native visual-evidence harness for the navigable Freedoom E1M1.
+## Renders from its real Doom map lumps. The app owns
 ## player simulation and map policy in Roc; the host retains textures and draws
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
@@ -179,99 +180,126 @@ update! = |model, input| {
 
 update_evidence! = |model, input| {
 	required = if model.evidence.long 11 else 10
-	if model.evidence.saved >= required {
+	# A capture task completes only after the returned model has had a
+	# presentation frame. Never place the next scenario while that task is
+	# outstanding: the PNG and the JSON record must describe the same model.
+	if model.evidence.saved < List.len(model.evidence.requested) {
+		Ok(model)
+	} else if model.evidence.saved >= required {
 		Err(Exit(0))
 	} else if input.time.cycle_count > 1400 {
 		Err(Exit(2))
 	} else if model.evidence.stage == 0 {
 		if !(valid_spawn(model)) return Err(Exit(3))
 		next = capture_state!(model, input, "spawn")
-		Keys.set_source!(Keys.holding([KeyA]))
-		Mouse.set_source!(Mouse.virtual_at({ x: 100, y: 80 }))
 		Ok({ ..next, evidence: { ..next.evidence, stage: 1 } })
 	} else if model.evidence.stage == 1 {
+		Keys.set_source!(Keys.holding([KeyA]))
+		Mouse.set_source!(Mouse.virtual_at({ x: 100, y: 80 }))
+		Ok({ ..model, evidence: { ..model.evidence, stage: 2 } })
+	} else if model.evidence.stage == 2 {
 		next = advance_from_input(model, input)
 		delta = DoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
 		if !(input.devices.key_pressed(KeyA) and input.devices.key_down(KeyA) and DoomSim.dot(delta, DoomControls.visual_right(model.evidence.start_angle)) < 0) return Err(Exit(3))
 		captured = capture_state!(next, input, "strafe-left")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 3 } })
+	} else if model.evidence.stage == 3 {
 		Keys.set_source!(Keys.holding([KeyD]))
-		Ok({ ..captured, world: { ..captured.world, doom: { ..captured.world.doom, player: { ..captured.world.doom.player, sim: DoomSim.clock(DoomSim.initial(model.evidence.start_pos, model.evidence.start_angle)) } } }, evidence: { ..captured.evidence, stage: 2 } })
-	} else if model.evidence.stage == 2 {
+		reset = at_scenario(model, model.evidence.start_pos, model.evidence.start_angle)
+		Ok({ ..reset, evidence: { ..reset.evidence, stage: 4 } })
+	} else if model.evidence.stage == 4 {
 		next = advance_from_input(model, input)
 		delta = DoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
 		if !(input.devices.key_released(KeyA) and input.devices.key_pressed(KeyD) and DoomSim.dot(delta, DoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
 		captured = capture_state!(next, input, "strafe-right")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 5 } })
+	} else if model.evidence.stage == 5 {
 		Keys.set_source!(Keys.holding([]))
 		Mouse.set_source!(Mouse.virtual_at({ x: 120, y: 80 }))
-		Ok({ ..captured, world: { ..captured.world, doom: { ..captured.world.doom, player: { ..captured.world.doom.player, sim: DoomSim.clock(DoomSim.initial(model.evidence.start_pos, model.evidence.start_angle)) } } }, evidence: { ..captured.evidence, stage: 3, mouse_x: 120 } })
-	} else if model.evidence.stage == 3 {
+		reset = at_scenario(model, model.evidence.start_pos, model.evidence.start_angle)
+		Ok({ ..reset, evidence: { ..reset.evidence, stage: 6, mouse_x: 120 } })
+	} else if model.evidence.stage == 6 {
 		next = advance_from_input(model, input)
 		if !(input.devices.mouse.delta().x > 0 and DoomSim.dot(next.world.doom.player.sim.state.angle.forward(), DoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
 		captured = capture_state!(next, input, "mouse-turn")
-		corridor = at_scenario(captured, { x: -288, y: 256 }, DoomSim.Angle.from_turns(0))
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 7 } })
+	} else if model.evidence.stage == 7 {
+		corridor = at_scenario(model, { x: -288, y: 256 }, DoomSim.Angle.from_turns(0))
 		Keys.set_source!(Keys.holding([]))
-		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 4 } })
-	} else if model.evidence.stage == 4 {
+		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 8 } })
+	} else if model.evidence.stage == 8 {
 		captured = capture_state!(model, input, "first-corridor-wall-hole")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 9 } })
+	} else if model.evidence.stage == 9 {
 		Keys.set_source!(Keys.holding([KeyW]))
-		Ok({ ..captured, evidence: { ..captured.evidence, stage: 5 } })
-	} else if model.evidence.stage == 5 {
+		Ok({ ..model, evidence: { ..model.evidence, stage: 10 } })
+	} else if model.evidence.stage == 10 {
 		next = advance_from_input(model, input)
 		if current_sector(next) == 141 {
 			captured = capture_state!(next, input, "open-portal-collision")
-			colu = at_scenario(captured, { x: 752, y: 608 }, DoomSim.Angle.from_turns(0.5))
-			Keys.set_source!(Keys.holding([KeyW]))
-			Ok({ ..colu, evidence: { ..colu.evidence, stage: 6 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
 			Ok(next)
 		}
-	} else if model.evidence.stage == 6 {
+	} else if model.evidence.stage == 11 {
+		colu = at_scenario(model, { x: 752, y: 608 }, DoomSim.Angle.from_turns(0.5))
+		Keys.set_source!(Keys.holding([KeyW]))
+		Ok({ ..colu, evidence: { ..colu.evidence, stage: 12 } })
+	} else if model.evidence.stage == 12 {
 		next = advance_from_input(model, input)
 		if next.world.doom.player.sim.state.tic >= 7 {
 			captured = capture_state!(next, input, "colu-portal-navigation")
-			door = at_scenario(captured, { x: 832, y: 496 }, DoomSim.Angle.from_turns(0.25))
-			Keys.set_source!(Keys.holding([]))
-			Ok({ ..door, evidence: { ..door.evidence, stage: 7 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 13 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
 			Ok(next)
 		}
-	} else if model.evidence.stage == 7 {
+	} else if model.evidence.stage == 13 {
+		door = at_scenario(model, { x: 832, y: 496 }, DoomSim.Angle.from_turns(0.25))
+		Keys.set_source!(Keys.holding([]))
+		Ok({ ..door, evidence: { ..door.evidence, stage: 14 } })
+	} else if model.evidence.stage == 14 {
 		captured = capture_state!(model, input, "door-closed")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 15 } })
+	} else if model.evidence.stage == 15 {
 		Keys.set_source!(Keys.holding([KeyE]))
-		Ok({ ..captured, evidence: { ..captured.evidence, stage: 8 } })
-	} else if model.evidence.stage == 8 {
+		Ok({ ..model, evidence: { ..model.evidence, stage: 16 } })
+	} else if model.evidence.stage == 16 {
 		next = advance_from_input(model, input)
 		if List.is_empty(next.level.doors) return Err(Exit(3))
 		if next.world.doom.player.sim.state.tic >= 20 {
 			captured = capture_state!(next, input, "door-open")
-			Keys.set_source!(Keys.holding([KeySpace]))
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 9 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 17 } })
 		} else {
 			Keys.set_source!(Keys.holding([]))
 			Ok(next)
 		}
-	} else if model.evidence.stage == 9 {
+	} else if model.evidence.stage == 17 {
+		Keys.set_source!(Keys.holding([KeySpace]))
+		Ok({ ..model, evidence: { ..model.evidence, stage: 18 } })
+	} else if model.evidence.stage == 18 {
 		next = advance_from_input(model, input)
 		if next.world.weapon.phase == 0 return Err(Exit(3))
 		captured = capture_state!(next, input, "combat")
-		if captured.evidence.long {
-			damage = at_scenario(captured, { x: 1258, y: 949 }, DoomSim.Angle.from_turns(0.044))
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 19 } })
+	} else if model.evidence.stage == 19 {
+		if model.evidence.long {
+			damage = at_scenario(model, { x: 1258, y: 949 }, DoomSim.Angle.from_turns(0.044))
 			Keys.set_source!(Keys.holding([KeyW]))
-			Ok({ ..damage, evidence: { ..damage.evidence, stage: 10 } })
+			Ok({ ..damage, evidence: { ..damage.evidence, stage: 20 } })
 		} else {
 			Keys.set_source!(Keys.holding([]))
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
+			Ok({ ..model, evidence: { ..model.evidence, stage: 21 } })
 		}
-	} else if model.evidence.stage == 10 {
+	} else if model.evidence.stage == 20 {
 		next = advance_from_input(model, input)
 		sector = current_sector(next)
 		special = (List.get(DoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
 		if special == 7 {
 			captured = capture_state!(next, input, "damaging-floor")
 			Keys.set_source!(Keys.holding([]))
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 21 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
 			Ok(next)
@@ -322,7 +350,10 @@ at_scenario = |model, pos, angle| {
 	player = model.world.doom.player
 	world = { ..model.world, doom: { ..model.world.doom, player: { ..player, sim: DoomSim.clock(DoomSim.initial(pos, angle)) } } }
 	level = DoomLevel.initial(DoomMap.e1m1)
-	{ ..model, world, level, sprites: sprite_geometry(world, model.decorations, level, pos) }
+	blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, pos), decoration_segments(model.decorations))
+	dynamic_batches = List.map(E1M1Renderer.build_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic E1M1 atlas is incomplete", render_geometry)
+	masked_dynamic_batches = List.map(E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic masked E1M1 atlas is incomplete", render_geometry)
+	{ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites: sprite_geometry(world, model.decorations, level, pos), flashes: DoomView.initial }
 }
 
 valid_spawn = |model| {

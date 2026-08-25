@@ -13,10 +13,10 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Timing | Doom 35 Hz game tic | Tests show the same command stream produces the same tic trace across different host-cycle deltas, with bounded catch-up |
 | Player movement | Chocolate Doom `p_user.c`, `p_map.c`, `p_mobj.c` | Deterministic regression traces cover thrust, turning, friction, stopping, collision radius, wall sliding, and narrow-portal recovery; these are not yet cross-engine golden traces |
 | Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, textures, offsets, sky and moving sectors; special-1 random flashes and synchronized special-12 strobes use explicit tic/RNG state, special-7 floors damage on the 32-tic cadence, and special-9 discoveries count once |
-| Interaction | Chocolate Doom `p_map.c`, `p_doors.c`, `p_spec.c` | Use and crossing specials operate the corresponding E1M1 doors, switches and exit |
+| Interaction | Chocolate Doom `p_map.c`, `p_doors.c`, `p_spec.c` | Player use/crossing specials operate the corresponding E1M1 doors, switches and exit; chasing monsters operate ordinary non-secret local doors without reversing an opening door |
 | Things | Doom thing types and difficulty flags | Player start, enemies, weapons, ammo, health, keys and decorations come from E1M1 data |
 | Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover weapon ownership, typed selection, dry-ammo fallback, cadence, ammunition, hitscan spread, damage, pain and death states; several exact weapon state chains remain incomplete |
-| Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
+| Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `p_inter.c`, `m_random.c`, `info.c` | Forward-half-plane wake sight with the close-range exception, randomized spawn/death timing, kind-specific radii and chase/attack/pain/death timing, committed attack action tics, spawn reaction delay, probabilistic ranged refusal without artificial maximum radii, post-attack chase suppression, retained eight-direction movement, blocked-direction search/RNG order, retaliation commitment, ordinary-door use, gameplay RNG reads for variable sight and active sounds, run/death frame indexing, hitscan spread, sound propagation, infighting, reduced-ammo drops, action-timed line-of-sight barrel cascades, and Nightmare behavior are deterministic |
 | Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, scripted movement, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Actor alert/attack/pain/death and projectile/explosion effects use listener-relative pan and distance attenuation; activated doors, switches, and platforms use the interaction position, while player/weapon/pickup feedback stays centered. Playback is capped at 16 semantic cues per host cycle, and the reproducibly rendered Freedoom track accompanies a complete run |
 | Whole level | Chocolate Doom running the same pinned WAD | The frozen `DoomReplay` ordinary-command fixture completes E1M1 and asserts route/state checkpoints; representative native frames are structurally validated, not compared with Chocolate Doom |
@@ -55,6 +55,7 @@ and independently observed outputs rather than importing GPL implementation.
   [`p_enemy.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/p_enemy.c),
   [`p_pspr.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/p_pspr.c),
   [`p_inter.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/p_inter.c),
+  [`m_random.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/m_random.c),
   and [`info.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/info.c)
   as the oracle for state durations, perception, chase choices, attacks,
   damage, pickups and thing/editor-number mappings.
@@ -137,12 +138,19 @@ bounds, not a universal frame-time guarantee across machines or backends.
   instantaneous rather than using the complete psprite transition chain.
 - Skill is retained in deterministic runtime state. Baby halves incoming
   damage with integer truncation, and Baby/Nightmare ammunition grants are
-  doubled. Nightmare's faster actor cadence and monster respawning remain an
-  intentional E1M1 vertical-slice departure: respawn bookkeeping and spawn
-  occupancy policy are outside the currently modeled bounded actor lifecycle.
-- Actor modes have deterministic tic durations, but they are coarser than the
-  complete Doom sprite-state chains. The status face similarly provides useful
-  health feedback without implementing the full original priority machine.
+  doubled. Nightmare removes the initial monster reaction delay, halves the
+  demon-family state timing, removes ordinary ranged-attack refusal and
+  post-shot movement suppression, doubles enemy-projectile speed, and gives
+  eligible corpses bounded 32-tic respawn attempts at their original map
+  positions after twelve seconds; occupied or blocked positions refuse the
+  attempt without replacing the corpse.
+- Actor modes preserve the kind-specific duration and action point of the
+  complete attack chains. Chase movement retains one of eight directions for a
+  bounded move count and advances the eight-phase run animation independently.
+  Its blocked-direction search tries the direct diagonal, target axes, retained
+  direction, exhaustive compass scan, and turnaround in the original order.
+  The status face similarly provides useful health feedback without
+  implementing the full original priority machine.
 - Damage resolves before pickup contact each tic, and lethal damage prevents a
   same-tic health pickup from reviving the player; corpse/death-camera motion is
   not modeled beyond the terminal runtime phase.

@@ -143,7 +143,7 @@ update! = |model, input| {
 		previous_pos = model.world.doom.player.sim.state.pos
 		extra_blockers = decoration_segments(model.decorations)
 		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire, weapon_slot }, extra_blockers, DoomMap.e1m1, model.level)
-		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, advanced.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
 			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
 		} else NotUsable
@@ -328,10 +328,10 @@ draw_weapon! = |frame, atlas, world| {
 		match DoomPresentation.weapon(world.doom.player.weapon, world.weapon.phase) {
 			Ok(view) => {
 				size = frame.size!()
-				width = U64.to_f32(view.rect.width)
-				height = U64.to_f32(view.rect.height)
+				width = U64.to_f32(view.rect.width) * weapon_scale
+				height = U64.to_f32(view.rect.height) * weapon_scale
 				bob = world.doom.player.sim.state.view
-				frame.texture!({ texture: atlas, source: atlas_rect(view.rect), dest: { x: size.width * 0.5 - width * 0.5 + bob.weapon_x, y: size.height - height - hud_height + bob.weapon_y + bob.weapon_kick, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+				frame.texture!({ texture: atlas, source: atlas_rect(view.rect), dest: { x: size.width * 0.5 - width * 0.5 + weapon_offset_x + bob.weapon_x, y: size.height - height - hud_height + bob.weapon_y + bob.weapon_kick, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 			}
 			Err(_) => {}
 		}
@@ -379,8 +379,6 @@ draw_hud! = |frame, atlas, world, flashes| {
 	}
 	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: 143, y: size.height - 32, width: U64.to_f32(face.width), height: U64.to_f32(face.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	draw_keys!(frame, atlas, player.keys, size)
-	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
-	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
 	match world.phase {
 		Playing => {}
 		Dead => overlay!(frame, size, "YOU DIED", "Press R to restart")
@@ -473,7 +471,7 @@ initial_runtime = |map, position, angle| {
 		crash "validated E1M1 contains unsupported thing types"
 	}
 	doom : DoomWorld.World
-	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: spawned.rng }
 	{ world: DoomRuntime.initial_for_skill(doom, Medium), decorations: spawned.decorations }
 }
 
@@ -517,6 +515,15 @@ logical_width = 320
 logical_height = 200
 
 hud_height = 32
+
+## The extracted PISG/SHTG frames are trimmed to their opaque bounds, so the
+## original lumps' draw offsets are gone and the sprite can only be centred by
+## its own width. These two dials restore the canonical framing: shrink the
+## oversized Freedoom art slightly, then nudge the barrel back onto the screen
+## centre that the trimmed arm pulls left of.
+weapon_scale = 0.85
+
+weapon_offset_x = 10
 
 draw_flashes! = |frame, flashes| {
 	size = frame.size!()
@@ -572,6 +579,12 @@ transition_cues = |before, after, use_result, fired, used| {
 			}
 			Err(_) => {}
 		}
+	}
+	match changed_actor(before.doom.actors, after.doom.actors, |old, new| new.kind == Barrel and old.state.mode == Dead and new.state.mode == Dead and old.state.remaining > 11 and new.state.remaining <= 11) {
+		Ok(actor) => {
+			$cues = List.append($cues, SpatialCue(ExplosionSound, actor.pos))
+		}
+		Err(_) => {}
 	}
 	if after.doom.player.health < before.doom.player.health {
 		$cues = List.append($cues, LocalCue(OofSound))

@@ -9,7 +9,7 @@ app [target] { fuzz: platform "../../../roc-fuzz/platform/main.roc" }
 ##  P3 firing through `world_tic` never makes ammo negative; the current
 ##     weapon is always owned
 ##  P4 actor tics over random facts: health never rises, Dead is absorbing,
-##     remaining never negative, player_damage only on the terminal Attack tic,
+##     remaining never negative, attacks occur once at the kind's action tic,
 ##     Rng is a deterministic function of the seed
 ##  P5 damage_actor / damage_actor_random with degenerate damage values
 import fuzz.Fuzz
@@ -352,6 +352,9 @@ test_actor = |input| {
 		has_sight: U8.bitwise_and(input.sight_bits, 1) != 0,
 		heard_sound: U8.bitwise_and(input.sight_bits, 2) != 0,
 		blockers: if U8.bitwise_and(input.sight_bits, 4) != 0 [{ start: { x: 24, y: -64 }, end: { x: 24, y: 64 } }] else [],
+		occupied: [],
+		nightmare: Bool.False,
+		used_door: Bool.False,
 	}
 	var $turn = { actor, rng: DoomWorld.Rng.seed(input.seed), player_damage: 0, attack_kind: NoAttack }
 	var $turn2 = { actor, rng: DoomWorld.Rng.seed(input.seed), player_damage: 0, attack_kind: NoAttack }
@@ -378,17 +381,18 @@ test_actor = |input| {
 		if $turn.player_damage < 0 {
 			crash "PROPERTY: negative player_damage ${ctx}"
 		}
-		if $turn.player_damage != 0 and (prev.actor.state.mode != Attack or prev.actor.state.remaining != 1) {
-			crash "PROPERTY: damage outside terminal Attack tic ${Str.inspect($turn.player_damage)} ${ctx}"
+		action_tic = prev.actor.state.mode == Attack and !(prev.actor.state.attacked) and prev.actor.state.remaining == DoomWorld.attack_action_remaining(prev.actor.kind)
+		if $turn.player_damage != 0 and !(action_tic) {
+			crash "PROPERTY: damage outside attack action tic ${Str.inspect($turn.player_damage)} ${ctx}"
 		}
-		if ($turn.player_damage > 0) != ($turn.attack_kind != NoAttack) {
-			crash "PROPERTY: attack_kind/damage disagree ${Str.inspect($turn)} ${ctx}"
+		if $turn.attack_kind != NoAttack and !(action_tic) {
+			crash "PROPERTY: attack outside action tic ${Str.inspect($turn)} ${ctx}"
 		}
-		if $turn.attack_kind == NoAttack and $turn.rng.index() != prev.rng.index() {
-			crash "PROPERTY: rng consumed without attack ${ctx}"
-		}
-		if $turn.attack_kind != NoAttack and $turn.rng.index() == prev.rng.index() and !(kind == Barrel) {
+		if $turn.attack_kind != NoAttack and $turn.attack_kind != ProjectileAttack and $turn.rng.index() == prev.rng.index() and !(kind == Barrel) {
 			crash "PROPERTY: attack did not consume rng ${ctx}"
+		}
+		if $turn.attack_kind == ProjectileAttack and $turn.rng.index() != prev.rng.index() {
+			crash "PROPERTY: projectile launch consumed impact rng ${ctx}"
 		}
 		# tick_actor (facts-free) must agree on the timing skeleton when nothing wakes the actor
 		if !(facts.has_sight) and !(facts.heard_sound) and prev.actor.state.mode != Look {
@@ -433,12 +437,12 @@ test_actor = |input| {
 					if a.state.mode == Dead and rolled.entered_pain {
 						crash "PROPERTY: dead actor entered pain ${ctx}"
 					}
-					if rolled.rng.index() == $turn.rng.index() and !(kind == Barrel) {
+					should_roll = amount > 0 and a.state.mode != Dead
+					if should_roll and rolled.rng.index() == $turn.rng.index() {
 						crash "PROPERTY: damage_actor_random consumed no random ${ctx}"
 					}
-					if Bool.False and kind == Barrel and rolled.actor.health > 0 and !(rolled.entered_pain) {
-						# (property was wrong: pain_chance 255 still misses on byte 255, as in vanilla `P_Random() < painchance`)
-						crash "PROPERTY: barrel pain_chance 255 missed ${Str.inspect(rolled)} ${ctx}"
+					if !(should_roll) and rolled.rng.index() != $turn.rng.index() {
+						crash "PROPERTY: ignored damage consumed random ${ctx}"
 					}
 					$turn = { ..$turn, actor: rolled.actor, rng: rolled.rng }
 					$turn2 = { ..$turn2, actor: rolled.actor, rng: rolled.rng }

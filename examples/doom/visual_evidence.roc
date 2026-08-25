@@ -166,7 +166,7 @@ update! = |model, input| {
 		previous_pos = model.world.doom.player.sim.state.pos
 		extra_blockers = decoration_segments(model.decorations)
 		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire, weapon_slot }, extra_blockers, DoomMap.e1m1, model.level)
-		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, advanced.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
 			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
 		} else NotUsable
@@ -364,7 +364,7 @@ advance_from_input = |model, input| {
 	previous_pos = model.world.doom.player.sim.state.pos
 	extra_blockers = decoration_segments(model.decorations)
 	advanced = DoomRuntime.advance_in_map(model.world, DoomSim.tic_seconds * 1.0001, command, extra_blockers, DoomMap.e1m1, model.level)
-	crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+	crossed = DoomRuntime.cross_specials(DoomMap.e1m1, advanced.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 	use_result = if Keys.key_pressed(input.devices, KeyE) DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys) else NotUsable
 	level0 = match use_result {
 		Activated(value) => value
@@ -684,7 +684,7 @@ initial_runtime = |map, position, angle| {
 		crash "validated E1M1 contains unsupported thing types"
 	}
 	doom : DoomWorld.World
-	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: spawned.rng }
 	{ world: DoomRuntime.initial_for_skill(doom, Medium), decorations: spawned.decorations }
 }
 

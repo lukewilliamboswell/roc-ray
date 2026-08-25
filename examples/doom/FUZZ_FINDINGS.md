@@ -8,8 +8,10 @@ W1–W4) is fixed with a red-green regression `expect` beside the code and a
 clean fuzz campaign with the corresponding guard removed; the fuzz targets no
 longer carry per-bug guards. The toolchain findings (T1–T4) remain open; the
 one workaround still in a target is `guard_dynamic_sectors` in `fuzz_map.roc`.
-The frozen replay route was re-authored (883 → 789 tics) because the door,
-lift and sliding fixes changed the legal route.
+The frozen replay route was first re-authored from 883 to 789 tics because the
+door, lift, and sliding fixes changed the legal route. It was later re-authored
+to 1108 tics after enemy perception, retaliation, gameplay-random ordering,
+death timing, and collision corrections changed combat along that route.
 
 Targets live beside the modules and build with the pinned nightly
 (`nightly-2026-08-23-fb208ba`) against a sibling checkout of roc-fuzz:
@@ -310,10 +312,10 @@ rule for all non-guarded kinds; taken pickups inert; `collect_for_skill`
 consistent across skills; `damage_player` monotone and a no-op for ≤ 0
 (including wrap cases); firing never goes negative; actor state machine
 (health monotone, Dead absorbing, `remaining >= 1`, damage only on the
-terminal Attack tic, rng consumed iff attack, deterministic);
-`damage_actor`/`damage_actor_random` agree. One property was wrong and
-withdrawn: Barrel `pain_chance 255` misses on byte 255 — that is vanilla
-`P_Random() < painchance` semantics.
+kind-specific attack action tic, deterministic RNG evolution);
+`damage_actor`/`damage_actor_random` agree. Barrel damage consumes the ordinary
+surviving-hit pain roll but never enters Pain because its actor definition has
+no pain state and a zero pain chance.
 
 ---
 

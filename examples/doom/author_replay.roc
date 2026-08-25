@@ -52,7 +52,7 @@ initial = |_unit| {
 	spawned = DoomWorld.spawn(map.raw().things, Baby)
 	player = DoomWorld.player({ x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }, DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360))
 	doom : DoomWorld.World
-	doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+	doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: spawned.rng }
 	{ world: DoomRuntime.initial_for_skill(doom, Baby), level: DoomLevel.initial(map), decorations: spawned.decorations, route_index: 0, tics: 0, runs: [], visited: [140], used_line: Err(NoUsableLine) }
 }
 
@@ -110,7 +110,7 @@ author_tic = |run| {
 	command = { ..movement, weapon_slot }
 	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, decorations, map, run.level)
 	new_pos = advanced.world.doom.player.sim.state.pos
-	crossed = DoomRuntime.cross_specials(map, run.level, pos, new_pos)
+	crossed = DoomRuntime.cross_specials(map, advanced.level, pos, new_pos)
 	# Press use once per newly reachable line, and again once no door is
 	# moving, matching DoomReplay's edge rule.
 	ahead = DoomRuntime.usable_line_ahead(map, new_pos, advanced.world.doom.player.sim.state.angle)
@@ -186,6 +186,7 @@ author_target = |route_index, pos, portal| {
 	else if route_index == 14 and pos.x > 240 { x: 224, y: 1200 }
 	else if route_index == 14 { x: 224, y: 1490 }
 	else if route_index == 15 and pos.x > 0 and pos.y < 1635 { x: 200, y: 1640 }
+	else if route_index == 15 and pos.x > -350 and pos.y > 1650 { x: pos.x, y: 1640 }
 	else if route_index == 15 and pos.x > -350 and pos.y > 1600 { x: -360, y: 1640 }
 	else if route_index == 15 and pos.y > 1440 { x: -360, y: 1440 }
 	else if route_index == 15 { x: -224, y: 1390 }
@@ -333,4 +334,4 @@ portal_lines = [834, 837, 564, 593, 594, 1084, 573, 577, 55, 62, 76, 248, 203, 2
 
 exit_line = 407
 
-max_tics = 900.U64
+max_tics = 1200.U64

@@ -2,7 +2,7 @@
 ## host-cycle time is accumulated explicitly, commands are repeated for whole
 ## tics, and excess catch-up is reported rather than creating an unbounded loop.
 ##
-## Constants and ordering are informed by Linux Doom 1.10/Chocolate Doom:
+## Constants and ordering are informed by the reference Doom implementation:
 ## `P_MovePlayer` applies command thrust in facing and facing-minus-90-degree
 ## directions, `P_XYMovement` caps momentum and applies 0xe800 friction, and
 ## `P_CalcHeight` derives view bob from squared horizontal momentum. The Roc

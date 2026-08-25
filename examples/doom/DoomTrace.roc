@@ -44,7 +44,7 @@ DoomTrace := [].{
 		spawned = DoomWorld.spawn(map.raw().things, Medium)
 		player = DoomWorld.player({ x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }, DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360))
 		doom : DoomWorld.World
-		doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+		doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: spawned.rng }
 		{ world: DoomRuntime.initial_for_skill(doom, Medium), level: DoomLevel.initial(map), trace: [] }
 	}
 
@@ -56,7 +56,7 @@ DoomTrace := [].{
 	checksum : List(Snapshot) -> U64
 	checksum = |trace| checksum_from(trace, 0, 2166136261)
 
-	golden_checksum = 2176744692.U64
+	golden_checksum = 157266671.U64
 }
 
 run_commands = |run, commands, partitions, index|
@@ -156,7 +156,7 @@ expect {
 	initial = DoomTrace.initial({})
 	first.trace == restarted.trace
 		and initial.world.doom.player.sim.state.tic == 0
-			and initial.world.doom.rng.index() == 0
+		and initial.world.doom.rng.index() == 210
 				and List.is_empty(initial.level.doors)
 					and List.is_empty(initial.level.floors)
 						and List.is_empty(initial.level.lifts)

@@ -188,6 +188,17 @@ DoomLevel := [].{
 		}
 	}
 
+	## Monsters may operate ordinary, non-secret local doors. They can reopen a
+	## closing door, but cannot reverse one that is already opening or waiting.
+	monster_use_line : DoomMap.Map, State, U64 -> UseResult
+	monster_use_line = |map, state, linedef| {
+		raw = map.raw()
+		match List.get(raw.linedefs, linedef) {
+			Ok(line) if line.special == 1 and !(DoomMap.line_flags(line.flags).secret) => monster_activate_local_door(raw, state, line)
+			_ => NotUsable
+		}
+	}
+
 	## W1 special 2 opens tagged doors permanently; WR special 88 starts the
 	## tagged lower-wait-raise lift cycle.
 	cross_line : DoomMap.Map, State, U64 -> UseResult
@@ -422,6 +433,29 @@ activate_local_door = |raw, state, line, stays_open, speed|
 			left = List.get(state.heights, left_sector) ?? crash "sector state missing"
 			sector = if right.ceiling - right.floor <= left.ceiling - left.floor right_sector else left_sector
 			activate_door(raw, state, sector, stays_open, speed)
+		}
+	}
+
+monster_activate_local_door = |raw, state, line|
+	match line.left_sidedef {
+		Err(Null) => NotUsable
+		Ok(left_index) => {
+			right_index = line.right_sidedef ?? crash "validated right sidedef missing"
+			right_sector = (List.get(raw.sidedefs, right_index) ?? crash "validated sidedef missing").sector
+			left_sector = (List.get(raw.sidedefs, left_index) ?? crash "validated sidedef missing").sector
+			right = List.get(state.heights, right_sector) ?? crash "sector state missing"
+			left = List.get(state.heights, left_sector) ?? crash "sector state missing"
+			sector = if right.ceiling - right.floor <= left.ceiling - left.floor right_sector else left_sector
+			match List.find_first(state.doors, |active| active.sector == sector) {
+				Ok(active) => match active.phase {
+					Closing => {
+						doors = List.map(state.doors, |door| if door.sector == sector { ..door, phase: Opening } else door)
+						Activated({ ..state, doors })
+					}
+					Opening | Waiting(_) => NotUsable
+				}
+				Err(_) => activate_door(raw, state, sector, Bool.False, 2)
+			}
 		}
 	}
 
@@ -711,6 +745,28 @@ expect {
 		List.map_with_index(map.raw().sectors, |_sector, index| index),
 		|sector| DoomLevel.collision_segments(map, $opened, sector) == collision_segments_from(map, map.raw(), $opened, sector, 0),
 	)
+}
+
+expect {
+	# A monster can start an ordinary local door and reopen it while closing,
+	# but repeated contact never reverses an opening door.
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	opened = DoomLevel.monster_use_line(map, initial, 55)
+	match opened {
+		Activated(opening) => {
+			repeated = DoomLevel.monster_use_line(map, opening, 55)
+			closing = DoomLevel.use_line(map, opening, 55, { blue: Bool.False, yellow: Bool.False, red: Bool.False })
+			match closing {
+				Activated(value) => match DoomLevel.monster_use_line(map, value, 55) {
+					Activated(reopened) => repeated == NotUsable and (List.get(reopened.doors, 0) ?? crash "reopened door missing").phase == Opening
+					_ => Bool.False
+				}
+				_ => Bool.False
+			}
+		}
+		_ => Bool.False
+	}
 }
 
 expect {

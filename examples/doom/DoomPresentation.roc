@@ -163,32 +163,42 @@ actor_mapping = |actor_value| {
 	}?
 	frame = match actor_value.kind {
 		Barrel => match actor_value.state.mode {
-			Dead => "E"
+			Dead => barrel_death_frame(actor_value.state.remaining)
 			_ => if actor_value.state.remaining % 2 == 0 "B" else "A"
 		}
 		Imp => match actor_value.state.mode {
 			Look => "A"
-			Chase => chase_frame(actor_value.state.remaining)
-			Attack => if actor_value.state.remaining > 5 "E" else if actor_value.state.remaining > 2 "F" else "G"
+			Chase => chase_frame(actor_value.chase_frame)
+			Attack => attack_frame(actor_value.kind, actor_value.state.remaining)
 			Pain => "H"
-			Dead => "M"
+			Dead => death_frame(actor_value.kind, actor_value.state.remaining)
 		}
 		_ => match actor_value.state.mode {
 			Look => "A"
-			Chase => chase_frame(actor_value.state.remaining)
-			Attack => if actor_value.state.remaining > 4 "E" else "F"
-			Pain => "G"
-			Dead => "L"
+			Chase => chase_frame(actor_value.chase_frame)
+			Attack => attack_frame(actor_value.kind, actor_value.state.remaining)
+			Pain => if actor_value.kind == Demon or actor_value.kind == Spectre "H" else "G"
+			Dead => death_frame(actor_value.kind, actor_value.state.remaining)
 		}
 	}
 	Ok({ sprite, frame })
 }
 
+attack_frame = |kind, remaining|
+	match kind {
+		ZombieMan => if remaining > 16 or remaining <= 8 "E" else "F"
+		ShotgunGuy => if remaining > 20 or remaining <= 10 "E" else "F"
+		Imp => if remaining > 14 "E" else if remaining > 6 "F" else "G"
+		Demon => if remaining > 16 "E" else if remaining > 8 "F" else "G"
+		Spectre => if remaining > 16 "E" else if remaining > 8 "F" else "G"
+		_ => "A"
+	}
+
 pickup_mapping : DoomWorld.ThingKind, U64 -> Try({ sprite : Str, frame : Str }, [MissingPickupSpriteMapping(DoomWorld.ThingKind)])
 pickup_mapping = |kind, tic|
 	match kind {
-		ShotgunPickup => Ok({ sprite: "SHOT", frame: "A" })
-		ClipPickup => Ok({ sprite: "CLIP", frame: "A" })
+		ShotgunPickup | DroppedShotgun => Ok({ sprite: "SHOT", frame: "A" })
+		ClipPickup | DroppedClip => Ok({ sprite: "CLIP", frame: "A" })
 		ShellPickup => Ok({ sprite: "SHEL", frame: "A" })
 		StimpackPickup => Ok({ sprite: "STIM", frame: "A" })
 		MedikitPickup => Ok({ sprite: "MEDI", frame: "A" })
@@ -234,12 +244,37 @@ decoration_mapping = |kind|
 		_ => Err(MissingDecorationSpriteMapping(kind))
 	}
 
-chase_frame = |remaining|
-	if remaining >= 4 "A" else if remaining == 3 "B" else if remaining == 2 "C" else "D"
+chase_frame = |phase| frame_at(["A", "A", "B", "B", "C", "C", "D", "D"], phase)
+
+death_frame = |kind, remaining|
+	match kind {
+		ZombieMan | ShotgunGuy => if remaining > 16 "H" else if remaining > 11 "I" else if remaining > 6 "J" else if remaining > 1 "K" else "L"
+		Imp => if remaining > 21 "I" else if remaining > 13 "J" else if remaining > 7 "K" else if remaining > 1 "L" else "M"
+		Demon | Spectre => if remaining > 21 "I" else if remaining > 13 "J" else if remaining > 9 "K" else if remaining > 5 "L" else if remaining > 1 "M" else "N"
+		_ => "A"
+	}
+
+barrel_death_frame = |remaining|
+	if remaining > 21 "A" else if remaining > 16 "B" else if remaining > 11 "C" else if remaining > 1 "D" else "E"
 
 frame_at = |frames, phase| List.get(frames, phase % List.len(frames)) ?? crash "nonempty presentation frame list"
 
 diagonal_threshold = 0.41421357
+
+expect {
+	List.map([0, 1, 2, 3, 4, 5, 6, 7], chase_frame) == ["A", "A", "B", "B", "C", "C", "D", "D"]
+}
+
+expect {
+	death_frame(ZombieMan, 21) == "H"
+		and death_frame(ZombieMan, 1) == "L"
+		and death_frame(Imp, 29) == "I"
+		and death_frame(Imp, 1) == "M"
+		and death_frame(Demon, 29) == "I"
+		and death_frame(Demon, 1) == "N"
+		and barrel_death_frame(26) == "A"
+		and barrel_death_frame(1) == "E"
+}
 
 expect {
 	angle = DoomSim.Angle.from_turns(0)
@@ -287,7 +322,7 @@ expect {
 	weapon = DoomPresentation.weapon(Pistol, 0)
 	hud = DoomPresentation.hud(StatusBar)
 	barrel = DoomWorld.actor(1, Barrel, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
-	explosion = DoomPresentation.actor({ ..barrel, state: DoomWorld.state(Dead) }, { x: 64, y: 0 })
+	explosion = DoomPresentation.actor({ ..barrel, state: DoomWorld.state_for(Barrel, Dead) }, { x: 64, y: 0 })
 	projectile = DoomPresentation.effect(ImpProjectile, 0)
 	match missing_key {
 		Err(MissingSprite(_)) => Bool.True
@@ -303,7 +338,7 @@ expect {
 			Err(_) => Bool.False
 		}
 		and match explosion {
-			Ok(view) => view.doom_name == "BEXPE0"
+			Ok(view) => view.doom_name == "BEXPA0"
 			Err(_) => Bool.False
 		}
 		and match projectile {

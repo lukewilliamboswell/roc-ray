@@ -625,6 +625,19 @@ test "allocation identity registry refuses saturation without overwriting live e
 }
 var active_cursor_focus = CursorFocusState{};
 
+const AudioNativeWorkCounters = struct {
+    device_init: usize = 0,
+    file_read: usize = 0,
+    decode: usize = 0,
+    stream_update: usize = 0,
+};
+
+// Kept deliberately small and synchronous: audio effects and stream upkeep
+// all run on the frame thread. Besides making the headless boundary testable,
+// these counters make every place that can cross into raylib/file decoding
+// explicit. They are diagnostic only and do not participate in app semantics.
+var audio_native_work = AudioNativeWorkCounters{};
+
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
 inline fn headlessMode() bool {
@@ -8553,20 +8566,25 @@ fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.A
     defer effect.end();
     defer path_arg.decref(host);
 
-    const path_slice = path_arg.asSlice();
-    const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer allocator.free(bytes);
-
+    // Headless audio is an inert, bounded host resource. Select it before even
+    // inspecting the path so unattended validation neither depends on assets
+    // being installed nor performs hidden filesystem/decoder work.
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
     }
 
+    const path_slice = path_arg.asSlice();
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    audio_native_work.file_read += 1;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    defer allocator.free(bytes);
+
     const file_type = audioFileTypeFromPath(path_slice, false) orelse
         return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    audio_native_work.decode += 1;
     const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
     const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
     return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
@@ -8588,21 +8606,23 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.A
     defer effect.end();
     defer path_arg.decref(host);
 
-    const path_slice = path_arg.asSlice();
-    const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    var bytes_transferred = false;
-    defer if (!bytes_transferred) allocator.free(bytes);
-
     if (headlessMode()) {
         const music = storeMusic(.headless) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .music = music, .err = RESOURCE_ERR_NONE };
     }
 
+    const path_slice = path_arg.asSlice();
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    audio_native_work.file_read += 1;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    var bytes_transferred = false;
+    defer if (!bytes_transferred) allocator.free(bytes);
+
     const file_type = audioFileTypeFromPath(path_slice, true) orelse
         return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    audio_native_work.decode += 1;
     const music = raylib.loadMusicFromMemory(file_type, bytes) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
     const stored = storeMusic(.{ .native = .{ .stream = music, .encoded = bytes, .allocator = allocator } }) orelse {
         raylib.unloadMusic(music);
@@ -8616,14 +8636,16 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
     return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
-test "the audio file loaders wait rather than load" {
-    // A sound and a music stream both start with a file read, which is what
-    // moved: `update!` can no longer reach one, and the decode that follows is
-    // still frame-thread work on bytes already in hand.
+test "headless audio loaders preserve phases without native work" {
+    // The effects retain their waiting phase even though a headless run can
+    // answer immediately with an inert resource.
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
+    active_headless = true;
+    audio_native_work = .{};
     defer {
+        active_headless = false;
         last_phase_violation = null;
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         sound_heap.deinitAll();
@@ -8653,7 +8675,7 @@ test "the audio file loaders wait rather than load" {
         try std.testing.expect(music_violation.allowed.eql(during_wait));
     }
 
-    // `init!` blocks for the read and a task parks for it; both answer.
+    // Startup and task phases both answer with the same typed resource.
     const startup = PhaseScope.enter(.startup);
     last_phase_violation = null;
     const sound = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
@@ -8666,12 +8688,19 @@ test "the audio file loaders wait rather than load" {
     try std.testing.expectEqual(RESOURCE_ERR_NONE, music.err);
     try std.testing.expect(last_phase_violation == null);
 
-    // A path with nothing behind it is a load failure rather than a resource.
+    // Headless loaders never touch the path: they return bounded inert
+    // resources even when no asset is installed.
     const missing = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-sound.wav", &roc_host));
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, missing.err);
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, missing.err);
+    const missing_music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-music.ogg", &roc_host));
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, missing_music.err);
+    updateMusicStreams();
+    try std.testing.expectEqualDeep(AudioNativeWorkCounters{}, audio_native_work);
 
     releaseResourceBox(&roc_host, sound.sound);
     releaseResourceBox(&roc_host, music.music);
+    releaseResourceBox(&roc_host, missing.sound);
+    releaseResourceBox(&roc_host, missing_music.music);
 }
 
 test "an extension raylib cannot decode is refused, and module music is music only" {
@@ -8942,11 +8971,17 @@ fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
 fn updateMusicResource(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |*music| raylib.updateMusicStream(&music.stream),
+        .native => |*music| {
+            if (!builtin.is_test) {
+                audio_native_work.stream_update += 1;
+                raylib.updateMusicStream(&music.stream);
+            }
+        },
     }
 }
 
 fn updateMusicStreams() void {
+    if (active_headless) return;
     music_heap.forEach(updateMusicResource);
 }
 
@@ -12641,6 +12676,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     raylib.setRandomSeed(@truncate(@intFromPtr(roc_host)));
 
     // Audio device must be ready before init! generates/plays any sounds.
+    // `runHeadlessApp` is a separate lifecycle and never reaches this point.
+    audio_native_work.device_init += 1;
     raylib.initAudioDevice();
     defer raylib.closeAudioDevice();
     defer deinitResources();

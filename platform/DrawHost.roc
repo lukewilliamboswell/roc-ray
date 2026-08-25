@@ -5,7 +5,7 @@ import Assets
 import Camera
 import Color
 import Math
-import rrt.Font as RrtFont
+import rrt.Font
 import rrt.Texture
 
 DrawHost := [].{
@@ -20,16 +20,8 @@ DrawHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
 		stub : PreparedText
-		stub = PreparedText.(Box.box(0))
+		stub = PreparedText.(Box.box(U64.highest))
 	}
-
-	## Which font a draw call names. Declared in the `roc-ray-types` package's
-	## `Font`, so the handle the host mints and the one a `Draw.Font` carries are
-	## one type.
-	Font : RrtFont.Handle
-
-	## The native font resource a handle carries.
-	FontResource : RrtFont.Resource
 
 	RenderTexture :: Texture.{
 		texture : RenderTexture -> Texture
@@ -47,7 +39,7 @@ DrawHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Draw.Shader.stub`.
 		stub : Shader
-		stub = Shader.(Box.box(0))
+		stub = Shader.(Box.box(U64.highest))
 	}
 
 	Uniform :: { shader : Shader, location : I32 }.{
@@ -71,12 +63,12 @@ DrawHost := [].{
 	Polygon : { points : List(Math.Vec2), color : Color.Rgba }
 	PolygonLines : { points : List(Math.Vec2), color : Color.Rgba, thickness : F32 }
 	Fps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
-	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font }
-	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align_x : F32, align_y : F32 }
+	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle }
+	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle, align_x : F32, align_y : F32 }
 	GlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
 	FontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(GlyphMetric) }
 	FrameSize : { width : F32, height : F32 }
-	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
+	PrepareText : { text : Str, size : F32, spacing : F32, font : Font.Handle }
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
 	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }
 	LoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
@@ -98,7 +90,7 @@ DrawHost := [].{
 	ShaderVec3 : { uniform : Uniform, value : { x : F32, y : F32, z : F32 } }
 	ShaderVec4 : { uniform : Uniform, value : { x : F32, y : F32, z : F32, w : F32 } }
 	ShaderTexture : { uniform : Uniform, texture : Texture }
-	FontResult : { font : FontResource, err : U8 }
+	FontResult : { font : Font.Handle, err : U8 }
 	RenderTextureResult : { target : RenderTexture, err : U8 }
 	ShaderResult : { shader : Shader, err : U8 }
 
@@ -118,12 +110,14 @@ DrawHost := [].{
 	clear! : Color.Rgba => {}
 	fps! : Fps => {}
 	line! : Line => {}
+	default_font! : () => Font.Handle
+	startup_default_font! : () => FontResult
 	load_font_bytes! : LoadFontBytes => FontResult
 	load_store_font! : LoadStoreFont => FontResult
 	load_render_texture! : RenderTextureSize => RenderTextureResult
 	load_shader_source! : LoadShaderSource => ShaderResult
 	load_store_shader! : LoadStoreShader => ShaderResult
-	font_metrics! : Font => FontMetrics
+	font_metrics! : Font.Handle => FontMetrics
 	frame_size! : () => FrameSize
 	prepare_text! : PrepareText => PrepareTextResult
 	draw_prepared_text! : PreparedTextDraw => {}

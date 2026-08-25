@@ -38,6 +38,8 @@ AppHostConfig : {
 	record_timing : U8,
 	record_cursor : U8,
 	record_quality : U8,
+	default_font_path : Str,
+	default_font_size : I32,
 }
 
 AppConfig := [].{
@@ -52,6 +54,7 @@ AppConfig := [].{
 		size = cfg.size()
 		min_size = cfg.min_size()
 		record = host_recording(cfg.recording())
+		default_font = cfg.default_font()
 		{
 			title: cfg.title(),
 			width: size.width,
@@ -77,6 +80,8 @@ AppConfig := [].{
 			record_timing: record.timing,
 			record_cursor: record.cursor,
 			record_quality: record.quality,
+			default_font_path: default_font.path,
+			default_font_size: default_font.size,
 		}
 	}
 }
@@ -175,6 +180,10 @@ expect {
 	host.record_every_nth == 1 and host.record_timing == 1 and host.record_cursor == 0
 }
 expect AppConfig.to_host({}, App.default.with_recording(RrtCapture.default)).record_quality == 1
+expect {
+	host = AppConfig.to_host({}, App.default.with_default_font({ path: "assets/body.ttf", size: 32 }))
+	host.default_font_path == "assets/body.ttf" and host.default_font_size == 32
+}
 expect {
 	fast = RrtCapture.default.with_quality(Fast)
 	best = RrtCapture.default.with_quality(Best)

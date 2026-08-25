@@ -5,8 +5,9 @@ that both the platform and reusable third-party packages depend on. Without
 this, any pure snapshot-to-framework translation is stuck inside the application,
 because a package cannot import from the app's chosen platform.
 
-The platform depends on `types/` and re-exports each moved module under the
-same name, so `exposes` and every existing app are unchanged.
+The platform depends on `types/` and transparently re-exports every companion
+nominal its public API mentions. Fonts are available as `Text.Font`; reusable
+packages name the identical value as `rrt.Font`.
 
 ## What moved, and what cannot
 

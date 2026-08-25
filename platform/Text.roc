@@ -22,6 +22,11 @@ import rrt.Font as RrtFont
 
 Text := [].{
 
+	## A host-owned font and immutable metric snapshot. This is the shared type
+	## from `roc-ray-types`, re-exported for applications that depend only on the
+	## platform.
+	Font : RrtFont.Font
+
 	## Which horizontal edge or centre of the text `pos` names.
 	HAlign : [Left, Center, Right]
 
@@ -40,6 +45,10 @@ Text := [].{
 	## third name; they are one type.
 	Size : RrtFont.Size
 
+	## Resource-free synthetic monospace font for pure layout tests.
+	font_stub : Font
+	font_stub = RrtFont.stub
+
 	## Everything a draw needs beyond the text itself: where to put it, what
 	## colour to paint it, and which point of it `pos` names.
 	Placement : {
@@ -57,7 +66,7 @@ Text := [].{
 		content : Str,
 		size : F32,
 		spacing : F32,
-		font : Draw.Font,
+		font : RrtFont.Font,
 	}.{
 
 		## Draw this text at a different pixel size. The default is `20`.
@@ -74,7 +83,7 @@ Text := [].{
 		spacing = |builder, value| { ..builder, spacing: value }
 
 		## Draw this text in a different font.
-		font : Builder, Draw.Font -> Builder
+		font : Builder, RrtFont.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
 
 		## Cache immutable UTF-8 text, font and style, and measurement in the
@@ -148,7 +157,7 @@ Text := [].{
 
 	## Start describing a string drawn in a font. Adjust the result with
 	## `size`, `spacing` and `font`, then call `prepare!`.
-	from : Str, Draw.Font -> Builder
+	from : Str, RrtFont.Font -> Builder
 	from = |content, font| {
 		content,
 		size: 20,

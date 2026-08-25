@@ -202,8 +202,8 @@ Model : {
 	## Two atlases of one face. A glyph atlas is rasterised at the size it is
 	## loaded at, so the figures and labels get one and the small tracked
 	## capitals get another.
-	font : Draw.Font,
-	small : Draw.Font,
+	font : Text.Font,
+	small : Text.Font,
 	title : Text.Prepared,
 	eyebrow : Text.Prepared,
 	deck : Text.Prepared,
@@ -2722,11 +2722,11 @@ draw_footer! = |frame, model| {
 # Text and numbers
 # ---------------------------------------------------------------------------
 
-text_left! : Draw.Frame, Draw.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
+text_left! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_left! = |frame, font, pos, content, size, spacing, color|
 	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font, align: Draw.align_top_left })
 
-text_right! : Draw.Frame, Draw.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
+text_right! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_right! = |frame, font, pos, content, size, spacing, color|
 	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font, align: Draw.align_top_right })
 

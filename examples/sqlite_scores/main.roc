@@ -25,7 +25,7 @@ Model : {
 	status : Status,
 	pending : Bool,
 	rng : Random.State,
-	font : Draw.Font,
+	font : Text.Font,
 
 	## Wall-clock seconds since startup, so the in-flight indicator turns.
 	elapsed : F32,
@@ -483,7 +483,7 @@ test_model = {
 	status: Ready,
 	pending: Bool.False,
 	rng: Random.seed(1),
-	font: Draw.Font.stub,
+	font: Text.font_stub,
 	elapsed: 0,
 	title: Text.Prepared.stub,
 	subtitle: Text.Prepared.stub,

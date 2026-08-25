@@ -31,7 +31,7 @@ Model := {
 	hit_sound : Audio.Sound,
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
-	font : Draw.Font,
+	font : Text.Font,
 
 	## Presentation state, advanced by the same pure step as the rules.
 	## `trail` is the ball's recent positions, newest first; `flash` decays from
@@ -486,7 +486,7 @@ test_model = {
 	hit_sound: Audio.Sound.stub,
 	wall_sound: Audio.Sound.stub,
 	score_sound: Audio.Sound.stub,
-	font: Draw.Font.stub,
+	font: Text.font_stub,
 	trail: [],
 	flash: 0,
 	flash_color: ball_neon,

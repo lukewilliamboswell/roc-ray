@@ -12,7 +12,7 @@ AssetsHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Assets.Store.stub`.
 		stub : Store
-		stub = Store.(Box.box(0))
+		stub = Store.(Box.box(U64.highest))
 	}
 
 	StoreOpen : {

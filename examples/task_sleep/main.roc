@@ -21,7 +21,7 @@ Model : {
 	elapsed : F32,
 	title : Text.Prepared,
 	hint : Text.Prepared,
-	font : Draw.Font,
+	font : Text.Font,
 }
 
 ## How far the app has got: waiting on the sleeper, or holding the cycle its

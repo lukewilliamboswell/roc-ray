@@ -63,6 +63,8 @@ import Capture
 import Files
 import AppHost
 import AppTransport
+import DrawHost
+import rrt.Font
 
 App := [].{
 
@@ -98,6 +100,7 @@ App := [].{
 		visible : Bool,
 		output_dir : Str,
 		recording : AppRecording,
+		default_font : { path : Str, size : I32 },
 	}.{
 
 		## Return a config with a different window title.
@@ -181,6 +184,12 @@ App := [].{
 		without_recording : Config -> Config
 		without_recording = |cfg| { ..cfg, recording: NoRecording }
 
+		## Load the startup default font from a working-directory-relative asset
+		## path at the requested base pixel size. The path is validated and loaded
+		## once before `Startup.default_font!` returns it.
+		with_default_font : Config, { path : Str, size : I32 } -> Config
+		with_default_font = |cfg, value| { ..cfg, default_font: value }
+
 		## Inspect the window title.
 		title : Config -> Str
 		title = |cfg| cfg.title
@@ -225,6 +234,11 @@ App := [].{
 		## Inspect whether the app records itself from startup.
 		recording : Config -> [NoRecording, Record(Capture.Recording)]
 		recording = |cfg| cfg.recording
+
+		## Inspect the configured startup default-font intent. An empty path means
+		## the backend's built-in font.
+		default_font : Config -> { path : Str, size : I32 }
+		default_font = |cfg| cfg.default_font
 	}
 
 	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
@@ -239,7 +253,16 @@ App := [].{
 	## the first `App.Input` supplies the first sampled values. After
 	## initialization, change host state by calling effects from `update!`, and
 	## ask for work that waits with `Task.spawn!`.
-	Startup : HostHost.Startup
+	Startup :: HostHost.Startup.{
+
+		## Return the configured startup font. Legal only in `init!`.
+		default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+		default_font! = |startup| App.default_font!(startup)
+
+		## Construct the public startup capability at the private host boundary.
+		for_host : HostHost.Startup -> Startup
+		for_host = |startup| Startup.(startup)
+	}
 
 	## Exit the application with the given exit code.
 	##
@@ -403,6 +426,29 @@ App := [].{
 	set_cursor! : Startup, Mouse.Cursor => {}
 	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
 
+	## Return the configured startup font, or the backend's built-in font when
+	## none was configured. A configured path is resolved from the process
+	## working directory. The host loads it once; repeat calls return retained
+	## aliases of the same resource. Legal only in `init!`.
+	default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+	default_font! = |_startup| {
+		result = DrawHost.startup_default_font!()
+		if result.err == 1 {
+			Err(AssetPathInvalid)
+		} else if result.err == 2 {
+			Err(AssetNotFound)
+		} else if result.err == 3 {
+			Err(AssetReadFailed)
+		} else if result.err == 4 {
+			Err(FontLoadFailed)
+		} else if result.err != 0 {
+			Err(ResourceLimit)
+		} else {
+			metrics = DrawHost.font_metrics!(result.font)
+			Ok({ handle: result.font, metrics })
+		}
+	}
+
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
 	## before the first frame, or let other initialization errors propagate.
@@ -435,6 +481,7 @@ App := [].{
 		visible: Bool.True,
 		output_dir: ".",
 		recording: NoRecording,
+		default_font: { path: "", size: 20 },
 	}
 
 	## Build initialization from a static startup configuration.

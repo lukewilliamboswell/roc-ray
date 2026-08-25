@@ -1,34 +1,25 @@
 ## Font handles, metric snapshots, and pure text measurement.
 ##
-## `measure` follows the host renderer's layout rules without calling the host,
-## so packages and tests can calculate text bounds purely.
-##
-## `Font` pairs an opaque host handle with immutable scalar and glyph metrics.
-## Only the platform can load a live font; it re-exports this type as
-## `Draw.Font`.
+## A font pairs an opaque, reference-counted native resource identity with an
+## immutable scalar metric snapshot. Reusable packages can retain and measure
+## it without importing the platform or calling the host. The platform
+## re-exports this type as `Text.Font`.
 import unicode.Scalar
 
 Font := {
 	handle : Handle,
-	base_size_value : F32,
-	line_spacing_value : F32,
-	fallback_index : U64,
-	glyph_values : List(GlyphMetrics),
+	metrics : FontMetrics,
 }.{
 
-	## The native resource a loaded font holds.
-	##
-	## Opaque: only the host mints one, so a font value can be copied and
-	## measured but a handle cannot be forged from an integer.
-	Resource :: Box(U64).{
+	## Opaque native resource identity. Only a host can manufacture a live one,
+	## but applications can compare and hash handles they receive.
+	Handle :: Box(U64).{
+		is_eq : Handle, Handle -> Bool
+		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)
 
-		## The invalid token, as a resource-free handle. See `Font.stub`.
-		stub : Resource
-		stub = Resource.(Box.box(0))
+		to_hash : Handle, Hasher -> Hasher
+		to_hash = |Handle.(value), hasher| U64.to_hash(Box.unbox(value), hasher)
 	}
-
-	## Which font a value names: raylib's built-in one, or a loaded resource.
-	Handle : [DefaultFont, LoadedFont(Resource)]
 
 	## Scalar metrics for one glyph, in the atlas's own units.
 	GlyphMetrics : {
@@ -40,247 +31,250 @@ Font := {
 		height : F32,
 	}
 
-	## What to measure: the string, the size to draw it at, and the extra space
-	## between scalars.
+	## Immutable atlas and glyph metrics captured when a font is loaded.
+	FontMetrics : {
+		base_size : F32,
+		line_spacing : F32,
+		fallback_index : U64,
+		glyphs : List(GlyphMetrics),
+	}
+
+	## What to measure: text, draw size, and extra spacing between codepoints.
 	Measure : {
 		text : Str,
 		size : F32,
 		spacing : F32,
 	}
 
-	## Text measurement result, in the units the size was given in.
+	## Text measurement result, in the units the requested size was given in.
 	Size : {
 		width : F32,
 		height : F32,
 	}
 
-	## The pixel size this font's glyph atlas was rasterized at.
+	## Resource-free synthetic monospace font for pure layout tests.
 	##
-	## Drawing at this size is one atlas texel per screen pixel. Drawing much
-	## larger scales the atlas up rather than re-rasterizing, so load the
-	## font again at the size wanted instead.
-	base_size : Font -> F32
-	base_size = |font| font.base_size_value
-
-	## Extra vertical space between lines, on top of the drawn size. Adding
-	## it to the text size is the distance from one baseline to the next.
-	line_spacing : Font -> F32
-	line_spacing = |font| font.line_spacing_value
-
-	## Every glyph the font rasterized, with its advance and its box. This is
-	## the table `measure` walks; an app rarely needs it directly.
-	glyphs : Font -> List(GlyphMetrics)
-	glyphs = |font| font.glyph_values
-
-	## Where a codepoint sits in `glyphs`, or the fallback glyph's index when
-	## the font has no glyph for it. Answers an index rather than a `Try`, so
-	## measurement stays total.
-	get_glyph_index : Font, U32 -> U64
-	get_glyph_index = |font, codepoint|
-		glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
-
-	## Measure a valid Roc string against this font's metric snapshot.
-	##
-	## Pure: it reads the snapshot taken when the font loaded and never calls
-	## the host, so a layout pass can run in `update!`, in a helper, or in an
-	## `expect`. The platform's `Text` is the fuller interface built on it.
-	##
-	## This follows raylib 6 `MeasureTextEx`: embedded NUL ends the input,
-	## newline advances by font size plus line spacing, missing codepoints use
-	## the fallback glyph, and spacing counts Unicode scalars.
-	measure : Font, Measure -> Size
-	measure = |font, cfg| {
-		state = {
-			line_width: 0,
-			widest_width: 0,
-			line_count: 0,
-			widest_count: 0,
-			height: cfg.size,
-			seen: Bool.False,
-		}
-		# TODO(compiler): the fold takes the scalar metrics rather than the
-		# `Font` itself. Passing the whole value into the recursion, while also
-		# reading its glyph list, makes the compiler's ARC certification panic
-		# with "consumed partially dismantled local" on the refcounted handle
-		# field. The metrics are all the fold reads anyway; restore the direct
-		# `Font` argument once that is fixed.
-		metrics = {
-			base_size: font.base_size_value,
-			line_spacing: font.line_spacing_value,
-			fallback_index: font.fallback_index,
-		}
-		measure_scalars(metrics, cfg, font.glyph_values, Scalar.iter(cfg.text), state)
-	}
-
-	## Resource-free font value for pure tests.
-	##
-	## The handle never resolves to a host resource, so every host path it
-	## reaches treats it as an invalid one: drawing falls back to raylib's
-	## built-in font, and the platform's `Text.prepare!` refuses it. Its metric
-	## snapshot is a fiction rather than a measurement -- no glyphs, no line
-	## spacing, and a `base_size` of 1 so that `measure` stays finite instead of
-	## dividing by zero. Put it in a model to reach the app's real `update!`
-	## from an `expect`. Do not use it to test drawing, layout, or resource
-	## lifetime.
+	## Its handle never resolves to a host resource, so drawing falls back to
+	## the platform's built-in font. One fallback glyph advances one unit at a
+	## base size of one, making measurements deterministic. Do not use it to
+	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: LoadedFont(Resource.stub),
-		base_size_value: 1,
-		line_spacing_value: 0,
-		fallback_index: 0,
-		glyph_values: [],
+		handle: Handle.(Box.box(U64.highest)),
+		metrics: {
+			base_size: 1,
+			line_spacing: 0,
+			fallback_index: 0,
+			glyphs: [{ codepoint: 0, advance_x: 1, offset_x: 0, offset_y: 0, width: 1, height: 1 }],
+		},
 	}
-}
 
-## The scalar metrics `measure` reads, without the handle beside them.
-Metrics : {
-	base_size : F32,
-	line_spacing : F32,
-	fallback_index : U64,
-}
-
-## The running line, the widest line seen, and the height accumulated so far.
-MeasureState : {
-	line_width : F32,
-	widest_width : F32,
-	line_count : U64,
-	widest_count : U64,
-	height : F32,
-	seen : Bool,
-}
-
-## One step of `measure`, folding the next Unicode scalar into the running
-## line and answering the finished `Size` when the string runs out.
-measure_scalars : Metrics, Font.Measure, List(Font.GlyphMetrics), Iter(Scalar.LocatedScalar), MeasureState -> Font.Size
-measure_scalars = |metrics, cfg, glyphs, scalars, state| {
-	match Iter.next(scalars) {
-		Done => finish(metrics, cfg, state)
-		Skip({ rest }) => measure_scalars(metrics, cfg, glyphs, rest, state)
-		One({ item, rest }) => {
-			codepoint = item.scalar.to_u32()
-			if codepoint == 0 {
-				finish(metrics, cfg, state)
-			} else if codepoint == 10 {
-				measure_scalars(
-					metrics,
-					cfg,
-					glyphs,
-					rest,
-					{
-						line_width: 0,
-						widest_width: max_f32(state.widest_width, state.line_width),
-						line_count: 0,
-						widest_count: max_u64(state.widest_count, state.line_count),
-						height: state.height + cfg.size + metrics.line_spacing,
-						seen: Bool.True,
-					},
-				)
-			} else {
-				index = glyph_index(glyphs, codepoint, 0, List.len(glyphs), metrics.fallback_index)
-				advance = match List.get(glyphs, index) {
-					Ok(glyph) => if glyph.advance_x > 0 glyph.advance_x else glyph.width + glyph.offset_x
-					Err(_) => 0
-				}
-				measure_scalars(
-					metrics,
-					cfg,
-					glyphs,
-					rest,
-					{ ..state, line_width: state.line_width + advance, line_count: state.line_count + 1, seen: Bool.True },
-				)
+	## Measure a valid Roc string against the font's immutable metric snapshot.
+	##
+	## Pure: this never calls the host, so layout can run in `update!`, in a
+	## package, or in an `expect`. Newlines advance by the requested size plus
+	## line spacing, missing codepoints use the fallback glyph, and spacing
+	## counts Unicode codepoints. U+0000 is an ordinary Roc string codepoint.
+	measure : Font, Measure -> Size
+	measure = |font, { text, size, spacing }| {
+		if Str.is_empty(text) {
+			{ width: 0, height: 0 }
+		} else {
+			var $state = {
+				# Codepoint count on the current line.
+				line_count: 0,
+				# Unscaled glyph-advance total for the current line.
+				line_width: 0,
+				# Greatest codepoint count among completed lines.
+				widest_count: 0,
+				# Greatest unscaled width among completed lines.
+				widest_width: 0,
+				# Accumulated height across all lines.
+				height: size,
+			}
+			$state = text_codepoints(text).fold(
+				$state,
+				|current, codepoint| {
+					if codepoint == 10 {
+						# Line Feed ("\n"):
+						# - Width preserves the widest completed line.
+						# - Height increases by font size plus line spacing.
+						{
+							line_width: 0,
+							widest_width: max_f32(current.widest_width, current.line_width),
+							line_count: 0,
+							widest_count: max_u64(current.widest_count, current.line_count),
+							height: current.height + size + font.metrics.line_spacing,
+						}
+					} else {
+						# Other codepoints:
+						# - width: accumulates glyph advance (use the fallback for a missing glyph).
+						# - height: unchanged.
+						glyph_result = match binary_search_by(font.metrics.glyphs, codepoint, |glyph| glyph.codepoint) {
+							Ok(found) => Ok(found)
+							Err(NotFound) => List.get(font.metrics.glyphs, font.metrics.fallback_index)
+						}
+						advance_x = match glyph_result {
+							Ok(glyph) => if glyph.advance_x > 0 glyph.advance_x else glyph.width + glyph.offset_x
+							Err(_) => 0
+						}
+						{ ..current, line_width: current.line_width + advance_x, line_count: current.line_count + 1 }
+					}
+				},
+			)
+			# Finalize width/height:
+			# - width: scale the widest line and add spacing from the greatest line count.
+			# - height: use the accumulated line height.
+			width = max_f32($state.widest_width, $state.line_width)
+			count = max_u64($state.widest_count, $state.line_count)
+			spacing_width = if count > 0 (U64.to_f32(count) - 1) * spacing else 0
+			{
+				width: width * (size / font.metrics.base_size) + spacing_width,
+				height: $state.height,
 			}
 		}
 	}
 }
 
-## Turn `measure`'s accumulated state into the `Size` it answers with, once
-## every scalar has been folded in.
-finish : Metrics, Font.Measure, MeasureState -> Font.Size
-finish = |metrics, cfg, state| {
-	if !state.seen {
-		{ width: 0, height: 0 }
+## Iterate over the Unicode codepoints in a valid Roc string.
+text_codepoints : Str -> Iter(U32)
+text_codepoints = |text| Scalar.iter(text).map(|located| located.scalar.to_u32())
+
+## Iterate over bytes as codepoints when the text is known to be ASCII.
+text_codepoints_ascii : Str -> Iter(U32)
+text_codepoints_ascii = |text| Str.to_utf8(text).iter().map(|byte| byte.to_u32())
+
+binary_search_by : List(a), key, (a -> key) -> Try(a, [NotFound]) where [key.is_eq : key, key -> Bool, key.is_lt : key, key -> Bool]
+binary_search_by = |items, needle, key_of| binary_search_range(items, needle, key_of, 0, List.len(items))
+
+binary_search_range : List(a), key, (a -> key), U64, U64 -> Try(a, [NotFound]) where [key.is_eq : key, key -> Bool, key.is_lt : key, key -> Bool]
+binary_search_range = |items, needle, key_of, low, high| {
+	if low >= high {
+		Err(NotFound)
 	} else {
-		width = max_f32(state.widest_width, state.line_width)
-		count = max_u64(state.widest_count, state.line_count)
-		spacing_width = if count > 0 (U64.to_f32(count) - 1) * cfg.spacing else 0
-		{
-			width: width * (cfg.size / metrics.base_size) + spacing_width,
-			height: state.height,
+		middle = low + (high - low) / 2
+		match List.get(items, middle) {
+			Err(_) => Err(NotFound)
+			Ok(item) => {
+				key = key_of(item)
+				if key.is_eq(needle) {
+					Ok(item)
+				} else if key.is_lt(needle) {
+					binary_search_range(items, needle, key_of, middle + 1, high)
+				} else {
+					binary_search_range(items, needle, key_of, low, middle)
+				}
+			}
 		}
 	}
 }
 
-## The larger of two `F32` values, used to keep the widest line seen so far.
 max_f32 : F32, F32 -> F32
 max_f32 = |a, b| if a > b a else b
 
-## The larger of two `U64` values, used to keep the longest line seen so far.
 max_u64 : U64, U64 -> U64
 max_u64 = |a, b| if a > b a else b
 
-## Binary search the glyph table, which the host builds sorted by codepoint.
-##
-## Answers the fallback index rather than a `Try` for a codepoint the font has
-## no glyph for, which is what keeps `measure` total.
-glyph_index : List(Font.GlyphMetrics), U32, U64, U64, U64 -> U64
-glyph_index = |glyphs, codepoint, start, end, fallback| {
-	if start >= end {
-		fallback
-	} else {
-		middle = start + (end - start) / 2
-		match List.get(glyphs, middle) {
-			Err(_) => fallback
-			Ok(glyph) => if glyph.codepoint == codepoint {
-				middle
-			} else if codepoint < glyph.codepoint {
-				glyph_index(glyphs, codepoint, start, middle, fallback)
-			} else {
-				glyph_index(glyphs, codepoint, middle + 1, end, fallback)
+iterator_done : Iter(a) -> Bool
+iterator_done = |iter| match Iter.next(iter) {
+	Done => Bool.True
+	_ => Bool.False
+}
+
+test_font : Font
+test_font = {
+	handle: Font.stub.handle,
+	metrics: {
+		base_size: 10,
+		line_spacing: 3,
+		fallback_index: 0,
+		glyphs: [
+			{ codepoint: 0, advance_x: 5, offset_x: 0, offset_y: 0, width: 5, height: 10 }, # "\u(0000)"
+			{ codepoint: 97, advance_x: 10, offset_x: 0, offset_y: 0, width: 10, height: 10 }, # "a"
+			{ codepoint: 98, advance_x: 4, offset_x: 0, offset_y: 0, width: 4, height: 10 }, # "b"
+			{ codepoint: 99, advance_x: 4, offset_x: 0, offset_y: 0, width: 4, height: 10 }, # "c"
+			{ codepoint: 122, advance_x: 0, offset_x: 2, offset_y: 0, width: 6, height: 10 }, # "z"
+		],
+	},
+}
+
+# Font.measure
+
+# Empty text has no bounds, regardless of requested size or spacing.
+expect Font.stub.measure({ text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
+
+# The synthetic fallback advances once per codepoint and spaces adjacent codepoints.
+expect Font.stub.measure({ text: "abc", size: 20, spacing: 1 }) == { width: 62, height: 20 }
+
+# A newline starts another font-sized line without contributing horizontal advance.
+expect Font.stub.measure({ text: "a\nb", size: 20, spacing: 0 }) == { width: 20, height: 40 }
+
+# Raylib combines the greatest glyph width and greatest codepoint count across lines.
+expect test_font.measure({ text: "a\nbc", size: 10, spacing: 3 }) == { width: 13, height: 23 }
+
+# A present glyph is selected by codepoint while an absent glyph uses the fallback.
+expect test_font.measure({ text: "a?", size: 10, spacing: 0 }) == { width: 15, height: 10 }
+
+# A zero glyph advance falls back to glyph width plus horizontal offset.
+expect test_font.measure({ text: "z", size: 10, spacing: 0 }) == { width: 8, height: 10 }
+
+# Glyph advances scale from the font's base size before spacing is added.
+expect test_font.measure({ text: "ab", size: 20, spacing: 3 }) == { width: 31, height: 20 }
+
+# A leading newline includes an empty first line and configured line spacing.
+expect test_font.measure({ text: "\na", size: 10, spacing: 0 }) == { width: 10, height: 23 }
+
+# A trailing newline includes an empty final line and configured line spacing.
+expect test_font.measure({ text: "a\n", size: 10, spacing: 0 }) == { width: 10, height: 23 }
+
+# Consecutive newlines include every intervening empty line.
+expect test_font.measure({ text: "a\n\nb", size: 10, spacing: 0 }) == { width: 10, height: 36 }
+
+# A multibyte Unicode scalar is measured as one missing codepoint, not UTF-8 bytes.
+expect test_font.measure({ text: "é", size: 10, spacing: 2 }) == { width: 5, height: 10 }
+
+# text_codepoints
+
+# A multibyte UTF-8 sequence produces one Unicode codepoint.
+expect match Iter.next(text_codepoints("é")) {
+	One({ item, rest }) => item == 233 and iterator_done(rest)
+	_ => Bool.False
+}
+
+# U+0000 is an ordinary Roc string codepoint rather than a terminator.
+expect match Iter.next(text_codepoints("a\u(0000)b")) {
+	One({ item, rest }) =>
+		item == 97 and match Iter.next(rest) {
+			One({ item: nul, rest: after_nul }) => nul == 0 and match Iter.next(after_nul) {
+				One({ item: final, rest: done }) => final == 98 and iterator_done(done)
+				_ => Bool.False
 			}
+			_ => Bool.False
 		}
-	}
+	_ => Bool.False
 }
 
-## A synthetic font, which is what a layout package's own tests are written
-## against: real-looking metrics, no host, and a handle that resolves to
-## nothing.
-sample : Font
-sample = {
-	handle: DefaultFont,
-	base_size_value: 10,
-	line_spacing_value: 2,
-	fallback_index: 0,
-	glyph_values: [
-		{ codepoint: 32, advance_x: 4, offset_x: 0, offset_y: 0, width: 0, height: 0 },
-		{ codepoint: 97, advance_x: 6, offset_x: 0, offset_y: 0, width: 5, height: 7 },
-		{ codepoint: 98, advance_x: 8, offset_x: 0, offset_y: 0, width: 7, height: 7 },
-	],
+# text_codepoints_ascii
+
+# Known ASCII text can be iterated directly from its UTF-8 bytes.
+expect match Iter.next(text_codepoints_ascii("A\n")) {
+	One({ item, rest }) =>
+		item == 65 and match Iter.next(rest) {
+			One({ item: newline, rest: done }) => newline == 10 and iterator_done(done)
+			_ => Bool.False
+		}
+	_ => Bool.False
 }
 
-expect Font.base_size(Font.stub) == 1
-expect Font.line_spacing(Font.stub) == 0
-expect List.is_empty(Font.glyphs(Font.stub))
+# binary_search_by
 
-## A font with no glyphs measures every string as zero-wide. The height is the
-## requested size because that is one line of it, and the `base_size` of 1 is
-## what keeps the scale factor finite rather than dividing by zero.
-expect Font.measure(Font.stub, { text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
-expect Font.measure(Font.stub, { text: "inert", size: 20, spacing: 0 }) == { width: 0, height: 20 }
+# A sorted collection returns the element whose extracted key matches.
+expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 3, |item| item.key) == Ok({ key: 3 })
 
-## The glyph table is searched by codepoint, and a codepoint the font does not
-## have measures as the fallback glyph rather than as an error.
-expect Font.get_glyph_index(sample, 97) == 1
-expect Font.get_glyph_index(sample, 98) == 2
-expect Font.get_glyph_index(sample, 9731) == 0
+# A key absent from a sorted collection reports NotFound.
+expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 4, |item| item.key) == Err(NotFound)
 
-## Drawn at the atlas's own base size, a string is exactly the sum of its
-## advances plus one gap per pair of scalars.
-expect Font.measure(sample, { text: "ab", size: 10, spacing: 0 }) == { width: 14, height: 10 }
-expect Font.measure(sample, { text: "ab", size: 10, spacing: 3 }) == { width: 17, height: 10 }
+# Font.Handle
 
-## Drawn at twice the base size, the advances scale but the spacing does not.
-expect Font.measure(sample, { text: "ab", size: 20, spacing: 0 }) == { width: 28, height: 20 }
-
-## A newline starts a second line: the width is the widest of the two, and the
-## height is two sizes plus one line spacing.
-expect Font.measure(sample, { text: "a\nab", size: 10, spacing: 0 }) == { width: 14, height: 22 }
+# Handle equality and hashing support keyed collections.
+expect Dict.single(Font.stub.handle, 42).get(Font.stub.handle) == Ok(42)

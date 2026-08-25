@@ -3101,50 +3101,50 @@ comptime {
 
 /// Element type for __AnonStruct_e7f1bd6203d0f761
 pub const __AnonStruct_e7f1bd6203d0f761 = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     size: f32,
     spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     size: f32,
     spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_e7f1bd6203d0f761) != 48) @compileError("__AnonStruct_e7f1bd6203d0f761 size mismatch");
+        if (@sizeOf(__AnonStruct_e7f1bd6203d0f761) != 40) @compileError("__AnonStruct_e7f1bd6203d0f761 size mismatch");
         if (@alignOf(__AnonStruct_e7f1bd6203d0f761) != 8) @compileError("__AnonStruct_e7f1bd6203d0f761 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_e7f1bd6203d0f761) != 28) @compileError("__AnonStruct_e7f1bd6203d0f761 size mismatch");
+        if (@sizeOf(__AnonStruct_e7f1bd6203d0f761) != 24) @compileError("__AnonStruct_e7f1bd6203d0f761 size mismatch");
         if (@alignOf(__AnonStruct_e7f1bd6203d0f761) != 4) @compileError("__AnonStruct_e7f1bd6203d0f761 alignment mismatch");
     }
 }
@@ -3609,7 +3609,7 @@ comptime {
 
 /// Element type for __AnonStruct_18f9d3b1fa7f9242
 pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     pos: MathVec2,
     size: f32,
@@ -3618,7 +3618,7 @@ pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -3627,13 +3627,13 @@ pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     pos: MathVec2,
     size: f32,
@@ -3642,7 +3642,7 @@ pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -3651,7 +3651,7 @@ pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
@@ -3660,18 +3660,18 @@ pub const __AnonStruct_18f9d3b1fa7f9242 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_18f9d3b1fa7f9242) != 64) @compileError("__AnonStruct_18f9d3b1fa7f9242 size mismatch");
+        if (@sizeOf(__AnonStruct_18f9d3b1fa7f9242) != 56) @compileError("__AnonStruct_18f9d3b1fa7f9242 size mismatch");
         if (@alignOf(__AnonStruct_18f9d3b1fa7f9242) != 8) @compileError("__AnonStruct_18f9d3b1fa7f9242 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_18f9d3b1fa7f9242) != 40) @compileError("__AnonStruct_18f9d3b1fa7f9242 size mismatch");
+        if (@sizeOf(__AnonStruct_18f9d3b1fa7f9242) != 36) @compileError("__AnonStruct_18f9d3b1fa7f9242 size mismatch");
         if (@alignOf(__AnonStruct_18f9d3b1fa7f9242) != 4) @compileError("__AnonStruct_18f9d3b1fa7f9242 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct_f27064a2797f2406
 pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     align_x: f32,
     align_y: f32,
@@ -3682,7 +3682,7 @@ pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -3691,13 +3691,13 @@ pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     align_x: f32,
     align_y: f32,
@@ -3708,7 +3708,7 @@ pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -3717,7 +3717,7 @@ pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
@@ -3726,11 +3726,11 @@ pub const __AnonStruct_f27064a2797f2406 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_f27064a2797f2406) != 72) @compileError("__AnonStruct_f27064a2797f2406 size mismatch");
+        if (@sizeOf(__AnonStruct_f27064a2797f2406) != 64) @compileError("__AnonStruct_f27064a2797f2406 size mismatch");
         if (@alignOf(__AnonStruct_f27064a2797f2406) != 8) @compileError("__AnonStruct_f27064a2797f2406 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_f27064a2797f2406) != 48) @compileError("__AnonStruct_f27064a2797f2406 size mismatch");
+        if (@sizeOf(__AnonStruct_f27064a2797f2406) != 44) @compileError("__AnonStruct_f27064a2797f2406 size mismatch");
         if (@alignOf(__AnonStruct_f27064a2797f2406) != 4) @compileError("__AnonStruct_f27064a2797f2406 alignment mismatch");
     }
 }
@@ -6352,9 +6352,11 @@ comptime {
 /// Element type for __AnonStruct_1fdbe5c9dee1b2d2
 pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct {
     record_max_frames: u64,
+    default_font_path: RocStr,
     output_dir: RocStr,
     record_path: RocStr,
     title: RocStr,
+    default_font_size: i32,
     exit_key_code: i32,
     height: i32,
     min_height: i32,
@@ -6378,6 +6380,7 @@ pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.default_font_path.decref(roc_host);
         value.output_dir.decref(roc_host);
         value.record_path.decref(roc_host);
         value.title.decref(roc_host);
@@ -6386,15 +6389,18 @@ pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.default_font_path.incref(amount);
         value.output_dir.incref(amount);
         value.record_path.incref(amount);
         value.title.incref(amount);
     }
 } else extern struct {
     record_max_frames: u64,
+    default_font_path: RocStr,
     output_dir: RocStr,
     record_path: RocStr,
     title: RocStr,
+    default_font_size: i32,
     exit_key_code: i32,
     height: i32,
     min_height: i32,
@@ -6418,6 +6424,7 @@ pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.default_font_path.decref(roc_host);
         value.output_dir.decref(roc_host);
         value.record_path.decref(roc_host);
         value.title.decref(roc_host);
@@ -6426,6 +6433,7 @@ pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.default_font_path.incref(amount);
         value.output_dir.incref(amount);
         value.record_path.incref(amount);
         value.title.incref(amount);
@@ -6434,11 +6442,11 @@ pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 136) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
+        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 160) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
         if (@alignOf(__AnonStruct_1fdbe5c9dee1b2d2) != 8) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 96) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
+        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 112) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
         if (@alignOf(__AnonStruct_1fdbe5c9dee1b2d2) != 8) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 alignment mismatch");
     }
 }
@@ -6914,65 +6922,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_225d69ea1bc0e508) != 12) @compileError("__AnonStruct_225d69ea1bc0e508 size mismatch");
         if (@alignOf(__AnonStruct_225d69ea1bc0e508) != 4) @compileError("__AnonStruct_225d69ea1bc0e508 alignment mismatch");
-    }
-}
-
-/// Tag discriminant for DefaultFontOrLoadedFont.
-pub const DefaultFontOrLoadedFontTag = enum(u8) {
-    DefaultFont = 0,
-    LoadedFont = 1,
-};
-
-/// Payload union for DefaultFontOrLoadedFont.
-pub const DefaultFontOrLoadedFontPayload = extern union {
-    default_font: [0]u8,
-    loaded_font: *u64,
-};
-
-/// Tag union: DefaultFontOrLoadedFont
-pub const DefaultFontOrLoadedFont = if (@sizeOf(usize) == 4) extern struct {
-    payload: [4]u8 align(4),
-    tag: DefaultFontOrLoadedFontTag,
-    pub fn payload_loaded_font(self: *const @This()) *u64 {
-        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefDefaultFontOrLoadedFont(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfDefaultFontOrLoadedFont(self, amount);
-    }
-} else extern struct {
-    payload: DefaultFontOrLoadedFontPayload,
-    tag: DefaultFontOrLoadedFontTag,
-    pub fn payload_loaded_font(self: *const @This()) *u64 {
-        return self.payload.loaded_font;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefDefaultFontOrLoadedFont(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfDefaultFontOrLoadedFont(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DefaultFontOrLoadedFont) != 16) @compileError("DefaultFontOrLoadedFont size mismatch");
-        if (@alignOf(DefaultFontOrLoadedFont) != 8) @compileError("DefaultFontOrLoadedFont alignment mismatch");
-        if (@offsetOf(DefaultFontOrLoadedFont, "tag") != 8) @compileError("DefaultFontOrLoadedFont tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DefaultFontOrLoadedFont) != 8) @compileError("DefaultFontOrLoadedFont size mismatch");
-        if (@alignOf(DefaultFontOrLoadedFont) != 4) @compileError("DefaultFontOrLoadedFont alignment mismatch");
-        if (@offsetOf(DefaultFontOrLoadedFont, "tag") != 4) @compileError("DefaultFontOrLoadedFont tag offset mismatch");
     }
 }
 
@@ -9385,10 +9334,10 @@ comptime {
 }
 
 /// Arguments for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(Font.Resource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
+/// Roc signature: Font.Handle => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostFont_metricsArgs = extern struct {
-    arg0: DefaultFontOrLoadedFont,
+    arg0: *u64,
 };
 
 /// Arguments for DrawHost.line!
@@ -9448,7 +9397,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.load_font_bytes!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Resource }
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Handle }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostLoad_font_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
@@ -9494,7 +9443,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Resource }
+/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Handle }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostLoad_store_fontArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
@@ -9544,53 +9493,53 @@ comptime {
 }
 
 /// Arguments for DrawHost.prepare_text!
-/// Roc signature: { font : [DefaultFont, LoadedFont(Font.Resource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
+/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostPrepare_textArgs = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     size: f32,
     spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     size: f32,
     spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawHostPrepare_textArgs) != 48) @compileError("DrawHostPrepare_textArgs size mismatch");
+        if (@sizeOf(DrawHostPrepare_textArgs) != 40) @compileError("DrawHostPrepare_textArgs size mismatch");
         if (@alignOf(DrawHostPrepare_textArgs) != 8) @compileError("DrawHostPrepare_textArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawHostPrepare_textArgs) != 28) @compileError("DrawHostPrepare_textArgs size mismatch");
+        if (@sizeOf(DrawHostPrepare_textArgs) != 24) @compileError("DrawHostPrepare_textArgs size mismatch");
         if (@alignOf(DrawHostPrepare_textArgs) != 4) @compileError("DrawHostPrepare_textArgs alignment mismatch");
     }
 }
@@ -10072,10 +10021,10 @@ comptime {
 }
 
 /// Arguments for DrawHost.text_aligned!
-/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : Font.Handle, pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     align_x: f32,
     align_y: f32,
@@ -10086,7 +10035,7 @@ pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -10095,13 +10044,13 @@ pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     align_x: f32,
     align_y: f32,
@@ -10112,7 +10061,7 @@ pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -10121,7 +10070,7 @@ pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
@@ -10130,20 +10079,20 @@ pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawHostText_alignedArgs) != 72) @compileError("DrawHostText_alignedArgs size mismatch");
+        if (@sizeOf(DrawHostText_alignedArgs) != 64) @compileError("DrawHostText_alignedArgs size mismatch");
         if (@alignOf(DrawHostText_alignedArgs) != 8) @compileError("DrawHostText_alignedArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawHostText_alignedArgs) != 48) @compileError("DrawHostText_alignedArgs size mismatch");
+        if (@sizeOf(DrawHostText_alignedArgs) != 44) @compileError("DrawHostText_alignedArgs size mismatch");
         if (@alignOf(DrawHostText_alignedArgs) != 4) @compileError("DrawHostText_alignedArgs alignment mismatch");
     }
 }
 
 /// Arguments for DrawHost.text!
-/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : Font.Handle, pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     pos: MathVec2,
     size: f32,
@@ -10152,7 +10101,7 @@ pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -10161,13 +10110,13 @@ pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
     }
 } else extern struct {
-    font: DefaultFontOrLoadedFont,
+    font: *u64,
     text: RocStr,
     pos: MathVec2,
     size: f32,
@@ -10176,7 +10125,7 @@ pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.font.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
         value.text.decref(roc_host);
         value.pos.decref(roc_host);
         value.color.decref(roc_host);
@@ -10185,7 +10134,7 @@ pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.font.incref(amount);
+        increfBox(@ptrCast(value.font), amount);
         value.text.incref(amount);
         value.pos.incref(amount);
         value.color.incref(amount);
@@ -10194,11 +10143,11 @@ pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawHostTextArgs) != 64) @compileError("DrawHostTextArgs size mismatch");
+        if (@sizeOf(DrawHostTextArgs) != 56) @compileError("DrawHostTextArgs size mismatch");
         if (@alignOf(DrawHostTextArgs) != 8) @compileError("DrawHostTextArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawHostTextArgs) != 40) @compileError("DrawHostTextArgs size mismatch");
+        if (@sizeOf(DrawHostTextArgs) != 36) @compileError("DrawHostTextArgs size mismatch");
         if (@alignOf(DrawHostTextArgs) != 4) @compileError("DrawHostTextArgs alignment mismatch");
     }
 }
@@ -12375,30 +12324,6 @@ pub const __AnonStruct_a31979034eec4b2eRelease = struct {
     }
 };
 
-fn decrefDefaultFontOrLoadedFont(value: DefaultFontOrLoadedFont, roc_host: *RocHost) void {
-    switch (value.tag) {
-        .DefaultFont => {},
-        .LoadedFont => {
-            decrefBoxWith(@ptrCast(value.payload_loaded_font()), @alignOf(u64), false, null, roc_host);
-        },
-    }
-}
-
-fn increfDefaultFontOrLoadedFont(value: DefaultFontOrLoadedFont, amount: isize) void {
-    switch (value.tag) {
-        .DefaultFont => {},
-        .LoadedFont => {
-            increfBox(@ptrCast(value.payload_loaded_font()), amount);
-        },
-    }
-}
-
-pub const DefaultFontOrLoadedFontRelease = struct {
-    pub fn release(value: DefaultFontOrLoadedFont, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
 pub const __AnonStruct_473ae8de77ee164bRelease = struct {
     pub fn release(value: __AnonStruct_473ae8de77ee164b, roc_host: *RocHost) void {
         value.decref(roc_host);
@@ -13113,7 +13038,6 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_3e85b4e878c74d96) return __AnonStruct_3e85b4e878c74d96Release;
     if (T == __AnonStruct_2bfb89334ad27c35) return __AnonStruct_2bfb89334ad27c35Release;
     if (T == RocListWith(__AnonStruct_a31979034eec4b2e, false)) return RocListSpineRelease(RocListWith(__AnonStruct_a31979034eec4b2e, false));
-    if (T == DefaultFontOrLoadedFont) return DefaultFontOrLoadedFontRelease;
     if (T == __AnonStruct_2a39039201b5023d) return __AnonStruct_2a39039201b5023dRelease;
     if (T == __AnonStruct_e7f1bd6203d0f761) return __AnonStruct_e7f1bd6203d0f761Release;
     if (T == __AnonStruct_6bff15fb6a4cb85a) return __AnonStruct_6bff15fb6a4cb85aRelease;
@@ -13487,13 +13411,23 @@ pub extern fn roc_draw_end_scissor_raw() callconv(.c) void;
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, size : F32 } => {}
 pub extern fn roc_draw_fps(arg0: DrawHostFpsArgs) callconv(.c) void;
 
+/// Hosted symbol for DrawHost.default_font!
+/// Roc signature: {} => Font.Handle
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_draw_default_font_raw() callconv(.c) *u64;
+
+/// Hosted symbol for DrawHost.startup_default_font!
+/// Roc signature: {} => { err : U8, font : Font.Handle }
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_draw_startup_default_font_raw() callconv(.c) DrawHostLoad_font_bytesRetRecord;
+
 /// Hosted symbol for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(Font.Resource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
+/// Roc signature: Font.Handle => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_draw_font_metrics_raw(arg0: DefaultFontOrLoadedFont) callconv(.c) __AnonStruct_2bfb89334ad27c35;
+pub extern fn roc_draw_font_metrics_raw(arg0: *u64) callconv(.c) __AnonStruct_2bfb89334ad27c35;
 
 /// Hosted symbol for DrawHost.frame_size!
 /// Roc signature: {} => { height : F32, width : F32 }
@@ -13504,7 +13438,7 @@ pub extern fn roc_draw_frame_size() callconv(.c) __AnonStruct_473ae8de77ee164b;
 pub extern fn roc_draw_line_raw(arg0: DrawHostLineArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.load_font_bytes!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Resource }
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Handle }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13512,7 +13446,7 @@ pub extern fn roc_draw_line_raw(arg0: DrawHostLineArgs) callconv(.c) void;
 pub extern fn roc_draw_load_font_bytes_raw(arg0: DrawHostLoad_font_bytesArgs) callconv(.c) __AnonStruct_83bbf23095f15134;
 
 /// Hosted symbol for DrawHost.load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Resource }
+/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Handle }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13520,7 +13454,7 @@ pub extern fn roc_draw_load_font_bytes_raw(arg0: DrawHostLoad_font_bytesArgs) ca
 pub extern fn roc_draw_load_store_font_raw(arg0: DrawHostLoad_store_fontArgs) callconv(.c) __AnonStruct_83bbf23095f15134;
 
 /// Hosted symbol for DrawHost.prepare_text!
-/// Roc signature: { font : [DefaultFont, LoadedFont(Font.Resource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
+/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13573,14 +13507,14 @@ pub extern fn roc_draw_rounded_rectangle_lines_raw(arg0: DrawHostRounded_rectang
 pub extern fn roc_draw_rounded_rectangle_raw(arg0: DrawHostRounded_rectangleArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.text_aligned!
-/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : Font.Handle, pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_text_aligned_raw(arg0: DrawHostText_alignedArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.text!
-/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : Font.Handle, pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);

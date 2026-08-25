@@ -129,7 +129,7 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "font_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Font.Resource"),
+        ("cannot use opaque nominal type", "instance of Font.Handle"),
     ),
 )
 

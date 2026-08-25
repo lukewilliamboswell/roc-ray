@@ -45,7 +45,7 @@ const MetricMeasurement = struct {
     height: f32,
 };
 
-/// Copy precisely the scalar data `Draw.Font` receives from a live raylib
+/// Copy precisely the scalar data `Text.Font` receives from a live raylib
 /// font. The measurement below deliberately has no access to the font after
 /// this point, matching the pure Roc API's ownership boundary.
 fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !MetricSnapshot {
@@ -66,7 +66,7 @@ fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !Metric
             if (glyph.codepoint == fallback_codepoint) break index;
         } else 0,
         // roc-ray exposes no text-line-spacing setter; this is raylib 6's
-        // initial value, retained by `Draw.Font` with the glyph scalars.
+        // initial value, retained by `Text.Font` with the glyph scalars.
         .line_spacing = 2,
         .glyphs = glyphs,
     };
@@ -95,7 +95,7 @@ const DecodedCodepoint = struct {
 };
 
 /// Every string below is valid UTF-8, exactly as `Str` values are. This is the
-/// same byte-to-codepoint boundary used by `Draw.Font.measure`.
+/// same byte-to-codepoint boundary used by the `Font.measure` receiver.
 fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
     const first: u32 = text[index];
     if (first < 0x80) return .{ .codepoint = first, .next = index + 1 };
@@ -113,7 +113,7 @@ fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
     };
 }
 
-/// Pure equivalent of `Draw.Font.measure` for a native parity check.
+/// Pure equivalent of the `Font.measure` receiver for a native parity check.
 fn measureSnapshot(snapshot: MetricSnapshot, text: []const u8, size: f32, spacing: f32) MetricMeasurement {
     if (text.len == 0 or text[0] == 0) return .{ .width = 0, .height = 0 };
 

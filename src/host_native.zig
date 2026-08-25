@@ -1978,16 +1978,25 @@ var camera_scope_count: usize = 0;
 var scissor_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_scissorArgs = undefined;
 var scissor_scope_count: usize = 0;
 
+const INVALID_RESOURCE_TOKEN = std.math.maxInt(u64);
+
 const InvalidResourceBox = extern struct {
     refcount: isize = 0,
-    token: u64 = 0,
+    token: u64 = INVALID_RESOURCE_TOKEN,
 };
 
 var invalid_resource_box: InvalidResourceBox = .{};
 
+const DefaultFontBox = extern struct {
+    refcount: isize = 0,
+    token: u64 = 0,
+};
+
+var default_font_box: DefaultFontBox = .{};
+
 const InvalidTextureBox = extern struct {
     refcount: isize = 0,
-    payload: u64 = 0,
+    payload: u64 = INVALID_RESOURCE_TOKEN,
 };
 
 var invalid_texture_box: InvalidTextureBox = .{};
@@ -2228,6 +2237,14 @@ var file_bytes_delivery_reservations = FileBytesDeliveryReservations{};
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
 var font_heap: FontHeap = .{};
+const StartupFontConfig = struct {
+    path: []const u8 = &.{},
+    size: i32 = 20,
+};
+
+/// Host-lifetime owner for a configured startup font, when present.
+var startup_font_handle: ?*u64 = null;
+var startup_font_config: StartupFontConfig = .{};
 var texture_heap: TextureHeap = .{};
 var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
@@ -2850,7 +2867,7 @@ test "prepared text allocates long native bytes once and retains its loaded font
     @memset(&long_text, 'x');
     const font = storeFont(.headless).?;
     const result = hostedDrawPrepareTextRaw(&roc_host, .{
-        .font = .{ .payload = .{ .loaded_font = font }, .tag = .LoadedFont },
+        .font = font,
         .text = abi.RocStr.fromSlice(&long_text, &roc_host),
         .size = 18,
         .spacing = 1,
@@ -2913,7 +2930,7 @@ test "prepared text rejects resource kind confusion and releases transferred own
 
     const font_shader = storeShader(.headless).?;
     const result = hostedDrawPrepareTextRaw(&roc_host, .{
-        .font = .{ .payload = .{ .loaded_font = font_shader }, .tag = .LoadedFont },
+        .font = font_shader,
         .text = abi.RocStr.empty(),
         .size = 16,
         .spacing = 1,
@@ -3194,7 +3211,7 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     const before = render_texture_heap.active();
     const target = hostedDrawLoadRenderTextureRaw(.{ .height = 0, .width = 160 });
     try std.testing.expectEqual(RESOURCE_ERR_FAILED, target.err);
-    try std.testing.expectEqual(@as(u64, 0), target.target.handle.*);
+    try std.testing.expectEqual(INVALID_RESOURCE_TOKEN, target.target.handle.*);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(before, render_texture_heap.active());
 }
@@ -3290,16 +3307,14 @@ test "copied shared texture destroys its native resource exactly once after the 
     try std.testing.expectEqual(destroyed_before + 1, texture_destroy_count);
 }
 
-/// The handle a Roc `stub` value carries: a real `Box(0)`.
+/// Allocate the real Roc box carried by a resource `stub` value.
 ///
-/// Zero is the officialized invalid token -- `decodeToken` rejects it and no
-/// heap ever emits it -- so every resource operation this reaches takes its
-/// unresolvable-handle branch. The box is a genuine Roc allocation rather than
-/// a fake, so the host's decref of it runs the same path it runs at runtime and
-/// the testing allocator reports a leak or a double free either way.
+/// The box is a genuine Roc allocation rather than a fake, so the host's
+/// decref of it runs the same path it runs at runtime and the testing allocator
+/// reports a leak or a double free either way.
 fn allocateTestResourceStub(host: *RocHost) *u64 {
     const handle: *u64 = @ptrCast(@alignCast(abi.allocateBox(@sizeOf(u64), @alignOf(u64), false, host)));
-    handle.* = 0;
+    handle.* = INVALID_RESOURCE_TOKEN;
     return handle;
 }
 
@@ -3334,7 +3349,7 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
     }
 
     const destroyed_before = texture_destroy_count;
-    try std.testing.expect(nativeTextureForToken(0) == null);
+    try std.testing.expect(nativeTextureForToken(INVALID_RESOURCE_TOKEN) == null);
 
     {
         const scope = PhaseScope.enter(.render);
@@ -3413,11 +3428,11 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
 
 test "resource-free draw handles are inert, and leave real resources alone" {
     // The Roc side publishes a `stub` for every resource an app can hold in its
-    // model -- `Draw.Font.stub`, `Draw.Shader.stub`, `Draw.RenderTexture.stub`,
+    // model -- `Text.font_stub`, `Draw.Shader.stub`, `Draw.RenderTexture.stub`,
     // `Text.Prepared.stub`, `Assets.Store.stub` -- so that a pure test can write
-    // a model down. Each one carries `Box(0)`, and this is the other half of
-    // that promise: the host resolves none of them, refuses the operations they
-    // reach, and releases the box exactly once.
+    // a model down. Every resource stub carries the maximum U64 token. The host
+    // resolves none of them, refuses the operations they reach, and releases
+    // the box exactly once.
     //
     // A real resource of each kind is live throughout, and goes through the
     // same calls itself. Stub traffic must not disturb it, and the operations
@@ -3440,13 +3455,13 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         active_roc_host = null;
     }
 
-    // Zero resolves nowhere, in any heap. This is the property every stub rests
-    // on, and the reason `stub` can be a pure value at all.
-    try std.testing.expect(font_heap.get(0) == null);
-    try std.testing.expect(shader_heap.get(0) == null);
-    try std.testing.expect(render_texture_heap.get(0) == null);
-    try std.testing.expect(prepared_text_heap.get(0) == null);
-    try std.testing.expect(store_heap.get(0) == null);
+    // Stub tokens resolve nowhere. This is the property every stub rests on,
+    // and the reason `stub` can be a pure value at all.
+    try std.testing.expect(font_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(shader_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(render_texture_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(prepared_text_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(store_heap.get(INVALID_RESOURCE_TOKEN) == null);
 
     const real_shader = storeShader(.headless).?;
     const real_target = storeRenderTexture(.headless).?;
@@ -3457,16 +3472,13 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A stub font has no metrics to snapshot; the headless answer is the
         // built-in one, and the transferred handle is still released.
-        const snapshot = hostedDrawFontMetricsRaw(&roc_host, .{
-            .payload = .{ .loaded_font = allocateTestResourceStub(&roc_host) },
-            .tag = .LoadedFont,
-        });
+        const snapshot = hostedDrawFontMetricsRaw(&roc_host, allocateTestResourceStub(&roc_host));
         defer snapshot.glyphs.decref(&roc_host);
 
         // Preparing text with a stub font is refused rather than silently
         // prepared against the default font, and consumes no heap slot.
         const prepared = hostedDrawPrepareTextRaw(&roc_host, .{
-            .font = .{ .payload = .{ .loaded_font = allocateTestResourceStub(&roc_host) }, .tag = .LoadedFont },
+            .font = allocateTestResourceStub(&roc_host),
             .text = abi.RocStr.fromSlice("inert", &roc_host),
             .size = 16,
             .spacing = 1,
@@ -3583,8 +3595,8 @@ test "resource-free audio handles are inert across every sound and music call" {
         active_roc_host = null;
     }
 
-    try std.testing.expect(sound_heap.get(0) == null);
-    try std.testing.expect(music_heap.get(0) == null);
+    try std.testing.expect(sound_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(music_heap.get(INVALID_RESOURCE_TOKEN) == null);
 
     const real_sound = storeSound(.headless).?;
     const real_music = storeMusic(.headless).?;
@@ -3912,7 +3924,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     var prepared_texts: [256]*u64 = undefined;
     for (&prepared_texts) |*prepared| {
         const result = hostedDrawPrepareTextRaw(&roc_host, .{
-            .font = .{ .payload = undefined, .tag = .DefaultFont },
+            .font = defaultFontHandle(),
             .text = abi.RocStr.empty(),
             .size = 16,
             .spacing = 1,
@@ -3921,7 +3933,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
         prepared.* = result.prepared;
     }
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawPrepareTextRaw(&roc_host, .{
-        .font = .{ .payload = undefined, .tag = .DefaultFont },
+        .font = defaultFontHandle(),
         .text = abi.RocStr.empty(),
         .size = 16,
         .spacing = 1,
@@ -3950,6 +3962,91 @@ fn storeFont(resource: FontResource) ?*u64 {
         destroyFont(&rejected);
         return null;
     };
+}
+
+fn defaultFontHandle() *u64 {
+    return &default_font_box.token;
+}
+
+test "the built-in font is token zero and consumes no font heap slot" {
+    try std.testing.expectEqual(@as(u64, 0), defaultFontHandle().*);
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+}
+
+fn releaseStartupFontHandle(host: *RocHost) void {
+    if (startup_font_handle) |handle| releaseResourceBox(host, handle);
+    startup_font_handle = null;
+}
+
+fn configuredStartupFont(host: *RocHost) abi.DrawHostLoad_font_bytesRetRecord {
+    enforcePhase("App.Startup.default_font!", during_startup);
+    if (startup_font_config.path.len == 0) return .{ .font = defaultFontHandle(), .err = RESOURCE_ERR_NONE };
+    if (!isSafeStoreRelativePath(startup_font_config.path)) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH };
+    if (startup_font_config.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+
+    if (startup_font_handle) |handle| {
+        abi.increfBox(@ptrCast(handle), 1);
+        return .{ .font = handle, .err = RESOURCE_ERR_NONE };
+    }
+
+    const file_type = fontFileTypeFromPath(startup_font_config.path) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+    const allocator = allocatorFromHost(host);
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), startup_font_config.path, allocator, .limited(MAX_ASSET_FILE_BYTES)) catch |err| {
+        return .{
+            .font = invalidResourceHandle(),
+            .err = switch (err) {
+                error.FileNotFound => STORE_LOAD_ERR_NOT_FOUND,
+                else => STORE_LOAD_ERR_READ,
+            },
+        };
+    };
+    defer allocator.free(bytes);
+
+    const handle = if (headlessMode())
+        storeFont(.headless)
+    else blk: {
+        const font = raylib.loadFontFromMemory(file_type, bytes, startup_font_config.size) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+        break :blk storeFont(.{ .native = font });
+    };
+    const stored = handle orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
+    startup_font_handle = stored;
+    abi.increfBox(@ptrCast(stored), 1);
+    return .{ .font = stored, .err = RESOURCE_ERR_NONE };
+}
+
+fn exportedDrawStartupDefaultFontRaw() callconv(.c) abi.DrawHostLoad_font_bytesRetRecord {
+    return configuredStartupFont(activeHost());
+}
+
+test "configured startup font loads once and returns retained aliases" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    startup_font_config = .{ .path = "examples/live_plot/assets/fonts/LiberationSans-Regular.ttf", .size = 24 };
+    const phase = PhaseScope.enter(.startup);
+    defer {
+        phase.leave();
+        font_heap.deinitAll();
+        startup_font_handle = null;
+        startup_font_config = .{};
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const first = configuredStartupFont(&roc_host);
+    const second = configuredStartupFont(&roc_host);
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, first.err);
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, second.err);
+    try std.testing.expectEqual(first.font, second.font);
+    try std.testing.expectEqual(@as(usize, 1), font_heap.active());
+    releaseResourceBox(&roc_host, first.font);
+    releaseResourceBox(&roc_host, second.font);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), font_heap.active());
 }
 
 fn storePreparedText(resource: PreparedTextResource) ?*u64 {
@@ -5366,13 +5463,19 @@ test "the store-backed font and shader loaders wait rather than load" {
     try std.testing.expect(last_phase_violation == null);
 }
 
-fn fontForValue(font_value: *const abi.DefaultFontOrLoadedFont) raylib.Font {
-    if (font_value.tag == .DefaultFont) return raylib.defaultFont();
-    const resource = font_heap.get(font_value.payload_loaded_font().*) orelse return raylib.defaultFont();
+fn fontForHandle(handle: *u64) raylib.Font {
+    if (builtin.is_test) return undefined;
+    if (handle.* == 0) return raylib.defaultFont();
+    const resource = font_heap.get(handle.*) orelse return raylib.defaultFont();
     return switch (resource.*) {
         .headless => raylib.defaultFont(),
         .native => |font| font,
     };
+}
+
+fn hostedDrawDefaultFontRaw() callconv(.c) *u64 {
+    enforcePhase("Draw.default_font!", during_load);
+    return defaultFontHandle();
 }
 
 fn headlessFontMetrics(host: *RocHost) abi.DrawHostFont_metricsRetRecord {
@@ -5427,14 +5530,14 @@ fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.DrawHostFont
     };
 }
 
-fn hostedDrawFontMetricsRaw(host: *RocHost, font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
+fn hostedDrawFontMetricsRaw(host: *RocHost, font: *u64) callconv(.c) abi.DrawHostFont_metricsRetRecord {
     enforcePhase("Draw font metric snapshot", during_load);
-    defer font.decref(host);
+    defer releaseResourceBox(host, font);
     if (headlessMode()) return headlessFontMetrics(host);
-    return snapshotRaylibFontMetrics(host, fontForValue(&font));
+    return snapshotRaylibFontMetrics(host, fontForHandle(font));
 }
 
-fn exportedDrawFontMetricsRaw(font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
+fn exportedDrawFontMetricsRaw(font: *u64) callconv(.c) abi.DrawHostFont_metricsRetRecord {
     return hostedDrawFontMetricsRaw(activeHost(), font);
 }
 
@@ -5454,10 +5557,7 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
     }
 
     const source = storeFont(.headless).?;
-    const snapshot = hostedDrawFontMetricsRaw(&roc_host, .{
-        .payload = .{ .loaded_font = source },
-        .tag = .LoadedFont,
-    });
+    const snapshot = hostedDrawFontMetricsRaw(&roc_host, source);
     defer snapshot.glyphs.decref(&roc_host);
 
     try std.testing.expectEqual(@as(f32, 2), snapshot.base_size);
@@ -5478,25 +5578,23 @@ fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) 
     defer args.text.decref(host);
     prepared_text_prepare_calls += 1;
 
-    var font: ?raylib.Font = null;
-    if (args.font.tag == .DefaultFont) {
-        if (!headlessMode()) font = raylib.defaultFont();
-    } else {
-        const font_resource = font_heap.get(args.font.payload_loaded_font().*) orelse {
-            args.font.decref(host);
-            return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_FAILED };
-        };
-        font = switch (font_resource.*) {
+    const font: ?raylib.Font = if (args.font.* == 0)
+        if (builtin.is_test) null else raylib.defaultFont()
+    else if (font_heap.get(args.font.*)) |font_resource|
+        switch (font_resource.*) {
             .headless => null,
             .native => |loaded| loaded,
-        };
-    }
+        }
+    else {
+        releaseResourceBox(host, args.font);
+        return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_FAILED };
+    };
 
     const text_slice = args.text.asSlice();
     const text_len = std.mem.indexOfScalar(u8, text_slice, 0) orelse text_slice.len;
     const allocator = allocatorFromHost(host);
     const allocation = allocator.alloc(u8, text_len + 1) catch {
-        args.font.decref(host);
+        releaseResourceBox(host, args.font);
         return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
     };
     @memcpy(allocation[0..text_len], text_slice[0..text_len]);
@@ -5511,12 +5609,11 @@ fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) 
         break :blk TextMeasurement{ .height = size.y, .width = size.x };
     };
 
-    const font_owner = if (args.font.tag == .LoadedFont) args.font.payload_loaded_font() else null;
     const prepared = storePreparedText(.{
         .allocator = allocator,
         .text = text,
         .font = font,
-        .font_owner = font_owner,
+        .font_owner = args.font,
         .size = args.size,
         .spacing = args.spacing,
     }) orelse return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
@@ -5552,7 +5649,7 @@ fn exportedDrawPreparedTextRaw(args: abi.DrawHostDraw_prepared_textArgs) callcon
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
     enforcePhase("Draw.text!", during_render);
     defer args.text.decref(host);
-    defer args.font.decref(host);
+    defer releaseResourceBox(host, args.font);
     if (headlessMode()) return;
 
     const text_slice = args.text.asSlice();
@@ -5562,7 +5659,7 @@ fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) vo
 
     raylib.drawTextZ(
         text.ptr,
-        fontForValue(&args.font),
+        fontForHandle(args.font),
         .{ .x = args.pos.x, .y = args.pos.y },
         args.size,
         args.spacing,
@@ -5577,7 +5674,7 @@ fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
 fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) callconv(.c) void {
     enforcePhase("Draw.text_at!", during_render);
     defer args.text.decref(host);
-    defer args.font.decref(host);
+    defer releaseResourceBox(host, args.font);
     if (active_headless) return;
 
     const text_slice = args.text.asSlice();
@@ -5587,7 +5684,7 @@ fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) 
 
     raylib.drawTextAlignedZ(
         text.ptr,
-        fontForValue(&args.font),
+        fontForHandle(args.font),
         .{ .x = args.pos.x, .y = args.pos.y },
         args.size,
         args.spacing,
@@ -7057,6 +7154,10 @@ fn deinitResources() void {
     screen_snapshot_requested = false;
 
     // The final model has been dropped, so everything it held is retired.
+    // Release the configured startup-font cache now that no startup call can
+    // ask for another alias. The built-in font uses static token zero and owns
+    // no heap slot.
+    releaseStartupFontHandle(activeHost());
     // Destroy it all before the assertions below, which are about whether Roc
     // *released* its handles rather than about when the host got round to the
     // driver calls. Shutdown drains the complete retirement queue.
@@ -7098,6 +7199,7 @@ fn deinitResources() void {
     render_texture_heap.deinitAll();
     texture_heap.deinitAll();
     font_heap.deinitAll();
+    startup_font_handle = null;
     music_heap.deinitAll();
     sound_heap.deinitAll();
 }
@@ -7171,6 +7273,8 @@ comptime {
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
+        @export(&hostedDrawDefaultFontRaw, .{ .name = "roc_draw_default_font_raw" });
+        @export(&exportedDrawStartupDefaultFontRaw, .{ .name = "roc_draw_startup_default_font_raw" });
         @export(&exportedDrawFontMetricsRaw, .{ .name = "roc_draw_font_metrics_raw" });
         @export(&hostedDrawFrameSizeRaw, .{ .name = "roc_draw_frame_size" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
@@ -10291,7 +10395,13 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     const config_phase = PhaseScope.enter(.startup);
     var app_config = app_config_for_host();
     config_phase.leave();
-    // The config now carries three Roc strings; `decref` releases all of them.
+    startup_font_config = .{
+        .path = app_config.default_font_path.asSlice(),
+        .size = app_config.default_font_size,
+    };
+    defer startup_font_config = .{};
+    // The config's Roc strings stay borrowed by startup configuration until
+    // the selected host lifetime finishes; `decref` then releases all of them.
     defer app_config.decref(&roc_host);
 
     if (options.headless) {

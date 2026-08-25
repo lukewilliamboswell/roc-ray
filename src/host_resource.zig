@@ -250,6 +250,7 @@ fn encodeToken(index: usize, generation: u64, comptime kind: Kind) u64 {
 /// A kind byte that names no `Kind` is not a token this host ever emitted, so
 /// it fails here rather than reaching a heap that would have to decide.
 fn decodeToken(token: u64) ?struct { index: usize, kind: Kind, generation: u64 } {
+    if (token == std.math.maxInt(u64)) return null;
     const encoded_index = token & token_index_mask;
     const encoded_kind = (token >> token_index_bits) & token_kind_mask;
     const generation = token >> token_generation_shift;
@@ -260,6 +261,10 @@ fn decodeToken(token: u64) ?struct { index: usize, kind: Kind, generation: u64 }
 
 test "zero is not a resource token" {
     try std.testing.expect(decodeToken(0) == null);
+}
+
+test "maximum u64 is not a resource token" {
+    try std.testing.expect(decodeToken(std.math.maxInt(u64)) == null);
 }
 
 test "a kind byte no resource claims is not a resource token" {

@@ -81,7 +81,7 @@ Model : {
 	won_line : Text.Prepared,
 	over_line : Text.Prepared,
 	restart_line : Text.Prepared,
-	font : Draw.Font,
+	font : Text.Font,
 }
 
 FrameInput : {

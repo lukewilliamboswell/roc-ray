@@ -58,7 +58,7 @@ important even when the suspected problem is pure Roc code, because generated
 procedure names otherwise cannot be mapped reliably to their source module:
 
 ```sh
-ROC=/path/to/roc
+ROC=~/roc_nightly-linux_x86_64-2026-08-23-fb208ba/roc
 $ROC build examples/doom/main.roc --debug --output=/tmp/doom-profile
 /usr/bin/time -f 'elapsed=%e user=%U sys=%S' \
     /tmp/doom-profile --host-headless --host-headless-frames=500
@@ -97,7 +97,8 @@ absent and reports total and `update!` allocation per cycle when enabled:
 ```sh
 /tmp/doom-profile --host-alloc-stats --host-headless \
     --host-headless-frames=500
-ROC=/path/to/roc scripts/test_doom_performance.py --frames 500
+ROC=~/roc_nightly-linux_x86_64-2026-08-23-fb208ba/roc \
+    scripts/test_doom_performance.py --frames 500
 ```
 
 The script is the repository's bounded performance gate; direct output is more

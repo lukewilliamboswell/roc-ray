@@ -12,7 +12,7 @@ import zlib
 from pathlib import Path
 
 
-EXPECTED = ("start.png", "combat.png", "moving-door.png")
+EXPECTED = ("start.png", "movement.png", "combat.png", "moving-door.png")
 
 
 def rgba_rows(path: Path) -> tuple[int, int, bytes]:
@@ -100,6 +100,18 @@ def main() -> int:
                 raise RuntimeError(f"{name} is effectively blank ({len(colors)} colors)")
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             hashes.add(digest)
+            if name == "start.png":
+                # Keep the floor visible on both sides of the centred weapon.
+                # This caught wrapped flat UVs interpolating through the atlas's
+                # unused black area at the BSP seam under the player start.
+                floor_pixels = []
+                for y in range(128, 160):
+                    for x in (*range(0, 116), *range(204, width)):
+                        offset = (y * width + x) * 4
+                        floor_pixels.append(pixels[offset : offset + 3])
+                visible = sum(1 for pixel in floor_pixels if sum(pixel) > 24)
+                if visible * 4 < len(floor_pixels):
+                    raise RuntimeError(f"start floor is mostly clear-color black ({visible}/{len(floor_pixels)} visible pixels)")
             print(f"{name}: 320x200, {len(colors)} colors, sha256 {digest}")
         if len(hashes) != len(EXPECTED):
             raise RuntimeError("representative captures are not distinct")

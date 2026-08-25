@@ -52,7 +52,7 @@ Model : {
 	evidence : Evidence,
 }
 
-Evidence : { active : Bool, tic : U64, start_requested : Bool, combat_requested : Bool, door_requested : Bool, saved : U64 }
+Evidence : { active : Bool, tic : U64, start_requested : Bool, movement_requested : Bool, combat_requested : Bool, door_requested : Bool, saved : U64 }
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
@@ -111,7 +111,7 @@ init! = App.init_for_args(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, tic: 0, start_requested: Bool.False, combat_requested: Bool.False, door_requested: Bool.False, saved: 0 } })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, tic: 0, start_requested: Bool.False, movement_requested: Bool.False, combat_requested: Bool.False, door_requested: Bool.False, saved: 0 } })
 	},
 )
 
@@ -180,7 +180,7 @@ update! = |model, input| {
 }
 
 update_evidence! = |model, input| {
-	if model.evidence.saved >= 3 {
+	if model.evidence.saved >= 4 {
 		Err(Exit(0))
 	} else if !(model.evidence.start_requested) {
 		Task.spawn!(
@@ -215,8 +215,18 @@ update_evidence! = |model, input| {
 				masked_dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic masked E1M1 atlas is incomplete", render_geometry) else model.masked_dynamic_batches
 				sprites = if advanced.tics > 0 sprite_geometry(world, model.decorations, level, world.doom.player.sim.state.pos) else model.sprites
 				blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
+				movement = !(model.evidence.movement_requested) and model.evidence.tic >= 96
 				combat = !(model.evidence.combat_requested) and advanced.fired
 				door = !(model.evidence.door_requested) and !(List.is_empty(level.doors))
+				if movement {
+					Task.spawn!(
+						input,
+						|| {
+							_ = Capture.screenshot!("movement.png")
+							EvidenceSaved
+						},
+					)
+				}
 				if combat {
 					Task.spawn!(
 						input,
@@ -235,7 +245,7 @@ update_evidence! = |model, input| {
 						},
 					)
 				}
-				Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, evidence: { ..model.evidence, tic: model.evidence.tic + advanced.tics, combat_requested: model.evidence.combat_requested or combat, door_requested: model.evidence.door_requested or door } })
+				Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, evidence: { ..model.evidence, tic: model.evidence.tic + advanced.tics, movement_requested: model.evidence.movement_requested or movement, combat_requested: model.evidence.combat_requested or combat, door_requested: model.evidence.door_requested or door } })
 			}
 		}
 	}

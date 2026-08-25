@@ -17,7 +17,7 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Things | Doom thing types and difficulty flags | Player start, enemies, weapons, ammo, health, keys and decorations come from E1M1 data |
 | Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover weapon ownership, typed selection, dry-ammo fallback, cadence, ammunition, hitscan spread, damage, pain and death states; several exact weapon state chains remain incomplete |
 | Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
-| Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
+| Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, scripted movement, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Actor alert/attack/pain/death and projectile/explosion effects use listener-relative pan and distance attenuation; activated doors, switches, and platforms use the interaction position, while player/weapon/pickup feedback stays centered. Playback is capped at 16 semantic cues per host cycle, and the reproducibly rendered Freedoom track accompanies a complete run |
 | Whole level | Chocolate Doom running the same pinned WAD | The frozen `DoomReplay` ordinary-command fixture completes E1M1 and asserts route/state checkpoints; representative native frames are structurally validated, not compared with Chocolate Doom |
 
@@ -106,10 +106,16 @@ than silently becoming the new definition of Doom behaviour.
 
 Run `python3 scripts/test_doom_visual.py --build` in a graphical session (or
 under Xvfb). The dedicated evidence app advances the ordinary deterministic
-replay through the real runtime and captures start, first combat and first
-moving-door frames through the public screenshot effect. The validator decodes
+replay through the real runtime and captures start, post-forward/strafe,
+first-combat and first-moving-door frames through the public screenshot effect. The validator decodes
 the PNGs, requires exact 320x200 RGBA dimensions, at least 128 colours, and
-distinct content, then removes them. SHA-256 values are reported for diagnosis
+distinct content. The start-frame check also requires visible floor pixels on
+both sides of the weapon: sector 140 begins on a BSP seam, and this guards the
+tile-clipped atlas UVs against interpolating through unused black atlas space.
+The wall-span tests verify that right/left sidedef geometry faces its owning
+sector while preserving sidedef offsets and vertical pegging. The exact pinned
+map lumps, rather than a visually similar wall on the far side of a portal,
+define that orientation. SHA-256 values are reported for diagnosis
 but are not portable golden values across GPU drivers. This proves the native
 render path is live at representative states; it is not cross-engine parity.
 

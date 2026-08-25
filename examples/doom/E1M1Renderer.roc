@@ -100,19 +100,11 @@ E1M1Renderer := [].{
 		if surface.orientation == Ceiling and surface.flat == "F_SKY1" return Ok(empty)
 		rect = DoomAssets.flat(surface.flat)?
 		tint = light_tint(surface.light_level)
-		vertices = List.map(
-			surface.vertices,
-			|point| {
-				position: doom_position(point.x, surface.height, point.y),
-				uv: tiled_uv(point.x, point.y, rect),
-				tint,
-			},
-		)
-		# DoomMap supplies CCW floors and reversed ceilings. Mapping map Y to
-		# world Z reverses the normal, so reversing both fans yields +Y floors
-		# and -Y ceilings respectively.
-		indices = reversed_fan_indices(List.len(vertices))
-		Ok({ vertices, indices })
+		# Atlas subrects cannot use GPU texture wrapping: interpolating wrapped UVs
+		# across a 64-texel boundary samples unrelated atlas entries. Clip each BSP
+		# polygon to the flat's tile grid so every triangle interpolates within one
+		# copy of the flat.
+		Ok(tiled_surface(surface, rect, tint))
 	}
 
 	## Camera-centred sky enclosure. Sky ceilings are omitted from world planes,
@@ -181,7 +173,9 @@ E1M1Renderer := [].{
 						{ position: d, uv: { x: u0, y: v1 }, tint },
 					],
 				)
-				$indices = List.concat($indices, [offset, offset + 1, offset + 2, offset, offset + 2, offset + 3])
+				# Each span is directed so its owning sidedef lies to its right.
+				# Reverse the quad fan so its normal points into that owning sector.
+				$indices = List.concat($indices, [offset, offset + 2, offset + 1, offset, offset + 3, offset + 2])
 			}
 		}
 		Ok({ vertices: $vertices, indices: $indices })
@@ -370,6 +364,144 @@ line_wall_extent = |walls, linedef| {
 
 advance_level = |state, count| if count == 0 state else advance_level(DoomLevel.tick(state), count - 1)
 
+ClipAxis := [ClipX, ClipY]
+
+tiled_surface = |surface, rect, tint| {
+	first = List.get(surface.vertices, 0) ?? return empty
+	var $min_x = first.x
+	var $max_x = first.x
+	var $min_y = first.y
+	var $max_y = first.y
+	for point in surface.vertices {
+		$min_x = F64.min($min_x, point.x)
+		$max_x = F64.max($max_x, point.x)
+		$min_y = F64.min($min_y, point.y)
+		$max_y = F64.max($max_y, point.y)
+	}
+	tile_w = U64.to_f64(rect.width)
+	tile_h = U64.to_f64(rect.height)
+	start_x = $min_x - wrap($min_x, tile_w)
+	start_y = $min_y - wrap($min_y, tile_h)
+	var $geometry = empty
+	var $x = start_x
+	while $x <= $max_x {
+		var $y = start_y
+		while $y <= $max_y {
+			points = clip_tile(surface.vertices, $x, $y, $x + tile_w, $y + tile_h)
+			if List.len(points) >= 3 and F64.abs(polygon_area(points)) > 0.000001 {
+				vertices = List.map(
+					points,
+					|point| {
+						position: doom_position(point.x, surface.height, point.y),
+						uv: { x: atlas_u_local(point.x - $x, rect), y: atlas_v_local($y + tile_h - point.y, rect) },
+						tint,
+					},
+				)
+				primitive = { vertices, indices: reversed_fan_indices(List.len(vertices)) }
+				$geometry = append_geometry($geometry, primitive)
+			}
+			$y = $y + tile_h
+		}
+		$x = $x + tile_w
+	}
+	$geometry
+}
+
+clip_tile = |points, min_x, min_y, max_x, max_y|
+	clip_edge(clip_edge(clip_edge(clip_edge(points, ClipX, min_x, Bool.True), ClipX, max_x, Bool.False), ClipY, min_y, Bool.True), ClipY, max_y, Bool.False)
+
+clip_edge = |points, axis, boundary, keep_greater| {
+	previous = List.last(points) ?? return []
+	var $result = []
+	var $before = previous
+	for after in points {
+		before_inside = point_inside($before, axis, boundary, keep_greater)
+		after_inside = point_inside(after, axis, boundary, keep_greater)
+		if before_inside != after_inside {
+			$result = append_distinct_point($result, edge_intersection($before, after, axis, boundary))
+		}
+		if after_inside {
+			$result = append_distinct_point($result, after)
+		}
+		$before = after
+	}
+	match ($result, List.get($result, 0), List.last($result)) {
+		(values, Ok(first), Ok(last)) => if F64.abs(first.x - last.x) < 0.0000001 and F64.abs(first.y - last.y) < 0.0000001 List.drop_last(values, 1) else values
+		(values, _, _) => values
+	}
+}
+
+append_distinct_point = |points, point|
+	match List.last(points) {
+		Ok(previous) => if F64.abs(previous.x - point.x) < 0.0000001 and F64.abs(previous.y - point.y) < 0.0000001 points else List.append(points, point)
+		Err(_) => List.append(points, point)
+	}
+
+point_inside = |point, axis, boundary, keep_greater| {
+	value = match axis {
+		ClipX => point.x
+		ClipY => point.y
+	}
+	if keep_greater value >= boundary else value <= boundary
+}
+
+edge_intersection = |start, end, axis, boundary| {
+	delta = match axis {
+		ClipX => end.x - start.x
+		ClipY => end.y - start.y
+	}
+	t = if F64.abs(delta) < 0.0000001 0 else (boundary - match axis {
+		ClipX => start.x
+		ClipY => start.y
+	}) / delta
+	{ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t }
+}
+
+polygon_area = |points| {
+	previous = List.last(points) ?? return 0
+	var $area = 0
+	var $before = previous
+	for after in points {
+		$area = $area + $before.x * after.y - after.x * $before.y
+		$before = after
+	}
+	$area * 0.5
+}
+
+convex_contains = |points, point| {
+	previous = List.last(points) ?? return Bool.False
+	var $inside = Bool.True
+	var $before = previous
+	for after in points {
+		cross = (after.x - $before.x) * (point.y - $before.y) - (after.y - $before.y) * (point.x - $before.x)
+		if cross < -0.000001 {
+			$inside = Bool.False
+		}
+		$before = after
+	}
+	$inside
+}
+
+floor_geometry_faces_up = |geometry| floor_triangles_face_up(geometry.vertices, geometry.indices, 0)
+
+floor_triangles_face_up = |vertices, indices, index| {
+	if index >= List.len(indices) Bool.True else {
+		a = List.get(vertices, U32.to_u64(List.get(indices, index) ?? return Bool.False)) ?? return Bool.False
+		b = List.get(vertices, U32.to_u64(List.get(indices, index + 1) ?? return Bool.False)) ?? return Bool.False
+		c = List.get(vertices, U32.to_u64(List.get(indices, index + 2) ?? return Bool.False)) ?? return Bool.False
+		normal_y = (b.position.z - a.position.z) * (c.position.x - a.position.x) - (b.position.x - a.position.x) * (c.position.z - a.position.z)
+		normal_y > 0 and floor_triangles_face_up(vertices, indices, index + 3)
+	}
+}
+
+append_geometry = |destination, source| {
+	offset = List.len(destination.vertices)
+	{
+		vertices: append_all(destination.vertices, source.vertices),
+		indices: append_shifted(destination.indices, source.indices, U64.to_u32_wrap(offset)),
+	}
+}
+
 ## Half-texel inset keeps filtered samples inside the atlas padding. Coordinate
 ## wrapping is computed in Doom texels before normalization into atlas space.
 atlas_u = |doom_texel, rect| {
@@ -450,8 +582,9 @@ expect {
 	List.len(wall.vertices) >= 4
 		and List.len(wall.vertices) % 4 == 0
 			and List.len(wall.indices) == List.len(wall.vertices) / 4 * 6
-				and wall_first.tint == { r: 144, g: 144, b: 144, a: 255 }
-					and List.all(wall.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
+				and List.take_first(wall.indices, 6) == [0, 2, 1, 0, 3, 2]
+					and wall_first.tint == { r: 144, g: 144, b: 144, a: 255 }
+						and List.all(wall.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
 }
 
 expect {
@@ -516,6 +649,26 @@ expect {
 }
 
 expect {
+	# The E1M1 player starts exactly on a BSP leaf seam. Both sides must retain
+	# sector-140 floor coverage, and tile clipping must keep every emitted floor
+	# triangle front-facing from the camera above it.
+	map = DoomMap.e1m1
+	start = map.player_start() ?? crash "E1M1 start missing"
+	sector = List.get(map.raw().sectors, 140) ?? crash "start sector missing"
+	floors = List.keep_if(map.surface_polygons(), |surface| surface.sector == 140 and surface.orientation == Floor)
+	start_point = { x: I64.to_f64(start.position.x), y: I64.to_f64(start.position.y) }
+	left = { x: start_point.x - 0.01, y: start_point.y }
+	right = { x: start_point.x + 0.01, y: start_point.y }
+	start.position == { x: -416, y: 256 }
+		and DoomLevel.sector_at(map, start_point) == Ok(140)
+			and sector.floor_height == 0
+				and sector.special == 0
+					and List.any(floors, |surface| convex_contains(surface.vertices, left))
+						and List.any(floors, |surface| convex_contains(surface.vertices, right))
+							and List.all(floors, |surface| floor_geometry_faces_up(E1M1Renderer.surface_geometry(surface) ?? crash "start flat missing"))
+}
+
+expect {
 	map = DoomMap.e1m1
 	initial = DoomLevel.initial(map)
 	match DoomLevel.cross_line(map, initial, 593) {
@@ -561,10 +714,10 @@ expect {
 	dynamic_counts = geometry_counts(dynamic)
 	List.len(DoomLevel.dynamic_sectors(map)) <= 32
 		and List.len(dynamic) <= 4
-			and static_counts.vertices <= 20000
-				and static_counts.indices <= 30000
-					and dynamic_counts.vertices <= 4096
-						and dynamic_counts.indices <= 6144
+			and static_counts.vertices <= 55000
+				and static_counts.indices <= 80000
+					and dynamic_counts.vertices <= 5000
+						and dynamic_counts.indices <= 7000
 							and dynamic_counts.vertices < static_counts.vertices
 								and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
 }

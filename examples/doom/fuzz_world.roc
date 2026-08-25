@@ -237,7 +237,7 @@ test_pickups = |input| {
 		# GUARD (contract-only, vanilla-consistent): Berserk/LightAmp always collect.
 		is_weapon = kind == ShotgunPickup or kind == ChaingunPickup or kind == RocketLauncherPickup or kind == PlasmaRiflePickup or kind == ChainsawPickup
 		# GUARD B2: Stimpack/Medikit/Berserk clamp health above 100 DOWN to 100.
-		guard_b2 = before.health > 100 and (kind == StimpackPickup or kind == MedikitPickup or kind == BerserkPickup)
+		guard_b2 = Bool.False # W1 fixed: give_health refuses at or above cap
 		# GUARD B3 (fidelity): SoulSphere/HealthBonus at health 200 are refused; vanilla always takes them.
 		guard_b3 = before.health >= 200 and (kind == SoulSpherePickup or kind == HealthBonusPickup)
 		# GUARD (contract-only, vanilla-consistent): ArmorBonus at 200 armor collects without change.

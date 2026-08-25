@@ -241,6 +241,7 @@ suspected live-height sector swap in `activate_local_door`; not reached.
 
 ### W1. Stimpack / Medikit / Berserk *lower* health above 100 back to 100
 - Severity: wrong-result
+- **Status: FIXED** — `give_health` refuses at or above its cap, Berserk uses `max(health, 100)`; regression expect in `DoomWorld.roc`; `fuzz_world` 90 s / 1.0 M execs clean with `guard_b2` off.
 - Location: `DoomWorld.roc:533-534, 556` via `give_health` at :615
 - Property: a pickup never lowers health; vanilla refuses stimpack/medikit at
   `health >= 100` and berserk only raises (`if health < 100 then 100`).

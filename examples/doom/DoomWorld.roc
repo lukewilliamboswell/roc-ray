@@ -556,7 +556,7 @@ apply_pickup = |player, kind|
 		ChainsawPickup => acquire_weapon(player, Chainsaw)
 		RocketPickup => give_rockets(player, 1)
 		SoulSpherePickup => give_health(player, 100, 200)
-		BerserkPickup => { player: { ..give_health(player, 100, DoomWorld.max_health).player, berserk: Bool.True }, collected: Bool.True }
+		BerserkPickup => { player: { ..player, health: I64.max(player.health, DoomWorld.max_health), berserk: Bool.True }, collected: Bool.True }
 		ComputerMapPickup => { player: { ..player, computer_map: Bool.True }, collected: !(player.computer_map) }
 		LightAmpPickup => { player: { ..player, light_amp_tics: 4200 }, collected: Bool.True }
 		BulletBoxPickup => give_bullets(player, 50)
@@ -612,9 +612,15 @@ give_cells = |player, amount| {
 	{ player: { ..player, ammo: { ..player.ammo, cells: next } }, collected: next > player.ammo.cells }
 }
 
+## Vanilla `P_TouchSpecialThing` refuses a health item once health has reached
+## its cap, so a cap below the current health never lowers it.
 give_health = |player, amount, cap| {
-	next = I64.min(cap, player.health + amount)
-	{ player: { ..player, health: next }, collected: next > player.health }
+	if player.health >= cap {
+		{ player, collected: Bool.False }
+	} else {
+		next = I64.min(cap, player.health + amount)
+		{ player: { ..player, health: next }, collected: next > player.health }
+	}
 }
 
 ammo_for = |player|
@@ -931,4 +937,25 @@ expect {
 	lit = DoomWorld.collect(mapped.player, lamp_pickup)
 	ticked = DoomWorld.tick_player_powers(lit.player)
 	mapped.player.computer_map and lit.player.light_amp_tics == 4200 and ticked.light_amp_tics == 4199
+}
+
+expect {
+	# A health pickup never lowers health: a stimpack at 101 (after a health
+	# bonus) is refused, a medikit after a soulsphere is refused, and berserk
+	# keeps health above 100 rather than clamping it down.
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	at = |player, kind| DoomWorld.collect(player, { id: 0, kind, pos: player.sim.state.pos, taken: Bool.False })
+	bonus = at(base, HealthBonusPickup).player
+	stim = at(bonus, StimpackPickup)
+	sphere = at(base, SoulSpherePickup).player
+	medikit = at(sphere, MedikitPickup)
+	berserk = at(sphere, BerserkPickup)
+	bonus.health == 101
+		and stim.player.health == 101
+			and !(stim.collected)
+				and sphere.health == 200
+					and medikit.player.health == 200
+						and !(medikit.collected)
+							and berserk.player.health == 200
+								and berserk.player.berserk
 }

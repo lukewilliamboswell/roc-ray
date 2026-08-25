@@ -115,7 +115,10 @@ DoomRuntime := [].{
 		var $sound_origins = []
 		var $actor_hits = []
 		for actor in world.doom.actors {
-			actor_blockers = actor_blockers_for(actor)
+			# Only the Chase transition that actually moves reads ActorFacts.blockers.
+			# Avoid deriving sector geometry for sleeping, dead, attacking, or
+			# countdown actors, which form most of the map population on each tic.
+			actor_blockers = if actor.state.mode == Chase and actor.state.remaining <= 1 actor_blockers_for(actor) else []
 			target = aggro_target(world.aggro, actor.id, world.doom.actors)
 			target_pos = match target {
 				Ok(value) => value.pos
@@ -281,11 +284,13 @@ global_map_blockers = |map, level| {
 actor_blocker_cache = |map, level, actors, extra_blockers| {
 	var $cache = []
 	for actor in actors {
-		match DoomLevel.sector_at(map, { x: F32.to_f64(actor.pos.x), y: F32.to_f64(actor.pos.y) }) {
-			Err(_) => {}
-			Ok(sector) => if !(List.any($cache, |entry| entry.sector == sector)) {
-				map_blockers = DoomRuntime.blockers_for_player(map, level, actor.pos)
-				$cache = List.append($cache, { sector, blockers: List.concat(map_blockers, extra_blockers) })
+		if actor.state.mode == Chase and actor.state.remaining <= 1 {
+			match DoomLevel.sector_at(map, { x: F32.to_f64(actor.pos.x), y: F32.to_f64(actor.pos.y) }) {
+				Err(_) => {}
+				Ok(sector) => if !(List.any($cache, |entry| entry.sector == sector)) {
+					map_blockers = DoomRuntime.blockers_for_player(map, level, actor.pos)
+					$cache = List.append($cache, { sector, blockers: List.concat(map_blockers, extra_blockers) })
+				}
 			}
 		}
 	}

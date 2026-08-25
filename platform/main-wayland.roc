@@ -266,7 +266,8 @@ import CmdHost
 ## compiler may optimize the reshaping below into a direct pass-through.
 InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
-	text_input : List(U32), ## Unicode codepoints entered this frame
+	text_input : List(U32), ## Unicode codepoints typed this interval, at most 32
+	text_input_overflow : Bool, ## whether more than 32 were typed and the rest discarded
 	gamepads : {
 		available : List(U8), ## 4 availability bytes
 		buttons : List(U8), ## 4 * 18 packed button-state bytes
@@ -322,6 +323,7 @@ input_from_raw : InputFromHost -> Devices.Snapshot
 input_from_raw = |raw| {
 	keys: raw.keys,
 	text_input: raw.text_input,
+	text_input_overflow: raw.text_input_overflow,
 	gamepads: {
 		connected: raw.gamepads.available,
 		buttons: raw.gamepads.buttons,

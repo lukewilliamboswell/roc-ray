@@ -1904,18 +1904,23 @@ var virtual_mouse_last_y: f32 = 0;
 var virtual_mouse_has_last: bool = false;
 /// Scripted keyboard state, replacing the hardware keyboard while active.
 ///
-/// Held flags only: the same edge detector that runs over hardware runs over
-/// this array, so pressed and released fall out of consecutive frames rather
-/// than being described here. Nothing about the real keyboard changes -- a key
-/// the user is holding is simply not what Roc is told about.
+/// Held flags: the same derivation that runs over hardware runs over this
+/// array, so pressed and released fall out of consecutive frames rather than
+/// being described here. A tap that starts and ends inside one cycle is the
+/// one thing a level cannot say, so a script records that as an edge instead
+/// (`raylib.recordVirtualKeyEdge`), exactly as the window system's callbacks
+/// do for hardware. Nothing about the real keyboard changes -- a key the user
+/// is holding is simply not what Roc is told about.
 var virtual_keys_active: bool = false;
 var virtual_key_down: [ffi.KEY_COUNT]bool = @splat(false);
 /// Scripted text queued for the next input, in the order it was entered.
 ///
-/// The same bound as the hardware channel, and lossy the same way: a longer
-/// script loses its tail rather than spilling into the following frame.
+/// The same bound as the hardware channel, and it overflows the same way: a
+/// longer script loses its tail rather than spilling into the following
+/// frame, and the input says so.
 var virtual_text: [raylib.TEXT_INPUT_CAPACITY]u32 = @splat(0);
 var virtual_text_len: usize = 0;
+var virtual_text_overflowed: bool = false;
 /// Nanoseconds of divergence introduced by fixed-step recordings.
 ///
 /// Fixed-step recording reports exact `1/fps` deltas instead of raylib's
@@ -6401,11 +6406,15 @@ fn applyVirtualKeys(active: bool, codes: []const u64) void {
     }
 }
 
-/// Queue scripted codepoints as the next input's text, discarding the excess.
+/// Queue scripted codepoints as the next input's text.
+///
+/// The excess past the interval's capacity is discarded and reported as an
+/// overflow, exactly as the hardware channel reports its own.
 fn applyVirtualText(codepoints: []const u32) void {
     const kept = @min(codepoints.len, virtual_text.len);
     @memcpy(virtual_text[0..kept], codepoints[0..kept]);
     virtual_text_len = kept;
+    virtual_text_overflowed = codepoints.len > kept;
 }
 
 /// Take the queued scripted text, or null when the frame's text is hardware's.
@@ -6413,11 +6422,13 @@ fn applyVirtualText(codepoints: []const u32) void {
 /// Taking rather than reading: text arrives on one frame and not the next, so
 /// a script that queued nothing this frame hands the channel back rather than
 /// repeating what it said last time.
-fn takeVirtualText() ?[]const u32 {
+fn takeVirtualText() ?raylib.TextInput {
     if (virtual_text_len == 0) return null;
     const queued = virtual_text[0..virtual_text_len];
+    const overflowed = virtual_text_overflowed;
     virtual_text_len = 0;
-    return queued;
+    virtual_text_overflowed = false;
+    return .{ .codepoints = queued, .overflowed = overflowed };
 }
 
 /// Forget every scripted input, so one app lifetime cannot inherit another's.
@@ -6431,6 +6442,7 @@ fn resetVirtualInput() void {
     virtual_keys_active = false;
     virtual_key_down = @splat(false);
     virtual_text_len = 0;
+    virtual_text_overflowed = false;
     raylib.clearKeyState();
     raylib.clearMouseButtonState();
 }
@@ -7395,13 +7407,14 @@ const InputState = struct {
         mouse_y: f32,
         mouse_delta: raylib.Vec2,
         mouse_wheel: raylib.Vec2,
-        text_input: []const u32,
+        text_input: raylib.TextInput,
     ) InputSnapshot {
-        self.text_input.update(text_input);
+        self.text_input.update(text_input.codepoints);
         self.retainForRoc();
         return .{
             .keys = self.keys.list,
             .text_input = self.text_input.list,
+            .text_input_overflow = text_input.overflowed,
             .gamepads = .{
                 .available = self.gamepad_available.list,
                 .buttons = self.gamepad_buttons.list,
@@ -7424,9 +7437,8 @@ const InputState = struct {
     }
 
     fn updateFromRaylib(self: *InputState) void {
-        // A scripted keyboard goes through the same edge detection as
-        // hardware, so pressed/released this frame behave identically for the
-        // app.
+        // A scripted keyboard goes through the same derivation as hardware,
+        // so pressed/released this interval behave identically for the app.
         if (virtual_keys_active) {
             raylib.updateKeyboardStateFrom(&virtual_key_down);
         } else {
@@ -7434,8 +7446,8 @@ const InputState = struct {
         }
         self.keys.update(raylib.getKeyState());
 
-        // A scripted pointer goes through the same edge detection as hardware,
-        // so pressed/released this frame behave identically for the app.
+        // A scripted pointer goes through the same derivation as hardware,
+        // so pressed/released this interval behave identically for the app.
         if (virtual_mouse_active) {
             raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
         } else {
@@ -7593,7 +7605,9 @@ fn printUsage() void {
         \\
         \\  --host-frames=N   exit after N cycles of a real windowed run
         \\  --host-hidden     open the real window hidden (needs a display server)
-        \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32"
+        \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32";
+        \\                      a ^ suffix taps the key inside that cycle instead
+        \\                      of holding it, e.g. "3:ESCAPE^"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
         \\
     , .{});
@@ -7653,18 +7667,46 @@ fn scriptSegment(spec: []const u8, cycle: u64) ScriptError!?[]const u8 {
     return found;
 }
 
-/// The key codes a `--host-keys` script holds on `cycle`, or null when it
+/// What a `--host-keys` script does on one cycle.
+///
+/// `held` keys are down for the whole cycle: pressed on the first cycle that
+/// names them, released on the first that does not. `taps` are pressed and
+/// released inside the cycle, so the input sees both edges and no hold -- the
+/// hardware case of a key that went down and up between two polls, which is
+/// what a level-per-cycle script could never express.
+const ScriptedKeys = struct {
+    held: []const u64,
+    taps: []const u64,
+};
+
+/// Scratch for one cycle of a key script.
+const ScriptedKeyBuffers = struct {
+    held: [KEY_SCRIPT_CAPACITY]u64 = undefined,
+    taps: [KEY_SCRIPT_CAPACITY]u64 = undefined,
+};
+
+/// The suffix that turns a held key into a tap: `S^`.
+const TAP_SUFFIX = '^';
+
+/// The keys a `--host-keys` script holds and taps on `cycle`, or null when it
 /// scripts nothing there.
-fn scriptedKeysAtCycle(spec: []const u8, cycle: u64, out: *[KEY_SCRIPT_CAPACITY]u64) ScriptError!?[]const u64 {
+fn scriptedKeysAtCycle(spec: []const u8, cycle: u64, out: *ScriptedKeyBuffers) ScriptError!?ScriptedKeys {
     const payload = (try scriptSegment(spec, cycle)) orelse return null;
     var tokens = std.mem.splitScalar(u8, payload, '+');
-    var count: usize = 0;
+    var held: usize = 0;
+    var taps: usize = 0;
     while (tokens.next()) |token| {
-        if (count == out.len) return error.InvalidScript;
-        out[count] = try parseScriptedKey(token);
-        count += 1;
+        if (token.len > 1 and token[token.len - 1] == TAP_SUFFIX) {
+            if (taps == out.taps.len) return error.InvalidScript;
+            out.taps[taps] = try parseScriptedKey(token[0 .. token.len - 1]);
+            taps += 1;
+        } else {
+            if (held == out.held.len) return error.InvalidScript;
+            out.held[held] = try parseScriptedKey(token);
+            held += 1;
+        }
     }
-    return out[0..count];
+    return .{ .held = out.held[0..held], .taps = out.taps[0..taps] };
 }
 
 /// Validate a whole script without running it, so a typo fails at startup
@@ -7677,7 +7719,7 @@ fn validateScript(spec: []const u8, keys: bool) ScriptError!void {
         const at = std.fmt.parseUnsigned(u64, segment[0..colon], 10) catch return error.InvalidScript;
         if (segment[colon + 1 ..].len == 0) return error.InvalidScript;
         if (keys) {
-            var scratch: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+            var scratch = ScriptedKeyBuffers{};
             _ = try scriptedKeysAtCycle(spec, at, &scratch);
         }
     }
@@ -7686,12 +7728,21 @@ fn validateScript(spec: []const u8, keys: bool) ScriptError!void {
 /// Apply this cycle's scripted keyboard and typed text, if any are scripted.
 ///
 /// Called immediately before the cycle samples input, so a scripted key goes
-/// through exactly the same edge detection as a hardware one.
+/// through exactly the same derivation as a hardware one: held keys as the
+/// level, taps as edges recorded inside the interval.
 fn applyInputScripts(options: RuntimeOptions, cycle: u64) void {
     if (options.key_script) |spec| {
-        var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
-        const held = scriptedKeysAtCycle(spec, cycle, &codes) catch null;
-        if (held) |keys| applyVirtualKeys(true, keys) else applyVirtualKeys(false, &.{});
+        var buffers = ScriptedKeyBuffers{};
+        const scripted = scriptedKeysAtCycle(spec, cycle, &buffers) catch null;
+        if (scripted) |keys| {
+            applyVirtualKeys(true, keys.held);
+            for (keys.taps) |code| {
+                raylib.recordVirtualKeyEdge(code, .press);
+                raylib.recordVirtualKeyEdge(code, .release);
+            }
+        } else {
+            applyVirtualKeys(false, &.{});
+        }
     }
     if (options.text_script) |spec| {
         const typed = scriptSegment(spec, cycle) catch null;
@@ -7705,24 +7756,80 @@ fn applyInputScripts(options: RuntimeOptions, cycle: u64) void {
 }
 
 test "a key script holds only the cycles it names" {
-    var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+    var buffers = ScriptedKeyBuffers{};
     const spec = "3:S,4:LEFT+x,10:32";
 
-    try std.testing.expectEqual(@as(?[]const u64, null), try scriptedKeysAtCycle(spec, 0, &codes));
-    try std.testing.expectEqualSlices(u64, &.{'S'}, (try scriptedKeysAtCycle(spec, 3, &codes)).?);
-    try std.testing.expectEqualSlices(u64, &.{ 263, 'X' }, (try scriptedKeysAtCycle(spec, 4, &codes)).?);
-    try std.testing.expectEqualSlices(u64, &.{32}, (try scriptedKeysAtCycle(spec, 10, &codes)).?);
-    try std.testing.expectEqual(@as(?[]const u64, null), try scriptedKeysAtCycle(spec, 5, &codes));
+    try std.testing.expect((try scriptedKeysAtCycle(spec, 0, &buffers)) == null);
+    try std.testing.expectEqualSlices(u64, &.{'S'}, (try scriptedKeysAtCycle(spec, 3, &buffers)).?.held);
+    try std.testing.expectEqualSlices(u64, &.{ 263, 'X' }, (try scriptedKeysAtCycle(spec, 4, &buffers)).?.held);
+    try std.testing.expectEqualSlices(u64, &.{32}, (try scriptedKeysAtCycle(spec, 10, &buffers)).?.held);
+    try std.testing.expect((try scriptedKeysAtCycle(spec, 5, &buffers)) == null);
+    for (0..11) |cycle| {
+        if (try scriptedKeysAtCycle(spec, cycle, &buffers)) |keys| {
+            try std.testing.expectEqual(@as(usize, 0), keys.taps.len);
+        }
+    }
+}
+
+test "a ^ suffix scripts a tap rather than a hold" {
+    var buffers = ScriptedKeyBuffers{};
+    const spec = "3:ESCAPE^,4:S^+a+SPACE^";
+
+    const escape = (try scriptedKeysAtCycle(spec, 3, &buffers)).?;
+    try std.testing.expectEqual(@as(usize, 0), escape.held.len);
+    try std.testing.expectEqualSlices(u64, &.{256}, escape.taps);
+
+    const mixed = (try scriptedKeysAtCycle(spec, 4, &buffers)).?;
+    try std.testing.expectEqualSlices(u64, &.{'A'}, mixed.held);
+    try std.testing.expectEqualSlices(u64, &.{ 'S', 32 }, mixed.taps);
+
+    // A bare ^ is the key that types it, not a tap of nothing.
+    const caret = (try scriptedKeysAtCycle("1:^", 1, &buffers)).?;
+    try std.testing.expectEqualSlices(u64, &.{'^'}, caret.held);
+    try std.testing.expectEqual(@as(usize, 0), caret.taps.len);
+    try validateScript(spec, true);
 }
 
 test "a malformed script is rejected rather than scripting nothing" {
-    var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
-    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3", 3, &codes));
-    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:", 3, &codes));
-    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("x:S", 3, &codes));
-    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE", 3, &codes));
+    var buffers = ScriptedKeyBuffers{};
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3", 3, &buffers));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:", 3, &buffers));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("x:S", 3, &buffers));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE", 3, &buffers));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE^", 3, &buffers));
     try std.testing.expectError(error.InvalidScript, validateScript("3:S,", true));
     try validateScript("1:ab,2:c", false);
+}
+
+test "a scripted tap lands inside one cycle as a press and a release" {
+    defer resetVirtualInput();
+    const escape = 256;
+    const options = RuntimeOptions{ .key_script = "2:S,3:ESCAPE^,4:S" };
+
+    // Cycle 1 is not scripted: hardware, with nothing recorded.
+    applyInputScripts(options, 1);
+    try std.testing.expect(!virtual_keys_active);
+
+    // Cycle 2 holds S, which is a press on the level.
+    applyInputScripts(options, 2);
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, raylib.getKeyState()['S']);
+
+    // Cycle 3 taps Escape: both edges, never held, and S is released by the
+    // level in the same cycle. That is what an app quitting on
+    // `key_pressed(KeyEscape)` sees when the key went down and up between two
+    // polls.
+    applyInputScripts(options, 3);
+    try std.testing.expect(virtual_keys_active);
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, raylib.getKeyState()[escape]);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, raylib.getKeyState()['S']);
+
+    // The tap was consumed with its cycle.
+    applyInputScripts(options, 4);
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(@as(u8, 0), raylib.getKeyState()[escape]);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, raylib.getKeyState()['S']);
 }
 
 fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
@@ -8473,21 +8580,28 @@ test "a key code past the packed state list is dropped rather than written" {
     for (virtual_key_down) |down| try std.testing.expect(!down);
 }
 
-test "scripted text is delivered once and truncated at the frame's bound" {
+test "scripted text is delivered once and its overflow is reported" {
     defer resetVirtualInput();
 
     applyVirtualText(&.{ 'h', 'i' });
-    try std.testing.expectEqualSlices(u32, &.{ 'h', 'i' }, takeVirtualText().?);
+    const short = takeVirtualText().?;
+    try std.testing.expectEqualSlices(u32, &.{ 'h', 'i' }, short.codepoints);
+    try std.testing.expect(!short.overflowed);
     // Gone on the next frame: real characters arrive once, not every frame
     // until something else is typed.
-    try std.testing.expectEqual(@as(?[]const u32, null), takeVirtualText());
+    try std.testing.expect(takeVirtualText() == null);
 
     var long: [raylib.TEXT_INPUT_CAPACITY + 4]u32 = @splat('x');
     long[0] = 'a';
     applyVirtualText(&long);
     const delivered = takeVirtualText().?;
-    try std.testing.expectEqual(raylib.TEXT_INPUT_CAPACITY, delivered.len);
-    try std.testing.expectEqual(@as(u32, 'a'), delivered[0]);
+    try std.testing.expectEqual(raylib.TEXT_INPUT_CAPACITY, delivered.codepoints.len);
+    try std.testing.expectEqual(@as(u32, 'a'), delivered.codepoints[0]);
+    try std.testing.expect(delivered.overflowed);
+
+    // Exactly the capacity is not an overflow: everything typed arrived.
+    applyVirtualText(long[0..raylib.TEXT_INPUT_CAPACITY]);
+    try std.testing.expect(!takeVirtualText().?.overflowed);
 }
 
 test "taking a model for render clears the host-owned reference" {
@@ -9957,6 +10071,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         window_title.ptr,
     );
     defer raylib.closeWindow();
+    // Chained behind raylib's own callbacks, so it needs the window too. Every
+    // key, button, wheel and character event between two polls is recorded
+    // from here on; without the hook the host would be back to comparing two
+    // levels, which loses whatever happened in between.
+    if (!raylib.installInputEventCallbacks()) {
+        std.log.warn("no GLFW window to record input events on; edges fall back to level sampling", .{});
+    }
     // Both of these need a live window: InitWindow zeroes raylib's CORE state
     // and writes exitKey = KEY_ESCAPE, so an earlier SetExitKey is discarded,
     // and SetWindowMinSize needs the window handle.
@@ -10050,21 +10171,25 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         else
             raylib.getMousePosition();
         const mouse_delta = if (virtual_mouse_active) virtualMouseDelta() else raylib.getMouseDelta();
+        // Taken either way: notches turned while the pointer was scripted
+        // would otherwise land on the cycle the app hands it back.
+        const hardware_wheel = raylib.takeMouseWheelMove();
         const mouse_wheel = if (virtual_mouse_active)
             raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel }
         else
-            raylib.getMouseWheelMoveV();
+            hardware_wheel;
         if (virtual_mouse_active) {
             recordVirtualMousePosition();
-            // A real wheel reports movement for one frame and then returns to
-            // zero, so consume the scripted value rather than reporting it
+            // A real wheel reports movement for one interval and then returns
+            // to zero, so consume the scripted value rather than reporting it
             // again on every subsequent frame.
             virtual_mouse_wheel = 0;
         }
-        // Drain raylib's queue either way: a scripted frame that left the
-        // hardware characters behind would deliver them on the next one.
-        const typed_text = raylib.getTextInput();
-        const text_input: []const u32 = takeVirtualText() orelse typed_text;
+        // Taken either way, for the same reason as the wheel: a scripted frame
+        // that left the hardware characters behind would deliver them on the
+        // next one.
+        const typed_text = raylib.takeTextInput();
+        const text_input = takeVirtualText() orelse typed_text;
         const input_snapshot = input.hostState(
             mouse_pos.x,
             mouse_pos.y,
@@ -10197,7 +10322,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
         input.updateHeadless();
-        const text_input: []const u32 = takeVirtualText() orelse &.{};
+        const text_input = takeVirtualText() orelse raylib.TextInput{ .codepoints = &.{}, .overflowed = false };
         // A headless run has no pointer, so a scripted one is the only pointer
         // there is. Everything a windowed run derives from it -- position,
         // delta, the wheel's single frame of movement -- is derived here the

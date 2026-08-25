@@ -64,11 +64,12 @@ pub const RenderTexture = rl.RenderTexture2D;
 /// Native shader program retained in the host resource heap.
 pub const Shader = rl.Shader;
 
-/// Persistent packed keyboard state - updated each frame.
-/// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
+/// Persistent packed keyboard state, derived once per input interval.
+/// Bit 0 is held, bit 1 is pressed this interval, and bit 2 is released this
+/// interval.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 
-/// Persistent packed mouse button state - updated each frame, with the same bits.
+/// Persistent packed mouse button state, with the same bits.
 var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 
 /// Persistent gamepad snapshot, flattened by gamepad then control index.
@@ -76,10 +77,91 @@ var gamepad_available: [ffi.GAMEPAD_COUNT]u8 = [_]u8{0} ** ffi.GAMEPAD_COUNT;
 var gamepad_button_state: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
 var gamepad_axes: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 = [_]f32{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT);
 
-/// raylib's internal codepoint queue is bounded; this also leaves room if its
-/// default grows. Any excess is drained so it cannot leak into a later frame.
+/// How many typed codepoints one input interval delivers.
+///
+/// The host records characters itself, from the window system's character
+/// callback, so this is the real bound: raylib's own queue holds sixteen per
+/// poll and drops the rest without saying so, and it is not consulted while
+/// the callbacks are installed. Past this many the extra codepoints are
+/// discarded and the interval is reported as overflowed, never silently cut.
 pub const TEXT_INPUT_CAPACITY: usize = 32;
+
+/// How many codepoints raylib's own character queue holds per poll
+/// (`MAX_CHAR_PRESSED_QUEUE` in rcore.c). Only the fallback path, with no GLFW
+/// window to hook, reads that queue.
+const RAYLIB_CHAR_QUEUE_CAPACITY: usize = 16;
+
+/// Typed characters recorded since the interval began, in the order typed.
 var text_input: [TEXT_INPUT_CAPACITY]u32 = [_]u32{0} ** TEXT_INPUT_CAPACITY;
+var text_input_len: usize = 0;
+var text_input_overflowed: bool = false;
+
+/// Wheel movement summed since the interval began.
+var hardware_wheel: Vec2 = .{ .x = 0, .y = 0 };
+
+/// A press or a release of one key or button.
+pub const InputEdge = enum { press, release };
+
+/// Which of the two edge sources a derived state consumes.
+///
+/// `hardware` is the window system, recorded by the chained GLFW callbacks;
+/// `virtual` is a script. The two are kept apart so a scripted keyboard shuts
+/// the real one out completely, edges included, and so a tap scripted while
+/// hardware was the source does not surface cycles later.
+pub const InputSource = enum { hardware, virtual };
+
+/// The edges of every key (or button) recorded since the state was last
+/// derived: one byte per code holding the `INPUT_PRESSED` and `INPUT_RELEASED`
+/// bits.
+///
+/// Recording the same edge twice is idempotent. The accumulator says whether at
+/// least one press and at least one release happened, not how many or in what
+/// order; that coalescing is the whole of what it loses, and it has no
+/// capacity to exhaust, so there is no overflow to report.
+fn EdgeAccumulator(comptime count: usize) type {
+    return struct {
+        bits: [count]u8 = [_]u8{0} ** count,
+
+        fn record(self: *@This(), index: usize, edge: InputEdge) void {
+            self.bits[index] |= switch (edge) {
+                .press => ffi.INPUT_PRESSED,
+                .release => ffi.INPUT_RELEASED,
+            };
+        }
+
+        fn take(self: *@This(), index: usize) u8 {
+            const edges = self.bits[index];
+            self.bits[index] = 0;
+            return edges;
+        }
+
+        fn clear(self: *@This()) void {
+            self.bits = [_]u8{0} ** count;
+        }
+    };
+}
+
+/// Edges the window system delivered, recorded by the chained GLFW callbacks.
+var hardware_key_edges: EdgeAccumulator(ffi.KEY_COUNT) = .{};
+var hardware_mouse_button_edges: EdgeAccumulator(ffi.MOUSE_BUTTON_COUNT) = .{};
+/// Edges a script placed inside one cycle, for the virtual keyboard.
+var virtual_key_edges: EdgeAccumulator(ffi.KEY_COUNT) = .{};
+
+test "an edge accumulator coalesces repeats and empties when taken" {
+    var edges: EdgeAccumulator(4) = .{};
+    try std.testing.expectEqual(@as(u8, 0), edges.take(1));
+
+    edges.record(1, .press);
+    edges.record(1, .release);
+    edges.record(1, .press);
+    edges.record(3, .release);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, edges.take(1));
+    try std.testing.expectEqual(@as(u8, 0), edges.take(1));
+    try std.testing.expectEqual(@as(u8, 0), edges.take(2));
+
+    edges.clear();
+    try std.testing.expectEqual(@as(u8, 0), edges.take(3));
+}
 
 fn gamepadButtonIndex(gamepad: usize, button: usize) usize {
     return gamepad * ffi.GAMEPAD_BUTTON_COUNT + button;
@@ -106,12 +188,21 @@ fn disconnectedInputState(previous: u8) u8 {
     return if (previous & ffi.INPUT_HELD != 0) ffi.INPUT_RELEASED else 0;
 }
 
-/// Derive this frame's packed state from the previous state and one held query.
-/// Raylib's pressed/released queries are equivalent to these transitions for
-/// keys and mouse buttons, so the host only needs one boundary call per input.
-fn nextInputState(previous: u8, down: bool) u8 {
+/// Derive one interval's packed state from the previous state, the level at
+/// the interval's end, and the edges recorded during it.
+///
+/// `edges` is what the window system (or a script) said happened; the level
+/// comparison is a second witness to the same transitions. Taking the union
+/// means a tap that began and ended inside the interval -- level unchanged,
+/// so invisible to the comparison -- still reads as pressed and released, and
+/// a transition whose edge was somehow not recorded still reads from the
+/// level. Gamepads, which raylib polls with no callback, pass no edges and
+/// get level detection alone.
+fn nextInputState(previous: u8, down: bool, edges: u8) u8 {
     const was_down = previous & ffi.INPUT_HELD != 0;
-    return inputStateBits(down, down and !was_down, !down and was_down);
+    const pressed = edges & ffi.INPUT_PRESSED != 0 or (down and !was_down);
+    const released = edges & ffi.INPUT_RELEASED != 0 or (!down and was_down);
+    return inputStateBits(down, pressed, released);
 }
 
 fn raylibGamepadButtonDown(_: void, gamepad: c_int, button: c_int) bool {
@@ -133,6 +224,7 @@ fn updateGamepadButtonStates(
             states[flat_index] = nextInputState(
                 states[flat_index],
                 is_button_down(context, gamepad_id, @intCast(button)),
+                0,
             );
         } else {
             states[flat_index] = disconnectedInputState(states[flat_index]);
@@ -152,18 +244,34 @@ test "disconnecting a held input synthesizes one release edge" {
 }
 
 test "input state derives press and release edges from held transitions" {
-    const up = nextInputState(0, false);
+    const up = nextInputState(0, false, 0);
     try std.testing.expectEqual(@as(u8, 0), up);
 
-    const pressed = nextInputState(up, true);
+    const pressed = nextInputState(up, true, 0);
     try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, pressed);
 
-    const held = nextInputState(pressed, true);
+    const held = nextInputState(pressed, true, 0);
     try std.testing.expectEqual(ffi.INPUT_HELD, held);
 
-    const released = nextInputState(held, false);
+    const released = nextInputState(held, false, 0);
     try std.testing.expectEqual(ffi.INPUT_RELEASED, released);
-    try std.testing.expectEqual(@as(u8, 0), nextInputState(released, false));
+    try std.testing.expectEqual(@as(u8, 0), nextInputState(released, false, 0));
+}
+
+test "recorded edges surface even when the level did not change" {
+    // A tap inside the interval: the level is up at both ends.
+    const tap = nextInputState(0, false, ffi.INPUT_PRESSED | ffi.INPUT_RELEASED);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, tap);
+
+    // Released and pressed again inside the interval: the level is down at
+    // both ends, and the app is told about both edges rather than a hold.
+    const held = ffi.INPUT_HELD;
+    const regrip = nextInputState(held, true, ffi.INPUT_RELEASED | ffi.INPUT_PRESSED);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_RELEASED | ffi.INPUT_PRESSED, regrip);
+
+    // An edge and a level transition that agree are one edge, not two.
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, nextInputState(0, true, ffi.INPUT_PRESSED));
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, nextInputState(held, false, ffi.INPUT_RELEASED));
 }
 
 test "gamepad buttons use one held query per connected button" {
@@ -218,33 +326,298 @@ test "gamepad button edges survive disconnect and reconnect" {
     try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, states[index]);
 }
 
-/// Update keyboard state from raylib (call once per frame)
-pub fn updateKeyboardState() void {
-    for (0..ffi.KEY_COUNT) |i| {
-        const key: c_int = @intCast(i);
-        key_state[i] = nextInputState(key_state[i], rl.IsKeyDown(key));
+// ---- Window-system event callbacks ----
+//
+// raylib's GLFW platform keeps levels, not queues: its key and mouse-button
+// callbacks store the latest action, its scroll callback overwrites the
+// wheel, and its character queue is a fixed sixteen per poll. Everything that
+// happens between two polls collapses into whatever came last, and the poll
+// period is the frame time. So the host chains its own callbacks behind
+// raylib's on the same window and records every event itself: edges into the
+// accumulators above, wheel offsets into a sum, characters into a bounded
+// buffer with an overflow flag. raylib's callback is still forwarded every
+// event, so its own state -- and its exit key, which its key callback
+// handles -- keep working unchanged. All of it runs on the frame thread,
+// inside `glfwPollEvents`.
+
+/// GLFW's window type. Opaque here: the host never dereferences it.
+const GlfwWindow = opaque {};
+const GlfwKeyFn = ?*const fn (?*GlfwWindow, c_int, c_int, c_int, c_int) callconv(.c) void;
+const GlfwMouseButtonFn = ?*const fn (?*GlfwWindow, c_int, c_int, c_int) callconv(.c) void;
+const GlfwScrollFn = ?*const fn (?*GlfwWindow, f64, f64) callconv(.c) void;
+const GlfwCharFn = ?*const fn (?*GlfwWindow, c_uint) callconv(.c) void;
+
+// Declared by hand rather than through a header: the vendored raylib ships
+// only its own headers, but every target's archive carries GLFW. The window
+// comes from the current context rather than `GetWindowHandle`, which returns
+// the native (HWND / NSWindow) handle on two of the four targets.
+extern fn glfwGetCurrentContext() ?*GlfwWindow;
+extern fn glfwSetKeyCallback(window: ?*GlfwWindow, callback: GlfwKeyFn) GlfwKeyFn;
+extern fn glfwSetMouseButtonCallback(window: ?*GlfwWindow, callback: GlfwMouseButtonFn) GlfwMouseButtonFn;
+extern fn glfwSetScrollCallback(window: ?*GlfwWindow, callback: GlfwScrollFn) GlfwScrollFn;
+extern fn glfwSetCharCallback(window: ?*GlfwWindow, callback: GlfwCharFn) GlfwCharFn;
+
+const GLFW_RELEASE: c_int = 0;
+const GLFW_PRESS: c_int = 1;
+const GLFW_REPEAT: c_int = 2;
+
+/// raylib's own callbacks, forwarded every event from the host's.
+var raylib_key_callback: GlfwKeyFn = null;
+var raylib_mouse_button_callback: GlfwMouseButtonFn = null;
+var raylib_scroll_callback: GlfwScrollFn = null;
+var raylib_char_callback: GlfwCharFn = null;
+var input_callbacks_installed: bool = false;
+
+fn hostKeyCallback(window: ?*GlfwWindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
+    if (raylib_key_callback) |forward| forward(window, key, scancode, action, mods);
+    recordKeyAction(key, action);
+}
+
+fn hostMouseButtonCallback(window: ?*GlfwWindow, button: c_int, action: c_int, mods: c_int) callconv(.c) void {
+    if (raylib_mouse_button_callback) |forward| forward(window, button, action, mods);
+    recordMouseButtonAction(button, action);
+}
+
+fn hostScrollCallback(window: ?*GlfwWindow, x_offset: f64, y_offset: f64) callconv(.c) void {
+    if (raylib_scroll_callback) |forward| forward(window, x_offset, y_offset);
+    recordScroll(x_offset, y_offset);
+}
+
+fn hostCharCallback(window: ?*GlfwWindow, codepoint: c_uint) callconv(.c) void {
+    if (raylib_char_callback) |forward| forward(window, codepoint);
+    recordCodepoint(codepoint);
+}
+
+/// Decode one GLFW key action into an edge, if it is one.
+///
+/// `GLFW_KEY_UNKNOWN` is -1 and is dropped along with any code past the packed
+/// list. Auto-repeat is not an edge: the key is still held, the user did
+/// nothing, and treating it as a press would fabricate one per repeat during
+/// a stall. raylib still sees the repeat through the forwarded callback.
+fn recordKeyAction(key: c_int, action: c_int) void {
+    if (key < 0 or key >= ffi.KEY_COUNT) return;
+    const edge: InputEdge = switch (action) {
+        GLFW_PRESS => .press,
+        GLFW_RELEASE => .release,
+        else => return,
+    };
+    recordHardwareKeyEdge(@intCast(key), edge);
+}
+
+fn recordMouseButtonAction(button: c_int, action: c_int) void {
+    if (button < 0 or button >= ffi.MOUSE_BUTTON_COUNT) return;
+    const edge: InputEdge = switch (action) {
+        GLFW_PRESS => .press,
+        GLFW_RELEASE => .release,
+        else => return,
+    };
+    recordHardwareMouseButtonEdge(@intCast(button), edge);
+}
+
+/// Record a key edge the window system delivered.
+///
+/// The callback above is the caller in a windowed run; a test is the other,
+/// standing in for the window system between two polls.
+pub fn recordHardwareKeyEdge(code: usize, edge: InputEdge) void {
+    hardware_key_edges.record(code, edge);
+}
+
+/// Record a mouse button edge the window system delivered.
+pub fn recordHardwareMouseButtonEdge(button: usize, edge: InputEdge) void {
+    hardware_mouse_button_edges.record(button, edge);
+}
+
+/// Record a key edge a script placed inside the current cycle.
+///
+/// A code the host has no slot for is dropped, as `applyVirtualKeys` drops it.
+/// Consumed by the next derivation from the virtual source; discarded by a
+/// derivation from hardware, where it has no cycle to land in.
+pub fn recordVirtualKeyEdge(code: u64, edge: InputEdge) void {
+    if (code >= ffi.KEY_COUNT) return;
+    virtual_key_edges.record(@intCast(code), edge);
+}
+
+/// Add one scroll event to the interval's wheel movement.
+pub fn recordScroll(x_offset: f64, y_offset: f64) void {
+    hardware_wheel.x += @floatCast(x_offset);
+    hardware_wheel.y += @floatCast(y_offset);
+}
+
+/// Append one typed codepoint, or note that the interval's buffer is full.
+pub fn recordCodepoint(codepoint: u32) void {
+    if (text_input_len < text_input.len) {
+        text_input[text_input_len] = codepoint;
+        text_input_len += 1;
+    } else {
+        text_input_overflowed = true;
     }
+}
+
+/// Chain the host's input callbacks behind raylib's on the live window.
+///
+/// Called once the window exists: raylib installs its own callbacks in
+/// `InitWindow`, and each `glfwSet*Callback` hands back the one it replaces,
+/// which is what the host forwards to. Returns false when there is no current
+/// GLFW context to hook, in which case edges come from level comparison alone
+/// and text from raylib's own queue -- the sampled behaviour the callbacks
+/// exist to improve on. Idempotent, so it can never chain to itself.
+pub fn installInputEventCallbacks() bool {
+    if (input_callbacks_installed) return true;
+    const window = glfwGetCurrentContext() orelse return false;
+    raylib_key_callback = glfwSetKeyCallback(window, hostKeyCallback);
+    raylib_mouse_button_callback = glfwSetMouseButtonCallback(window, hostMouseButtonCallback);
+    raylib_scroll_callback = glfwSetScrollCallback(window, hostScrollCallback);
+    raylib_char_callback = glfwSetCharCallback(window, hostCharCallback);
+    input_callbacks_installed = true;
+    clearRecordedHardwareInput();
+    return true;
+}
+
+/// Forget the callbacks along with the window they were installed on.
+fn forgetInputEventCallbacks() void {
+    input_callbacks_installed = false;
+    raylib_key_callback = null;
+    raylib_mouse_button_callback = null;
+    raylib_scroll_callback = null;
+    raylib_char_callback = null;
+    clearRecordedHardwareInput();
+}
+
+/// Drop everything the window system recorded but nothing has consumed.
+fn clearRecordedHardwareInput() void {
+    hardware_key_edges.clear();
+    hardware_mouse_button_edges.clear();
+    hardware_wheel = .{ .x = 0, .y = 0 };
+    text_input_len = 0;
+    text_input_overflowed = false;
+}
+
+test "GLFW key actions become edges, except repeats and unknown keys" {
+    defer clearRecordedHardwareInput();
+    const key_a = 65;
+
+    hostKeyCallback(null, key_a, 0, GLFW_PRESS, 0);
+    hostKeyCallback(null, key_a, 0, GLFW_REPEAT, 0);
+    hostKeyCallback(null, key_a, 0, GLFW_REPEAT, 0);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED, hardware_key_edges.take(key_a));
+
+    hostKeyCallback(null, key_a, 0, GLFW_RELEASE, 0);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, hardware_key_edges.take(key_a));
+
+    // GLFW_KEY_UNKNOWN and a code past the packed list have nowhere to land.
+    hostKeyCallback(null, -1, 0, GLFW_PRESS, 0);
+    hostKeyCallback(null, ffi.KEY_COUNT, 0, GLFW_PRESS, 0);
+    for (hardware_key_edges.bits) |bits| try std.testing.expectEqual(@as(u8, 0), bits);
+
+    hostMouseButtonCallback(null, 1, GLFW_PRESS, 0);
+    hostMouseButtonCallback(null, ffi.MOUSE_BUTTON_COUNT, GLFW_PRESS, 0);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED, hardware_mouse_button_edges.take(1));
+    for (hardware_mouse_button_edges.bits) |bits| try std.testing.expectEqual(@as(u8, 0), bits);
+}
+
+test "every event is forwarded to raylib's callback unchanged" {
+    const Forwarded = struct {
+        var key: [5]c_int = undefined;
+        var key_calls: usize = 0;
+        var button: [3]c_int = undefined;
+        var scroll: [2]f64 = undefined;
+        var char: c_uint = 0;
+
+        fn onKey(_: ?*GlfwWindow, k: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
+            key = .{ k, scancode, action, mods, 0 };
+            key_calls += 1;
+        }
+        fn onMouseButton(_: ?*GlfwWindow, b: c_int, action: c_int, mods: c_int) callconv(.c) void {
+            button = .{ b, action, mods };
+        }
+        fn onScroll(_: ?*GlfwWindow, x: f64, y: f64) callconv(.c) void {
+            scroll = .{ x, y };
+        }
+        fn onChar(_: ?*GlfwWindow, c: c_uint) callconv(.c) void {
+            char = c;
+        }
+    };
+    raylib_key_callback = Forwarded.onKey;
+    raylib_mouse_button_callback = Forwarded.onMouseButton;
+    raylib_scroll_callback = Forwarded.onScroll;
+    raylib_char_callback = Forwarded.onChar;
+    defer forgetInputEventCallbacks();
+
+    // The exit key is raylib's to handle, inside its key callback, so the
+    // repeat and the press both have to reach it even though only the press
+    // is an edge to the host.
+    hostKeyCallback(null, 256, 9, GLFW_PRESS, 1);
+    hostKeyCallback(null, 256, 9, GLFW_REPEAT, 1);
+    try std.testing.expectEqual(@as(usize, 2), Forwarded.key_calls);
+    try std.testing.expectEqualSlices(c_int, &.{ 256, 9, GLFW_REPEAT, 1 }, Forwarded.key[0..4]);
+
+    hostMouseButtonCallback(null, 2, GLFW_RELEASE, 4);
+    try std.testing.expectEqualSlices(c_int, &.{ 2, GLFW_RELEASE, 4 }, &Forwarded.button);
+
+    hostScrollCallback(null, -1.5, 2.0);
+    try std.testing.expectEqualSlices(f64, &.{ -1.5, 2.0 }, &Forwarded.scroll);
+
+    hostCharCallback(null, 0x20ac);
+    try std.testing.expectEqual(@as(c_uint, 0x20ac), Forwarded.char);
+}
+
+/// Derive the packed keyboard state for one interval.
+///
+/// `down` is the level at the interval's end and `source` names the edge
+/// accumulator to consume; the other accumulator is discarded, so a scripted
+/// keyboard never leaks a hardware edge and a script's tap cannot surface after
+/// the app hands the keyboard back.
+pub fn deriveKeyboardState(source: InputSource, down: *const [ffi.KEY_COUNT]bool) void {
+    const consumed, const discarded = switch (source) {
+        .hardware => .{ &hardware_key_edges, &virtual_key_edges },
+        .virtual => .{ &virtual_key_edges, &hardware_key_edges },
+    };
+    discarded.clear();
+    for (0..ffi.KEY_COUNT) |i| {
+        key_state[i] = nextInputState(key_state[i], down[i], consumed.take(i));
+    }
+}
+
+/// Derive the packed mouse button state for one interval, as
+/// `deriveKeyboardState` does. Only hardware records button edges; a virtual
+/// pointer states levels, so `virtual` consumes nothing and discards the
+/// hardware edges.
+pub fn deriveMouseButtonState(source: InputSource, down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
+        const edges = hardware_mouse_button_edges.take(i);
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], down[i], if (source == .hardware) edges else 0);
+    }
+}
+
+/// Update keyboard state from the window system, once per interval.
+///
+/// The level is raylib's, kept current by the forwarded callbacks; the edges
+/// are the host's own record of the interval.
+pub fn updateKeyboardState() void {
+    var down: [ffi.KEY_COUNT]bool = undefined;
+    for (0..ffi.KEY_COUNT) |i| down[i] = rl.IsKeyDown(@intCast(i));
+    deriveKeyboardState(.hardware, &down);
 }
 
 /// Advance the packed keyboard state from caller-supplied held flags.
 ///
 /// Used by the virtual keyboard in place of `updateKeyboardState`, and by a
 /// headless run, which has no hardware to ask at all. It runs the same
-/// `nextInputState` edge detection, so a scripted key produces real
-/// pressed-this-frame and released-this-frame bits and an app's ordinary
-/// key handling reacts to it exactly as it would to hardware.
+/// derivation, so a scripted key produces real pressed-this-interval and
+/// released-this-interval bits, and a scripted tap (`recordVirtualKeyEdge`)
+/// lands inside one cycle exactly as a hardware tap between two polls does.
 pub fn updateKeyboardStateFrom(down: *const [ffi.KEY_COUNT]bool) void {
-    for (0..ffi.KEY_COUNT) |i| {
-        key_state[i] = nextInputState(key_state[i], down[i]);
-    }
+    deriveKeyboardState(.virtual, down);
 }
 
-/// Forget every key's held and edge bits.
+/// Forget every key's held and edge bits, recorded edges included.
 ///
 /// Called when an app lifetime starts, so a key held when one app exited is
 /// not still held when the next one begins.
 pub fn clearKeyState() void {
     key_state = [_]u8{0} ** ffi.KEY_COUNT;
+    hardware_key_edges.clear();
+    virtual_key_edges.clear();
 }
 
 /// Get the current packed keyboard state array.
@@ -252,12 +625,11 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
 }
 
-/// Update mouse button state from raylib (call once per frame)
+/// Update mouse button state from the window system, once per interval.
 pub fn updateMouseButtonState() void {
-    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
-        const button: c_int = @intCast(i);
-        mouse_button_state[i] = nextInputState(mouse_button_state[i], rl.IsMouseButtonDown(button));
-    }
+    var down: [ffi.MOUSE_BUTTON_COUNT]bool = undefined;
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| down[i] = rl.IsMouseButtonDown(@intCast(i));
+    deriveMouseButtonState(.hardware, &down);
 }
 
 /// Get the current packed mouse button state array.
@@ -268,21 +640,104 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
 /// Forget every mouse button's held and edge bits, as `clearKeyState` does.
 pub fn clearMouseButtonState() void {
     mouse_button_state = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+    hardware_mouse_button_edges.clear();
 }
 
 /// Advance the packed mouse button state from caller-supplied down flags.
 ///
 /// Used by the virtual mouse in place of `updateMouseButtonState`. It runs the
-/// same `nextInputState` edge detection, so a scripted pointer produces real
-/// pressed-this-frame and released-this-frame bits and an app's ordinary click
-/// handling reacts to it exactly as it would to hardware.
+/// same derivation, so a scripted pointer produces real pressed-this-interval
+/// and released-this-interval bits and an app's ordinary click handling
+/// reacts to it exactly as it would to hardware.
 pub fn updateMouseButtonStateFrom(down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
-    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
-        mouse_button_state[i] = nextInputState(mouse_button_state[i], down[i]);
-    }
+    deriveMouseButtonState(.virtual, down);
+}
+
+test "a tap between two polls is pressed and released, never held" {
+    defer clearKeyState();
+    const key_e = 69;
+    const up: [ffi.KEY_COUNT]bool = @splat(false);
+
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_e]);
+
+    // The window system delivers PRESS then RELEASE inside one interval, so
+    // the level is up at both polls.
+    recordHardwareKeyEdge(key_e, .press);
+    recordHardwareKeyEdge(key_e, .release);
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, getKeyState()[key_e]);
+
+    // Consumed: the next interval is quiet again.
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_e]);
+}
+
+test "a release and re-press between two polls is not one long hold" {
+    defer clearMouseButtonState();
+    const left = 0;
+    var down: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
+
+    down[left] = true;
+    recordHardwareMouseButtonEdge(left, .press);
+    deriveMouseButtonState(.hardware, &down);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, getMouseButtonState()[left]);
+
+    // RELEASE then PRESS inside the interval; the level is down at both polls.
+    recordHardwareMouseButtonEdge(left, .release);
+    recordHardwareMouseButtonEdge(left, .press);
+    deriveMouseButtonState(.hardware, &down);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_RELEASED | ffi.INPUT_PRESSED, getMouseButtonState()[left]);
+
+    deriveMouseButtonState(.hardware, &down);
+    try std.testing.expectEqual(ffi.INPUT_HELD, getMouseButtonState()[left]);
+}
+
+test "each source consumes its own edges and discards the other's" {
+    defer clearKeyState();
+    defer clearMouseButtonState();
+    const key_a = 65;
+    const up: [ffi.KEY_COUNT]bool = @splat(false);
+
+    // A hardware tap while a script owns the keyboard is not the script's.
+    recordHardwareKeyEdge(key_a, .press);
+    recordHardwareKeyEdge(key_a, .release);
+    deriveKeyboardState(.virtual, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_a]);
+    // And it does not resurface when the app hands the keyboard back.
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_a]);
+
+    // A scripted tap consumed by hardware derivation is likewise gone.
+    recordVirtualKeyEdge(key_a, .press);
+    recordVirtualKeyEdge(key_a, .release);
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_a]);
+    deriveKeyboardState(.virtual, &up);
+    try std.testing.expectEqual(@as(u8, 0), getKeyState()[key_a]);
+
+    // A scripted tap consumed by the virtual source lands.
+    recordVirtualKeyEdge(key_a, .press);
+    recordVirtualKeyEdge(key_a, .release);
+    recordVirtualKeyEdge(ffi.KEY_COUNT + 5, .press);
+    deriveKeyboardState(.virtual, &up);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, getKeyState()[key_a]);
+
+    // A virtual pointer states levels only; hardware button edges are dropped.
+    const buttons_up: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
+    recordHardwareMouseButtonEdge(0, .press);
+    deriveMouseButtonState(.virtual, &buttons_up);
+    try std.testing.expectEqual(@as(u8, 0), getMouseButtonState()[0]);
+    deriveMouseButtonState(.hardware, &buttons_up);
+    try std.testing.expectEqual(@as(u8, 0), getMouseButtonState()[0]);
 }
 
 /// Sample all supported gamepads once for this frame.
+///
+/// Sampled, not recorded: raylib polls gamepads inside `PollInputEvents` with
+/// no callback to chain, so a button pressed and released between two polls
+/// is invisible here. That is documented as lossy on the Roc side rather than
+/// papered over.
 pub fn updateGamepadState() void {
     for (0..ffi.GAMEPAD_COUNT) |gamepad| {
         const gamepad_id: c_int = @intCast(gamepad);
@@ -361,8 +816,72 @@ pub fn releaseDroppedFiles() void {
     rl.UnloadDroppedFiles(list);
 }
 
-/// Drain this frame's queued Unicode input and return a stable scratch slice.
-pub fn getTextInput() []const u32 {
+/// Take the interval's wheel movement: every scroll event summed.
+///
+/// Taken, not read, so each notch is delivered to exactly one input. The
+/// caller takes it every cycle whether or not a scripted pointer is standing
+/// in for the hardware one, so notches turned while the pointer was scripted
+/// do not land on the cycle the app hands it back. Without callbacks this is
+/// raylib's own value, which is the last event of the poll rather than the
+/// sum.
+pub fn takeMouseWheelMove() Vec2 {
+    if (!input_callbacks_installed) return getMouseWheelMoveV();
+    return takeRecordedWheel();
+}
+
+fn takeRecordedWheel() Vec2 {
+    const moved = hardware_wheel;
+    hardware_wheel = .{ .x = 0, .y = 0 };
+    return moved;
+}
+
+test "wheel notches inside one interval are summed, then consumed" {
+    defer clearRecordedHardwareInput();
+    try std.testing.expectEqual(@as(f32, 0), takeRecordedWheel().y);
+
+    hostScrollCallback(null, 0, 1);
+    hostScrollCallback(null, 0, 1);
+    hostScrollCallback(null, -0.5, -0.25);
+    const moved = takeRecordedWheel();
+    try std.testing.expectEqual(@as(f32, -0.5), moved.x);
+    try std.testing.expectEqual(@as(f32, 1.75), moved.y);
+
+    const next = takeRecordedWheel();
+    try std.testing.expectEqual(@as(f32, 0), next.x);
+    try std.testing.expectEqual(@as(f32, 0), next.y);
+}
+
+/// One interval's typed text, and whether any of it was discarded.
+pub const TextInput = struct {
+    codepoints: []const u32,
+    overflowed: bool,
+};
+
+/// Take the interval's typed text: at most `TEXT_INPUT_CAPACITY` codepoints in
+/// the order typed, and whether more arrived than that.
+///
+/// The slice is a stable scratch buffer that the next recorded character
+/// overwrites, so the caller copies it before the next poll. Without callbacks
+/// this drains raylib's own queue instead.
+pub fn takeTextInput() TextInput {
+    if (!input_callbacks_installed) return drainRaylibTextQueue();
+    return takeRecordedText();
+}
+
+fn takeRecordedText() TextInput {
+    const delivered = text_input[0..text_input_len];
+    const overflowed = text_input_overflowed;
+    text_input_len = 0;
+    text_input_overflowed = false;
+    return .{ .codepoints = delivered, .overflowed = overflowed };
+}
+
+/// raylib's queue holds `RAYLIB_CHAR_QUEUE_CAPACITY` codepoints per poll and
+/// drops the rest without saying so. A full queue cannot be told apart from an
+/// overflowed one, so it is reported as an overflow: the honest answer is
+/// "possibly", and the flag's contract is that a clear flag means nothing was
+/// lost.
+fn drainRaylibTextQueue() TextInput {
     var count: usize = 0;
     while (true) {
         const codepoint = rl.GetCharPressed();
@@ -372,7 +891,38 @@ pub fn getTextInput() []const u32 {
             count += 1;
         }
     }
-    return text_input[0..count];
+    return .{
+        .codepoints = text_input[0..count],
+        .overflowed = count >= RAYLIB_CHAR_QUEUE_CAPACITY,
+    };
+}
+
+test "typed text past the interval's capacity is reported, not silently cut" {
+    defer clearRecordedHardwareInput();
+
+    hostCharCallback(null, 'h');
+    hostCharCallback(null, 'i');
+    const short = takeRecordedText();
+    try std.testing.expectEqualSlices(u32, &.{ 'h', 'i' }, short.codepoints);
+    try std.testing.expect(!short.overflowed);
+
+    // Gone once taken: characters arrive on one input and not the next.
+    const empty = takeRecordedText();
+    try std.testing.expectEqual(@as(usize, 0), empty.codepoints.len);
+    try std.testing.expect(!empty.overflowed);
+
+    for (0..TEXT_INPUT_CAPACITY) |i| hostCharCallback(null, @intCast('a' + (i % 26)));
+    const exact = takeRecordedText();
+    try std.testing.expectEqual(TEXT_INPUT_CAPACITY, exact.codepoints.len);
+    try std.testing.expect(!exact.overflowed);
+
+    for (0..TEXT_INPUT_CAPACITY + 1) |_| hostCharCallback(null, 'x');
+    const over = takeRecordedText();
+    try std.testing.expectEqual(TEXT_INPUT_CAPACITY, over.codepoints.len);
+    try std.testing.expect(over.overflowed);
+
+    // The flag travels with the interval that overflowed, not the next one.
+    try std.testing.expect(!takeRecordedText().overflowed);
 }
 
 /// Return raylib's built-in font, which is not owned by a resource heap.
@@ -1158,8 +1708,9 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible
     return flags;
 }
 
-/// Close the window.
+/// Close the window. The input callbacks chained on it go with it.
 pub fn closeWindow() void {
+    forgetInputEventCallbacks();
     rl.CloseWindow();
 }
 

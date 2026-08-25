@@ -1,7 +1,18 @@
-## One cycle of sampled keyboard, text, mouse and gamepad state.
+## One cycle of keyboard, text, mouse and gamepad input.
 ##
-## `App.Input` carries the host's start-of-cycle observation as
-## `input.devices`. A snapshot is pure data and grants no device authority.
+## `App.Input` carries the host's observation as `input.devices`. A snapshot is
+## pure data and grants no device authority.
+##
+## Two kinds of information are in it, and each field says which it is. A
+## *state sample* is the latest value at the cycle boundary: a held key, the
+## pointer position, a gamepad axis. An *interval event* is something that
+## happened since the previous input: a press, a release, a typed character,
+## a wheel notch. On a desktop host the keyboard, mouse-button, wheel and text
+## events are recorded from the window system's own event callbacks, so an
+## event that reaches the process is in the next input or reported as an
+## overflow, never silently lost, with a latency of at most one cycle.
+## Gamepad buttons are the exception: raylib polls them with no callback, so
+## their edges are sampled and a press-and-release between two polls is lost.
 ##
 ## Tests can start from `Devices.none` and set only the relevant state with the
 ## `with_key_*` and `with_mouse_*` receivers.
@@ -23,22 +34,41 @@ Devices := [].{
 	Snapshot := {
 
 		## Packed per-key state, one byte per raylib key code. Each byte stores
-		## held, pressed-this-frame, and released-this-frame bits. Use the
+		## a held bit, which is a state sample, and pressed and released bits,
+		## which are interval events: set when at least one press (release) of
+		## that key happened since the previous input. Several presses of one
+		## key in one interval coalesce into one bit; the count and the order
+		## are not retained. A key tapped between two cycles is therefore
+		## pressed and released in one input and held in neither. Use the
 		## `key_down`/`key_pressed`/`key_released` receivers.
 		keys : List(U8),
 
-		## Unicode codepoints retained for this host-cycle input, in event order. This is
-		## distinct from physical key state and respects the active keyboard
-		## layout. At most 32 codepoints are delivered per frame; excess queued
-		## input is discarded.
+		## Unicode codepoints typed since the previous input, in the order
+		## typed. This is distinct from physical key state and respects the
+		## active keyboard layout. At most 32 codepoints are delivered per
+		## input; a longer burst has the rest discarded and `text_input_overflow`
+		## set. Order relative to the key edges of the same interval is not
+		## defined.
 		text_input : List(U32),
 
-		## Gamepad input sampled once per host-cycle input. Use the `gamepad` receiver, or
-		## the `Gamepad` helpers, rather than indexing these flat lists.
+		## Whether more than 32 codepoints were typed in this interval, so
+		## `text_input` is the first 32 of them rather than all. Clear means
+		## nothing was lost.
+		text_input_overflow : Bool,
+
+		## Gamepad input sampled once per host-cycle input. The held bits and
+		## axes are state samples; the pressed and released bits are derived by
+		## comparing two samples, so a button pressed and released between two
+		## cycles is not seen. Use the `gamepad` receiver, or the `Gamepad`
+		## helpers, rather than indexing these flat lists.
 		gamepads : Gamepad.Snapshot,
 
-		## Mouse buttons, position, delta, and two-axis wheel movement sampled
-		## once for this host-cycle input. Receiver helpers are available on `Mouse.State`.
+		## Mouse buttons, position, movement, and wheel for this input. Position
+		## and the held bits are state samples at the cycle boundary; pressed
+		## and released bits are interval events, coalesced per button like
+		## keys; the wheel is the sum of every notch in the interval. Clicks in
+		## one interval share the boundary position. Receivers are on
+		## `Mouse.Snapshot`.
 		mouse : Mouse.Snapshot,
 	}.{
 
@@ -74,9 +104,8 @@ Devices := [].{
 		## Say that one key is held, as `Devices.none.with_key_down(KeyW)`.
 		##
 		## Each `with_key_*` states the complete state of the key it names,
-		## replacing whatever that key had, because the host samples exactly one
-		## of held, pressed, or released per key per cycle. Different keys are
-		## independent bytes, so these compose:
+		## replacing whatever that key had. Different keys are independent
+		## bytes, so these compose:
 		## `Devices.none.with_key_pressed(KeySpace).with_key_down(KeyLeftShift)`.
 		##
 		## Only a snapshot with the host's packed list lengths can carry these.
@@ -141,6 +170,14 @@ Devices := [].{
 		## cycle is no longer held.
 		with_mouse_button_released : Snapshot, Mouse.Button -> Snapshot
 		with_mouse_button_released = |input, button| with_mouse_button_state(input, button, released)
+
+		## Say whether typed text was cut at the interval's capacity, which is
+		## what `text_input_overflow` reports.
+		with_text_input_overflow : Snapshot, Bool -> Snapshot
+		with_text_input_overflow = |input, overflow| {
+			..snapshot_fields(input),
+			text_input_overflow: overflow,
+		}
 	}
 
 	## A neutral snapshot with the host's own packed list lengths, for tests.
@@ -163,6 +200,7 @@ Devices := [].{
 	none = {
 		keys: List.repeat(0, key_state_len),
 		text_input: [],
+		text_input_overflow: Bool.False,
 		gamepads: {
 			connected: List.repeat(0, gamepad_count),
 			buttons: List.repeat(0, gamepad_count * gamepad_button_count),
@@ -193,6 +231,7 @@ Devices := [].{
 	empty = {
 		keys: [],
 		text_input: [],
+		text_input_overflow: Bool.False,
 		gamepads: {
 			connected: [],
 			buttons: [],
@@ -225,6 +264,7 @@ Devices := [].{
 	expect Devices.empty.mouse.delta() == { x: 0, y: 0 }
 	expect Devices.empty.mouse.wheel_delta() == { x: 0, y: 0 }
 	expect List.len(Devices.empty.text_input) == 0
+	expect !(Devices.empty.text_input_overflow)
 }
 
 ## Held bit in a packed key or mouse-button state byte.
@@ -267,6 +307,7 @@ gamepad_axis_count = 6
 snapshot_fields : Devices.Snapshot -> {
 	keys : List(U8),
 	text_input : List(U32),
+	text_input_overflow : Bool,
 	gamepads : Gamepad.Snapshot,
 	mouse : Mouse.Snapshot,
 }
@@ -429,6 +470,12 @@ expect Devices.none.with_mouse_button_down(Middle).mouse.middle
 expect !(Devices.none.with_mouse_button_down(Left).mouse.right)
 expect !(Devices.none.with_mouse_button_released(Left).mouse.left)
 expect !(Devices.none.with_mouse_button_down(Side).mouse.left)
+
+## Text overflow is an ordinary flag on the sample, clear until stated.
+expect !(Devices.none.text_input_overflow)
+expect Devices.none.with_text_input_overflow(Bool.True).text_input_overflow
+expect !(Devices.none.with_text_input_overflow(Bool.True).with_text_input_overflow(Bool.False).text_input_overflow)
+expect Devices.none.with_text_input_overflow(Bool.True).with_key_pressed(KeyR).key_pressed(KeyR)
 
 ## Pointer, movement, and wheel are ordinary scalars on the sample.
 expect Devices.none.with_mouse_position({ x: 40, y: 12 }).mouse.position() == { x: 40, y: 12 }

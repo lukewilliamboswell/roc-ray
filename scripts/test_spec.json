@@ -7,7 +7,7 @@
     "Every examples/<name> directory must appear exactly once, and each app has",
     "one or more named cases. Case fields, all optional except name:",
     "  frames           cycles to run before the host exits by itself",
-    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys)",
+    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys; a ^ suffix taps the key inside the cycle)",
     "  text             --host-text script, e.g. \"5:hi\" (cycle:typed text)",
     "  args             extra application arguments",
     "  contains         substrings the combined output must contain",
@@ -184,6 +184,13 @@
           "frames": 1000000,
           "keys": "3:W,4:W,5:S,8:SPACE,12:ESCAPE",
           "timeout_seconds": 30
+        },
+        {
+          "name": "tapped-quit",
+          "frames": 1000000,
+          "keys": "3:W,6:ESCAPE^",
+          "timeout_seconds": 30,
+          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
         }
       ]
     },

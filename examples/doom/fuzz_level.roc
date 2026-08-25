@@ -46,38 +46,15 @@ special_lines = |raw| {
 	$result
 }
 
-## Guards for bugs already recorded in fuzz_findings_level.md, so the campaign
-## can keep looking for the next one. Flip to False to reproduce them.
-## B1: special 62 is treated as a permanent door, but its E1M1 tags name lift
-## sectors, so `open` lands below `closed`.
-guard_special_62 = Bool.True
-
-## L2 (fixed): re-using a door used to rebuild it with `closed: current
-## ceiling`. The guard skipped use-line commands while any door was active.
-guard_door_reuse = Bool.False
-
-## Linedef indices excluded by the active guards.
-guarded_lines = |raw| {
-	var $result = []
-	for entry in List.map_with_index(raw.linedefs, |line, index| { line, index }) {
-		if guard_special_62 and entry.line.special == 62 {
-			$result = List.append($result, entry.index)
-		}
-	}
-	$result
-}
-
-## Pick the linedef for a command. Guarded lines are redirected to an unused
-## index so the command becomes a no-op.
-resolve_line : List(U64), List(U64), Cmd -> U64
-resolve_line = |guarded, specials, cmd| {
-	line = if cmd.pick % 8 == 0 cmd.raw_line else {
+## Pick the linedef for a command: mostly a special line, occasionally any
+## index (including out-of-range ones).
+resolve_line : List(U64), Cmd -> U64
+resolve_line = |specials, cmd|
+	if cmd.pick % 8 == 0 cmd.raw_line else {
 		List.get(specials, cmd.pick % List.len(specials)) ?? cmd.raw_line
 	}
-	if List.contains(guarded, line) 5000 else line
-}
 
-## WORKAROUND for a native-codegen refcount bug (see fuzz_findings_level.md,
+## WORKAROUND for a native-codegen refcount bug (see FUZZ_FINDINGS.md,
 ## Notes): a record spread update `{ ..state, field: x }` inside a callee frees
 ## the caller's list fields when compiled with `roc build`. DoomLevel builds
 ## every new `State` that way, so each call gets a fresh copy and the caller's
@@ -204,18 +181,16 @@ tick_checked = |map, state, count, step_desc, checked| {
 ## property checks; the determinism re-run skips them (they are pure anyway).
 ## `render_changed` is expensive (it rebuilds the dynamic-sector set), so it is
 ## checked on every activation plus a sampled subset of the other steps.
-run_stream = |map, guarded, specials, input, checked| {
+run_stream = |map, specials, input, checked| {
 	keys = keys_of(input.key_bits)
 	var $state = DoomLevel.initial(map)
 	var $total = 0
 	var $step = 0
 	for cmd in input.cmds {
-		line = resolve_line(guarded, specials, cmd)
+		line = resolve_line(specials, cmd)
 		desc = "${input.label} step ${Str.inspect($step)}"
 		prev = $state
-		if cmd.kind == 0 and guard_door_reuse and !(List.is_empty(prev.doors)) {
-			{}
-		} else if cmd.kind == 0 {
+		if cmd.kind == 0 {
 			match use_line(map, prev, line, keys) {
 				Activated(next) => {
 					$state = next
@@ -281,10 +256,9 @@ test = |input| {
 	map = DoomMap.e1m1
 	raw = map.raw()
 	specials = special_lines(raw)
-	guarded = guarded_lines(raw)
 	initial = DoomLevel.initial(map)
-	final = run_stream(map, guarded, specials, input, Bool.True)
-	again = run_stream(map, guarded, specials, input, Bool.False)
+	final = run_stream(map, specials, input, Bool.True)
+	again = run_stream(map, specials, input, Bool.False)
 	# Compared through Str.inspect: derived `==` on State is miscompiled by the
 	# native backend (see Notes in the findings file).
 	if Str.inspect(final) != Str.inspect(again) {
@@ -297,12 +271,11 @@ test = |input| {
 show_input = |input| {
 	raw = DoomMap.e1m1.raw()
 	specials = special_lines(raw)
-	guarded = guarded_lines(raw)
 	keys = keys_of(input.key_bits)
 	lines = List.map(
 		input.cmds,
 		|cmd| {
-			line = resolve_line(guarded, specials, cmd)
+			line = resolve_line(specials, cmd)
 			special = match List.get(raw.linedefs, line) {
 				Ok(l) => "special ${Str.inspect(l.special)} tag ${Str.inspect(l.tag)}"
 				Err(_) => "out-of-range"

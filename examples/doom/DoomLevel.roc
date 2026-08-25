@@ -136,9 +136,10 @@ DoomLevel := [].{
 	render_changed : DoomMap.Map, State, State -> Bool
 	render_changed = |map, before, after| render_changed_in(map, before, after, dynamic_sectors(map), 0)
 
-	## Activate the E1M1 use-line door vocabulary. Specials 1 and 117 are
-	## ordinary/blazing local doors; 26 is the blue-key variant; 62 opens all
-	## tagged doors permanently. Special 11 requests level exit.
+	## Activate the E1M1 use-line vocabulary. Specials 1 and 117 are
+	## ordinary/blazing local doors; 26 is the blue-key variant; 23 lowers
+	## tagged floors; 62 is the switch form of the special-88 lift. Special 11
+	## requests level exit.
 	use_line : DoomMap.Map, State, U64, Keys -> UseResult
 	use_line = |map, state, linedef, keys| {
 		raw = map.raw()
@@ -148,7 +149,7 @@ DoomLevel := [].{
 				1 => activate_local_door(raw, state, line, Bool.False, 2)
 				26 => if keys.blue activate_local_door(raw, state, line, Bool.False, 2) else Locked(Blue)
 				23 => activate_tagged_floors(raw, state, line.tag)
-				62 => activate_tagged_doors(raw, state, line.tag, Bool.True, 2)
+				62 => activate_tagged_lifts(raw, state, line.tag)
 				117 => activate_local_door(raw, state, line, Bool.False, 8)
 				11 => Exit
 				_ => NotUsable
@@ -393,32 +394,31 @@ activate_local_door = |raw, state, line, stays_open, speed|
 		}
 	}
 
-activate_tagged_doors = |raw, state, tag, stays_open, speed| {
-	sectors = tagged_sectors(raw.sectors, tag, 0)
-	if List.is_empty(sectors) NotUsable else Activated(activate_doors(raw, state, sectors, 0, stays_open, speed))
-}
+activate_tagged_doors = |raw, state, tag, stays_open, speed|
+	activated_if_changed(state, activate_doors(raw, state, tagged_sectors(raw.sectors, tag, 0), 0, stays_open, speed))
 
-activate_tagged_floors = |raw, state, tag| {
-	sectors = tagged_sectors(raw.sectors, tag, 0)
-	if List.is_empty(sectors) NotUsable else Activated(add_floor_movers(raw, state, sectors, 0))
-}
+activate_tagged_floors = |raw, state, tag|
+	activated_if_changed(state, add_floor_movers(raw, state, tagged_sectors(raw.sectors, tag, 0), 0))
 
-activate_tagged_lifts = |raw, state, tag| {
-	sectors = tagged_sectors(raw.sectors, tag, 0)
-	if List.is_empty(sectors) NotUsable else Activated(add_lifts(raw, state, sectors, 0))
-}
+activate_tagged_lifts = |raw, state, tag|
+	activated_if_changed(state, add_lifts(raw, state, tagged_sectors(raw.sectors, tag, 0), 0))
+
+## A tagged special that started no mover (no tagged sector, or none with an
+## adjacent sector to move toward) is reported as unusable.
+activated_if_changed = |before, after|
+	if List.len(after.doors) == List.len(before.doors) and List.len(after.floors) == List.len(before.floors) and List.len(after.lifts) == List.len(before.lifts) NotUsable else Activated(after)
 
 add_lifts = |raw, state, sectors, index|
 	match List.get(sectors, index) {
 		Err(_) => state
 		Ok(sector) => {
-			if List.any(state.lifts, |lift| lift.sector == sector) {
-				add_lifts(raw, state, sectors, index + 1)
-			} else {
-				heights = List.get(state.heights, sector) ?? crash "sector state missing"
-				low = lowest_adjacent_floor(raw, state, sector, 0, Err(NoAdjacent))
-				next = { ..state, lifts: List.append(state.lifts, { sector, low, high: heights.floor, speed: 1, phase: Lowering }) }
-				add_lifts(raw, next, sectors, index + 1)
+			match lowest_adjacent_floor(raw, state, sector, 0, Err(NoAdjacent)) {
+				Ok(low) if !(List.any(state.lifts, |lift| lift.sector == sector)) => {
+					heights = List.get(state.heights, sector) ?? crash "sector state missing"
+					next = { ..state, lifts: List.append(state.lifts, { sector, low, high: heights.floor, speed: 1, phase: Lowering }) }
+					add_lifts(raw, next, sectors, index + 1)
+				}
+				_ => add_lifts(raw, state, sectors, index + 1)
 			}
 		}
 	}
@@ -427,10 +427,14 @@ add_floor_movers = |raw, state, sectors, index|
 	match List.get(sectors, index) {
 		Err(_) => state
 		Ok(sector) => {
-			target = lowest_adjacent_floor(raw, state, sector, 0, Err(NoAdjacent))
-			without = List.keep_if(state.floors, |mover| mover.sector != sector)
-			next = { ..state, floors: List.append(without, { sector, target, speed: 1 }) }
-			add_floor_movers(raw, next, sectors, index + 1)
+			match lowest_adjacent_floor(raw, state, sector, 0, Err(NoAdjacent)) {
+				Err(NoAdjacent) => add_floor_movers(raw, state, sectors, index + 1)
+				Ok(target) => {
+					without = List.keep_if(state.floors, |mover| mover.sector != sector)
+					next = { ..state, floors: List.append(without, { sector, target, speed: 1 }) }
+					add_floor_movers(raw, next, sectors, index + 1)
+				}
+			}
 		}
 	}
 
@@ -470,18 +474,25 @@ activate_door = |raw, state, sector, stays_open, speed| {
 			doors = List.map(state.doors, |door| if door.sector == sector reversed else door)
 			Activated({ ..state, doors })
 		}
-		Err(_) => {
-			current = List.get(state.heights, sector) ?? crash "sector state missing"
-			open = lowest_adjacent_ceiling(raw, state, sector, 0, Err(NoAdjacent)) - 4
-			door = { sector, closed: current.ceiling, open, speed, phase: Opening, stays_open }
-			Activated({ ..state, doors: List.append(state.doors, door) })
+		Err(_) => match lowest_adjacent_ceiling(raw, state, sector, 0, Err(NoAdjacent)) {
+			# A sector with no two-sided line has nothing to open toward; vanilla
+			# leaves it alone, and validation admits such tags.
+			Err(NoAdjacent) => NotUsable
+			Ok(lowest) => {
+				current = List.get(state.heights, sector) ?? crash "sector state missing"
+				# A door whose surroundings are no higher than it cannot open; it
+				# finishes in place rather than pulling its own ceiling down.
+				open = I64.max(current.ceiling, lowest - 4)
+				door = { sector, closed: current.ceiling, open, speed, phase: Opening, stays_open }
+				Activated({ ..state, doors: List.append(state.doors, door) })
+			}
 		}
 	}
 }
 
 lowest_adjacent_ceiling = |raw, state, sector, line_index, found|
 	match List.get(raw.linedefs, line_index) {
-		Err(_) => found ?? crash "door sector has no adjacent sector"
+		Err(_) => found
 		Ok(line) => {
 			next = adjacent_sector(raw, line, sector)
 			found2 = match next {
@@ -500,7 +511,7 @@ lowest_adjacent_ceiling = |raw, state, sector, line_index, found|
 
 lowest_adjacent_floor = |raw, state, sector, line_index, found|
 	match List.get(raw.linedefs, line_index) {
-		Err(_) => found ?? crash "floor sector has no adjacent sector"
+		Err(_) => found
 		Ok(line) => {
 			next = adjacent_sector(raw, line, sector)
 			found2 = match next {
@@ -785,4 +796,68 @@ expect {
 				and settled_heights.ceiling == at_rest.ceiling
 					and closing_heights.ceiling < open_heights.ceiling
 						and closed_again.ceiling == at_rest.ceiling
+}
+
+expect {
+	# L1: special 62 is the switch form of the lower-wait-raise lift (vanilla
+	# "SR Lift"), not a permanent door. On E1M1 its tags name the lift sectors
+	# driven by the walk-over special 88, so using the switch lowers the lift
+	# floor, never touches a ceiling, and the floor rises back afterwards.
+	map = DoomMap.e1m1
+	no_keys = { blue: Bool.False, yellow: Bool.False, red: Bool.False }
+	initial = DoomLevel.initial(map)
+	match DoomLevel.use_line(map, initial, 1064, no_keys) {
+		Activated(started) => {
+			lift = List.get(started.lifts, 0) ?? crash "lift missing"
+			rest = DoomLevel.heights_for(initial, lift.sector) ?? crash "sector missing"
+			lowered = DoomLevel.heights_for(advance_tics(started, 40), lift.sector) ?? crash "sector missing"
+			settled = advance_tics(started, 400)
+			raised = DoomLevel.heights_for(settled, lift.sector) ?? crash "sector missing"
+			List.is_empty(started.doors)
+				and lowered.floor < rest.floor
+					and lowered.ceiling == rest.ceiling
+						and raised == rest
+							and List.is_empty(settled.lifts)
+		}
+		_ => Bool.False
+	}
+}
+
+expect {
+	# M2: a tagged special whose tag reaches a sector with no two-sided line
+	# has nothing to move; vanilla leaves that sector alone. Validation admits
+	# such maps, so activation must answer NotUsable rather than crash.
+	sector = { floor_height: 0, ceiling_height: 128, floor_flat: "FLOOR", ceiling_flat: "CEIL", light_level: 160, special: 0, tag: 0 }
+	side = { x_offset: 0, y_offset: 0, upper_texture: Err(Null), lower_texture: Err(Null), middle_texture: Ok("WALL"), sector: 0 }
+	polygon = { subsector: 0, sector: 0, points: [{ x: 0, y: 0 }, { x: 64, y: 0 }, { x: 0, y: 64 }] }
+	raw = {
+		format: "doom",
+		map: "ORPHAN",
+		vertices: [{ x: 0, y: 0 }, { x: 64, y: 0 }],
+		linedefs: [
+			{ start_vertex: 0, end_vertex: 1, flags: 1, special: 62, tag: 1, right_sidedef: Ok(0), left_sidedef: Err(Null) },
+			{ start_vertex: 1, end_vertex: 0, flags: 1, special: 2, tag: 1, right_sidedef: Ok(0), left_sidedef: Err(Null) },
+			{ start_vertex: 0, end_vertex: 1, flags: 1, special: 23, tag: 1, right_sidedef: Ok(0), left_sidedef: Err(Null) },
+			{ start_vertex: 1, end_vertex: 0, flags: 1, special: 88, tag: 1, right_sidedef: Ok(0), left_sidedef: Err(Null) },
+		],
+		sidedefs: [side],
+		sectors: [sector, { ..sector, tag: 1 }],
+		things: [],
+		segs: [{ start_vertex: 0, end_vertex: 1, angle: 0, linedef: 0, direction: 0, offset: 0 }],
+		subsectors: [{ seg_count: 1, first_seg: 0 }],
+		nodes: [],
+		subsector_polygon_bounds: { min_x: 0, min_y: 0, max_x: 64, max_y: 64 },
+		subsector_polygons: [polygon],
+	}
+	map = DoomMap.validate(raw) ?? crash "orphan fixture should validate"
+	state = DoomLevel.initial(map)
+	no_keys = { blue: Bool.False, yellow: Bool.False, red: Bool.False }
+	unusable = |result| match result {
+		NotUsable => Bool.True
+		_ => Bool.False
+	}
+	unusable(DoomLevel.use_line(map, state, 0, no_keys))
+		and unusable(DoomLevel.cross_line(map, state, 1))
+			and unusable(DoomLevel.use_line(map, state, 2, no_keys))
+				and unusable(DoomLevel.cross_line(map, state, 3))
 }

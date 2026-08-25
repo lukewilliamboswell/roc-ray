@@ -148,7 +148,7 @@ validate_linedefs = |raw, index|
 	match List.get(raw.linedefs, index) {
 		Err(_) => Ok({})
 		Ok(line) => {
-			if line.start_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.start_vertex })) else if line.end_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.end_vertex })) else if line.start_vertex == line.end_vertex Err(DegenerateLinedef(index)) else {
+			if line.start_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.start_vertex })) else if line.end_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.end_vertex })) else if same_position(raw.vertices, line.start_vertex, line.end_vertex) Err(DegenerateLinedef(index)) else {
 				validate_side_ref(line.right_sidedef, raw.sidedefs, index, Bool.True)?
 				validate_side_ref(line.left_sidedef, raw.sidedefs, index, Bool.False)?
 				has_left = match line.left_sidedef {
@@ -159,6 +159,15 @@ validate_linedefs = |raw, index|
 			}
 		}
 	}
+
+## Two in-range vertex indices name the same point when they coincide or when
+## their coordinates are equal; either way the line has no direction.
+same_position = |vertices, a, b|
+	a == b
+		or match (List.get(vertices, a), List.get(vertices, b)) {
+			(Ok(first), Ok(second)) => first == second
+			_ => Bool.False
+		}
 
 validate_side_ref = |side, sidedefs, linedef, required|
 	match side {
@@ -187,7 +196,7 @@ validate_things = |things, index|
 validate_segs = |raw, index|
 	match List.get(raw.segs, index) {
 		Err(_) => Ok({})
-		Ok(seg) => if seg.start_vertex >= List.len(raw.vertices) Err(SegVertexOutOfRange({ seg: index, vertex: seg.start_vertex })) else if seg.end_vertex >= List.len(raw.vertices) Err(SegVertexOutOfRange({ seg: index, vertex: seg.end_vertex })) else if seg.start_vertex == seg.end_vertex Err(DegenerateSeg(index)) else if seg.linedef >= List.len(raw.linedefs) Err(SegLinedefOutOfRange({ seg: index, linedef: seg.linedef })) else if seg.direction > 1 Err(InvalidSegDirection({ seg: index, direction: seg.direction })) else validate_segs(raw, index + 1)
+		Ok(seg) => if seg.start_vertex >= List.len(raw.vertices) Err(SegVertexOutOfRange({ seg: index, vertex: seg.start_vertex })) else if seg.end_vertex >= List.len(raw.vertices) Err(SegVertexOutOfRange({ seg: index, vertex: seg.end_vertex })) else if same_position(raw.vertices, seg.start_vertex, seg.end_vertex) Err(DegenerateSeg(index)) else if seg.linedef >= List.len(raw.linedefs) Err(SegLinedefOutOfRange({ seg: index, linedef: seg.linedef })) else if seg.direction > 1 Err(InvalidSegDirection({ seg: index, direction: seg.direction })) else validate_segs(raw, index + 1)
 	}
 
 validate_subsectors = |raw, index|
@@ -217,7 +226,10 @@ validate_nodes = |raw, index|
 
 validate_child = |raw, node_index, child|
 	if child.kind == "node" {
-		if child.index >= List.len(raw.nodes) Err(NodeChildOutOfRange({ node: node_index, kind: child.kind, index: child.index })) else Ok({})
+		# Classic BSPs are built bottom-up with the root last, so a node child
+		# always precedes its parent; anything else is a cycle that `descend`
+		# could never leave.
+		if child.index >= List.len(raw.nodes) Err(NodeChildOutOfRange({ node: node_index, kind: child.kind, index: child.index })) else if child.index >= node_index Err(NodeChildNotEarlier({ node: node_index, index: child.index })) else Ok({})
 	} else if child.kind == "subsector" {
 		if child.index >= List.len(raw.subsectors) Err(NodeChildOutOfRange({ node: node_index, kind: child.kind, index: child.index })) else Ok({})
 	} else Err(InvalidNodeChildKind({ node: node_index, kind: child.kind }))
@@ -588,4 +600,45 @@ expect {
 								Ok(start) => start.angle >= 0 and start.angle < 360
 								Err(_) => Bool.False
 							}
+}
+
+expect {
+	# M1: a node graph must descend toward the last node's leaves. Classic Doom
+	# BSPs are built bottom-up with the root last, so every "node" child has a
+	# smaller index than its parent; a self-loop or forward reference is a
+	# cycle that would hang `sector_at`.
+	bbox = { top: 0, bottom: 0, left: 0, right: 0 }
+	leaf = { kind: "subsector", index: 0 }
+	self_loop = { x: -8, y: -8, dx: -8, dy: -8, right_bbox: bbox, left_bbox: bbox, right_child: { kind: "node", index: 0 }, left_child: leaf }
+	forward = { x: -8, y: -8, dx: -8, dy: -8, right_bbox: bbox, left_bbox: bbox, right_child: { kind: "node", index: 1 }, left_child: leaf }
+	root = { x: 0, y: 0, dx: 8, dy: 8, right_bbox: bbox, left_bbox: bbox, right_child: { kind: "node", index: 0 }, left_child: leaf }
+	polygon = { subsector: 0, sector: 0, points: [{ x: 0, y: 0 }, { x: 16, y: 0 }, { x: 0, y: 16 }] }
+	with_nodes = |nodes| { ..surface_fixture, segs: [{ start_vertex: 0, end_vertex: 1, angle: 0, linedef: 0, direction: 0, offset: 0 }], subsectors: [{ seg_count: 1, first_seg: 0 }], subsector_polygons: [polygon], nodes }
+	rejected = |raw, expected| match DoomMap.validate(raw) {
+		Err(NodeChildNotEarlier(detail)) => detail == expected
+		_ => Bool.False
+	}
+	accepted = |raw| match DoomMap.validate(raw) {
+		Ok(_) => Bool.True
+		Err(_) => Bool.False
+	}
+	rejected(with_nodes([self_loop]), { node: 0, index: 0 })
+		and rejected(with_nodes([forward, root]), { node: 0, index: 1 })
+			and accepted(with_nodes([{ ..forward, right_child: leaf }, root]))
+}
+
+expect {
+	# M3: a linedef or seg whose endpoints share coordinates has no direction;
+	# degeneracy is decided by position, not just by vertex index.
+	same_place = { ..surface_fixture, vertices: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 64, y: 64 }, { x: 0, y: 64 }] }
+	rejected = |raw, expected| match DoomMap.validate(raw) {
+		Err(DegenerateLinedef(index)) => index == expected
+		_ => Bool.False
+	}
+	seg_rejected = |raw, expected| match DoomMap.validate(raw) {
+		Err(DegenerateSeg(index)) => index == expected
+		_ => Bool.False
+	}
+	rejected(same_place, 0)
+		and seg_rejected({ ..surface_fixture, segs: List.map(surface_fixture.segs, |seg| if seg.start_vertex == 0 { ..seg, end_vertex: 4 } else seg), vertices: List.append(surface_fixture.vertices, { x: 0, y: 0 }) }, 0)
 }

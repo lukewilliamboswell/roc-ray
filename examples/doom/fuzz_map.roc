@@ -7,19 +7,13 @@ import fuzz.Fuzz
 import DoomMap
 import DoomLevel
 
-# ---- guards (never fix the module; exclude a known bug so fuzzing can continue) ----
+# The map bugs this target found (FUZZ_FINDINGS.md M1-M3) are fixed: cyclic
+# node graphs and coordinate-equal endpoints are now rejected by validation
+# (checked below as properties), and orphan tagged sectors are safe to query.
 
-## B1: validate_nodes accepts cyclic BSP graphs; DoomLevel.sector_at hangs.
-guard_node_cycles = Bool.True
-
-## Zero-length blocking segments (distinct vertex indices, equal coordinates).
-guard_zero_length_lines = Bool.True
-
-## Tagged specials (2/23/62/88) whose tagged sector has no two-sided line crash.
-guard_orphan_tagged_sectors = Bool.True
-
-## B4: the compiled build of DoomLevel.dynamic_sectors returns garbage indices
-## for some maps (the interpreter does not). Skip the range assertion.
+## WORKAROUND for compiler bug T1 (FUZZ_FINDINGS.md): the native build of
+## DoomLevel.dynamic_sectors returns garbage indices for some maps while the
+## interpreter is correct. The range assertion stays off until that is fixed.
 guard_dynamic_sectors = Bool.True
 
 # ---- seeds ----
@@ -209,7 +203,7 @@ build_raw = |input| {
 	}
 }
 
-# ---- guards ----
+# ---- structural predicates validation must agree with ----
 
 ## Static acyclicity: every "node" child must have a smaller index than its parent
 ## (the classic Doom BSP builds nodes bottom-up with the root last).
@@ -252,23 +246,6 @@ sector_has_two_sided_line = |raw, sector| {
 		|line| match line.left_sidedef {
 			Err(Null) => Bool.False
 			Ok(_) => sector_of_side(raw, line.right_sidedef) == Ok(sector) or sector_of_side(raw, line.left_sidedef) == Ok(sector)
-		},
-	)
-}
-
-## A tagged special (2/23/62/88) whose tag reaches a sector with no two-sided line.
-has_orphan_tagged_sector : DoomMap.Raw -> Bool
-has_orphan_tagged_sector = |raw| {
-	List.any(
-		raw.linedefs,
-		|line| {
-			tagged = line.special == 2 or line.special == 23 or line.special == 62 or line.special == 88
-			tagged
-				and line.tag != 0
-					and List.any(
-						List.map_with_index(raw.sectors, |sector, index| { sector, index }),
-						|entry| entry.sector.tag == line.tag and !sector_has_two_sided_line(raw, entry.index),
-					)
 		},
 	)
 }
@@ -343,12 +320,10 @@ test = |input| {
 	match DoomMap.validate(raw) {
 		Err(_) => Fuzz.reject
 		Ok(map) => {
-			if guard_node_cycles and !nodes_acyclic(raw) {
-				Fuzz.reject
-			} else if guard_zero_length_lines and has_zero_length_line(raw) {
-				Fuzz.reject
-			} else if guard_orphan_tagged_sectors and has_orphan_tagged_sector(raw) {
-				Fuzz.reject
+			if !nodes_acyclic(raw) {
+				crash "PROPERTY: validate accepted a cyclic node graph"
+			} else if has_zero_length_line(raw) {
+				crash "PROPERTY: validate accepted a zero-length linedef or seg"
 			} else {
 				q = input.query
 				nsec = List.len(raw.sectors)

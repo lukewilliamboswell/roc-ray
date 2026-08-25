@@ -4,7 +4,7 @@
 ## ordinary key. This example shows how each `Input` gives `update!` the latest
 ## device state, and how `update!` can change the clipboard, cursor, and window
 ## or read a pixel from the previous drawing.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
 import rr.Text

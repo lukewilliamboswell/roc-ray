@@ -13,13 +13,14 @@ import rr.Camera
 import rr.Capture
 import rr.Color
 import rr.Draw
+import rr.Keys
 import rr.Mouse
+import rr.Stdout
 import rr.Task
 import DoomControls
 import DoomLevel
 import DoomMap
 import DoomPresentation
-import DoomReplay
 import DoomRuntime
 import DoomSim
 import DoomSprites
@@ -52,7 +53,7 @@ Model : {
 	evidence : Evidence,
 }
 
-Evidence : { active : Bool, tic : U64, start_requested : Bool, movement_requested : Bool, combat_requested : Bool, door_requested : Bool, saved : U64 }
+Evidence : { active : Bool, long : Bool, stage : U64, tic : U64, mouse_x : F32, requested : List(Str), saved : U64, start_pos : DoomSim.Vec2, start_angle : DoomSim.Angle }
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
@@ -108,7 +109,7 @@ init! = App.init_for_args(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, tic: 0, start_requested: Bool.False, movement_requested: Bool.False, combat_requested: Bool.False, door_requested: Bool.False, saved: 0 } })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, long: List.contains(App.args!(startup), "--long-evidence"), stage: 0, tic: 0, mouse_x: 100, requested: [], saved: 0, start_pos: position, start_angle: angle } })
 	},
 )
 
@@ -177,75 +178,193 @@ update! = |model, input| {
 }
 
 update_evidence! = |model, input| {
-	if model.evidence.saved >= 4 {
+	required = if model.evidence.long 11 else 10
+	if model.evidence.saved >= required {
 		Err(Exit(0))
-	} else if !(model.evidence.start_requested) {
-		Task.spawn!(
-			input,
-			|| {
-				_ = Capture.screenshot!("start.png")
-				EvidenceSaved
-			},
-		)
-		Ok({ ..model, evidence: { ..model.evidence, start_requested: Bool.True } })
+	} else if input.time.cycle_count > 1400 {
+		Err(Exit(2))
+	} else if model.evidence.stage == 0 {
+		if !(valid_spawn(model)) return Err(Exit(3))
+		next = capture_state!(model, input, "spawn")
+		Keys.set_source!(Keys.holding([KeyA]))
+		Mouse.set_source!(Mouse.virtual_at({ x: 100, y: 80 }))
+		Ok({ ..next, evidence: { ..next.evidence, stage: 1 } })
+	} else if model.evidence.stage == 1 {
+		next = advance_from_input(model, input)
+		delta = DoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
+		if !(input.devices.key_pressed(KeyA) and input.devices.key_down(KeyA) and DoomSim.dot(delta, DoomControls.visual_right(model.evidence.start_angle)) < 0) return Err(Exit(3))
+		captured = capture_state!(next, input, "strafe-left")
+		Keys.set_source!(Keys.holding([KeyD]))
+		Ok({ ..captured, world: { ..captured.world, doom: { ..captured.world.doom, player: { ..captured.world.doom.player, sim: DoomSim.clock(DoomSim.initial(model.evidence.start_pos, model.evidence.start_angle)) } } }, evidence: { ..captured.evidence, stage: 2 } })
+	} else if model.evidence.stage == 2 {
+		next = advance_from_input(model, input)
+		delta = DoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
+		if !(input.devices.key_released(KeyA) and input.devices.key_pressed(KeyD) and DoomSim.dot(delta, DoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
+		captured = capture_state!(next, input, "strafe-right")
+		Keys.set_source!(Keys.holding([]))
+		Mouse.set_source!(Mouse.virtual_at({ x: 120, y: 80 }))
+		Ok({ ..captured, world: { ..captured.world, doom: { ..captured.world.doom, player: { ..captured.world.doom.player, sim: DoomSim.clock(DoomSim.initial(model.evidence.start_pos, model.evidence.start_angle)) } } }, evidence: { ..captured.evidence, stage: 3, mouse_x: 120 } })
+	} else if model.evidence.stage == 3 {
+		next = advance_from_input(model, input)
+		if !(input.devices.mouse.delta().x > 0 and DoomSim.dot(next.world.doom.player.sim.state.angle.forward(), DoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
+		captured = capture_state!(next, input, "mouse-turn")
+		corridor = at_scenario(captured, { x: -288, y: 256 }, DoomSim.Angle.from_turns(0))
+		Keys.set_source!(Keys.holding([]))
+		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 4 } })
+	} else if model.evidence.stage == 4 {
+		captured = capture_state!(model, input, "first-corridor-wall-hole")
+		Keys.set_source!(Keys.holding([KeyW]))
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 5 } })
+	} else if model.evidence.stage == 5 {
+		next = advance_from_input(model, input)
+		if current_sector(next) == 141 {
+			captured = capture_state!(next, input, "open-portal-collision")
+			colu = at_scenario(captured, { x: 752, y: 608 }, DoomSim.Angle.from_turns(0.5))
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok({ ..colu, evidence: { ..colu.evidence, stage: 6 } })
+		} else {
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok(next)
+		}
+	} else if model.evidence.stage == 6 {
+		next = advance_from_input(model, input)
+		if next.world.doom.player.sim.state.tic >= 7 {
+			captured = capture_state!(next, input, "colu-portal-navigation")
+			door = at_scenario(captured, { x: 832, y: 496 }, DoomSim.Angle.from_turns(0.25))
+			Keys.set_source!(Keys.holding([]))
+			Ok({ ..door, evidence: { ..door.evidence, stage: 7 } })
+		} else {
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok(next)
+		}
+	} else if model.evidence.stage == 7 {
+		captured = capture_state!(model, input, "door-closed")
+		Keys.set_source!(Keys.holding([KeyE]))
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 8 } })
+	} else if model.evidence.stage == 8 {
+		next = advance_from_input(model, input)
+		if List.is_empty(next.level.doors) return Err(Exit(3))
+		if next.world.doom.player.sim.state.tic >= 20 {
+			captured = capture_state!(next, input, "door-open")
+			Keys.set_source!(Keys.holding([KeySpace]))
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 9 } })
+		} else {
+			Keys.set_source!(Keys.holding([]))
+			Ok(next)
+		}
+	} else if model.evidence.stage == 9 {
+		next = advance_from_input(model, input)
+		if next.world.weapon.phase == 0 return Err(Exit(3))
+		captured = capture_state!(next, input, "combat")
+		if captured.evidence.long {
+			damage = at_scenario(captured, { x: 1258, y: 949 }, DoomSim.Angle.from_turns(0.044))
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok({ ..damage, evidence: { ..damage.evidence, stage: 10 } })
+		} else {
+			Keys.set_source!(Keys.holding([]))
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
+		}
+	} else if model.evidence.stage == 10 {
+		next = advance_from_input(model, input)
+		sector = current_sector(next)
+		special = (List.get(DoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
+		if special == 7 {
+			captured = capture_state!(next, input, "damaging-floor")
+			Keys.set_source!(Keys.holding([]))
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
+		} else {
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok(next)
+		}
 	} else {
-		match DoomReplay.command_at(model.evidence.tic) {
-			Err(ReplayFinished) => if input.time.cycle_count > 1000 Err(Exit(2)) else Ok(model)
-			Ok(command) => {
-				previous_pos = model.world.doom.player.sim.state.pos
-				extra_blockers = decoration_segments(model.decorations)
-				advanced = DoomRuntime.advance_in_map(model.world, DoomSim.tic_seconds * 1.0001, command, extra_blockers, DoomMap.e1m1, model.level)
-				crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
-				use_result = DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
-				level0 = match use_result {
-					Activated(next) => next
-					_ => crossed.level
-				}
-				exited = crossed.exited or match use_result {
-					Exit => Bool.True
-					_ => Bool.False
-				}
-				world = if exited { ..advanced.world, phase: Exited } else advanced.world
-				level = advance_level(level0, advanced.tics)
-				dynamic_changed = DoomLevel.render_changed(DoomMap.e1m1, model.level, level)
-				dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic E1M1 atlas is incomplete", render_geometry) else model.dynamic_batches
-				masked_dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic masked E1M1 atlas is incomplete", render_geometry) else model.masked_dynamic_batches
-				sprites = if advanced.tics > 0 sprite_geometry(world, model.decorations, level, world.doom.player.sim.state.pos) else model.sprites
-				blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
-				movement = !(model.evidence.movement_requested) and model.evidence.tic >= 96
-				combat = !(model.evidence.combat_requested) and advanced.fired
-				door = !(model.evidence.door_requested) and !(List.is_empty(level.doors))
-				if movement {
-					Task.spawn!(
-						input,
-						|| {
-							_ = Capture.screenshot!("movement.png")
-							EvidenceSaved
-						},
-					)
-				}
-				if combat {
-					Task.spawn!(
-						input,
-						|| {
-							_ = Capture.screenshot!("combat.png")
-							EvidenceSaved
-						},
-					)
-				}
-				if door {
-					Task.spawn!(
-						input,
-						|| {
-							_ = Capture.screenshot!("moving-door.png")
-							EvidenceSaved
-						},
-					)
-				}
-				Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, evidence: { ..model.evidence, tic: model.evidence.tic + advanced.tics, movement_requested: model.evidence.movement_requested or movement, combat_requested: model.evidence.combat_requested or combat, door_requested: model.evidence.door_requested or door } })
-			}
+		Ok(model)
+	}
+}
+
+advance_from_input = |model, input| {
+	forward = signed_command(Keys.key_down(input.devices, KeyW) or Keys.key_down(input.devices, KeyUp), Keys.key_down(input.devices, KeyS) or Keys.key_down(input.devices, KeyDown), 50)
+	side = DoomControls.side(Keys.key_down(input.devices, KeyA) or Keys.key_down(input.devices, KeyLeft), Keys.key_down(input.devices, KeyD) or Keys.key_down(input.devices, KeyRight))
+	command = { ..DoomSim.neutral, forward, side, turn: DoomControls.turn(input.devices.mouse.delta().x), fire: input.devices.mouse.button_down(Left) or Keys.key_down(input.devices, KeySpace), weapon_slot: evidence_weapon_slot(input.devices) }
+	previous_pos = model.world.doom.player.sim.state.pos
+	extra_blockers = decoration_segments(model.decorations)
+	advanced = DoomRuntime.advance_in_map(model.world, DoomSim.tic_seconds * 1.0001, command, extra_blockers, DoomMap.e1m1, model.level)
+	crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+	use_result = if Keys.key_pressed(input.devices, KeyE) DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys) else NotUsable
+	level0 = match use_result {
+		Activated(value) => value
+		_ => crossed.level
+	}
+	world = if crossed.exited { ..advanced.world, phase: Exited } else advanced.world
+	level = advance_level(level0, advanced.tics)
+	dynamic_changed = DoomLevel.render_changed(DoomMap.e1m1, model.level, level)
+	dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic E1M1 atlas is incomplete", render_geometry) else model.dynamic_batches
+	masked_dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic masked E1M1 atlas is incomplete", render_geometry) else model.masked_dynamic_batches
+	sprites = sprite_geometry(world, model.decorations, level, world.doom.player.sim.state.pos)
+	blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
+	{ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites }
+}
+
+evidence_weapon_slot = |devices|
+	if Keys.key_pressed(devices, Key2) SelectSlot(2) else if Keys.key_pressed(devices, Key3) SelectSlot(3) else if Keys.key_pressed(devices, Key4) SelectSlot(4) else if Keys.key_pressed(devices, Key5) SelectSlot(5) else if Keys.key_pressed(devices, Key6) SelectSlot(6) else if Keys.key_pressed(devices, Key8) SelectSlot(8) else KeepWeapon
+
+reset_world = |_model| {
+	start = DoomMap.e1m1.player_start() ?? crash "validated E1M1 player start missing"
+	position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
+	angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
+	(initial_runtime(DoomMap.e1m1, position, angle)).world
+}
+
+at_scenario = |model, pos, angle| {
+	# Evidence-only scenario placement is the remaining adapter duplication. It
+	# selects a stable E1M1 viewpoint; every movement, use, turn, collision and
+	# attack after placement still enters through sampled virtual devices and the
+	# same advance_from_input/runtime path as the playable app.
+	player = model.world.doom.player
+	world = { ..model.world, doom: { ..model.world.doom, player: { ..player, sim: DoomSim.clock(DoomSim.initial(pos, angle)) } } }
+	level = DoomLevel.initial(DoomMap.e1m1)
+	{ ..model, world, level, sprites: sprite_geometry(world, model.decorations, level, pos) }
+}
+
+valid_spawn = |model| {
+	sector = current_sector(model)
+	heights = DoomLevel.heights_for(model.level, sector) ?? crash "start sector missing"
+	model.world.doom.player.health == 100 and sector == 140 and heights.floor == 0 and heights.ceiling == 128
+}
+
+current_sector = |model|
+	DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(model.world.doom.player.sim.state.pos.x), y: F32.to_f64(model.world.doom.player.sim.state.pos.y) }) ?? crash "evidence player outside BSP"
+
+capture_state! = |model, input, checkpoint| {
+	sector = current_sector(model)
+	heights = DoomLevel.heights_for(model.level, sector) ?? crash "evidence sector missing"
+	special = (List.get(DoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
+	line = nearest_blocking_line(model, sector)
+	state = model.world.doom.player.sim.state
+	_ = Stdout.line!("{\"checkpoint\":\"${checkpoint}\",\"cycle\":${U64.to_str(input.time.cycle_count)},\"tic\":${U64.to_str(state.tic)},\"x\":${F32.to_str(state.pos.x)},\"y\":${F32.to_str(state.pos.y)},\"angle\":${F32.to_str(state.angle.turns())},\"sector\":${U64.to_str(sector)},\"floor\":${I64.to_str(heights.floor)},\"ceiling\":${I64.to_str(heights.ceiling)},\"special\":${U64.to_str(special)},\"health\":${I64.to_str(model.world.doom.player.health)},\"blocking_linedef\":${U64.to_str(line)}}")
+	Task.spawn!(
+		input,
+		|| {
+			_ = Capture.screenshot!("${checkpoint}.png")
+			EvidenceSaved
+		},
+	)
+	{ ..model, evidence: { ..model.evidence, requested: List.append(model.evidence.requested, checkpoint) } }
+}
+
+nearest_blocking_line = |model, sector| {
+	segments = DoomLevel.collision_segments(DoomMap.e1m1, model.level, sector)
+	pos = model.world.doom.player.sim.state.pos
+	var $best = 1000000000000000000000000000000
+	var $line = 18446744073709551615.U64
+	for segment in segments {
+		converted = { start: { x: F64.to_f32_wrap(segment.start.x), y: F64.to_f32_wrap(segment.start.y) }, end: { x: F64.to_f32_wrap(segment.end.x), y: F64.to_f32_wrap(segment.end.y) } }
+		distance = DoomSim.distance_to_segment_squared(pos, converted)
+		if distance < $best {
+			$best = distance
+			$line = segment.linedef
 		}
 	}
+	$line
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])

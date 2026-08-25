@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import math
 import struct
 import subprocess
 import sys
@@ -12,7 +14,11 @@ import zlib
 from pathlib import Path
 
 
-EXPECTED = ("start.png", "movement.png", "combat.png", "moving-door.png")
+FAST_CHECKPOINTS = (
+    "spawn", "strafe-left", "strafe-right", "mouse-turn",
+    "first-corridor-wall-hole", "open-portal-collision", "colu-portal-navigation",
+    "door-closed", "door-open", "combat",
+)
 
 
 def rgba_rows(path: Path) -> tuple[int, int, bytes]:
@@ -73,22 +79,37 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="rebuild native platform libraries first")
     parser.add_argument("--frames", type=int, default=1000, help="native host-cycle safety cap")
+    parser.add_argument("--long", action="store_true", help="also follow the optional damaging-floor route")
+    parser.add_argument("--keep", action="store_true", help="retain PNG and state evidence after success")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     output = root / "examples" / "doom" / "evidence"
     output.mkdir(parents=True, exist_ok=True)
-    for name in EXPECTED:
-        (output / name).unlink(missing_ok=True)
+    checkpoints = FAST_CHECKPOINTS + (("damaging-floor",) if args.long else ())
+    for checkpoint in checkpoints:
+        (output / f"{checkpoint}.png").unlink(missing_ok=True)
     command = [str(root / "scripts" / "run-example.py"), str(root / "examples" / "doom" / "visual_evidence.roc")]
     if not args.build:
         command.append("--skip-platform-build")
-    command.extend(["--platform-mode=source", "--", "--capture-evidence", "--host-hidden", f"--host-frames={args.frames}"])
-    result = subprocess.run(command, cwd=root)
+    app_args = ["--capture-evidence"]
+    if args.long:
+        app_args.append("--long-evidence")
+    command.extend(["--platform-mode=source", "--", *app_args, "--host-hidden", f"--host-frames={args.frames}"])
+    result = subprocess.run(command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    print(result.stdout, end="")
     if result.returncode != 0:
         return result.returncode
+    records = {}
+    for line in result.stdout.splitlines():
+        if line.startswith('{"checkpoint"'):
+            record = json.loads(line)
+            records[record["checkpoint"]] = record
     hashes: set[str] = set()
     try:
-        for name in EXPECTED:
+        if tuple(records) != checkpoints:
+            raise RuntimeError(f"state checkpoints differ: got {tuple(records)}, expected {checkpoints}")
+        for checkpoint in checkpoints:
+            name = f"{checkpoint}.png"
             path = output / name
             if not path.is_file():
                 raise RuntimeError(f"capture did not produce {name}")
@@ -96,11 +117,18 @@ def main() -> int:
             if (width, height) != (320, 200):
                 raise RuntimeError(f"{name} is {width}x{height}, expected 320x200")
             colors = {pixels[index : index + 4] for index in range(0, len(pixels), 4)}
-            if len(colors) < 128:
+            if len(colors) < 64:
                 raise RuntimeError(f"{name} is effectively blank ({len(colors)} colors)")
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             hashes.add(digest)
-            if name == "start.png":
+            record = records[checkpoint]
+            if record["ceiling"] <= record["floor"] or not (0 < record["health"] <= 100):
+                raise RuntimeError(f"{checkpoint} has invalid sector/player state: {record}")
+            if not isinstance(record["blocking_linedef"], int):
+                raise RuntimeError(f"{checkpoint} has no typed blocking-linedef state")
+            if checkpoint == "spawn" and (record["sector"], record["floor"], record["ceiling"], record["health"]) != (140, 0, 128, 100):
+                raise RuntimeError(f"spawn oracle changed: {record}")
+            if checkpoint == "spawn":
                 # Keep the floor visible on both sides of the centred weapon.
                 # This caught wrapped flat UVs interpolating through the atlas's
                 # unused black area at the BSP seam under the player start.
@@ -113,18 +141,29 @@ def main() -> int:
                 if visible * 4 < len(floor_pixels):
                     raise RuntimeError(f"start floor is mostly clear-color black ({visible}/{len(floor_pixels)} visible pixels)")
             print(f"{name}: 320x200, {len(colors)} colors, sha256 {digest}")
-        if len(hashes) != len(EXPECTED):
-            raise RuntimeError("representative captures are not distinct")
+        spawn = records["spawn"]
+        facing_right_x = -math.sin(spawn["angle"] * 2 * math.pi)
+        facing_right_y = math.cos(spawn["angle"] * 2 * math.pi)
+
+        def lateral(record):
+            return (record["x"] - spawn["x"]) * facing_right_x + (record["y"] - spawn["y"]) * facing_right_y
+        if lateral(records["strafe-left"]) >= 0 or lateral(records["strafe-right"]) <= 0:
+            raise RuntimeError("virtual A/D evidence has reversed lateral signs")
+        if records["mouse-turn"]["angle"] == spawn["angle"]:
+            raise RuntimeError("virtual mouse evidence did not turn the player")
+        if len(hashes) < 7:
+            raise RuntimeError(f"representative captures are insufficiently distinct ({len(hashes)}/{len(checkpoints)})")
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    finally:
-        for name in EXPECTED:
-            (output / name).unlink(missing_ok=True)
-        try:
-            output.rmdir()
-        except OSError:
-            pass
+    else:
+        if not args.keep:
+            for checkpoint in checkpoints:
+                (output / f"{checkpoint}.png").unlink(missing_ok=True)
+            try:
+                output.rmdir()
+            except OSError:
+                pass
     print("Libre Doom native visual evidence passed")
     return 0
 

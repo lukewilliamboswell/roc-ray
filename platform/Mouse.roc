@@ -55,7 +55,8 @@ Mouse := [].{
 		}
 
 	## Cursor visibility and capture policy, applied atomically as one tagged
-	## operation by `Mouse.set_cursor_mode!`.
+	## operation by `Mouse.set_cursor_mode!`. A `Locked` choice remains desired
+	## across focus loss and is reasserted by the native host on focus regain.
 	CursorMode : [Visible, Hidden, Locked]
 
 	## Flatten a cursor shape to the raylib code the host passes to
@@ -104,6 +105,8 @@ Mouse := [].{
 	set_cursor! = |cursor| MouseHost.set_cursor!(cursor_code(cursor))
 
 	## Set cursor visibility and capture, applied atomically as one operation.
+	## `Locked` is retained across focus loss; the native host reasserts it after
+	## sampling the focus-regain cycle's legitimate mouse delta.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor_mode! : CursorMode => {}

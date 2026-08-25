@@ -623,6 +623,7 @@ test "allocation identity registry refuses saturation without overwriting live e
     try std.testing.expect(!identities.put(0xFFFF_FFF0, 99_999, 1));
     try std.testing.expectEqual(@as(u64, 1), identities.get(0x1000).?.id);
 }
+var active_cursor_focus = CursorFocusState{};
 
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
@@ -8306,6 +8307,40 @@ const CursorMode = enum {
     locked,
 };
 
+const CursorFocusState = struct {
+    desired: CursorMode = .visible,
+    was_focused: bool = false,
+};
+
+const CursorFocusTransition = struct {
+    state: CursorFocusState,
+    reassert_lock: bool,
+};
+
+fn cursorFocusTransition(state: CursorFocusState, focused: bool) CursorFocusTransition {
+    return .{
+        .state = .{ .desired = state.desired, .was_focused = focused },
+        .reassert_lock = state.desired == .locked and focused and !state.was_focused,
+    };
+}
+
+fn applyCursorMode(mode: CursorMode) void {
+    switch (mode) {
+        .visible => raylib.enableCursor(),
+        .hidden => {
+            raylib.enableCursor();
+            raylib.hideCursor();
+        },
+        .locked => raylib.disableCursor(),
+    }
+}
+
+fn serviceCursorFocus(focused: bool) void {
+    const transition = cursorFocusTransition(active_cursor_focus, focused);
+    active_cursor_focus = transition.state;
+    if (transition.reassert_lock) applyCursorMode(.locked);
+}
+
 fn cursorModeFromCode(code: u8) CursorMode {
     return switch (code) {
         1 => .hidden,
@@ -8319,14 +8354,9 @@ fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
     const effect = EffectScope.begin("Mouse.set_cursor_mode!", 0);
     defer effect.end();
     if (active_headless) return;
-    switch (cursorModeFromCode(mode_code)) {
-        .visible => raylib.enableCursor(),
-        .hidden => {
-            raylib.enableCursor();
-            raylib.hideCursor();
-        },
-        .locked => raylib.disableCursor(),
-    }
+    const mode = cursorModeFromCode(mode_code);
+    active_cursor_focus.desired = mode;
+    applyCursorMode(mode);
 }
 
 fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
@@ -8356,6 +8386,28 @@ test "cursor mode codes map invalid values to visible" {
     try std.testing.expectEqual(CursorMode.hidden, cursorModeFromCode(1));
     try std.testing.expectEqual(CursorMode.locked, cursorModeFromCode(2));
     try std.testing.expectEqual(CursorMode.visible, cursorModeFromCode(255));
+}
+
+test "locked cursor reasserts on first focus and every focus regain only" {
+    var state = CursorFocusState{ .desired = .locked };
+    var transition = cursorFocusTransition(state, false);
+    try std.testing.expect(!transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, true);
+    try std.testing.expect(transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, true);
+    try std.testing.expect(!transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, false);
+    try std.testing.expect(!transition.reassert_lock);
+    transition = cursorFocusTransition(transition.state, true);
+    try std.testing.expect(transition.reassert_lock);
+}
+
+test "visible and hidden cursor modes never request focus reassertion" {
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .visible }, true).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .hidden }, true).reassert_lock);
 }
 
 test "window minimums and exit keys clamp negatives to the no-op zero" {
@@ -12578,7 +12630,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     );
     raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
-    if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
+    const configured_cursor_mode = cursorModeFromCode(app_config.cursor_mode);
+    active_cursor_focus = .{ .desired = configured_cursor_mode, .was_focused = false };
+    applyCursorMode(configured_cursor_mode);
     active_mouse_cursor_code = 255;
 
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
@@ -12679,6 +12733,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const frame_time: f32 = if (cycle_count == 0) 0 else (fixed_step orelse raylib.getFrameTime());
         const now_ns: u64 = captureAdjustedClock(real_ns, fixed_step);
         updateMusicStreams();
+        const window = windowState();
 
         applyInputScripts(options, cycle_count);
         // Text is taken first, and either way: a scripted frame that left the
@@ -12697,6 +12752,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // Taken either way: notches turned while the pointer was scripted
         // would otherwise land on the cycle the app hands it back.
         const hardware_wheel = raylib.takeMouseWheelMove();
+        // Preserve the delta raylib already sampled for this focus cycle, then
+        // reassert an authorized lock. DisableCursor can warp the native cursor;
+        // doing it after sampling avoids replacing real motion with that warp.
+        serviceCursorFocus(window.focused);
         const mouse_wheel = if (virtual_mouse_active)
             raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel }
         else
@@ -12733,7 +12792,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = window,
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = now_ns,

@@ -6489,8 +6489,8 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_a868748fcc059834
-pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_f632156656feb70e
+pub const __AnonStruct_f632156656feb70e = if (@sizeOf(usize) == 4) extern struct {
     record_max_frames: u64,
     default_font_path: RocStr,
     output_dir: RocStr,
@@ -6507,7 +6507,7 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     record_scale_numerator: u32,
     target_fps: i32,
     width: i32,
-    cursor_visible: bool,
+    cursor_mode: u8,
     fullscreen: bool,
     record_cursor: u8,
     record_enabled: bool,
@@ -6551,7 +6551,7 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     record_scale_numerator: u32,
     target_fps: i32,
     width: i32,
-    cursor_visible: bool,
+    cursor_mode: u8,
     fullscreen: bool,
     record_cursor: u8,
     record_enabled: bool,
@@ -6582,12 +6582,12 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_a868748fcc059834) != 160) @compileError("__AnonStruct_a868748fcc059834 size mismatch");
-        if (@alignOf(__AnonStruct_a868748fcc059834) != 8) @compileError("__AnonStruct_a868748fcc059834 alignment mismatch");
+        if (@sizeOf(__AnonStruct_f632156656feb70e) != 160) @compileError("__AnonStruct_f632156656feb70e size mismatch");
+        if (@alignOf(__AnonStruct_f632156656feb70e) != 8) @compileError("__AnonStruct_f632156656feb70e alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_a868748fcc059834) != 112) @compileError("__AnonStruct_a868748fcc059834 size mismatch");
-        if (@alignOf(__AnonStruct_a868748fcc059834) != 8) @compileError("__AnonStruct_a868748fcc059834 alignment mismatch");
+        if (@sizeOf(__AnonStruct_f632156656feb70e) != 112) @compileError("__AnonStruct_f632156656feb70e size mismatch");
+        if (@alignOf(__AnonStruct_f632156656feb70e) != 8) @compileError("__AnonStruct_f632156656feb70e alignment mismatch");
     }
 }
 
@@ -12326,7 +12326,7 @@ pub const SqliteHostExec_script = __AnonStruct_e7ff50a9dfab1a8d;
 pub const CmdHostRunArg0 = __AnonStruct_3fe396bc5ba0c31c;
 pub const CmdHostRunArg0Envs = __AnonStruct_82a96c5d55d63488;
 pub const CmdHostRun = __AnonStruct_fa110e8829dc221b;
-pub const App_config_for_host = __AnonStruct_a868748fcc059834;
+pub const App_config_for_host = __AnonStruct_f632156656feb70e;
 pub const Update_for_hostArg1 = __AnonStruct_cf3def8e4b7f351;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
 pub const Update_for_hostArg1Time = __AnonStruct_db5a281b648e1efe;
@@ -13101,8 +13101,8 @@ pub const __AnonStruct_8fd71e3705bdb8b5Release = struct {
     }
 };
 
-pub const __AnonStruct_a868748fcc059834Release = struct {
-    pub fn release(value: __AnonStruct_a868748fcc059834, roc_host: *RocHost) void {
+pub const __AnonStruct_f632156656feb70eRelease = struct {
+    pub fn release(value: __AnonStruct_f632156656feb70e, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13428,7 +13428,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_3d573c3bcb10a375) return __AnonStruct_3d573c3bcb10a375Release;
     if (T == __AnonStruct_def8e181e644dca4) return __AnonStruct_def8e181e644dca4Release;
     if (T == __AnonStruct_8fd71e3705bdb8b5) return __AnonStruct_8fd71e3705bdb8b5Release;
-    if (T == __AnonStruct_a868748fcc059834) return __AnonStruct_a868748fcc059834Release;
+    if (T == __AnonStruct_f632156656feb70e) return __AnonStruct_f632156656feb70eRelease;
     if (T == __AnonStruct_cf3def8e4b7f351) return __AnonStruct_cf3def8e4b7f351Release;
     if (T == __AnonStruct_1339741edbb01404) return __AnonStruct_1339741edbb01404Release;
     if (T == RocListWith(__AnonStruct_59fc16acdd7d0c98, false)) return RocListSpineRelease(RocListWith(__AnonStruct_59fc16acdd7d0c98, false));
@@ -14492,7 +14492,7 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // Roc exports these symbols from the app with their natural C ABI signatures.
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct_a868748fcc059834;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct_f632156656feb70e;
 
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host() callconv(.c) Init_for_hostResult;

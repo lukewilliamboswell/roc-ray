@@ -78,9 +78,6 @@ init! = App.init_for_args(
 	},
 	|startup| {
 		evidence_active = List.contains(App.args!(startup), "--capture-evidence")
-		# Reapply capture after native-window creation; see App.Config cursor-mode
-		# transport notes in the original vertical-slice example.
-		App.set_cursor_mode!(startup, Locked)
 		store = Assets.Store.open!(Assets.working_directory("examples/doom/assets"))?
 		world_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/world_atlas.png")?
 		sprite_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/sprite_atlas.png")?

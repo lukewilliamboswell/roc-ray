@@ -68,10 +68,7 @@ init! = App.init(
 		.with_size({ width: 1280, height: 720 })
 		.with_frame_pacing(VSync)
 		.with_cursor_mode(Locked),
-	|startup| {
-		# Reapply capture after native-window creation; see App.Config cursor-mode
-		# transport notes in the original vertical-slice example.
-		App.set_cursor_mode!(startup, Locked)
+	|_startup| {
 		store = Assets.Store.open!(Assets.working_directory("examples/doom/assets"))?
 		world_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/world_atlas.png")?
 		sprite_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/sprite_atlas.png")?

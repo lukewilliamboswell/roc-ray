@@ -4,35 +4,17 @@ import fuzz.Fuzz
 import DoomSim
 
 # Fuzz target for the pure DoomSim tic layer. Every property crashes with a
-# "PROPERTY: <name>" message so the runner captures it; guards below exclude
-# already-recorded bugs so a campaign can keep looking for the next one.
+# "PROPERTY: <name>" message so the runner captures it. The bugs this target
+# found (FUZZ_FINDINGS.md S1-S4) are fixed; every property now runs
+# unconditionally.
 
-## S1 (fixed): `wrap_turn` used to recurse by +/-1 and hang for |turns| >= 2^24
-## or non-finite input. The guard excluded those inputs from the Angle property.
-guard_angle_hang = Bool.False
-
-## B3 guard: the slide path is not swept against the other blockers, so a
-## slide can clip a second segment's corner. Only report grazes deeper than
-## `graze_depth` map units so deeper tunnelling is still visible.
+## Grazes shallower than this many map units are tolerated by the path check;
+## the sim samples the sweep at 64 points, so exact contact is not detectable.
 graze_depth : F32
 graze_depth = 2
 
-## Skip the graze check entirely so a full crossing can still be found.
-guard_graze = Bool.True
-
-## B4 guard: with two or more blockers the slide can cross a second segment
-## outright. Restrict the collision property to a single blocker.
-guard_multi_blocker = Bool.True
-
-## Guard for NaN/negative elapsed handling in `advance`.
-guard_wild_elapsed = Bool.False
-
 ## Partition drift is expected F32 behaviour; report it only when asked.
 report_partition_drift = Bool.False
-
-## B2 guard: DoomSim.sqrt is Newton with 14 fixed iterations, so it only
-## converges for inputs in roughly [1e-7, 1e7] (lengths 3e-4 .. 3162).
-guard_sqrt = Bool.True
 
 Vec2 : { x : F32, y : F32 }
 
@@ -129,8 +111,7 @@ test = |input| {
 check_angle : Input -> {}
 check_angle = |input| {
 	t = bits_to_f32(input.turn_bits)
-	excluded = guard_angle_hang and (!(F32.is_finite(t)) or F32.abs(t) >= two_pow_24)
-	if !excluded {
+	{
 		r = DoomSim.Angle.from_turns(t).turns()
 		if !(F32.is_finite(r)) or r < 0 or r >= 1 {
 			crash "PROPERTY: angle_range: from_turns(${Str.inspect(t)}) -> ${Str.inspect(r)}"
@@ -149,8 +130,7 @@ check_sqrt : Input -> {}
 check_sqrt = |input| {
 	v = bits_to_f32(input.sqrt_bits)
 	in_domain = F32.is_finite(v) and v > 0 and v <= 100000000
-	excluded = guard_sqrt and (v < 0.0000001 or v > 10000000)
-	if in_domain and !excluded {
+	if in_domain {
 		got = DoomSim.sqrt(v)
 		want = F32.sqrt(v)
 		rel = F32.abs(got - want) / want
@@ -251,7 +231,7 @@ path_penetrates = |p0, p1, s| {
 check_collision : DoomSim.State, DoomSim.Command, List(DoomSim.Segment) -> {}
 check_collision = |state0, command, blockers| {
 	start_clear = !(DoomSim.any_collision(state0.pos, radius, blockers))
-	if start_clear and !(guard_multi_blocker and List.len(blockers) > 1) {
+	if start_clear {
 		s1 = DoomSim.tic(state0, command, blockers)
 		for b in blockers {
 			d2 = DoomSim.distance_to_segment_squared(s1.pos, b)
@@ -261,7 +241,7 @@ check_collision = |state0, command, blockers| {
 			if segments_cross(state0.pos, s1.pos, b) {
 				crash "PROPERTY: tunnel_cross: centre path ${Str.inspect(state0.pos)} -> ${Str.inspect(s1.pos)} crosses ${Str.inspect(b)}"
 			}
-			if !guard_graze and path_penetrates(state0.pos, s1.pos, b) {
+			if path_penetrates(state0.pos, s1.pos, b) {
 				crash "PROPERTY: tunnel_graze: centre path ${Str.inspect(state0.pos)} -> ${Str.inspect(s1.pos)} passes through ${Str.inspect(b)}"
 			}
 		}
@@ -318,8 +298,7 @@ check_advance_sequence = |state0, command, blockers, elapsed_seq| {
 check_wild_elapsed : DoomSim.State, DoomSim.Command, List(DoomSim.Segment), U64 -> {}
 check_wild_elapsed = |state0, command, blockers, bits| {
 	elapsed = bits_to_f32(bits)
-	excluded = guard_wild_elapsed and !(F32.is_finite(elapsed) and elapsed >= 0)
-	if !excluded {
+	{
 		result = DoomSim.advance(DoomSim.clock(state0), elapsed, command, blockers)
 		check_advance_result("advance_wild(${Str.inspect(elapsed)})", result)
 		if result.clock.state.tic != state0.tic + result.tics {

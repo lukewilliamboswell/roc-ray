@@ -136,27 +136,76 @@ DoomSim := [].{
 	}
 
 	## Try the whole displacement. On contact, remove the component normal to
-	## the first blocking segment and try the tangent displacement instead. This
-	## is the composable core of Doom's wall-slide behavior without map policy.
+	## the earliest blocking segment and try the tangent displacement instead.
+	## The slide is swept too, so it cannot clip or cross a second blocker; if
+	## it would, the player stays put, as in Doom's `P_SlideMove`. This is the
+	## composable core of wall sliding without map policy.
 	move_with_slide : Vec2, Vec2, F32, List(Segment) -> Vec2
 	move_with_slide = |position, displacement, radius, blockers| {
 		candidate = add(position, displacement)
-		var $result = candidate
-		var $handled = Bool.False
+		var $hit = Err(NoHit)
+		var $hit_sample = collision_samples + 1
 		for blocker in blockers {
-			if !($handled) and sweep_hits_segment(position, candidate, radius, blocker) {
-				$handled = Bool.True
-				tangent = normalize(sub(blocker.end, blocker.start))
-				slide = scale(tangent, dot(displacement, tangent))
+			match first_hit_sample(position, candidate, radius, blocker) {
+				Ok(sample) if sample < $hit_sample => {
+					$hit_sample = sample
+					$hit = Ok(blocker)
+				}
+				_ => {}
+			}
+		}
+		match $hit {
+			Err(NoHit) => candidate
+			Ok(blocker) => {
+				slide = along(displacement, blocker)
 				slide_candidate = add(position, slide)
 				# A portal can leave the player radius overlapping an adjacent closed
 				# boundary (notably E1M1's narrow sector 142). Permit motion that does
-				# not deepen an existing overlap, so the player can slide out rather
-				# than becoming permanently pinned by that other boundary.
-				$result = if any_deeper_penetration(position, slide_candidate, radius, blockers) position else slide_candidate
+				# not deepen an existing overlap anywhere along the slide, so the
+				# player can slide out rather than becoming permanently pinned.
+				others = List.keep_if(blockers, |other| other != blocker)
+				match first_deepening_blocker(position, slide_candidate, radius, blockers) {
+					Err(NoHit) => slide_candidate
+					Ok(_) => match first_deepening_blocker(position, slide_candidate, radius, others) {
+						Err(NoHit) => position
+						Ok(second) => {
+							# Like `P_SlideMove`'s retry: when the first wall's slide is
+							# blocked (typically at a corner it shares with another wall),
+							# slide the original move along that other wall instead, so
+							# a corner is rounded rather than sticky.
+							corner_candidate = add(position, along(displacement, second))
+							if path_deepens_penetration(position, corner_candidate, radius, blockers) position else corner_candidate
+						}
+					}
+				}
 			}
 		}
-		$result
+	}
+
+	## The component of a displacement along a segment's direction.
+	along : Vec2, Segment -> Vec2
+	along = |displacement, segment| {
+		tangent = normalize(sub(segment.end, segment.start))
+		scale(tangent, dot(displacement, tangent))
+	}
+
+	## The blocker whose overlap the path deepens earliest, if any.
+	first_deepening_blocker : Vec2, Vec2, F32, List(Segment) -> Try(Segment, [NoHit])
+	first_deepening_blocker = |from, to, radius, blockers| {
+		var $found = Err(NoHit)
+		var $found_sample = collision_samples + 1
+		for blocker in blockers {
+			before = distance_to_segment_squared(from, blocker)
+			for index in List.map_with_index(List.repeat({}, collision_samples), |_unit, index| index) {
+				amount = U64.to_f32(index + 1) / U64.to_f32(collision_samples)
+				after = distance_to_segment_squared(add(from, scale(sub(to, from), amount)), blocker)
+				if index < $found_sample and after < radius * radius - 0.000001 and after < before - 0.000001 {
+					$found_sample = index
+					$found = Ok(blocker)
+				}
+			}
+		}
+		$found
 	}
 
 	any_collision : Vec2, F32, List(Segment) -> Bool
@@ -174,6 +223,39 @@ DoomSim := [].{
 				after < radius * radius - 0.000001 and after < before - 0.000001
 			},
 		)
+
+	## Whether any sampled point of the path overlaps a blocker more deeply
+	## than the start did. Sampling the whole path, not just its end, is what
+	## stops a slide from passing through a segment and coming out clear.
+	path_deepens_penetration : Vec2, Vec2, F32, List(Segment) -> Bool
+	path_deepens_penetration = |from, to, radius, blockers| {
+		var $deepens = Bool.False
+		for blocker in blockers {
+			before = distance_to_segment_squared(from, blocker)
+			for index in List.map_with_index(List.repeat({}, collision_samples), |_unit, index| index) {
+				amount = U64.to_f32(index + 1) / U64.to_f32(collision_samples)
+				after = distance_to_segment_squared(add(from, scale(sub(to, from), amount)), blocker)
+				if after < radius * radius - 0.000001 and after < before - 0.000001 {
+					$deepens = Bool.True
+				}
+			}
+		}
+		$deepens
+	}
+
+	## The first sample index along the sweep at which the circle touches the
+	## segment, so the nearest of several blockers can be chosen.
+	first_hit_sample : Vec2, Vec2, F32, Segment -> Try(U64, [NoHit])
+	first_hit_sample = |from, to, radius, segment| {
+		var $hit = Err(NoHit)
+		for index in List.map_with_index(List.repeat({}, collision_samples), |_unit, index| index) {
+			amount = U64.to_f32(index + 1) / U64.to_f32(collision_samples)
+			if $hit == Err(NoHit) and circle_hits_segment(add(from, scale(sub(to, from), amount)), radius, segment) {
+				$hit = Ok(index)
+			}
+		}
+		$hit
+	}
 
 	circle_hits_segment : Vec2, F32, Segment -> Bool
 	circle_hits_segment = |center, radius, segment| {
@@ -196,13 +278,13 @@ DoomSim := [].{
 
 	distance_to_segment_squared : Vec2, Segment -> F32
 	distance_to_segment_squared = |center, segment| {
-		along = sub(segment.end, segment.start)
-		segment_len_squared = length_squared(along)
+		direction = sub(segment.end, segment.start)
+		segment_len_squared = length_squared(direction)
 		closest = if segment_len_squared <= 0 {
 			segment.start
 		} else {
-			amount = clamp(dot(sub(center, segment.start), along) / segment_len_squared, 0, 1)
-			add(segment.start, scale(along, amount))
+			amount = clamp(dot(sub(center, segment.start), direction) / segment_len_squared, 0, 1)
+			add(segment.start, scale(direction, amount))
 		}
 		distance_squared(center, closest)
 	}
@@ -230,18 +312,10 @@ DoomSim := [].{
 	}
 	clamp : F32, F32, F32 -> F32
 	clamp = |value, low, high| F32.max(low, F32.min(value, high))
+
+	## Non-positive input is a length of zero; `F32.sqrt` would give NaN.
 	sqrt : F32 -> F32
-	sqrt = |value| {
-		if value <= 0 {
-			0
-		} else {
-			var $guess = if value >= 1 value else 1
-			for _ in List.repeat({}, 14) {
-				$guess = ($guess + value / $guess) * 0.5
-			}
-			$guess
-		}
-	}
+	sqrt = |value| if value <= 0 0 else F32.sqrt(value)
 
 	tic_rate = 35.U64
 	tic_seconds = 1 / 35
@@ -350,4 +424,69 @@ expect {
 							and in_range(tiny_negative)
 								and approx(DoomSim.Angle.from_turns(-0.25).turns(), 0.75)
 									and approx(DoomSim.Angle.from_turns(2.5).turns(), 0.5)
+}
+
+expect {
+	# S2: square roots stay accurate at map scale and below; E1M1's bounding
+	# diagonal is about 5213 units (length squared 2.7e7) and normalize sees it.
+	relative = |value, expected| F32.abs(value - expected) <= expected * 0.0001
+	relative(DoomSim.sqrt(27000000), 5196.1524)
+		and relative(DoomSim.sqrt(100000000), 10000)
+			and relative(DoomSim.sqrt(1000000000), 31622.777)
+				and relative(DoomSim.sqrt(0.0000001), 0.00031622776)
+					and DoomSim.sqrt(0) == 0
+						and DoomSim.sqrt(-4) == 0
+							and relative(DoomSim.length({ x: 3000, y: 4000 }), 5000)
+}
+
+expect {
+	# S3/S4: a tic that starts clear of every blocker never sweeps the player
+	# circle through one. The first case slides into a second wall at near-cap
+	# momentum, the second clips a corner mid-path.
+	line_side = |a, b, p| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
+	path_clear = |from, to, blockers| {
+		var $clear = Bool.True
+		for step in List.map_with_index(List.repeat({}, 64), |_unit, index| index) {
+			amount = U64.to_f32(step + 1) / 64
+			point = DoomSim.add(from, DoomSim.scale(DoomSim.sub(to, from), amount))
+			for blocker in blockers {
+				if DoomSim.distance_to_segment_squared(point, blocker) < DoomSim.player_radius * DoomSim.player_radius - 0.001 {
+					$clear = Bool.False
+				}
+			}
+		}
+		$clear
+	}
+	crossing_blockers = [
+		{ start: { x: -177, y: -200 }, end: { x: -104, y: 142 } },
+		{ start: { x: -197, y: 171 }, end: { x: 118, y: -36 } },
+		{ start: { x: -111, y: 167 }, end: { x: 122, y: -161 } },
+	]
+	crossing_start = { ..DoomSim.initial({ x: -146, y: 118 }, DoomSim.Angle.from_turns(0)), momentum: { x: 36.6, y: 36.6 } }
+	crossing = DoomSim.tic(crossing_start, { ..DoomSim.neutral, turn: -0.617, forward: -67, side: -100 }, crossing_blockers)
+	second = List.get(crossing_blockers, 1) ?? crash "blocker missing"
+	same_side = line_side(second.start, second.end, crossing_start.pos) * line_side(second.start, second.end, crossing.pos) > 0
+	corner_blockers = [
+		{ start: { x: 39, y: -28 }, end: { x: -28, y: -28 } },
+		{ start: { x: -180, y: -198 }, end: { x: 95, y: 95 } },
+		{ start: { x: 95, y: 100 }, end: { x: -62, y: -200 } },
+	]
+	corner_start = { ..DoomSim.initial({ x: 73, y: 95 }, DoomSim.Angle.from_turns(0.934)), momentum: { x: 31.5, y: 31.5 } }
+	corner = DoomSim.tic(corner_start, { ..DoomSim.neutral, turn: 0.927, forward: -38, side: -38 }, corner_blockers)
+	same_side
+		and path_clear(crossing_start.pos, crossing.pos, crossing_blockers)
+			and path_clear(corner_start.pos, corner.pos, corner_blockers)
+}
+
+expect {
+	# A corner shared by a vertical and a horizontal wall (E1M1 at (192, 1344))
+	# must not pin a player approaching it diagonally: the move slides along
+	# whichever wall admits it, regardless of which wall is listed first.
+	vertical = { start: { x: 192, y: 1344 }, end: { x: 192, y: 1472 } }
+	horizontal = { start: { x: 144, y: 1344 }, end: { x: 192, y: 1344 } }
+	pos = { x: 195.7, y: 1322.4 }
+	first = DoomSim.move_with_slide(pos, { x: 2, y: 10 }, 16, [vertical, horizontal])
+	second = DoomSim.move_with_slide(pos, { x: 2, y: 10 }, 16, [horizontal, vertical])
+	clear = |point| DoomSim.distance_to_segment_squared(point, vertical) >= 256 and DoomSim.distance_to_segment_squared(point, horizontal) >= 256
+	first.x > pos.x and second.x > pos.x and clear(first) and clear(second)
 }

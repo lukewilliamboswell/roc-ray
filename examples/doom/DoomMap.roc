@@ -72,26 +72,28 @@ DoomMap := [].{
 		special : Special,
 	}
 
-	Map :: Raw.{
+	Map :: { raw : Raw, blocking_segments : List(BlockingSegment) }.{
 		raw : Map -> Raw
-		raw = |Map.(value)| value
+		raw = |Map.(value)| value.raw
 
 		wall_spans : Map -> List(WallSpan)
-		wall_spans = |Map.(value)| derive_all_spans(value)
+		wall_spans = |Map.(value)| derive_all_spans(value.raw)
 
 		## Re-derive spans from application-owned moving sector heights. The list
 		## must preserve the validated map's sector order and cardinality.
 		wall_spans_at : Map, List(SectorHeights) -> List(WallSpan)
-		wall_spans_at = |Map.(value), heights| if List.len(heights) != List.len(value.sectors) crash "sector height count mismatch" else derive_all_spans({ ..value, sectors: resolve_sector_heights(value.sectors, heights, 0, []) })
+		wall_spans_at = |Map.(value), heights| if List.len(heights) != List.len(value.raw.sectors) crash "sector height count mismatch" else derive_all_spans({ ..value.raw, sectors: resolve_sector_heights(value.raw.sectors, heights, 0, []) })
 
 		surface_polygons : Map -> List(SurfacePolygon)
-		surface_polygons = |Map.(value)| derive_surfaces(value, 0, [])
+		surface_polygons = |Map.(value)| derive_surfaces(value.raw, 0, [])
 
+		## Return the static collision geometry derived once during validation.
+		## Per-sector moving geometry remains the responsibility of DoomLevel.
 		blocking_segments : Map -> List(BlockingSegment)
-		blocking_segments = |Map.(value)| derive_blocking_segments(value, 0)
+		blocking_segments = |Map.(value)| value.blocking_segments
 
 		player_start : Map -> Try(PlayerStart, [PlayerStartMissing, MultiplePlayerStarts])
-		player_start = |Map.(value)| find_player_start(value.things, 0, Err(PlayerStartMissing))
+		player_start = |Map.(value)| find_player_start(value.raw.things, 0, Err(PlayerStartMissing))
 	}
 
 	## Decode the asset pipeline's deterministic `map.json`, then validate every
@@ -122,7 +124,7 @@ DoomMap := [].{
 			validate_subsectors(raw, 0)?
 			validate_nodes(raw, 0)?
 			validate_polygons(raw, 0, [])?
-			Ok(Map.(raw))
+			Ok(Map.({ raw, blocking_segments: derive_blocking_segments(raw, 0) }))
 		}
 	}
 

@@ -438,7 +438,7 @@ activate_doors = |raw, state, sectors, index, stays_open, speed|
 	match List.get(sectors, index) {
 		Err(_) => state
 		Ok(sector) => {
-			next = match activate_door(raw, state, sector, stays_open, speed) {
+			next = if List.any(state.doors, |active| active.sector == sector) state else match activate_door(raw, state, sector, stays_open, speed) {
 				Activated(value) => value
 				_ => state
 			}
@@ -455,12 +455,28 @@ tagged_sectors = |sectors, tag, index|
 		}
 	}
 
+## Vanilla `EV_VerticalDoor`: using a sector whose door is already moving
+## reverses it rather than rebuilding it, so the original closed height is
+## kept. A closing door reopens; an opening or waiting door starts closing.
+## Tagged activation (`EV_DoDoor`) instead leaves an active door alone.
 activate_door = |raw, state, sector, stays_open, speed| {
-	current = List.get(state.heights, sector) ?? crash "sector state missing"
-	open = lowest_adjacent_ceiling(raw, state, sector, 0, Err(NoAdjacent)) - 4
-	door = { sector, closed: current.ceiling, open, speed, phase: Opening, stays_open }
-	without = List.keep_if(state.doors, |active| active.sector != sector)
-	Activated({ ..state, doors: List.append(without, door) })
+	match List.find_first(state.doors, |active| active.sector == sector) {
+		Ok(active) => {
+			reversed = match active.phase {
+				Closing => { ..active, phase: Opening }
+				Opening => { ..active, phase: Closing }
+				Waiting(_) => { ..active, phase: Closing }
+			}
+			doors = List.map(state.doors, |door| if door.sector == sector reversed else door)
+			Activated({ ..state, doors })
+		}
+		Err(_) => {
+			current = List.get(state.heights, sector) ?? crash "sector state missing"
+			open = lowest_adjacent_ceiling(raw, state, sector, 0, Err(NoAdjacent)) - 4
+			door = { sector, closed: current.ceiling, open, speed, phase: Opening, stays_open }
+			Activated({ ..state, doors: List.append(state.doors, door) })
+		}
+	}
 }
 
 lowest_adjacent_ceiling = |raw, state, sector, line_index, found|
@@ -738,4 +754,35 @@ expect {
 		}
 		_ => Bool.False
 	}
+}
+
+expect {
+	# L2: re-using a door keeps its original closed height. Interrupting the
+	# close reopens it (vanilla EV_VerticalDoor) and it later rests at the
+	# initial ceiling; using a fully open door starts it closing.
+	map = DoomMap.e1m1
+	no_keys = { blue: Bool.False, yellow: Bool.False, red: Bool.False }
+	initial = DoomLevel.initial(map)
+	use = |state| match DoomLevel.use_line(map, state, 55, no_keys) {
+		Activated(next) => next
+		_ => crash "door 55 not usable"
+	}
+	first = use(initial)
+	door = List.get(first.doors, 0) ?? crash "door missing"
+	at_rest = DoomLevel.heights_for(initial, door.sector) ?? crash "sector missing"
+	interrupted = use(advance_tics(first, 233))
+	reopened = List.get(interrupted.doors, 0) ?? crash "reopened door missing"
+	settled = advance_tics(interrupted, 1000)
+	settled_heights = DoomLevel.heights_for(settled, door.sector) ?? crash "sector missing"
+	open_state = advance_tics(first, 100)
+	open_heights = DoomLevel.heights_for(open_state, door.sector) ?? crash "sector missing"
+	closing = advance_tics(use(open_state), 10)
+	closing_heights = DoomLevel.heights_for(closing, door.sector) ?? crash "sector missing"
+	closed_again = DoomLevel.heights_for(advance_tics(closing, 1000), door.sector) ?? crash "sector missing"
+	reopened.closed == at_rest.ceiling
+		and reopened.phase == Opening
+			and List.is_empty(settled.doors)
+				and settled_heights.ceiling == at_rest.ceiling
+					and closing_heights.ceiling < open_heights.ceiling
+						and closed_again.ceiling == at_rest.ceiling
 }

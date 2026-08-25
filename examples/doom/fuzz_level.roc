@@ -52,10 +52,9 @@ special_lines = |raw| {
 ## sectors, so `open` lands below `closed`.
 guard_special_62 = Bool.True
 
-## B2: re-using a door sector mid-cycle rebuilds it with `closed: current
-## ceiling`, so it never closes again. Skips use-line commands while any door
-## is active.
-guard_door_reuse = Bool.True
+## L2 (fixed): re-using a door used to rebuild it with `closed: current
+## ceiling`. The guard skipped use-line commands while any door was active.
+guard_door_reuse = Bool.False
 
 ## Linedef indices excluded by the active guards.
 guarded_lines = |raw| {

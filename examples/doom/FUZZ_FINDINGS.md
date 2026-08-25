@@ -208,6 +208,7 @@ and JSON-spliced strings: always `Ok`/`Err`, never crash or hang.
 
 ### L2. Re-using a door mid-cycle rebuilds it with `closed: current.ceiling`, so it never closes again
 - Severity: wrong-result (lasting map effect)
+- **Status: FIXED** — `activate_door` reverses an existing door (Closing→Opening, Opening/Waiting→Closing) keeping its heights; tagged activation skips sectors with an active door (vanilla `EV_DoDoor`); regression expect in `DoomLevel.roc`; `fuzz_level` 100 seeds clean with `guard_door_reuse` off.
 - Location: `DoomLevel.roc:458-464` (`activate_door`)
 - Property: after all movers finish, every plane rests at its initial height
   or a legitimate open/target height.

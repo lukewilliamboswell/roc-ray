@@ -16,7 +16,7 @@ from pathlib import Path
 
 FAST_CHECKPOINTS = (
     "spawn", "strafe-left", "strafe-right", "mouse-turn",
-    "first-corridor-wall-hole", "open-portal-collision", "colu-portal-navigation",
+    "west-sky-portal", "first-corridor-wall-hole", "open-portal-collision", "colu-portal-navigation",
     "door-closed", "door-open", "combat",
 )
 

@@ -194,11 +194,11 @@ update! = |model, input| {
 }
 
 update_evidence! = |model, input| {
-	required = if model.evidence.long 11 else 10
+	required = if model.evidence.long 12 else 11
 	# A capture task completes only after the returned model has had a
 	# presentation frame. Never place the next scenario while that task is
 	# outstanding: the PNG and the JSON record must describe the same model.
-	if model.evidence.stage == 22 {
+	if model.evidence.stage == 24 {
 		match input.capture {
 			Finished(_) => Err(Exit(0))
 			Failed(_) => Err(Exit(4))
@@ -214,7 +214,7 @@ update_evidence! = |model, input| {
 		# Finalize explicitly and wait for the following sampled status. This
 		# makes a successful exit proof that the shareable WebM was closed.
 		Capture.stop!()
-		Ok({ ..model, evidence: { ..model.evidence, stage: 22 } })
+		Ok({ ..model, evidence: { ..model.evidence, stage: 24 } })
 	} else if input.time.cycle_count > 1400 {
 		Err(Exit(2))
 	} else if model.evidence.stage == 0 {
@@ -252,82 +252,92 @@ update_evidence! = |model, input| {
 		captured = capture_state!(next, input, "mouse-turn")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 7 } })
 	} else if model.evidence.stage == 7 {
-		corridor = at_scenario(model, { x: -288, y: 256 }, DoomSim.Angle.from_turns(0))
+		# Face the intentional null-texture gap at linedef 1049. Both adjoining
+		# ceilings are F_SKY1, so this view must reveal the sky enclosure rather
+		# than the host's black clear colour.
+		west_sky = at_scenario(model, { x: -600, y: 256 }, DoomSim.Angle.from_turns(0.5))
 		Keys.set_source!(Keys.holding([]))
-		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 8 } })
+		Ok({ ..west_sky, evidence: { ..west_sky.evidence, stage: 8 } })
 	} else if model.evidence.stage == 8 {
-		captured = capture_state!(model, input, "first-corridor-wall-hole")
+		captured = capture_state!(model, input, "west-sky-portal")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 9 } })
 	} else if model.evidence.stage == 9 {
-		Keys.set_source!(Keys.holding([KeyW]))
-		Ok({ ..model, evidence: { ..model.evidence, stage: 10 } })
+		corridor = at_scenario(model, { x: -288, y: 256 }, DoomSim.Angle.from_turns(0))
+		Keys.set_source!(Keys.holding([]))
+		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 10 } })
 	} else if model.evidence.stage == 10 {
+		captured = capture_state!(model, input, "first-corridor-wall-hole")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
+	} else if model.evidence.stage == 11 {
+		Keys.set_source!(Keys.holding([KeyW]))
+		Ok({ ..model, evidence: { ..model.evidence, stage: 12 } })
+	} else if model.evidence.stage == 12 {
 		next = advance_from_input(model, input)
 		if current_sector(next) == 141 {
 			captured = capture_state!(next, input, "open-portal-collision")
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
-		} else {
-			Keys.set_source!(Keys.holding([KeyW]))
-			Ok(next)
-		}
-	} else if model.evidence.stage == 11 {
-		colu = at_scenario(model, { x: 752, y: 608 }, DoomSim.Angle.from_turns(0.5))
-		Keys.set_source!(Keys.holding([KeyW]))
-		Ok({ ..colu, evidence: { ..colu.evidence, stage: 12 } })
-	} else if model.evidence.stage == 12 {
-		next = advance_from_input(model, input)
-		if next.world.doom.player.sim.state.tic >= 7 {
-			captured = capture_state!(next, input, "colu-portal-navigation")
 			Ok({ ..captured, evidence: { ..captured.evidence, stage: 13 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
 			Ok(next)
 		}
 	} else if model.evidence.stage == 13 {
+		colu = at_scenario(model, { x: 752, y: 608 }, DoomSim.Angle.from_turns(0.5))
+		Keys.set_source!(Keys.holding([KeyW]))
+		Ok({ ..colu, evidence: { ..colu.evidence, stage: 14 } })
+	} else if model.evidence.stage == 14 {
+		next = advance_from_input(model, input)
+		if next.world.doom.player.sim.state.tic >= 7 {
+			captured = capture_state!(next, input, "colu-portal-navigation")
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 15 } })
+		} else {
+			Keys.set_source!(Keys.holding([KeyW]))
+			Ok(next)
+		}
+	} else if model.evidence.stage == 15 {
 		door = at_scenario(model, { x: 832, y: 496 }, DoomSim.Angle.from_turns(0.25))
 		Keys.set_source!(Keys.holding([]))
-		Ok({ ..door, evidence: { ..door.evidence, stage: 14 } })
-	} else if model.evidence.stage == 14 {
-		captured = capture_state!(model, input, "door-closed")
-		Ok({ ..captured, evidence: { ..captured.evidence, stage: 15 } })
-	} else if model.evidence.stage == 15 {
-		Keys.set_source!(Keys.holding([KeyE]))
-		Ok({ ..model, evidence: { ..model.evidence, stage: 16 } })
+		Ok({ ..door, evidence: { ..door.evidence, stage: 16 } })
 	} else if model.evidence.stage == 16 {
+		captured = capture_state!(model, input, "door-closed")
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 17 } })
+	} else if model.evidence.stage == 17 {
+		Keys.set_source!(Keys.holding([KeyE]))
+		Ok({ ..model, evidence: { ..model.evidence, stage: 18 } })
+	} else if model.evidence.stage == 18 {
 		next = advance_from_input(model, input)
 		if List.is_empty(next.level.doors) return Err(Exit(3))
 		if next.world.doom.player.sim.state.tic >= 20 {
 			captured = capture_state!(next, input, "door-open")
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 17 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 19 } })
 		} else {
 			Keys.set_source!(Keys.holding([]))
 			Ok(next)
 		}
-	} else if model.evidence.stage == 17 {
+	} else if model.evidence.stage == 19 {
 		Keys.set_source!(Keys.holding([KeySpace]))
-		Ok({ ..model, evidence: { ..model.evidence, stage: 18 } })
-	} else if model.evidence.stage == 18 {
+		Ok({ ..model, evidence: { ..model.evidence, stage: 20 } })
+	} else if model.evidence.stage == 20 {
 		next = advance_from_input(model, input)
 		if next.world.weapon.phase == 0 return Err(Exit(3))
 		captured = capture_state!(next, input, "combat")
-		Ok({ ..captured, evidence: { ..captured.evidence, stage: 19 } })
-	} else if model.evidence.stage == 19 {
+		Ok({ ..captured, evidence: { ..captured.evidence, stage: 21 } })
+	} else if model.evidence.stage == 21 {
 		if model.evidence.long {
 			damage = at_scenario(model, { x: 1258, y: 949 }, DoomSim.Angle.from_turns(0.044))
 			Keys.set_source!(Keys.holding([KeyW]))
-			Ok({ ..damage, evidence: { ..damage.evidence, stage: 20 } })
+			Ok({ ..damage, evidence: { ..damage.evidence, stage: 22 } })
 		} else {
 			Keys.set_source!(Keys.holding([]))
-			Ok({ ..model, evidence: { ..model.evidence, stage: 21 } })
+			Ok({ ..model, evidence: { ..model.evidence, stage: 23 } })
 		}
-	} else if model.evidence.stage == 20 {
+	} else if model.evidence.stage == 22 {
 		next = advance_from_input(model, input)
 		sector = current_sector(next)
 		special = (List.get(DoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
 		if special == 7 {
 			captured = capture_state!(next, input, "damaging-floor")
 			Keys.set_source!(Keys.holding([]))
-			Ok({ ..captured, evidence: { ..captured.evidence, stage: 21 } })
+			Ok({ ..captured, evidence: { ..captured.evidence, stage: 23 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
 			Ok(next)

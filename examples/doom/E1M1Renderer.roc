@@ -114,8 +114,10 @@ E1M1Renderer := [].{
 		rect = DoomAssets.texture("SKY1")?
 		tint = { r: 255, g: 255, b: 255, a: 255 }
 		r = 200.F32
-		low = -20.F32
-		high = 30.F32
+		# At this radius the enclosure must extend beyond the full perspective
+		# frustum. A short wall leaves clear-colour bands above and below SKY1.
+		low = -200.F32
+		high = 200.F32
 		points = [{ x: camera_x - r, z: camera_y - r }, { x: camera_x + r, z: camera_y - r }, { x: camera_x + r, z: camera_y + r }, { x: camera_x - r, z: camera_y + r }]
 		var $vertices = []
 		var $indices = []
@@ -135,7 +137,9 @@ E1M1Renderer := [].{
 					{ position: { x: edge.point.x, y: high, z: edge.point.z }, uv: { x: u0, y: v0 }, tint },
 				],
 			)
-			$indices = List.concat($indices, [offset, offset + 2, offset + 1, offset, offset + 3, offset + 2])
+			# The enclosure's centre lies to the left of its counter-clockwise
+			# perimeter edges, so its faces use the opposite winding from walls.
+			$indices = List.concat($indices, [offset, offset + 1, offset + 2, offset, offset + 2, offset + 3])
 		}
 		Ok({ vertices: $vertices, indices: $indices })
 	}
@@ -484,6 +488,29 @@ convex_contains = |points, point| {
 
 floor_geometry_faces_up = |geometry| floor_triangles_face_up(geometry.vertices, geometry.indices, 0)
 
+sky_geometry_faces_in = |geometry, center| sky_triangles_face_in(geometry.vertices, geometry.indices, center, 0)
+
+sky_triangles_face_in = |vertices, indices, center, index|
+	if index >= List.len(indices) {
+		Bool.True
+	} else {
+		a = List.get(vertices, U32.to_u64(List.get(indices, index) ?? return Bool.False)) ?? return Bool.False
+		b = List.get(vertices, U32.to_u64(List.get(indices, index + 1) ?? return Bool.False)) ?? return Bool.False
+		c = List.get(vertices, U32.to_u64(List.get(indices, index + 2) ?? return Bool.False)) ?? return Bool.False
+		ux = b.position.x - a.position.x
+		uy = b.position.y - a.position.y
+		uz = b.position.z - a.position.z
+		vx = c.position.x - a.position.x
+		vy = c.position.y - a.position.y
+		vz = c.position.z - a.position.z
+		normal_x = uy * vz - uz * vy
+		normal_z = ux * vy - uy * vx
+		triangle_x = (a.position.x + b.position.x + c.position.x) / 3
+		triangle_z = (a.position.z + b.position.z + c.position.z) / 3
+		normal_x * (center.x - triangle_x) + normal_z * (center.z - triangle_z) > 0
+			and sky_triangles_face_in(vertices, indices, center, index + 3)
+	}
+
 floor_triangles_face_up = |vertices, indices, index| {
 	if index >= List.len(indices) Bool.True else {
 		a = List.get(vertices, U32.to_u64(List.get(indices, index) ?? return Bool.False)) ?? return Bool.False
@@ -728,7 +755,30 @@ expect {
 	first = List.get(sky_surfaces, 0) ?? crash "E1M1 sky ceiling missing"
 	omitted = E1M1Renderer.surface_geometry(first) ?? crash "sky sentinel should not need a flat"
 	sky = E1M1Renderer.sky_geometry(0, 0) ?? crash "SKY1 texture missing"
-	List.len(sky_surfaces) > 0 and List.is_empty(omitted.vertices) and List.is_empty(omitted.indices) and List.len(sky.vertices) == 16 and List.len(sky.indices) == 24
+	List.len(sky_surfaces) > 0
+		and List.is_empty(omitted.vertices)
+			and List.is_empty(omitted.indices)
+				and List.len(sky.vertices) == 16
+					and List.len(sky.indices) == 24
+						and sky_geometry_faces_in(sky, { x: 0, z: 0 })
+}
+
+expect {
+	# Linedef 1049 is E1M1's intentional west-facing sky portal: both adjacent
+	# ceilings use the sky sentinel and its sidedefs deliberately omit textures.
+	# It must reveal the inward-facing sky enclosure, not acquire a fake wall.
+	raw = DoomMap.e1m1.raw()
+	line = List.get(raw.linedefs, 1049) ?? crash "E1M1 west sky portal missing"
+	right = List.get(raw.sidedefs, line.right_sidedef ?? crash "west sky portal right side missing") ?? crash "west sky portal right side invalid"
+	left = List.get(raw.sidedefs, line.left_sidedef ?? crash "west sky portal left side missing") ?? crash "west sky portal left side invalid"
+	right_sector = List.get(raw.sectors, right.sector) ?? crash "west sky portal right sector invalid"
+	left_sector = List.get(raw.sectors, left.sector) ?? crash "west sky portal left sector invalid"
+	spans = List.keep_if(DoomMap.e1m1.wall_spans(), |span| span.linedef == 1049)
+	right_sector.ceiling_flat == "F_SKY1"
+		and left_sector.ceiling_flat == "F_SKY1"
+			and right_sector.ceiling_height == 128
+				and left_sector.ceiling_height == 0
+					and List.is_empty(spans)
 }
 
 expect {

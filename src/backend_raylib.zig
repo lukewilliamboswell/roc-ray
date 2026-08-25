@@ -815,32 +815,6 @@ pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, sp
     rl.DrawTextEx(font, text, pos, size, spacing, colorToRl(color));
 }
 
-/// Draw text anchored at a fractional point within its measured bounds.
-/// Top-left alignment ({ 0, 0 }) skips measurement entirely.
-pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: Color, alignment: rl.Vector2) void {
-    const origin = if (alignment.x == 0 and alignment.y == 0) pos else blk: {
-        const measured = rl.MeasureTextEx(font, text, size, spacing);
-        break :blk textOrigin(pos, measured, alignment);
-    };
-    rl.DrawTextEx(font, text, origin, size, spacing, colorToRl(color));
-}
-
-/// Resolve an anchor position to the top-left drawing origin for measured text.
-pub fn textOrigin(pos: rl.Vector2, measured: rl.Vector2, alignment: rl.Vector2) rl.Vector2 {
-    return .{
-        .x = pos.x - measured.x * alignment.x,
-        .y = pos.y - measured.y * alignment.y,
-    };
-}
-
-test "textOrigin applies fractional alignment" {
-    const pos = rl.Vector2{ .x = 100, .y = 80 };
-    const measured = rl.Vector2{ .x = 40, .y = 20 };
-    try std.testing.expectEqual(rl.Vector2{ .x = 100, .y = 80 }, textOrigin(pos, measured, .{ .x = 0, .y = 0 }));
-    try std.testing.expectEqual(rl.Vector2{ .x = 80, .y = 70 }, textOrigin(pos, measured, .{ .x = 0.5, .y = 0.5 }));
-    try std.testing.expectEqual(rl.Vector2{ .x = 60, .y = 60 }, textOrigin(pos, measured, .{ .x = 1, .y = 1 }));
-}
-
 /// Draw a texture region into a destination rectangle.
 pub fn drawTexture(texture: Texture, args: anytype) void {
     rl.DrawTexturePro(

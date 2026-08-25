@@ -1,7 +1,12 @@
-## Prepare text once, then measure and draw it without per-frame allocation.
+## Align and draw immediate text, or prepare it once to draw repeatedly without
+## per-frame allocation.
 ##
 ## ```roc
 ## title = Text.from("Hello", font).size(38).prepare!()?
+## ```
+##
+## ```roc
+## Text.from("Score", font).size(24).draw!(frame, { pos, color: Color.white, align: Text.align_top_right })
 ## ```
 ##
 ## ```roc
@@ -57,11 +62,13 @@ Text := [].{
 		align : Align,
 	}
 
-	## A string and the style to prepare it with. Start one with `Text.from`,
-	## adjust it with the receivers below, and finish it with `prepare!`.
+	## A string and its drawing style. Start one with `Text.from`, adjust it with
+	## the receivers below, then draw it immediately or finish it with
+	## `prepare!` for repeated drawing.
 	##
-	## A builder is a plain description, so building one costs nothing and it
-	## can be assembled anywhere. Only `prepare!` reaches the host.
+	## A builder is a plain description, so building and measuring one costs
+	## nothing and it can be assembled anywhere. `draw!` and `prepare!` are the
+	## operations that reach the host.
 	Builder :: {
 		content : Str,
 		size : F32,
@@ -85,6 +92,29 @@ Text := [].{
 		## Draw this text in a different font.
 		font : Builder, RrtFont.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
+
+		## Measure this description from the font's immutable metric snapshot,
+		## resolve `placement.align`, and draw it immediately.
+		##
+		## Legal in `render!` only. This is an alignment convenience for text
+		## that does not need a retained `Prepared` resource; `Draw.text!` is the
+		## lower-level operation for callers that already resolved the origin.
+		draw! : Builder, Draw.Frame, Placement => {}
+		draw! = |builder, frame, placement| {
+			measured = builder.font.measure({ text: builder.content, size: builder.size, spacing: builder.spacing })
+			pos = Text.origin_for(placement.pos, measured, placement.align)
+			Draw.text!(
+				frame,
+				{
+					pos,
+					text: builder.content,
+					size: builder.size,
+					spacing: builder.spacing,
+					color: placement.color,
+					font: builder.font,
+				},
+			)
+		}
 
 		## Cache immutable UTF-8 text, font and style, and measurement in the
 		## host.
@@ -194,9 +224,7 @@ Text := [].{
 
 	## Anchor `pos` at the top-left corner of the text.
 	##
-	## These nine constants are the ones to use with `Placement`. `Draw` has a
-	## set under the same names for `Draw.text_at!`, which draws an unprepared
-	## string.
+	## These nine constants are the ones to use with `Placement`.
 	align_top_left : Align
 	align_top_left = { horizontal: Left, vertical: Top }
 

@@ -13,9 +13,11 @@ import rr.Task
 import rr.Text
 
 ## The Model keeps the current status, decoded texture, overflow warning, and
-## prepared title between updates. The dropped path itself is handled when it
-## arrives; only information needed for later progress and drawing is retained.
+## font and prepared title between updates. The dropped path itself is handled
+## when it arrives; only information needed for later progress and drawing is
+## retained.
 Model : {
+	font : Text.Font,
 	title : Text.Prepared,
 	status : Status,
 	image : [NoImage, Shown(Assets.Texture)],
@@ -46,6 +48,7 @@ init! = App.init(
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
+			font,
 			title: Text.from("Drop Viewer", font).size(28).prepare!()?,
 			status: WaitingForDrop,
 			image: NoImage,
@@ -233,7 +236,9 @@ render! = |model, frame| {
 
 	match model.image {
 		NoImage =>
-			frame.text_centered!({ pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, text: "Drop a PNG, JPEG, GIF, QOI or BMP file here", size: 18, color: theme.faint })
+			Text.from("Drop a PNG, JPEG, GIF, QOI or BMP file here", model.font)
+				.size(18)
+				.draw!(frame, { pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, color: theme.faint, align: Text.align_center })
 
 		Shown(texture) =>
 			frame.texture!({

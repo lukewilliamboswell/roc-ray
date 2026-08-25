@@ -237,7 +237,7 @@ theme = {
 panel! : Draw.Frame, Text.Font, { x : F32, y : F32, width : F32, height : F32, label : Str } => {}
 panel! = |frame, font, cfg| {
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
-	frame.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font })
 }
 
 ## One indicator chip, lit while the snapshot says its input is active.
@@ -247,14 +247,16 @@ chip! = |frame, font, cfg| {
 	edge = if cfg.on theme.active else theme.edge
 	ink = if cfg.on theme.active_ink else theme.idle_ink
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
-	frame.text!({ pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, text: cfg.label, size: 17, spacing: Draw.default_spacing, color: ink, font: font, align: Draw.align_center })
+	Text.from(cfg.label, font)
+		.size(17)
+		.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: Text.align_center })
 }
 
 ## A small square light next to a label, for the signals that are on or off
 ## rather than named keys.
 light! : Draw.Frame, Text.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
 light! = |frame, font, cfg| {
-	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font })
 	fill = if cfg.on theme.active else theme.idle
 	frame.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if cfg.on theme.active else theme.edge, 1) })
 }
@@ -262,7 +264,7 @@ light! = |frame, font, cfg| {
 ## A line of body text inside a panel.
 line! : Draw.Frame, Text.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
 line! = |frame, font, cfg|
-	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
@@ -300,8 +302,8 @@ render! = |model, frame| {
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
 
 	frame.clear!(theme.bg)
-	frame.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font })
+	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
 
 	panel!(frame, font, { x: 20, y: 84, width: 780, height: 258, label: "KEYS AND BUTTONS" })
 	chip!(frame, font, { x: 70, y: 126, width: 30, label: "W", on: w_down })
@@ -339,6 +341,6 @@ render! = |model, frame| {
 	frame.rounded_rectangle!({ x: 30, y: 632, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), theme.edge, 1) })
 	line!(frame, font, { x: 62, y: 634, text: eyedropper_label(model.picked), color: theme.muted })
 
-	frame.text!({ pos: { x: 30, y: 676 }, text: "Q exits  |  Esc is a normal key  |  hold left mouse for a crosshair", size: 14, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x5c6b87), font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 676 }, text: "Q exits  |  Esc is a normal key  |  hold left mouse for a crosshair", size: 14, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x5c6b87), font: font })
 	Ok({})
 }

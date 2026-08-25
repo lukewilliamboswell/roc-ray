@@ -590,8 +590,8 @@ draw_bodies! = |frame, game| {
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
 	model.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon, align: Text.align_top_left })
-	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
+	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
 	if model.demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
 	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
 	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })

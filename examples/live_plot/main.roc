@@ -2724,11 +2724,11 @@ draw_footer! = |frame, model| {
 
 text_left! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_left! = |frame, font, pos, content, size, spacing, color|
-	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font })
 
 text_right! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_right! = |frame, font, pos, content, size, spacing, color|
-	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font, align: Draw.align_top_right })
+	Text.from(content, font).size(size).spacing(spacing).draw!(frame, { pos, color, align: Text.align_top_right })
 
 ## The entrance fades the furniture up rather than sliding it, so nothing in the
 ## figure ever moves except the data.

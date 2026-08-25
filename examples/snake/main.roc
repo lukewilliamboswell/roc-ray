@@ -546,7 +546,9 @@ draw_board! = |frame| {
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
 	model.title.draw!(frame, { pos: { x: board_x, y: 26 }, color: snake_head, align: Text.align_top_left })
-	frame.text!({ pos: { x: screen_w - board_x, y: 30 }, text: "SCORE ${U64.to_str(model.score)}", size: 24, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xd7e3ff), font: model.font, align: Draw.align_top_right })
+	Text.from("SCORE ${U64.to_str(model.score)}", model.font)
+		.size(24)
+		.draw!(frame, { pos: { x: screen_w - board_x, y: 30 }, color: Color.from_hex_rgb(0xd7e3ff), align: Text.align_top_right })
 	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })
 }
 

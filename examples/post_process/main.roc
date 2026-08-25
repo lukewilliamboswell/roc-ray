@@ -10,11 +10,13 @@ import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Math
+import rr.Text
 
-## State kept between updates: the offscreen drawing target, shader, and its
-## prepared time setting, plus the elapsed time that animates the scene. These
-## resources are created once and reused for every frame.
+## State kept between updates: the font, offscreen drawing target, shader, and
+## its prepared time setting, plus the elapsed time that animates the scene.
+## These resources are created once and reused for every frame.
 Model : {
+	font : Text.Font,
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
 
@@ -36,10 +38,11 @@ init! = App.init(
 		## This source tree example deliberately opts into CWD-relative assets.
 		## Packaged applications normally use `Assets.beside_executable("assets")`.
 		assets = Assets.Store.open!(Assets.working_directory("examples/post_process/assets"))?
+		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
 		time_uniform = shader.uniform_f32!("time")?
-		Ok({ target, shader, time_uniform, seconds: 0 })
+		Ok({ font, target, shader, time_uniform, seconds: 0 })
 	},
 )
 
@@ -68,8 +71,12 @@ render! = |model, frame| {
 			offscreen = target_frame.size!()
 			center = { x: offscreen.width * 0.5, y: offscreen.height * 0.62 }
 			target_frame.rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
-			target_frame.text_centered!({ pos: { x: center.x, y: 96 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
-			target_frame.text_centered!({ pos: { x: center.x, y: 152 }, text: "render texture -> additive blend -> fragment shader   (ESC quits)", size: 18, color: Color.from_hex_rgb(0x9d8fd0) })
+			Text.from("offscreen + shader", model.font)
+				.size(48)
+				.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: Text.align_center })
+			Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", model.font)
+				.size(18)
+				.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: Text.align_center })
 			target_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {

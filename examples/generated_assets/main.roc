@@ -24,11 +24,12 @@ PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
 
-## State kept between updates: the canvas pixels and texture, the selected
+## State kept between updates: the font, canvas pixels and texture, the selected
 ## colour and last painted cell, the generated sound, and the small amount of
 ## input and demo state needed for the next update. Prepared labels are kept so
 ## they do not need to be rebuilt every frame.
 Model : {
+	font : Text.Font,
 	texture : Assets.Texture,
 	pixels : List(Color.Rgba),
 	paint_sound : Audio.Sound,
@@ -124,6 +125,7 @@ init! = App.init_for_args(
 		Assets.set_texture_wrap!(texture, Clamp)
 		paint_sound = Audio.gen_tone!({ freq: 520, ms: 35 })?
 		Ok({
+			font,
 			texture,
 			pixels: initial_pixels,
 			paint_sound,
@@ -276,8 +278,8 @@ theme = {
 swatch_bounds : U64 -> Math.Rect
 swatch_bounds = |index| Math.rect(610, 180 + U64.to_f32(index) * 70, 118, 50)
 
-draw_swatch! : Draw.Frame, U64, U64, Math.Vec2 => {}
-draw_swatch! = |frame, index, selected, mouse| {
+draw_swatch! : Draw.Frame, Text.Font, U64, U64, Math.Vec2 => {}
+draw_swatch! = |frame, font, index, selected, mouse| {
 	bounds = swatch_bounds(index)
 	chosen = index == selected
 	hovered = bounds.contains(mouse)
@@ -288,7 +290,8 @@ draw_swatch! = |frame, index, selected, mouse| {
 		frame.rounded_rectangle!({ x: bounds.x - 5, y: bounds.y - 5, width: bounds.width + 10, height: bounds.height + 10, radius: 11, segments: 8, style: Draw.outlined(theme.accent, 2) })
 	}
 	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
-	frame.text_centered!({ pos: { x: 752, y: bounds.y + 25 }, text: U64.to_str(index + 1), size: 20, color: if chosen theme.ink else theme.faint })
+	Text.from(U64.to_str(index + 1), font)
+		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if chosen theme.ink else theme.faint, align: Text.align_center })
 }
 
 ## Perform one edit. A mismatched upload is a programmer error -- the editor
@@ -381,10 +384,10 @@ render! = |model, frame| {
 
 	frame.rounded_rectangle!({ x: 594, y: 108, width: 150, height: 348, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: theme.ink, align: Text.align_top_left })
-	draw_swatch!(frame, 0, model.palette, model.mouse)
-	draw_swatch!(frame, 1, model.palette, model.mouse)
-	draw_swatch!(frame, 2, model.palette, model.mouse)
-	draw_swatch!(frame, 3, model.palette, model.mouse)
+	draw_swatch!(frame, model.font, 0, model.palette, model.mouse)
+	draw_swatch!(frame, model.font, 1, model.palette, model.mouse)
+	draw_swatch!(frame, model.font, 2, model.palette, model.mouse)
+	draw_swatch!(frame, model.font, 3, model.palette, model.mouse)
 	ui.help.draw!(frame, { pos: { x: canvas_x, y: 562 }, color: theme.faint, align: Text.align_top_left })
 
 	Ok({})

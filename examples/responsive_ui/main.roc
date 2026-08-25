@@ -53,6 +53,7 @@ Selection := [Display, AudioSettings, Controls].{
 }
 
 UiCopy : {
+	font : Text.Font,
 	title : Text.Prepared,
 	subtitle : Text.Prepared,
 	display : Text.Prepared,
@@ -64,10 +65,10 @@ UiCopy : {
 	help : Text.Prepared,
 }
 
-## State retained between updates: prepared labels, the selected panel and
-## pointer position, animation time, monitor choices, and demo mode. Window
-## size is intentionally omitted because `update!` and `render!` each receive
-## the current size when they need it.
+## State retained between updates: the font and prepared labels, the selected
+## panel and pointer position, animation time, monitor choices, and demo mode.
+## Window size is intentionally omitted because `update!` and `render!` each
+## receive the current size when they need it.
 Model : {
 	ui : Box(UiCopy),
 	selection : Selection,
@@ -120,6 +121,7 @@ init! = App.init_for_args(
 		font = Draw.default_font!()
 		Ok({
 			ui: Box.box({
+				font,
 				title: Text.from("Settings", font).size(38).prepare!()?,
 				subtitle: Text.from("A resizable, input-aware application screen", font).size(18).prepare!()?,
 				display: Text.from("Display", font).size(22).prepare!()?,
@@ -223,10 +225,10 @@ draw_menu_item! = |frame, bounds, label, selected, hovered| {
 	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: Text.align_middle_left })
 }
 
-draw_key! : Draw.Frame, F32, F32, Str => {}
-draw_key! = |frame, x, y, label| {
+draw_key! : Draw.Frame, Text.Font, F32, F32, Str => {}
+draw_key! = |frame, font, x, y, label| {
 	frame.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(theme.panel_high, theme.edge, 2) })
-	frame.text_centered!({ pos: { x: x + 34, y: y + 22 }, text: label, size: 18, color: theme.ink })
+	Text.from(label, font).size(18).draw!(frame, { pos: { x: x + 34, y: y + 22 }, color: theme.ink, align: Text.align_center })
 }
 
 draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, Draw.FrameSize, Model => {}
@@ -267,9 +269,9 @@ draw_preview! = |frame, bounds, selection, ui, screen, model| {
 		}
 		Controls => {
 			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 76 }, text: "Move", size: 18, color: theme.muted })
-			draw_key!(frame, bounds.x + 28, bounds.y + 112, "WASD")
+			draw_key!(frame, ui.font, bounds.x + 28, bounds.y + 112, "WASD")
 			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 182 }, text: "Command", size: 18, color: theme.muted })
-			draw_key!(frame, bounds.x + 28, bounds.y + 218, "SPACE")
+			draw_key!(frame, ui.font, bounds.x + 28, bounds.y + 218, "SPACE")
 		}
 	}
 }

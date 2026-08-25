@@ -1049,10 +1049,10 @@ draw_player! = |frame, characters, player| {
 draw_hud! : Draw.Frame, Level, World, Text.Font => {}
 draw_hud! = |frame, level, world, font| {
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
+	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font })
+	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 
 	if world.flash > 0 {
@@ -1061,17 +1061,17 @@ draw_hud! = |frame, level, world, font| {
 
 	match world.state {
 		Playing => {}
-		Won => draw_modal!(frame, "Summit reached", "Press SPACE to climb again", Color.from_hex_rgb(0x90be6d))
-		GameOver => draw_modal!(frame, "Climb failed", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
+		Won => draw_modal!(frame, font, "Summit reached", "Press SPACE to climb again", Color.from_hex_rgb(0x90be6d))
+		GameOver => draw_modal!(frame, font, "Climb failed", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
 	}
 }
 
-draw_modal! : Draw.Frame, Str, Str, Color.Rgba => {}
-draw_modal! = |frame, title, subtitle, accent| {
+draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
+draw_modal! = |frame, font, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
 	frame.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
-	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 276 }, text: title, size: 30, color: Color.white })
-	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
+	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: Text.align_center })
+	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: Text.align_center })
 }
 
 expect physics_distance(Physics.point_xy(0, 0), Physics.point_xy(3, 4)) == 5

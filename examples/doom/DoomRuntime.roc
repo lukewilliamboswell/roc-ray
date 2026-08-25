@@ -52,9 +52,13 @@ DoomRuntime := [].{
 		if world.phase != Playing {
 			{ world, tics: 0, dropped: Bool.False, fired: Bool.False, projectile_saturated: Bool.False }
 		} else {
-			player_blockers = List.concat(blockers_for_player(map, level, world.doom.player.sim.state.pos), extra_blockers)
-			all_blockers = List.concat(player_blockers, actor_segments(world.doom.actors))
-			sim = DoomSim.advance(world.doom.player.sim, elapsed, command, all_blockers)
+			actor_blockers = actor_segments(world.doom.actors)
+			sim = DoomSim.advance_with(
+				world.doom.player.sim,
+				elapsed,
+				command,
+				|state| List.concat(List.concat(blockers_for_player(map, level, state.pos), extra_blockers), actor_blockers),
+			)
 			var $next = { ..world, doom: { ..world.doom, player: { ..world.doom.player, sim: sim.clock } } }
 			var $saturated = Bool.False
 			var $fired = Bool.False
@@ -746,6 +750,21 @@ expect {
 	}
 	sector = DoomLevel.sector_at(map, { x: F32.to_f64($state.pos.x), y: F32.to_f64($state.pos.y) })
 	$state.pos.x > 208 and sector == Ok(17)
+}
+
+expect {
+	# Linedef 1049 deliberately renders as continuous sky, but sector 40 has no
+	# vertical opening. The invisible boundary must still stop a radius-16
+	# player approaching it from sector 29.
+	map = DoomMap.e1m1
+	level = DoomLevel.initial(map)
+	var $state = DoomSim.initial({ x: -640, y: 256 }, DoomSim.Angle.from_turns(0.5))
+	for _ in List.repeat({}, 20) {
+		blockers = DoomRuntime.blockers_for_player(map, level, $state.pos)
+		$state = DoomSim.tic($state, { ..DoomSim.neutral, forward: 50 }, blockers)
+	}
+	sector = DoomLevel.sector_at(map, { x: F32.to_f64($state.pos.x), y: F32.to_f64($state.pos.y) })
+	$state.pos.x >= -656 and sector == Ok(29)
 }
 
 expect {

@@ -101,8 +101,25 @@ billboard = |pos, viewer, view, low| {
 			{ position: { ..right_bottom, y: bottom + height }, uv: { x: u1, y: v0 }, tint },
 			{ position: { ..left, y: bottom + height }, uv: { x: u0, y: v0 }, tint },
 		],
-		indices: [0, 1, 2, 0, 2, 3],
+		# Front faces point toward `viewer`; the 3D draw path culls the opposite
+		# winding before the cutout shader can sample the sprite.
+		indices: [0, 2, 1, 0, 3, 2],
 	}
+}
+
+faces_viewer = |geometry, viewer| {
+	a = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 0) ?? return Bool.False)) ?? return Bool.False
+	b = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 1) ?? return Bool.False)) ?? return Bool.False
+	c = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 2) ?? return Bool.False)) ?? return Bool.False
+	ab = { x: b.position.x - a.position.x, y: b.position.y - a.position.y, z: b.position.z - a.position.z }
+	ac = { x: c.position.x - a.position.x, y: c.position.y - a.position.y, z: c.position.z - a.position.z }
+	normal = {
+		x: ab.y * ac.z - ab.z * ac.y,
+		y: ab.z * ac.x - ab.x * ac.z,
+		z: ab.x * ac.y - ab.y * ac.x,
+	}
+	to_viewer = { x: viewer.x * DoomSprites.doom_scale - a.position.x, y: 0 - a.position.y, z: viewer.y * DoomSprites.doom_scale - a.position.z }
+	normal.x * to_viewer.x + normal.y * to_viewer.y + normal.z * to_viewer.z > 0
 }
 
 expect {
@@ -115,8 +132,14 @@ expect {
 
 expect {
 	actor = DoomWorld.actor(1, ZombieMan, { x: 64, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
-	geometry = DoomSprites.actor_geometry(actor, { x: 0, y: 0 }) ?? crash "POSS sprite missing"
-	List.len(geometry.vertices) == 4 and geometry.indices == [0, 1, 2, 0, 2, 3]
+	viewers = [{ x: 0, y: 0 }, { x: 128, y: 0 }, { x: 64, y: 64 }, { x: 64, y: -64 }]
+	List.all(
+		viewers,
+		|viewer| {
+			geometry = DoomSprites.actor_geometry(actor, viewer) ?? crash "POSS sprite missing"
+			List.len(geometry.vertices) == 4 and faces_viewer(geometry, viewer)
+		},
+	)
 }
 
 expect {
@@ -125,7 +148,7 @@ expect {
 	visible = DoomSprites.pickup_geometry(pickup, { x: 64, y: 0 }, 0) ?? crash "BKEY sprite missing"
 	hidden = DoomSprites.pickup_geometry({ ..pickup, taken: Bool.True }, { x: 64, y: 0 }, 0) ?? crash "taken pickup lookup failed"
 	match visible {
-		Visible(geometry) => List.len(geometry.vertices) == 4 and hidden == Hidden
+		Visible(geometry) => List.len(geometry.vertices) == 4 and faces_viewer(geometry, { x: 64, y: 0 }) and hidden == Hidden
 		Hidden => Bool.False
 	}
 }

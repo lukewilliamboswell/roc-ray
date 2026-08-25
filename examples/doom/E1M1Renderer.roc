@@ -366,6 +366,27 @@ line_wall_extent = |walls, linedef| {
 	$extent
 }
 
+wall_faces_point = |wall, point| {
+	geometry = E1M1Renderer.wall_geometry(wall) ?? return Bool.False
+	a = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 0) ?? return Bool.False)) ?? return Bool.False
+	b = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 1) ?? return Bool.False)) ?? return Bool.False
+	c = List.get(geometry.vertices, U32.to_u64(List.get(geometry.indices, 2) ?? return Bool.False)) ?? return Bool.False
+	ab = { x: b.position.x - a.position.x, y: b.position.y - a.position.y, z: b.position.z - a.position.z }
+	ac = { x: c.position.x - a.position.x, y: c.position.y - a.position.y, z: c.position.z - a.position.z }
+	normal_x = ab.y * ac.z - ab.z * ac.y
+	normal_z = ab.x * ac.y - ab.y * ac.x
+	to_x = F64.to_f32_wrap(point.x) * E1M1Renderer.doom_scale - a.position.x
+	to_z = F64.to_f32_wrap(point.y) * E1M1Renderer.doom_scale - a.position.z
+	normal_x * to_x + normal_z * to_z > 0
+}
+
+wall_owning_point = |wall| {
+	dx = I64.to_f64(wall.end.x - wall.start.x)
+	dy = I64.to_f64(wall.end.y - wall.start.y)
+	length = sqrt(dx * dx + dy * dy)
+	{ x: I64.to_f64(wall.start.x + wall.end.x) * 0.5 + dy / length, y: I64.to_f64(wall.start.y + wall.end.y) * 0.5 - dx / length }
+}
+
 advance_level = |state, count| if count == 0 state else advance_level(DoomLevel.tick(state), count - 1)
 
 ClipAxis := [ClipX, ClipY]
@@ -647,6 +668,14 @@ expect {
 		and List.all(batches, |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
 			and counts.vertices > List.len(derived_surfaces) * 3
 				and counts.indices > counts.vertices
+}
+
+expect {
+	# Back-face culling must never turn an otherwise derived wall span into a
+	# black opening. Test every E1M1 side against a point inside its owning
+	# sector rather than pinning one example's index order.
+	map = DoomMap.e1m1
+	List.all(map.wall_spans(), |wall| wall_faces_point(wall, wall_owning_point(wall)))
 }
 
 expect {

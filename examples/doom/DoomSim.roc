@@ -79,12 +79,19 @@ DoomSim := [].{
 	## tics. A remainder smaller than one tic is retained. If the cap saturates,
 	## whole excess tics are deliberately dropped and reported.
 	advance : Clock, F32, Command, List(Segment) -> Advance
-	advance = |clock_value, elapsed, command, blockers| {
+	advance = |clock_value, elapsed, command, blockers| advance_with(clock_value, elapsed, command, |_state| blockers)
+
+	## Fold elapsed time like `advance`, resolving collision from the state at
+	## the start of each simulation tic. Map-backed callers use this so crossing
+	## a sector boundary during catch-up cannot retain the previous sector's
+	## portal set for the remaining tics.
+	advance_with : Clock, F32, Command, (State -> List(Segment)) -> Advance
+	advance_with = |clock_value, elapsed, command, blockers_for| {
 		var $state = clock_value.state
 		var $remainder = clock_value.remainder + clamp(elapsed, 0, max_elapsed)
 		var $count = 0.U64
 		while $remainder >= tic_seconds and $count < max_catch_up_tics {
-			$state = tic($state, command, blockers)
+			$state = tic($state, command, blockers_for($state))
 			$remainder = $remainder - tic_seconds
 			$count = $count + 1
 		}
@@ -476,6 +483,20 @@ expect {
 	same_side
 		and path_clear(crossing_start.pos, crossing.pos, crossing_blockers)
 			and path_clear(corner_start.pos, corner.pos, corner_blockers)
+}
+
+expect {
+	# Catch-up collision is a per-tic query. A boundary which becomes relevant
+	# after the first tic must constrain the remaining tics in the same host
+	# cycle, while the ordinary fixed-blocker entry point stays equivalent.
+	clock = DoomSim.clock(DoomSim.initial({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0)))
+	command = { ..DoomSim.neutral, forward: 50 }
+	wall = { start: { x: 30, y: -100 }, end: { x: 30, y: 100 } }
+	elapsed = 8 * DoomSim.tic_seconds
+	dynamic = DoomSim.advance_with(clock, elapsed, command, |state| if state.pos.x >= 2 [wall] else [])
+	fixed = DoomSim.advance(clock, elapsed, command, [wall])
+	fixed_via_query = DoomSim.advance_with(clock, elapsed, command, |_state| [wall])
+	dynamic.clock.state.pos.x < 14 and fixed == fixed_via_query
 }
 
 expect {

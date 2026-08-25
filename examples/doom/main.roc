@@ -2,7 +2,7 @@
 ## player simulation and map policy in Roc; the host retains textures and draws
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
+	rr: platform "../../platform/main.roc",
 	roc: "nightly-2026-08-23-fb208ba",
 }
 
@@ -12,8 +12,10 @@ import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
+import rr.Stdout
 import DoomLevel
 import DoomControls
+import DoomDebug
 import DoomMap
 import DoomPresentation
 import DoomRuntime
@@ -23,6 +25,10 @@ import DoomView
 import DoomWorld
 import E1M1Renderer
 import "sprite_cutout.fs" as sprite_fragment_shader : Str
+
+# Compile-time geometry diagnostics. Set to Bool.True locally, rebuild, and
+# place the crosshair over a missing wall. Keep false for normal play/captures.
+debug_geometry = Bool.False
 
 RenderGeometry : {
 	vertices : List({ position : { x : F32, y : F32, z : F32 }, uv : { x : F32, y : F32 }, tint : Color.Rgba }),
@@ -105,6 +111,7 @@ init! = App.init(
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
+	write_geometry_debug!(model, input, debug_geometry)
 	if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else if input.devices.key_pressed(KeyR) {
@@ -164,6 +171,18 @@ update! = |model, input| {
 	}
 }
 
+write_geometry_debug! = |model, input, enabled| if enabled and input.devices.key_pressed(KeyF3) {
+	state = model.world.doom.player.sim.state
+	match DoomDebug.trace(DoomMap.e1m1, model.level, state.pos, state.angle) {
+		Ok(hit) => for line in hit.lines {
+			_ = Stdout.line!(line)
+		}
+		Err(_) => {
+			_ = Stdout.line!("GEOMETRY DEBUG: crosshair ray hit no linedef")
+		}
+	}
+} else {}
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101010))
@@ -221,8 +240,22 @@ draw_logical! = |model, frame| {
 	draw_weapon!(frame, model.sprite_atlas, model.world)
 	draw_hud!(frame, model.sprite_atlas, model.world, model.flashes)
 	draw_flashes!(frame, model.flashes)
+	draw_geometry_debug!(frame, model, state, debug_geometry)
 	Ok({})
 }
+
+draw_geometry_debug! = |frame, model, state, enabled| if enabled {
+	report = DoomDebug.trace(DoomMap.e1m1, model.level, state.pos, state.angle)
+	match report {
+		Ok(hit) => {
+			frame.rectangle!({ x: 2, y: 2, width: 316, height: 58, style: Draw.filled(Color.with_alpha(Color.black, 220)) })
+			for entry in List.map_with_index(hit.lines, |line, index| { line, index }) {
+				frame.text_at!({ pos: { x: 5, y: 4 + U64.to_f32(entry.index) * 8 }, text: entry.line, size: 7, color: if entry.index == 1 Color.from_hex_rgb(0xff00ff) else Color.ray_white })
+			}
+		}
+		Err(_) => frame.text_at!({ pos: { x: 5, y: 5 }, text: "GEOMETRY DEBUG: crosshair ray hit no linedef", size: 7, color: Color.from_hex_rgb(0xff00ff) })
+	}
+} else {}
 
 sprite_geometry : DoomRuntime.World, List(DoomWorld.Decoration), DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
 sprite_geometry = |world, decorations, level, viewer| {
@@ -318,10 +351,13 @@ draw_hud! = |frame, atlas, world, flashes| {
 	}
 	bar = DoomPresentation.hud(StatusBar) ?? crash "generated status bar sprite missing"
 	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: 0, y: size.height - hud_height, width: 320, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
-	draw_number!(frame, atlas, I64.max(0, ammo), 43, size.height - 29)
+	draw_number!(frame, atlas, I64.max(0, ammo), 44, size.height - 29)
 	draw_number!(frame, atlas, I64.max(0, player.health), 90, size.height - 29)
+	draw_percent!(frame, atlas, 90, size.height - 29)
 	draw_weapons!(frame, atlas, player, size)
-	frame.text_at!({ pos: { x: 184, y: size.height - 12 }, text: "S:${U64.to_str(world.secrets_found)}", size: 8, color: Color.ray_white })
+	draw_number!(frame, atlas, I64.max(0, player.armor), 221, size.height - 29)
+	draw_percent!(frame, atlas, 221, size.height - 29)
+	draw_ammo_table!(frame, atlas, player, size)
 	dead = match world.phase {
 		Dead => Bool.True
 		_ => Bool.False
@@ -341,7 +377,7 @@ draw_hud! = |frame, atlas, world, flashes| {
 	} else {
 		DoomPresentation.hud(Face("ST00")) ?? crash "healthy face missing"
 	}
-	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: 143, y: size.height - 30, width: 36, height: 30 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: 143, y: size.height - 32, width: U64.to_f32(face.width), height: U64.to_f32(face.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	draw_keys!(frame, atlas, player.keys, size)
 	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
 	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
@@ -354,12 +390,12 @@ draw_hud! = |frame, atlas, world, flashes| {
 
 draw_weapons! = |frame, atlas, player, size| {
 	arms = DoomPresentation.hud(Arms) ?? crash "status arms sprite missing"
-	frame.texture!({ texture: atlas, source: atlas_rect(arms), dest: { x: 104, y: size.height - 32, width: 32, height: 10 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
-	slots = [{ slot: 2.U8, owned: player.weapons.pistol }, { slot: 3.U8, owned: player.weapons.shotgun }, { slot: 4.U8, owned: player.weapons.chaingun }, { slot: 5.U8, owned: player.weapons.rocket_launcher }, { slot: 6.U8, owned: player.weapons.plasma_rifle }, { slot: 8.U8, owned: player.weapons.chainsaw }]
+	frame.texture!({ texture: atlas, source: atlas_rect(arms), dest: { x: 104, y: size.height - 32, width: U64.to_f32(arms.width), height: U64.to_f32(arms.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	slots = [{ slot: 2.U8, owned: player.weapons.pistol }, { slot: 3.U8, owned: player.weapons.shotgun }, { slot: 4.U8, owned: player.weapons.chaingun }, { slot: 5.U8, owned: player.weapons.rocket_launcher }, { slot: 6.U8, owned: player.weapons.plasma_rifle }, { slot: 7.U8, owned: Bool.False }]
 	for item in List.map_with_index(slots, |value, index| { value, index }) {
 		element = if item.value.owned SmallDigit(item.value.slot) else GrayDigit(item.value.slot)
 		match DoomPresentation.hud(element) {
-			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: 106 + U64.to_f32(item.index % 3) * 10, y: size.height - 20 + U64.to_f32(item.index / 3) * 9, width: 8, height: 7 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: 111 + U64.to_f32(item.index % 3) * 12, y: size.height - 28 + U64.to_f32(item.index / 3) * 10, width: U64.to_f32(rect.width), height: U64.to_f32(rect.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 			Err(_) => {}
 		}
 	}
@@ -367,13 +403,48 @@ draw_weapons! = |frame, atlas, player, size| {
 
 draw_number! = |frame, atlas, value, x, y| {
 	n = I64.min(999, value)
-	digits = [I64.to_u8_wrap(n / 100), I64.to_u8_wrap((n / 10) % 10), I64.to_u8_wrap(n % 10)]
+	digits = number_digits(n)
 	for entry in List.map_with_index(digits, |digit, index| { digit, index }) {
 		match DoomPresentation.hud(LargeDigit(entry.digit)) {
-			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: x + U64.to_f32(entry.index) * 14, y, width: 14, height: 18 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: x - U64.to_f32(List.len(digits) - entry.index) * U64.to_f32(rect.width), y, width: U64.to_f32(rect.width), height: U64.to_f32(rect.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 			Err(_) => {}
 		}
 	}
+}
+
+draw_percent! = |frame, atlas, x, y| {
+	rect = DoomPresentation.hud(Percent) ?? crash "status percent sprite missing"
+	frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x, y, width: U64.to_f32(rect.width), height: U64.to_f32(rect.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+}
+
+draw_ammo_table! = |frame, atlas, player, size| {
+	maximums = if player.backpack [400.I64, 100.I64, 100.I64, 600.I64] else [200.I64, 50.I64, 50.I64, 300.I64]
+	values = [player.ammo.bullets, player.ammo.shells, player.ammo.rockets, player.ammo.cells]
+	for row in List.map_with_index(values, |value, index| { value, index }) {
+		y = size.height - 27 + U64.to_f32(row.index) * 6
+		draw_small_number!(frame, atlas, I64.max(0, row.value), 288, y)
+		draw_small_number!(frame, atlas, List.get(maximums, row.index) ?? 0, 314, y)
+	}
+}
+
+draw_small_number! = |frame, atlas, value, right, y| {
+	digits = number_digits(I64.min(999, value))
+	for entry in List.map_with_index(digits, |digit, index| { digit, index }) {
+		match DoomPresentation.hud(SmallDigit(entry.digit)) {
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: right - U64.to_f32(List.len(digits) - entry.index) * U64.to_f32(rect.width), y, width: U64.to_f32(rect.width), height: U64.to_f32(rect.height) }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Err(_) => {}
+		}
+	}
+}
+
+number_digits = |value| if value >= 100 [I64.to_u8_wrap(value / 100), I64.to_u8_wrap((value / 10) % 10), I64.to_u8_wrap(value % 10)] else if value >= 10 [I64.to_u8_wrap(value / 10), I64.to_u8_wrap(value % 10)] else [I64.to_u8_wrap(value)]
+
+expect number_digits(0) == [0] and number_digits(39) == [3, 9] and number_digits(100) == [1, 0, 0]
+
+expect {
+	# Canonical Doom status-bar coordinates at the 320x200 logical resolution.
+	ammo_rows = List.map([0.U64, 1.U64, 2.U64, 3.U64], |row| logical_height - 27 + U64.to_f32(row) * 6)
+	ammo_rows == [173, 179, 185, 191]
 }
 
 draw_keys! = |frame, atlas, keys, size| {

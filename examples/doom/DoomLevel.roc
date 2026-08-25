@@ -96,7 +96,7 @@ DoomLevel := [].{
 		top = I64.min(from.ceiling, to.ceiling)
 		step = to.floor - from.floor
 		blocked = DoomMap.line_flags(line.flags).blocks_players
-		Ok({ from_sector, to_sector, bottom, top, step, traversable: !blocked and step <= 24 and top - to.floor >= 56 })
+		Ok({ from_sector, to_sector, bottom, top, step, traversable: !blocked and step <= 24 and top - bottom >= 56 })
 	}
 
 	## Return the current sector boundary segments that collision must retain.
@@ -631,6 +631,38 @@ expect {
 	# topology has no sector with more than 64 candidate lines. This turns each
 	# actor query from 1175 line checks into at most 64 exact portal evaluations.
 	$equivalent and $sum <= List.len(map.raw().linedefs) * 2 and $maximum <= 64
+}
+
+expect {
+	# Every real two-sided E1M1 boundary must report the geometric opening it
+	# actually tests. Checking both directions catches clearance accidentally
+	# measured from only the destination floor.
+	map = DoomMap.e1m1
+	raw = map.raw()
+	state = DoomLevel.initial(map)
+	var $valid = Bool.True
+	for entry in List.map_with_index(raw.linedefs, |line, index| { line, index }) {
+		match (entry.line.right_sidedef, entry.line.left_sidedef) {
+			(Ok(right_index), Ok(left_index)) => {
+				right_sector = (List.get(raw.sidedefs, right_index) ?? crash "validated right side missing").sector
+				left_sector = (List.get(raw.sidedefs, left_index) ?? crash "validated left side missing").sector
+				for from_sector in [right_sector, left_sector] {
+					portal = DoomLevel.portal(map, state, entry.index, from_sector) ?? crash "validated portal missing"
+					from = DoomLevel.heights_for(state, portal.from_sector) ?? crash "from sector missing"
+					to = DoomLevel.heights_for(state, portal.to_sector) ?? crash "to sector missing"
+					expected_bottom = I64.max(from.floor, to.floor)
+					expected_top = I64.min(from.ceiling, to.ceiling)
+					expected_step = to.floor - from.floor
+					expected_traversable = !(DoomMap.line_flags(entry.line.flags).blocks_players) and expected_step <= 24 and expected_top - expected_bottom >= 56
+					if portal.bottom != expected_bottom or portal.top != expected_top or portal.step != expected_step or portal.traversable != expected_traversable {
+						$valid = Bool.False
+					}
+				}
+			}
+			_ => {}
+		}
+	}
+	$valid
 }
 
 expect {

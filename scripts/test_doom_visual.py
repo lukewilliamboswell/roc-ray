@@ -16,7 +16,7 @@ from pathlib import Path
 
 FAST_CHECKPOINTS = (
     "spawn", "strafe-left", "strafe-right", "mouse-turn",
-    "west-sky-portal", "first-corridor-wall-hole", "open-portal-collision", "colu-portal-navigation",
+    "west-sky-portal", "first-corridor-wall-hole", "open-portal-collision", "sector141-aperture", "colu-portal-navigation",
     "door-closed", "door-open", "combat",
 )
 
@@ -78,7 +78,7 @@ def rgba_rows(path: Path) -> tuple[int, int, bytes]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="rebuild native platform libraries first")
-    parser.add_argument("--frames", type=int, default=1000, help="native host-cycle safety cap")
+    parser.add_argument("--frames", type=int, default=1200, help="native host-cycle safety cap")
     parser.add_argument("--long", action="store_true", help="also follow the optional damaging-floor route")
     parser.add_argument("--keep", action="store_true", help="retain PNG review artifacts after success (the WebM is always retained)")
     args = parser.parse_args()

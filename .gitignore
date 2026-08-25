@@ -133,6 +133,7 @@ __pycache__/
 
 # Output written by the capture examples
 captures/
+examples/doom/evidence/*.webm
 shots/
 postcards/
 

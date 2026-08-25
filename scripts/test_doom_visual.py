@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Capture and validate representative native Libre Doom frames."""
+"""Capture representative native Libre Doom frames and a shareable WebM."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import shutil
 import struct
 import subprocess
 import sys
@@ -79,12 +80,14 @@ def main() -> int:
     parser.add_argument("--build", action="store_true", help="rebuild native platform libraries first")
     parser.add_argument("--frames", type=int, default=1000, help="native host-cycle safety cap")
     parser.add_argument("--long", action="store_true", help="also follow the optional damaging-floor route")
-    parser.add_argument("--keep", action="store_true", help="retain PNG and state evidence after success")
+    parser.add_argument("--keep", action="store_true", help="retain PNG review artifacts after success (the WebM is always retained)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     output = root / "examples" / "doom" / "evidence"
     output.mkdir(parents=True, exist_ok=True)
     checkpoints = FAST_CHECKPOINTS + (("damaging-floor",) if args.long else ())
+    video = output / ("doom-scripted-long.webm" if args.long else "doom-scripted-fast.webm")
+    video.unlink(missing_ok=True)
     for checkpoint in checkpoints:
         (output / f"{checkpoint}.png").unlink(missing_ok=True)
     command = [str(root / "scripts" / "run-example.py"), str(root / "examples" / "doom" / "visual_evidence.roc")]
@@ -106,6 +109,21 @@ def main() -> int:
     try:
         if tuple(records) != checkpoints:
             raise RuntimeError(f"state checkpoints differ: got {tuple(records)}, expected {checkpoints}")
+        if not video.is_file() or video.stat().st_size < 1024:
+            raise RuntimeError(f"recording was not finalized: {video}")
+        if video.read_bytes()[:4] != b"\x1a\x45\xdf\xa3":
+            raise RuntimeError(f"{video.name} has no WebM/EBML signature")
+        ffprobe = shutil.which("ffprobe")
+        if ffprobe:
+            probe = subprocess.run(
+                [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,width,height", "-of", "json", str(video)],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            if probe.returncode != 0:
+                raise RuntimeError(f"ffprobe rejected {video.name}: {probe.stderr.strip()}")
+            stream = json.loads(probe.stdout).get("streams", [{}])[0]
+            if stream.get("codec_name") != "vp8" or (stream.get("width"), stream.get("height")) != (320, 200):
+                raise RuntimeError(f"unexpected video stream: {stream}")
         for checkpoint in checkpoints:
             name = f"{checkpoint}.png"
             path = output / name
@@ -154,10 +172,7 @@ def main() -> int:
         if not args.keep:
             for checkpoint in checkpoints:
                 (output / f"{checkpoint}.png").unlink(missing_ok=True)
-            try:
-                output.rmdir()
-            except OSError:
-                pass
+        print(f"{video.name}: {video.stat().st_size} bytes, finalized VP8/WebM")
     print("Libre Doom native visual evidence passed")
     return 0
 

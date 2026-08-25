@@ -54,7 +54,7 @@ Model : {
 	evidence : Evidence,
 }
 
-Evidence : { active : Bool, long : Bool, stage : U64, tic : U64, mouse_x : F32, requested : List(Str), saved : U64, start_pos : DoomSim.Vec2, start_angle : DoomSim.Angle }
+Evidence : { active : Bool, long : Bool, stage : U64, tic : U64, mouse_x : F32, requested : List(Str), saved : U64, hold_until : U64, start_pos : DoomSim.Vec2, start_angle : DoomSim.Angle }
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
@@ -68,15 +68,30 @@ init! : App.Init(Model, _)
 init! = App.init_for_args(
 	|args| {
 		evidence = List.contains(args, "--capture-evidence")
+		long_evidence = List.contains(args, "--long-evidence")
 		cursor_mode : Mouse.CursorMode
 		cursor_mode = if evidence Visible else Locked
-		App.default
+		config = App.default
 			.with_title("RocRay: Freedoom E1M1")
 			.with_size(if evidence { width: 320, height: 200 } else { width: 1280, height: 720 })
 			.with_frame_pacing(if evidence Uncapped else VSync)
 			.with_visible(!(evidence))
 			.with_output_dir("examples/doom/evidence")
 			.with_cursor_mode(cursor_mode)
+		if evidence {
+			config.with_recording(
+				Capture.default
+					.with_path(if long_evidence "doom-scripted-long.webm" else "doom-scripted-fast.webm")
+					.with_format(WebM)
+					.with_fps(35)
+					.with_max_frames(0)
+					.with_scale(Full)
+					.with_timing(FixedStep)
+					.with_cursor(NoCursor),
+			)
+		} else {
+			config
+		}
 	},
 	|startup| {
 		evidence_active = List.contains(App.args!(startup), "--capture-evidence")
@@ -110,7 +125,7 @@ init! = App.init_for_args(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, long: List.contains(App.args!(startup), "--long-evidence"), stage: 0, tic: 0, mouse_x: 100, requested: [], saved: 0, start_pos: position, start_angle: angle } })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, long: List.contains(App.args!(startup), "--long-evidence"), stage: 0, tic: 0, mouse_x: 100, requested: [], saved: 0, hold_until: 0, start_pos: position, start_angle: angle } })
 	},
 )
 
@@ -183,10 +198,23 @@ update_evidence! = |model, input| {
 	# A capture task completes only after the returned model has had a
 	# presentation frame. Never place the next scenario while that task is
 	# outstanding: the PNG and the JSON record must describe the same model.
-	if model.evidence.saved < List.len(model.evidence.requested) {
+	if model.evidence.stage == 22 {
+		match input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(4))
+			_ => Ok(model)
+		}
+	} else if model.evidence.saved < List.len(model.evidence.requested) {
+		Ok(model)
+	} else if input.time.cycle_count < model.evidence.hold_until {
+		# Give each diagnostic viewpoint enough screen time to be legible when
+		# this same run is shared as a video, without changing its simulation.
 		Ok(model)
 	} else if model.evidence.saved >= required {
-		Err(Exit(0))
+		# Finalize explicitly and wait for the following sampled status. This
+		# makes a successful exit proof that the shareable WebM was closed.
+		Capture.stop!()
+		Ok({ ..model, evidence: { ..model.evidence, stage: 22 } })
 	} else if input.time.cycle_count > 1400 {
 		Err(Exit(2))
 	} else if model.evidence.stage == 0 {
@@ -379,7 +407,7 @@ capture_state! = |model, input, checkpoint| {
 			EvidenceSaved
 		},
 	)
-	{ ..model, evidence: { ..model.evidence, requested: List.append(model.evidence.requested, checkpoint) } }
+	{ ..model, evidence: { ..model.evidence, requested: List.append(model.evidence.requested, checkpoint), hold_until: input.time.cycle_count + 18 } }
 }
 
 nearest_blocking_line = |model, sector| {

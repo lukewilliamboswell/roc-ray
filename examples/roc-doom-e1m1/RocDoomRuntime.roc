@@ -345,14 +345,25 @@ RocDoomRuntime := [].{
 }
 
 heard_actor_ids = |map, sources, actors| {
+	heard_sectors = heard_sectors_for_sources(map, sources)
 	var $ids = []
 	for actor in actors {
-		if !(actor.ambush) and List.any(sources, |source| RocDoomSound.can_hear(map, source, actor.pos)) {
+		sector_heard = match RocDoomLevel.sector_at(map, { x: F32.to_f64(actor.pos.x), y: F32.to_f64(actor.pos.y) }) {
+			Ok(sector) => List.contains(heard_sectors, sector)
+			Err(_) => Bool.False
+		}
+		if !(actor.ambush) and sector_heard {
 			$ids = List.append($ids, actor.id)
 		}
 	}
 	$ids
 }
+
+heard_sectors_for_sources = |map, sources|
+	match List.first(sources) {
+		Err(_) => []
+		Ok(source) => List.concat(RocDoomSound.heard_sectors(map, source), heard_sectors_for_sources(map, List.drop_first(sources, 1)))
+	}
 
 # Build one bounded intercept set per simulation tic. Each linedef appears at
 # most once even though a two-sided boundary is discoverable from both sectors.

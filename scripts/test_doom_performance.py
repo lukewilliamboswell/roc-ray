@@ -27,7 +27,7 @@ def main() -> int:
     binary = root / "examples" / "doom" / "main"
     if not args.skip_build:
         build = subprocess.run(
-            [str(root / "scripts" / "run-example.py"), "examples/doom/main.roc", "--skip-platform-build", "--platform-mode=source", "--", "--host-headless", "--host-headless-frames=1"],
+            [str(root / "scripts" / "run-example.py"), "examples/roc-doom-e1m1/main.roc", "--skip-platform-build", "--platform-mode=source", "--", "--host-headless", "--host-headless-frames=1"],
             cwd=root,
         )
         if build.returncode != 0:

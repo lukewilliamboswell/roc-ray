@@ -112,7 +112,7 @@
       ]
     },
     {
-      "path": "examples/doom",
+      "path": "examples/roc-doom-e1m1",
       "cases": [
         {
           "name": "walks-fires-and-uses",

@@ -112,10 +112,10 @@ scripts/all_tests.py --only pong,snake
 
 For a focused release-equivalent verification of one example, require bundle
 mode and exercise the staged consumer through check, native build, and a bounded
-headless run. For example, the Libre Doom fidelity gate is:
+headless run. For example, the RocDOOM E1M1 gate is:
 
 ```bash
-scripts/all_tests.py --only doom --skip-platform-build --skip-roc-test \
+scripts/all_tests.py --only roc-doom-e1m1 --skip-platform-build --skip-roc-test \
     --skip-bundle-test --skip-interop-test --skip-integration-probes \
     --platform-mode=bundle --skip-windowed --headless-frames=3
 ```

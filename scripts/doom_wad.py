@@ -609,7 +609,7 @@ def main() -> None:
         raise SystemExit(f"Pillow {PILLOW_VERSION} required; found {PIL.__version__}")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, help="official freedoom-0.13.0.zip for offline extraction")
-    parser.add_argument("--output", type=Path, default=Path("examples/doom/assets/freedoom/generated/e1m1"))
+    parser.add_argument("--output", type=Path, default=Path("examples/roc-doom-e1m1/assets/freedoom/generated/e1m1"))
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if args.check:

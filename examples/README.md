@@ -60,7 +60,7 @@ value arrives as one `Msg` on a later `input.messages`.
 | [Live Plot](live_plot/main.roc) | A whole source tree walked with `Files.list!`, read and parsed through a backlog of tasks, and drawn as a scrolling strip of a quarter of a million lines under a fixed point budget that evicts and re-reads on demand |
 | [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
 | [Cave Climb](cave_climb/main.roc) | Platforming physics, a mirror-bouncing laser and a spring grapple, tilemaps, camera tracking, and audio split across modules |
-| [Libre Doom](doom/main.roc) | A Doom-compatible game evolving against pinned Freedoom E1M1 data and Chocolate Doom behaviour; its [fidelity matrix](doom/FIDELITY.md) records the evidence required |
+| [RocDOOM E1M1](roc-doom-e1m1/main.roc) | A Doom-compatible game built over pinned Freedoom E1M1 data, with a fixed-tic simulation, BSD-tree rendering, enemies, combat and line specials |
 
 Use these to see several systems composed in one application.
 

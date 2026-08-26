@@ -195,7 +195,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("examples/doom/assets/freedoom"),
+        default=Path("examples/roc-doom-e1m1/assets/freedoom"),
         help="asset directory to populate",
     )
     parser.add_argument("--check", action="store_true", help="fail if regenerating would change checked-in output")

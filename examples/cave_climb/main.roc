@@ -21,6 +21,7 @@ import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
+import rr.Trace
 import Cave
 
 GameState : Cave.GameState
@@ -761,6 +762,7 @@ update! = |model, program_input| {
 
 	restart = input.key_pressed(KeySpace)
 	tools = tool_input(input, camera_for(model.level, model.world.player.pos))
+	update_zone = Trace.begin!("advance cave world")
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
@@ -773,6 +775,7 @@ update! = |model, program_input| {
 		Won => if restart new_world(model.level) else model.world
 		GameOver => if restart new_world(model.level) else model.world
 	}
+	Trace.end!(update_zone)
 
 	if input.key_pressed(KeyEscape) {
 		Err(Exit(0))
@@ -796,7 +799,9 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
+	hud_zone = Trace.begin!("draw cave HUD")
 	draw_hud!(frame, model.level, model.world, model.font)
+	Trace.end!(hud_zone)
 
 	Ok({})
 }
@@ -818,15 +823,27 @@ draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, Draw.Texture, Draw.
 draw_world! = |frame, level, background, tiles, characters, enemies_texture, world, viewport| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
 	frame.texture!({ texture: background, source: { x: 0, y: 0, width: background.width, height: background.height }, dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
+	tilemap_zone = Trace.begin!("draw cave tilemap")
 	level.tilemap.draw_all_in!(frame, viewport)
+	Trace.end!(tilemap_zone)
+	actors_zone = Trace.begin!("draw cave actors")
+	landmarks_zone = Trace.begin!("draw cave landmarks")
 	draw_checkpoints!(frame, tiles, level, world)
 	draw_goal!(frame, tiles, level, world)
-	draw_gems!(frame, tiles, world.gems, world.phase)
-	draw_hazard_marks!(frame, tiles, level.hazards, world.phase)
-	draw_mirrors!(frame, level.mirrors, world.phase)
-	draw_enemies!(frame, enemies_texture, world.enemies, world.phase)
+	Trace.end!(landmarks_zone)
+	gems_zone = Trace.begin!("draw cave gems and hazards")
+	draw_gems!(frame, tiles, world.gems, world.phase, viewport)
+	draw_hazard_marks!(frame, tiles, level.hazards, world.phase, viewport)
+	Trace.end!(gems_zone)
+	obstacles_zone = Trace.begin!("draw cave mirrors and enemies")
+	draw_mirrors!(frame, level.mirrors, world.phase, viewport)
+	draw_enemies!(frame, enemies_texture, world.enemies, world.phase, viewport)
+	Trace.end!(obstacles_zone)
+	tools_zone = Trace.begin!("draw cave tools and player")
 	draw_tools!(frame, world)
 	draw_player!(frame, characters, world.player)
+	Trace.end!(tools_zone)
+	Trace.end!(actors_zone)
 }
 
 gem_source : Math.Rect
@@ -877,24 +894,30 @@ draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 		)
 		.draw!(frame)
 
-draw_gems! : Draw.Frame, Draw.Texture, List(Gem), F32 => {}
-draw_gems! = |frame, tiles, gems, phase| {
+draw_gems! : Draw.Frame, Draw.Texture, List(Gem), F32, Math.Rect => {}
+draw_gems! = |frame, tiles, gems, phase, viewport| {
 	for gem in gems {
 		if !(gem.taken) {
 			pos = Cave.Space.world_to_map(gem.pos)
 			pulse = 0.86 + ping_pong(wrap_unit(phase + U64.to_f32(gem.id) * 0.07)) * 0.12
-			frame.circle_gradient!({ center: pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
-			draw_tile_sprite!(frame, tiles, gem_source, pos, 0.72 * pulse, phase * 60)
+			radius = 42 * pulse
+			if Math.circle_rect({ center: pos, radius }, viewport) {
+				frame.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
+				draw_tile_sprite!(frame, tiles, gem_source, pos, 0.72 * pulse, phase * 60)
+			}
 		}
 	}
 }
 
-draw_hazard_marks! : Draw.Frame, Draw.Texture, List(Danger), F32 => {}
-draw_hazard_marks! = |frame, tiles, hazards, phase| {
+draw_hazard_marks! : Draw.Frame, Draw.Texture, List(Danger), F32, Math.Rect => {}
+draw_hazard_marks! = |frame, tiles, hazards, phase, viewport| {
 	for hazard in hazards {
 		pos = Cave.Space.world_to_map(hazard.pos)
-		frame.circle_gradient!({ center: pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
-		draw_tile_sprite!(frame, tiles, saw_source, pos, 0.78, phase * 260)
+		radius = hazard.radius * 1.8
+		if Math.circle_rect({ center: pos, radius }, viewport) {
+			frame.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
+			draw_tile_sprite!(frame, tiles, saw_source, pos, 0.78, phase * 260)
+		}
 	}
 }
 
@@ -931,8 +954,8 @@ draw_goal! = |frame, tiles, level, world| {
 	draw_tile_sprite!(frame, tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
-draw_mirrors! : Draw.Frame, List(Mirror), F32 => {}
-draw_mirrors! = |frame, mirrors, phase| {
+draw_mirrors! : Draw.Frame, List(Mirror), F32, Math.Rect => {}
+draw_mirrors! = |frame, mirrors, phase, viewport| {
 	for mirror in mirrors {
 		segment = mirror.segment(phase)
 		start = Cave.Space.world_to_map(segment.start)
@@ -940,12 +963,15 @@ draw_mirrors! = |frame, mirrors, phase| {
 		center = Cave.Space.world_to_map(mirror.pos)
 		glass = Color.from_hex_rgb(0xbaf2ff)
 		edge = Color.from_hex_rgb(0x3a506b)
-		frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
-		frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
-		frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-		frame.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
-		frame.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
-		frame.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
+		bounds = Math.rect(F32.min(start.x, end.x) - 8, F32.min(start.y, end.y) - 8, F32.abs(end.x - start.x) + 16, F32.abs(end.y - start.y) + 16)
+		if Math.overlaps(bounds, viewport) {
+			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+			frame.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
+			frame.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
+			frame.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
+		}
 	}
 }
 
@@ -955,14 +981,17 @@ enemy_source = |enemy, phase| {
 	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
 }
 
-draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32 => {}
-draw_enemies! = |frame, texture, enemies, phase| {
+draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32, Math.Rect => {}
+draw_enemies! = |frame, texture, enemies, phase, viewport| {
 	for enemy in enemies {
 		if enemy.alive {
 			pos = Cave.Space.world_to_map(enemy.pos)
 			pulse = 0.9 + ping_pong(wrap_unit(phase + U64.to_f32(enemy.id) * 0.09)) * 0.08
-			frame.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
-			draw_tile_sprite!(frame, texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
+			radius = F32.max(enemy.radius + 3, 34 * pulse)
+			if Math.circle_rect({ center: pos, radius }, viewport) {
+				frame.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
+				draw_tile_sprite!(frame, texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
+			}
 		}
 	}
 }

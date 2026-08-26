@@ -18,7 +18,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | capture_plot | 131.8 us | 168 B / 3.0 calls | 46.0 | Baseline captured; analysis pending |
 | capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Exits after 6 cycles headlessly; workload-specific capture still needed |
 | capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Baseline captured; analysis pending |
-| cave_climb | 251.1 us | 816 B / 1.0 calls | 69.0 | Dedicated baseline captured; analysis pending |
+| cave_climb | 251.1 us | 816 B / 1.0 calls | 69.0 | Optimized; see result below |
 | drop_viewer | 106.5 us | 11,219 B / 92.0 calls | 8.0 | Optimized; see result below |
 | generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Baseline captured; analysis pending |
 | hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
@@ -38,6 +38,18 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Baseline captured; network workload needs scripted capture |
 
 ## Accepted optimizations
+
+### cave_climb: cull off-camera actors
+
+Trace zones separated the 183.5 us average render callback into tilemap (14.0
+us), HUD (9.6 us), and actors (115.2 us). Gems and hazard markers alone took
+67.2 us because all eight gems and six hazards were submitted throughout the
+vertically scrolling level. Mirrors and enemies had the same issue. Culling by
+the complete glow, sprite, or segment bounds reduced accepted draw calls from
+69 to 31 per cycle without changing allocation traffic. Average render time
+fell to 119.6 us, median cycle time from 251.1 us to 187.2 us, and p95 from
+258.2 us to 196.4 us. A 240-cycle hidden raylib run also completed cleanly with
+zero Observatory omissions.
 
 ### drop_viewer: prepare static interface copy
 

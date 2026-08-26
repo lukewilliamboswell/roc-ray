@@ -722,6 +722,7 @@ def run_observatory_probe(
                 "final_state": "complete",
                 "target_profile": "native-headless",
                 "backend": "headless_stub",
+                "app_name": "observatory",
             }
             for key, expected in required_metadata.items():
                 if metadata.get(key) != expected:

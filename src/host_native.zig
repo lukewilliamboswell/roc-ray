@@ -12104,7 +12104,7 @@ fn reserveObservatoryPath(allocator: std.mem.Allocator, options: RuntimeOptions)
     if (options.stats_output) |explicit| return allocator.dupe(u8, explicit);
     const wall_nanos = std.Io.Clock.real.now(mainThreadIo()).nanoseconds;
     const seconds: u64 = @intCast(@max(@divFloor(wall_nanos, std.time.ns_per_s), 0));
-    const raw_name = if (options.app_args.len == 0) "app" else std.fs.path.basename(std.mem.span(options.app_args[0]));
+    const raw_name = if (options.app_args.len == 0) "app" else portableAppName(std.mem.span(options.app_args[0]));
     var collision: u32 = 1;
     while (true) : (collision += 1) {
         const path = try formatObservatoryDefaultPath(allocator, raw_name, seconds, collision);
@@ -12146,6 +12146,20 @@ fn portableBaseName(path: []const u8) []const u8 {
     return if (start == path.len) "unavailable" else path[start..];
 }
 
+fn portableAppName(path: []const u8) []const u8 {
+    const executable = portableBaseName(path);
+    const generic = std.mem.eql(u8, executable, "main") or
+        std.mem.eql(u8, executable, "main.exe") or
+        std.mem.eql(u8, executable, "main.roc");
+    if (!generic) return executable;
+
+    const executable_start = path.len - executable.len;
+    if (executable_start == 0) return executable;
+    const parent = path[0 .. executable_start - 1];
+    const parent_name = portableBaseName(parent);
+    return if (std.mem.eql(u8, parent_name, "unavailable")) executable else parent_name;
+}
+
 fn startObservatory(allocator: std.mem.Allocator, options: RuntimeOptions) !ObservatoryRecording {
     const buffer_bytes = std.math.mul(u64, options.stats_buffer_mib, 1024 * 1024) catch return error.InvalidArgument;
     // Each retained chunk also has one free-list and one ready-queue index.
@@ -12175,7 +12189,7 @@ fn startObservatory(allocator: std.mem.Allocator, options: RuntimeOptions) !Obse
             .target_profile = observatoryTargetProfile(options.headless),
             .backend = observatoryBackendName(options.headless),
             .executable_name = executable_name,
-            .app_name = executable_name,
+            .app_name = portableAppName(executable_argument),
             .clock_resolution_ns = @intCast(@max(clock_resolution.nanoseconds, 0)),
             .utc_origin_unix_ns = @intCast(@max(utc_origin, 0)),
             .benchmark_writer_delay_ms = observatoryBenchmarkWriterDelayMs(
@@ -12204,6 +12218,10 @@ test "observatory executable metadata basename is portable" {
     try std.testing.expectEqualStrings("app.exe", portableBaseName("C:\\games\\app.exe"));
     try std.testing.expectEqualStrings("app", portableBaseName("app"));
     try std.testing.expectEqualStrings("unavailable", portableBaseName("/"));
+    try std.testing.expectEqualStrings("particles", portableAppName("/tmp/examples/particles/main.roc"));
+    try std.testing.expectEqualStrings("particles", portableAppName("C:\\examples\\particles\\main.exe"));
+    try std.testing.expectEqualStrings("particles", portableAppName("/opt/games/particles"));
+    try std.testing.expectEqualStrings("main.roc", portableAppName("main.roc"));
     try std.testing.expectEqualStrings("nightly-2026-08-23-fb208ba", roc_compiler_pin);
 }
 

@@ -70,8 +70,10 @@ assuming table or column meanings.
 - `metadata` records schema, requested and effective detail, host environment,
   build identity, configured limits, clean shutdown, and final state. Build
   identity includes the Roc compiler pin embedded from `.roc-version`, target
-  profile, backend, OS, architecture, and the portable executable/application
-  basename derived from argument zero. `rocray_version` is `unavailable` until
+  profile, backend, OS, architecture, and portable executable/application
+  identity derived from argument zero. A generically named `main`, `main.exe`,
+  or `main.roc` executable uses its parent directory as the application
+  identity. `rocray_version` is `unavailable` until
   the build embeds an authoritative RocRay release version. These values come
   only from build/host configuration and process argument zero, never from the
   Roc application model or message payloads.
@@ -88,7 +90,8 @@ assuming table or column meanings.
   render-callback time, task-executor time (including polling or pacing), and
   residual host time; task/effect/draw/resource/queue counts; and Roc allocation,
   free, live, peak-live, and update-attributed allocation counters.
-- `annotations` records marks, zone endpoints, and numeric samples. The
+- `annotations` records marks, zone endpoints, and numeric samples. Zone rows
+  use `integer_value` for their recorder-private correlation ID; otherwise an
   irrelevant numeric column is SQL `NULL`. Zone-end rows include `wall_ns`,
   `active_ns`, and `parked_ns`; nested open zones are each charged for waits
   they span, and `wall_ns = active_ns + parked_ns`. A live task cancelled by

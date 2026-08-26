@@ -49,7 +49,7 @@ WITH checks AS (
       CASE WHEN NOT schema_ok THEN 'schema version differs or is unsupported'
            WHEN NOT captures_ok THEN 'one or both captures are untrusted or incomplete'
            WHEN NOT evidence_ok THEN 'required measurement evidence is incomplete'
-           WHEN NOT app_ok THEN 'application basename differs'
+           WHEN NOT app_ok THEN 'application identity differs'
            WHEN NOT environment_ok THEN 'target, backend, operating system, or architecture differs'
            WHEN NOT recorder_ok THEN 'detail level or recorder configuration differs'
            ELSE 'mechanically comparable; workload equivalence remains the caller responsibility' END AS reason

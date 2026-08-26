@@ -148,7 +148,7 @@ class QueryCorpusTests(unittest.TestCase):
         db.execute("ATTACH DATABASE ? AS after", (str(after),))
         row = db.execute(query("compare.sql")).fetchone()
         self.assertEqual("incomparable", row["evidence_status"])
-        self.assertEqual("application basename differs", row["evidence_reason"])
+        self.assertEqual("application identity differs", row["evidence_reason"])
 
 
 if __name__ == "__main__":

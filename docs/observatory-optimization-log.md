@@ -34,7 +34,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | snake | 157.1 us | 2,386 B / 20.1 calls | 64.6 | Baseline captured; analysis pending |
 | sqlite_scores | 62.5 us | 264 B / 2.0 calls | 13.0 | Baseline captured; database workload needs scripted capture |
 | task_sleep | 16,798.3 us | 193 B / 2.1 calls | 59.0 | Expected pacing/waiting example; task query separates parked from active work |
-| top_down | 321.5 us | 5,024 B / 37.0 calls | 106.0 | Baseline captured; analysis pending |
+| top_down | 321.5 us | 5,024 B / 37.0 calls | 106.0 | Optimized; see result below |
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Baseline captured; network workload needs scripted capture |
 
 ## Accepted optimizations
@@ -88,6 +88,17 @@ values there. Moving `prepare!` to `init!` reduced recurring traffic to 104 B
 and one call per cycle, reduced accepted draw calls from 17 to 15, and reduced
 the headless median cycle from 180.9 us to 75.7 us. This is a 99.5% reduction
 in recurring allocation bytes and a 58.1% median-cycle reduction in this run.
+
+### top_down: cull off-camera world actors
+
+The baseline submitted every obstacle, decoration, spark, and moving hazard in
+the level even when the camera could not show it. Conservative tests against
+each actor's complete visual bounds reduced accepted draw calls from 106 to 46
+per cycle and average render time from 294.6 us to 198.2 us. Although average
+update time rose from 14.1 us to 48.3 us across the rebuild, the repeat capture
+confirmed a net improvement: median cycle time fell from 321.5 us to 261.7 us
+and p95 from 333.0 us to 265.8 us. A 240-frame hidden raylib run moved the
+camera in three directions and completed with zero Observatory omissions.
 
 ## Observatory friction and issues
 

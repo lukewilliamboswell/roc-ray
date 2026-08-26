@@ -13,8 +13,8 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | Example | Median cycle | Allocation | Draw calls | Status / evidence |
 | --- | ---: | ---: | ---: | --- |
 | async_read | 100.0 us | 3,791 B / 5.1 calls | 27.0 | Baseline captured; analysis pending |
-| breakout | 339.1 us | 280 B / 1.0 calls | 114.0 | Baseline captured; analysis pending |
-| camera | 124.1 us | 56 B / 1.0 calls | 83.0 | Baseline captured; analysis pending |
+| breakout | 339.1 us | 280 B / 1.0 calls | 114.0 | Audited; visible brick-and-glow workload retained |
+| camera | 124.1 us | 56 B / 1.0 calls | 83.0 | Optimized; see result below |
 | capture_plot | 131.8 us | 168 B / 3.0 calls | 46.0 | Baseline captured; analysis pending |
 | capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Exits after 6 cycles headlessly; workload-specific capture still needed |
 | capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Baseline captured; analysis pending |
@@ -26,7 +26,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Optimized; see result below |
 | live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Optimized; parsing remains the dominant cost |
 | particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Audited; bounded batch construction is already efficient |
-| pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Baseline captured; analysis pending |
+| pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Audited; visible trail-and-glow workload retained |
 | post_process | 180.9 us | 21,091 B / 171.0 calls | 17.0 | Optimized; see result below |
 | postcard_studio | 58.6 us | 102 B / 1.0 calls | 16.0 | Baseline captured; analysis pending |
 | projective_texture | 51.5 us | 144 B / 1.0 calls | 14.0 | Baseline captured; analysis pending |
@@ -38,6 +38,16 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Optimized; loopback timing remains nondeterministic |
 
 ## Accepted optimizations
+
+### camera: cull the world grid to the rotated view
+
+The example submitted every line spanning its 3,200 by 2,400 world regardless
+of the camera view. Converting all four screen corners to world space gives a
+conservative axis-aligned bound even while the camera is rotated. Applying it
+to grid submission reduced accepted draw calls from 83 to 48 per cycle and
+total render callback time from 25.1 ms to 22.4 ms over 240 cycles. Median
+cycle time improved from 124.1 us to 121.7 us. A hidden real-window run moved
+and rotated the camera through 170 frames and recorded zero omissions.
 
 ### input_inspector: retain invariant key-chip labels
 
@@ -134,6 +144,16 @@ at 1.25 ms total and instance preparation at 4.82 ms total over 240 cycles,
 with a 58.9 us median cycle. Removing that traffic would require reducing the
 demonstrated workload or changing the public batch representation, not fixing
 avoidable application work.
+
+### breakout and pong: retain the visible game presentation
+
+Both baselines have negligible recurring allocation relative to their work:
+280 B in one call for `breakout` and 479 B in three calls for `pong`. Source
+review accounts for the draw submissions as visible bricks and their sheen in
+`breakout`, and the centre dashes, short ball trail, bodies, and additive glow
+in `pong`. They use prepared invariant text and bounded on-screen collections;
+there is no off-camera population or invariant per-frame layout to remove
+without simplifying the intended examples.
 
 ## Observatory friction and issues
 

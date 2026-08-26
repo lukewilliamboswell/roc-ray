@@ -25,7 +25,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Baseline captured; task workload needs separate interpretation |
 | input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Optimized; see result below |
 | live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Optimized; parsing remains the dominant cost |
-| particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Trace attributes recurring list construction; analysis pending |
+| particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Audited; bounded batch construction is already efficient |
 | pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Baseline captured; analysis pending |
 | post_process | 180.9 us | 21,091 B / 171.0 calls | 17.0 | Optimized; see result below |
 | postcard_studio | 58.6 us | 102 B / 1.0 calls | 16.0 | Baseline captured; analysis pending |
@@ -35,7 +35,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | sqlite_scores | 62.5 us | 264 B / 2.0 calls | 13.0 | Baseline captured; database workload needs scripted capture |
 | task_sleep | 16,798.3 us | 193 B / 2.1 calls | 59.0 | Expected pacing/waiting example; task query separates parked from active work |
 | top_down | 321.5 us | 5,024 B / 37.0 calls | 106.0 | Optimized; see result below |
-| udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Baseline captured; network workload needs scripted capture |
+| udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Optimized; loopback timing remains nondeterministic |
 
 ## Accepted optimizations
 
@@ -112,6 +112,29 @@ confirmed a net improvement: median cycle time fell from 321.5 us to 261.7 us
 and p95 from 333.0 us to 265.8 us. A 240-frame hidden raylib run moved the
 camera in three directions and completed with zero Observatory omissions.
 
+### udp_cursor: stop submitting grid lines beyond the window
+
+The fixed 32-by-32 grid submitted both a horizontal and vertical line for every
+offset even after an offset exceeded the corresponding window dimension.
+Checking each axis independently reduced accepted draw calls from 84 to 57 per
+cycle at the default size. Two repeat captures put total render callback time
+at 23.5 ms, down from the 24.9 ms baseline, with allocation unchanged. Overall
+cycle latency is not used for this acceptance decision because loopback receive
+task delivery varied materially between runs.
+
+## Evidence-backed no-change audits
+
+### particles: retain the explicit 4,000-sprite workload
+
+Full allocation lifetimes showed no realloc moves or copied bytes after the
+first cycle. The recurring traffic is the bounded particle-state map plus the
+exact 4,000-element texture-instance batch; rendering crosses the hosted
+boundary once for the batch. Observatory zones measured particle advancement
+at 1.25 ms total and instance preparation at 4.82 ms total over 240 cycles,
+with a 58.9 us median cycle. Removing that traffic would require reducing the
+demonstrated workload or changing the public batch representation, not fixing
+avoidable application work.
+
 ## Observatory friction and issues
 
 - Full detail has meaningful observer cost, so absolute timings are used to
@@ -131,6 +154,10 @@ camera in three directions and completed with zero Observatory omissions.
   zone and callback totals are useful, but individual cycle comparisons are
   not a controlled benchmark until the app exposes a deterministic non-capture
   workload.
+- `udp_cursor` loopback delivery changes how many receive completions are
+  folded into each cycle. Render callback totals and accepted draw counts are
+  repeatable, but whole-cycle before/after latency is not without a scripted
+  peer and delivery schedule.
 - A `generated_assets` experiment prepared its four swatch numbers and one
   static subtitle. It reduced allocation from 1,852 B/18 calls to 128 B/one
   call, but two repeat captures showed update time rising by about 9 us with

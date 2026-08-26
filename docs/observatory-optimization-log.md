@@ -24,7 +24,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
 | http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Baseline captured; task workload needs separate interpretation |
 | input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Optimized; see result below |
-| live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Highest-priority baseline; file workload and update folding need separation |
+| live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Optimized; parsing remains the dominant cost |
 | particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Trace attributes recurring list construction; analysis pending |
 | pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Baseline captured; analysis pending |
 | post_process | 180.9 us | 21,091 B / 171.0 calls | 17.0 | Optimized; see result below |
@@ -49,6 +49,18 @@ us, but average render time fell from 373.0 us to 335.8 us; median cycle time
 improved from 389.4 us to 367.7 us and p95 from 430.2 us to 413.5 us. The
 scripted real-window event-order and quit path still produced the expected
 events.
+
+### live_plot: retain parsed-file summary totals
+
+Added zones separated filesystem task delivery from application work and then
+split update and rendering into their major parts. Parsing and eviction remain
+the principal cost, but the HUD was also folding every retained lane twice per
+frame to rediscover the number of ready files and total parsed lines. Maintaining
+those two totals when a scan advances, completes, or is reset for a refetch
+removed the full-list folds. Across matched 240-cycle full-detail runs, total
+render callback time fell from 351.5 ms to 289.5 ms and the HUD zone from 281.6
+ms to 231.0 ms. P95 cycle time fell from 30.45 ms to 28.78 ms. The retained
+zones make the still-dominant parse-and-evict work explicit for future tuning.
 
 ### cave_climb: cull off-camera actors
 
@@ -114,6 +126,11 @@ camera in three directions and completed with zero Observatory omissions.
 - Many examples have no Trace zones. Observatory identifies the expensive
   callback and allocation phase, but source-level attribution then requires
   inspection or a temporary/additional annotation.
+- `live_plot` walks the working directory using concurrent tasks, so the files
+  delivered in any particular cycle vary between captures. Repeated aggregate
+  zone and callback totals are useful, but individual cycle comparisons are
+  not a controlled benchmark until the app exposes a deterministic non-capture
+  workload.
 - A `generated_assets` experiment prepared its four swatch numbers and one
   static subtitle. It reduced allocation from 1,852 B/18 calls to 128 B/one
   call, but two repeat captures showed update time rising by about 9 us with

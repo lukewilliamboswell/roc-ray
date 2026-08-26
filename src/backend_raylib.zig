@@ -2353,6 +2353,12 @@ pub fn disableCursor() void {
     rl.DisableCursor();
 }
 
+/// Whether raylib currently considers the cursor hidden, which is the state
+/// `disableCursor` establishes and anything that releases the grab clears.
+pub fn isCursorHidden() bool {
+    return rl.IsCursorHidden();
+}
+
 /// Unlock the OS cursor and make it visible.
 pub fn enableCursor() void {
     rl.EnableCursor();

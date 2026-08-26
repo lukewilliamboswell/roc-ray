@@ -8330,10 +8330,14 @@ const CursorFocusTransition = struct {
     reassert_lock: bool,
 };
 
-fn cursorFocusTransition(state: CursorFocusState, focused: bool) CursorFocusTransition {
+fn cursorFocusTransition(state: CursorFocusState, focused: bool, cursor_hidden: bool) CursorFocusTransition {
     return .{
         .state = .{ .desired = state.desired, .was_focused = focused },
-        .reassert_lock = state.desired == .locked and focused and !state.was_focused,
+        // A focus round trip that completes between two polls is invisible to
+        // `was_focused`, and a window manager can drop the grab without any
+        // focus change at all, so an authorized lock that is no longer in
+        // effect is reasserted on whatever frame notices it.
+        .reassert_lock = state.desired == .locked and focused and (!state.was_focused or !cursor_hidden),
     };
 }
 
@@ -8349,7 +8353,7 @@ fn applyCursorMode(mode: CursorMode) void {
 }
 
 fn serviceCursorFocus(focused: bool) void {
-    const transition = cursorFocusTransition(active_cursor_focus, focused);
+    const transition = cursorFocusTransition(active_cursor_focus, focused, raylib.isCursorHidden());
     active_cursor_focus = transition.state;
     if (transition.reassert_lock) applyCursorMode(.locked);
 }
@@ -8403,24 +8407,36 @@ test "cursor mode codes map invalid values to visible" {
 
 test "locked cursor reasserts on first focus and every focus regain only" {
     var state = CursorFocusState{ .desired = .locked };
-    var transition = cursorFocusTransition(state, false);
+    var transition = cursorFocusTransition(state, false, false);
     try std.testing.expect(!transition.reassert_lock);
     state = transition.state;
-    transition = cursorFocusTransition(state, true);
+    transition = cursorFocusTransition(state, true, false);
     try std.testing.expect(transition.reassert_lock);
     state = transition.state;
-    transition = cursorFocusTransition(state, true);
+    transition = cursorFocusTransition(state, true, true);
     try std.testing.expect(!transition.reassert_lock);
     state = transition.state;
-    transition = cursorFocusTransition(state, false);
+    transition = cursorFocusTransition(state, false, true);
     try std.testing.expect(!transition.reassert_lock);
-    transition = cursorFocusTransition(transition.state, true);
+    transition = cursorFocusTransition(transition.state, true, true);
     try std.testing.expect(transition.reassert_lock);
 }
 
+test "locked cursor reasserts when the grab is lost without a focus change" {
+    // The window never reports losing focus, but the cursor came unhidden:
+    // the lock is gone and has to be retaken rather than waiting for a focus
+    // transition that will never arrive.
+    const state = CursorFocusState{ .desired = .locked, .was_focused = true };
+    try std.testing.expect(cursorFocusTransition(state, true, false).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(state, true, true).reassert_lock);
+    // An unfocused window is left alone; taking the grab back there would
+    // steal the pointer from whatever the user switched to.
+    try std.testing.expect(!cursorFocusTransition(state, false, false).reassert_lock);
+}
+
 test "visible and hidden cursor modes never request focus reassertion" {
-    try std.testing.expect(!cursorFocusTransition(.{ .desired = .visible }, true).reassert_lock);
-    try std.testing.expect(!cursorFocusTransition(.{ .desired = .hidden }, true).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .visible }, true, false).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .hidden }, true, false).reassert_lock);
 }
 
 test "window minimums and exit keys clamp negatives to the no-op zero" {

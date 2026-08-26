@@ -53,7 +53,9 @@ def capture_facts(
             raise RuntimeError("capture detail does not match the benchmark mode")
         cycle_count = db.execute("SELECT count(*) FROM cycles").fetchone()[0]
         if not slow_writer and cycle_count != expected_frames:
-            raise RuntimeError(f"expected {expected_frames} cycles, recorded {cycle_count}")
+            raise RuntimeError(
+                f"{expected_detail}: expected {expected_frames} cycles, recorded {cycle_count}"
+            )
         if slow_writer and not 0 < cycle_count <= expected_frames:
             raise RuntimeError(f"slow-writer capture has invalid cycle count {cycle_count}")
         health = db.execute(
@@ -120,9 +122,19 @@ def run_sample(executable: Path, directory: Path, mode: str, frames: int, repeti
     slow_writer = mode == "full_slow_writer"
     if mode != "disabled":
         detail = "full" if slow_writer else mode
-        command.extend((f"--host-stats-output={capture}", f"--host-stats-detail={detail}"))
+        command.extend(
+            (
+                f"--host-stats-output={capture}",
+                f"--host-stats-detail={detail}",
+                "--host-stats-max-mib=128",
+            )
+        )
         if slow_writer:
             command.append("--host-stats-buffer-mib=1")
+        else:
+            # This benchmark validates recorder cost, not default-buffer
+            # saturation while an intentionally tiny app runs flat out.
+            command.append("--host-stats-buffer-mib=512")
     environment = os.environ.copy()
     if slow_writer:
         environment["ROC_RAY_OBSERVATORY_BENCH_WRITER_DELAY_MS"] = SLOW_WRITER_DELAY_MS

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute every public Observatory SQL investigation against a v11 fixture."""
+"""Read-only contract tests for the public Observatory SQL corpus."""
 
 from __future__ import annotations
 
@@ -9,86 +9,146 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).parent
+QUERY_DIR = HERE / "observatory_queries"
 SPEC = importlib.util.spec_from_file_location("analyzer_tests", HERE / "test_analyze_observatory.py")
 assert SPEC and SPEC.loader
 fixture_module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fixture_module)
 
-EXPECTED_COLUMNS = {
-    "01_recording_trust.sql": ("schema_version", "clean_shutdown", "final_state", "omitted_events", "writer_failed", "incomplete_measurements"),
-    "02_slowest_cycles.sql": ("evidence_status", "evidence_reason", "cycle", "duration_ns", "update_ns", "render_callback_ns", "task_executor_ns", "host_other_ns"),
-    "03_presentation_budget_misses.sql": ("evidence_status", "evidence_reason", "missed_cycles"),
-    "04_cycle_percentiles.sql": ("evidence_status", "evidence_reason", "median_ns", "p95_ns", "p99_ns"),
-    "05_missed_frame_dominance.sql": ("evidence_status", "evidence_reason", "cycle", "duration_ns", "largest_measured_component"),
-    "06_expensive_zones.sql": ("evidence_status", "evidence_reason", "name", "phase", "zone_count", "wall_ns", "active_ns", "parked_ns", "max_wall_ns"),
-    "07_marks_around_slow_cycles.sql": ("evidence_status", "evidence_reason", "cycle", "timestamp_ns", "name"),
-    "08_effect_tail_latency.sql": ("evidence_status", "evidence_reason", "name", "calls", "mean_ns", "max_ns", "non_success"),
-    "09_boundary_copy_hotspots.sql": ("evidence_status", "evidence_reason", "name", "calls", "inbound_copied_bytes", "outbound_copied_bytes", "ownership_transfer_bytes"),
-    "10_allocation_heavy_cycles.sql": ("evidence_status", "evidence_reason", "cycle", "alloc_calls", "alloc_bytes", "free_calls", "free_bytes", "live_bytes", "peak_live_bytes"),
-    "11_live_allocations.sql": ("evidence_status", "evidence_reason", "subject_id", "bytes", "phase", "task_id", "zone_id"),
-    "12_reallocation_moves.sql": ("evidence_status", "evidence_reason", "subject_id", "cycle", "timestamp_ns", "prior_bytes", "bytes", "copied_bytes", "phase", "task_id", "zone_id"),
-    "13_long_task_turns.sql": ("evidence_status", "evidence_reason", "subject_id", "started_ns", "active_ns"),
-    "14_task_latency_decomposition.sql": ("evidence_status", "evidence_reason", "subject_id", "spawned_ns", "started_ns", "finished_ns", "delivered_ns"),
-    "15_worker_vs_external.sql": ("evidence_status", "evidence_reason", "name", "calls", "worker_ns", "external_ns", "unavailable_worker", "unavailable_external"),
-    "16_queue_saturation.sql": ("evidence_status", "evidence_reason", "name", "saturation_events", "high_water", "capacity", "oldest_age_ns"),
-    "17_resource_destruction_delay.sql": ("evidence_status", "evidence_reason", "subject_id", "name", "destruction_delay_ns", "heap_high_water"),
-    "18_input_to_presentation.sql": ("evidence_status", "evidence_reason", "subject_id", "parent_id", "cycle", "duration_ns"),
-    "19_rendering_pressure.sql": ("evidence_status", "evidence_reason", "cycle", "submitted_items", "secondary_count", "host_duration_ns"),
-    "20_recorder_health_and_compare.sql": ("evidence_status", "evidence_reason", "transactions", "checkpoints", "queue_high_water", "output_bytes", "omitted_events", "writer_failed", "output_limited", "writer_cpu_ns"),
-    "21_compare_captures.sql": ("evidence_status", "evidence_reason", "before_cycles", "after_cycles", "mean_cycle_delta_ns", "allocation_bytes_per_cycle_delta"),
-    "22_measurement_completeness.sql": ("measurement", "status", "reason", "rows_recorded", "omitted_events", "first_cycle", "last_cycle", "started_ns", "ended_ns", "producer_track"),
-}
+
+def query(name: str) -> str:
+    return (QUERY_DIR / name).read_text()
+
+
+def readonly(path: Path) -> sqlite3.Connection:
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA query_only=ON")
+    return db
 
 
 class QueryCorpusTests(unittest.TestCase):
-    def test_every_public_query_runs_read_only_with_locked_columns(self):
+    def fixture(self):
         temporary, path = fixture_module.AnalyzerTests().fixture()
         self.addCleanup(temporary.cleanup)
+        return path
+
+    def test_every_public_query_is_standalone_read_only_and_self_documenting(self):
+        path = self.fixture()
         before = path.read_bytes()
-        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        db = readonly(path)
         self.addCleanup(db.close)
-        db.execute("PRAGMA query_only=ON")
-        db.execute("ATTACH DATABASE ? AS before", (str(path),))
         db.execute("ATTACH DATABASE ? AS after", (str(path),))
-        query_dir = HERE / "observatory_queries"
-        files = sorted(query_dir.glob("*.sql"))
-        self.assertEqual(set(EXPECTED_COLUMNS), {item.name for item in files})
+        files = sorted(QUERY_DIR.glob("*.sql"))
+        self.assertGreaterEqual(len(files), 1)
         for item in files:
             with self.subTest(query=item.name):
-                cursor = db.execute(item.read_text(), {"limit": 3, "budget_ns": 1_500_000})
-                self.assertEqual(EXPECTED_COLUMNS[item.name], tuple(column[0] for column in cursor.description))
-                self.assertTrue(cursor.fetchall(), f"{item.name} returned no rows for its recognizable fixture pattern")
+                self.assertFalse(item.name[0].isdigit(), item.name)
+                self.assertTrue(item.read_text().lstrip().startswith("--"), item.name)
+                cursor = db.execute(item.read_text())
+                columns = tuple(column[0] for column in cursor.description)
+                self.assertEqual(("evidence_status", "evidence_reason"), columns[:2])
+                self.assertTrue(cursor.fetchall(), f"{item.name} returned no status row")
         self.assertEqual(before, path.read_bytes())
 
     def test_partial_measurement_returns_status_and_null_metrics(self):
-        temporary, path = fixture_module.AnalyzerTests().fixture()
-        self.addCleanup(temporary.cleanup)
+        path = self.fixture()
         writable = sqlite3.connect(path)
-        writable.execute("UPDATE measurement_status SET status='partial',reason='injected omission',omitted_events=1 WHERE name='task_lifecycle'")
+        writable.execute(
+            "UPDATE measurement_status SET status='partial',reason='injected omission',omitted_events=1 "
+            "WHERE name='task_lifecycle'"
+        )
         writable.commit()
         writable.close()
-        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        db = readonly(path)
         self.addCleanup(db.close)
-        row = db.execute(
-            (HERE / "observatory_queries" / "13_long_task_turns.sql").read_text(),
-            {"limit": 3},
-        ).fetchone()
-        self.assertEqual("partial", row[0])
-        self.assertEqual("injected omission", row[1])
-        self.assertIsNone(row[2])
-        self.assertIsNone(row[4])
+        row = db.execute(query("tasks.sql")).fetchone()
+        self.assertEqual("partial", row["evidence_status"])
+        self.assertEqual("injected omission", row["evidence_reason"])
+        self.assertIsNone(row["subject_id"])
+        self.assertIsNone(row["active_ns"])
 
-    def test_long_task_turns_include_resumed_work_and_exclude_parked_time(self):
-        temporary, path = fixture_module.AnalyzerTests().fixture()
-        self.addCleanup(temporary.cleanup)
-        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    def test_task_turns_include_resumed_work_and_exclude_parked_time(self):
+        path = self.fixture()
+        db = readonly(path)
         self.addCleanup(db.close)
-        rows = db.execute(
-            (HERE / "observatory_queries" / "13_long_task_turns.sql").read_text(),
-            {"limit": 10},
-        ).fetchall()
-        active = sorted(row[4] for row in rows if row[2] is not None)
-        self.assertEqual([200_000, 500_000], active)
+        row = db.execute(query("tasks.sql")).fetchone()
+        self.assertEqual(700_000, row["active_ns"])
+        self.assertEqual(500_000, row["longest_turn_ns"])
+        self.assertEqual(1_000_000, row["parked_ns"])
+
+    def test_rendering_keeps_cycle_aggregate_and_full_detail_separate(self):
+        path = self.fixture()
+        writable = sqlite3.connect(path)
+        writable.execute(
+            "INSERT INTO draw_summaries VALUES(2,1,1,0,0,0,100,1,0,'Draw.circle!')"
+        )
+        writable.commit()
+        writable.close()
+        db = readonly(path)
+        self.addCleanup(db.close)
+        rows = db.execute(query("rendering.sql")).fetchall()
+        aggregate = next(row for row in rows if row["record_type"] == "cycle aggregate")
+        detail = next(row for row in rows if row["record_type"] == "operation detail")
+        self.assertEqual(12, aggregate["accepted_calls"])
+        self.assertEqual(300_000, aggregate["host_duration_ns"])
+        self.assertEqual(1, detail["accepted_calls"])
+        self.assertEqual(100, detail["host_duration_ns"])
+
+    def test_headless_capture_never_claims_presentation_evidence(self):
+        path = self.fixture()
+        writable = sqlite3.connect(path)
+        writable.execute("UPDATE metadata SET value='native-headless' WHERE key='target_profile'")
+        writable.execute("UPDATE metadata SET value='headless_stub' WHERE key='backend'")
+        writable.execute("UPDATE gpu_facts SET name='headless_stub' WHERE kind=0")
+        writable.execute("DELETE FROM gpu_facts WHERE kind=1")
+        writable.execute("DELETE FROM structural_latency WHERE name LIKE 'input_to_present%'")
+        writable.commit()
+        writable.close()
+        db = readonly(path)
+        self.addCleanup(db.close)
+        cycle = db.execute(query("cycles.sql")).fetchone()
+        self.assertIsNone(cycle["presentation_budget_ns"])
+        latency = {row["name"]: row for row in db.execute(query("latency.sql")).fetchall()}
+        self.assertEqual("unavailable", latency["input_to_presentation"]["evidence_status"])
+        self.assertIsNone(latency["input_to_presentation"]["observations"])
+
+    def test_allocation_lifetimes_resolve_trace_zone_names(self):
+        path = self.fixture()
+        db = readonly(path)
+        self.addCleanup(db.close)
+        rows = db.execute(query("allocation_lifetimes.sql")).fetchall()
+        named = next(row for row in rows if row["zone_id"] == 9)
+        outside = next(row for row in rows if row["zone_id"] == 0)
+        self.assertEqual("load", named["zone_name"])
+        self.assertEqual("(outside a Trace zone)", outside["zone_name"])
+
+    def test_compare_refuses_unclean_or_different_application(self):
+        before = self.fixture()
+        after_temp, after = fixture_module.AnalyzerTests().fixture()
+        self.addCleanup(after_temp.cleanup)
+        writable = sqlite3.connect(after)
+        writable.execute("UPDATE metadata SET value='0' WHERE key='clean_shutdown'")
+        writable.commit()
+        writable.close()
+        db = readonly(before)
+        db.execute("ATTACH DATABASE ? AS after", (str(after),))
+        row = db.execute(query("compare.sql")).fetchone()
+        self.assertEqual("incomparable", row["evidence_status"])
+        self.assertIsNone(row["median_delta_ns"])
+        db.close()
+
+        writable = sqlite3.connect(after)
+        writable.execute("UPDATE metadata SET value='1' WHERE key='clean_shutdown'")
+        writable.execute("UPDATE metadata SET value='different-app' WHERE key='app_name'")
+        writable.commit()
+        writable.close()
+        db = readonly(before)
+        self.addCleanup(db.close)
+        db.execute("ATTACH DATABASE ? AS after", (str(after),))
+        row = db.execute(query("compare.sql")).fetchone()
+        self.assertEqual("incomparable", row["evidence_status"])
+        self.assertEqual("application basename differs", row["evidence_reason"])
 
 
 if __name__ == "__main__":

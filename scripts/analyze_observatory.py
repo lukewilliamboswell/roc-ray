@@ -9,16 +9,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-SUPPORTED_SCHEMA = 11
-DETAIL_TABLES = (
-    ("Effects", "hosted_effects", "hosted_effects"),
-    ("Tasks", "task_events", "task_lifecycle"),
-    ("Queues", "queue_pressure", "queue_pressure"),
-    ("Resources", "resource_lifecycle", "resource_lifecycle"),
-    ("Draw", "draw_summaries", "draw_observations"),
-    ("Allocations", "allocation_events", "allocation_lifecycle"),
-    ("Latency", "structural_latency", "structural_latency"),
-)
+SUPPORTED_SCHEMA = 1
 
 
 class CaptureError(Exception):
@@ -68,8 +59,17 @@ def validate(db: sqlite3.Connection) -> dict[str, str]:
         raise CaptureError("capture did not record a clean shutdown")
     if metadata.get("final_state") != "complete":
         raise CaptureError(f"capture final state is {metadata.get('final_state', 'missing')!r}, not 'complete'")
+    health = db.execute(
+        "SELECT writer_failed,output_limited,omitted_events FROM recorder_health WHERE id=1"
+    ).fetchone()
+    if health is None:
+        raise CaptureError("missing recorder health")
+    if health[0] or health[1] or health[2]:
+        raise CaptureError(
+            f"capture is incomplete: writer_failed={health[0]} output_limited={health[1]} omitted_events={health[2]}"
+        )
     if "measurement_status" not in _tables(db):
-        raise CaptureError("missing final schema-v11 measurement_status contract")
+        raise CaptureError("missing schema-v1 measurement_status contract")
     unfinished = list(db.execute(
         "SELECT name FROM measurement_status WHERE status='unfinalized' ORDER BY name"
     ))
@@ -93,16 +93,6 @@ def _unavailable_line(statuses: dict[str, tuple[str, str]], name: str, label: st
     return f"  {label}: unavailable (evidence={status}: {reason})"
 
 
-def _duration_summary(db: sqlite3.Connection, title: str, table: str) -> list[str]:
-    rows = list(db.execute(
-        f"SELECT name,kind,count(*),sum(duration_ns),max(duration_ns),sum(value_a),max(value_b) FROM {table} "
-        "GROUP BY name,kind ORDER BY count(*) DESC,name,kind LIMIT 10"
-    ))
-    lines = [f"{title}: {sum(row[2] for row in rows)} event(s) in displayed groups"]
-    lines.extend(f"  {name or '(unnamed)'} kind={kind}: count={count} duration_total={total / 1e6:.3f}ms duration_max={maximum / 1e6:.3f}ms value_a_total={value_a} value_b_max={value_b}" for name, kind, count, total, maximum, value_a, value_b in rows)
-    return lines
-
-
 def _callback_summary(db: sqlite3.Connection) -> list[str]:
     rows = list(db.execute(
         "SELECT name,phase,outcome,count(*),sum(duration_ns),max(duration_ns) "
@@ -119,9 +109,14 @@ def _demonstrated_analyses(db: sqlite3.Connection, tables: set[str], statuses: d
     lines = ["Demonstrated analyses:"]
     if "gpu_facts" in tables and _complete(statuses, "backend_facts"):
         pacing = db.execute("SELECT name,value_b FROM gpu_facts WHERE kind=2 ORDER BY id LIMIT 1").fetchone()
-        if pacing and pacing[0] == "host_fps_cap" and pacing[1] > 0:
+        graphical = db.execute("SELECT 1 FROM gpu_facts WHERE kind=0 AND name='raylib_native'").fetchone()
+        if graphical and pacing and pacing[0] == "host_fps_cap" and pacing[1] > 0:
             budget = 1_000_000_000 / pacing[1]
-            missed = db.execute("SELECT count(*) FROM cycles WHERE duration_ns>?", (budget,)).fetchone()[0]
+            missed = db.execute(
+                "SELECT count(*) FROM cycles c WHERE duration_ns>? AND EXISTS "
+                "(SELECT 1 FROM gpu_facts p WHERE p.cycle=c.cycle AND p.kind=1 AND p.name='presentation_completed')",
+                (budget,),
+            ).fetchone()[0]
             lines.append(f"  Presentation budget: {missed} cycle(s) over {budget / 1e6:.3f}ms host cap")
         else:
             lines.append("  Presentation budget: unavailable (no enforceable numeric presentation budget recorded)")
@@ -252,7 +247,8 @@ def _demonstrated_analyses(db: sqlite3.Connection, tables: set[str], statuses: d
     else: lines.append(_unavailable_line(statuses, "structural_latency", "Input-to-presentation"))
     if "draw_summaries" in tables and _complete(statuses, "draw_observations"):
         draw = db.execute(
-            "SELECT count(*),sum(value_a),sum(value_b),sum(duration_ns) FROM draw_summaries"
+            "SELECT count(*),sum(value_a),sum(value_b),sum(duration_ns) FROM draw_summaries "
+            "WHERE name='public_draw_effects'"
         ).fetchone()
         lines.append(
             f"  Rendering pressure: events={draw[0]} primary_count={draw[1] or 0} "
@@ -314,9 +310,6 @@ def analyze(path: Path, slowest: int = 10) -> str:
             lines.append(f"Zones: {sum(row[1] for row in zones)} completed zone(s)")
             lines.extend(f"  {name}: count={count} wall={wall / 1e6:.3f}ms active={active / 1e6:.3f}ms parked={parked / 1e6:.3f}ms max={maximum / 1e6:.3f}ms" for name, count, wall, active, parked, maximum in zones)
         lines.extend(_demonstrated_analyses(db, tables, statuses))
-        for title, table, measurement in DETAIL_TABLES:
-            if table in tables and _complete(statuses, measurement):
-                lines.extend(_duration_summary(db, title, table))
         if "recorder_health" in tables:
             row = db.execute("SELECT transactions,checkpoints,queue_high_water,output_bytes,omitted_events,rows_written,writer_failed,output_limited,writer_active_wall_ns,writer_idle_wall_ns,writer_cpu_ns FROM recorder_health WHERE id=1").fetchone()
             lines.append("Recorder health: " + ("missing" if row is None else "transactions={} checkpoints={} queue_high_water={} output_bytes={} omissions={} rows={} writer_failed={} output_limited={} writer_active_wall={:.3f}ms writer_idle_wall={:.3f}ms writer_cpu={}".format(*row[:8], row[8] / 1e6, row[9] / 1e6, "unavailable" if row[10] is None else f"{row[10] / 1e6:.3f}ms")))
@@ -343,7 +336,7 @@ def compare(before: Path, after: Path) -> str:
                 status, reason = statuses.get("cycle_summary", ("unavailable", "missing status"))
                 raise CaptureError(f"cycle summary evidence is {status}: {reason}")
             environments.append(tuple(metadata.get(key, "unknown") for key in (
-                "target_profile", "backend", "host_os", "host_arch", "effective_detail",
+                "app_name", "target_profile", "backend", "host_os", "host_arch", "effective_detail",
                 "chunk_count", "summary_reserve", "max_output_bytes", "transaction_chunks",
             )))
             values = [row[0] for row in db.execute("SELECT duration_ns FROM cycles")]

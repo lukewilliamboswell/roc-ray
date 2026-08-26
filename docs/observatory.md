@@ -21,7 +21,7 @@ existing file.
 | --- | --- |
 | `--host-stats-record` | Enable recording with the defaults. |
 | `--host-stats-output=PATH` | Select the `.rrstats` destination and enable recording. |
-| `--host-stats-detail=summary\|standard\|full` | Select captured detail; `standard` is the default. Summary records cycle, callback, draw, backend, presentation/pacing, annotation, and recorder aggregates; standard adds lifecycle and structural facts; full adds individual allocation and draw detail. |
+| `--host-stats-detail=summary\|standard\|full` | Select captured detail; `standard` is the default. Summary records cycle and callback timing, aggregate counts and allocation traffic, annotations, backend facts, and recorder health. Standard adds non-drawing effects, tasks, queues, structural latency, and resource lifecycle transitions. Full adds individual allocations and draw operations. |
 | `--host-stats-buffer-mib=N` | Bound recorder-owned memory in MiB; default 32, valid range 1–4096. Detail is omitted before reserved summary capacity is consumed. |
 | `--host-stats-max-mib=N` | Stop admitting events once the database reaches this size; default 4096 MiB and must be greater than zero. The application continues. |
 
@@ -64,7 +64,7 @@ nesting, and programmer-error rules.
 
 ## Capture schema
 
-`metadata.schema_version` is currently `11`. Consumers must check it before
+`metadata.schema_version` is currently `1`. Consumers must check it before
 assuming table or column meanings.
 
 - `metadata` records schema, requested and effective detail, host environment,
@@ -105,8 +105,8 @@ assuming table or column meanings.
   `metadata.drain_duration_ns` records orderly queue-drain wall time and
   `metadata.application_outcome` records the host-owned terminal outcome.
 
-Schema v11 also defines nine detail tables. `task_events` records task
-lifecycle and scheduling facts; `hosted_effects` records stable effect and
+Schema v1 also defines nine detail tables. `task_events` records task
+lifecycle and scheduling facts; `hosted_effects` records non-drawing effects with stable effect and
 owner-correlation IDs, directional copy/ownership-transfer bytes, total call
 timing, and nullable validation, conversion, worker, and external intervals;
 `Task.sleep!` reports its actual waiting interval, and `Files.read_text!`
@@ -123,9 +123,10 @@ likewise contain only counts and ages. Their capacity is `0`, meaning
 application-proportional with no platform admission cap: task spawns retain
 FIFO delayed-start and exactly-one-message semantics, so these facilities emit
 reserve/release facts but never an invented saturation or refusal;
-`resource_lifecycle` records creation, reuse, use, retirement, and destruction
+`resource_lifecycle` records creation, saturation, reuse, retirement, and destruction
 under recorder-private resource IDs (never application-visible lifecycle
-tokens);
+tokens). Individual uses are represented only by the per-cycle resource-event
+counter;
 `structural_latency` links input or message observations to later cycles;
 `draw_summaries` records aggregate drawing pressure. In full detail its stable
 kind values distinguish primitive, batch/instance, upload, state change,
@@ -138,11 +139,12 @@ payload bytes. For successful region, pixel, and screenshot readbacks they are
 returned/read pixels and the known RGBA8 byte span. Encoded-image inputs report
 their encoded source size because decoded driver-transfer bytes are not
 available; no row claims GPU traffic, bandwidth, or execution time.
-`allocation_events` records allocation,
+`allocation_events` is full-detail evidence and records allocation,
 free, moving realloc, and in-place realloc facts with phase, private task and
 active-zone correlation, current/prior sizes, and honest copied bytes (only a
 move reports `min(prior_bytes, bytes)`). These columns support live, peak, and
-survivor queries without recording addresses. `gpu_facts` records the selected
+survivor queries without recording addresses. Summary and standard captures
+retain only the allocation counters in `cycles`. `gpu_facts` records the selected
 backend, requested pacing, presentation completion, and whether GPU timing is
 available. The native raylib backend and headless stub both report GPU timing
 as unavailable: RocRay does not force a synchronizing query or present host
@@ -155,69 +157,28 @@ foreign keys. Timeline indexes cover common run/cycle/time, effect, task, and
 resource lookups; orderly finalization refuses a clean marker if
 `PRAGMA foreign_key_check` finds an orphan.
 
-SQLite's command-line tool can inspect a capture directly:
-
-```sql
-SELECT key, value FROM metadata ORDER BY key;
-
-SELECT cycle, duration_ns, update_ns, render_callback_ns,
-       task_executor_ns, host_other_ns
-FROM cycles
-ORDER BY duration_ns DESC
-LIMIT 20;
-
-SELECT name AS measurement, status, rows_recorded, omitted_events, reason
-FROM measurement_status
-ORDER BY name;
-
-SELECT cycle, timestamp_ns, kind, name, integer_value, real_value, unit
-FROM annotations
-ORDER BY timestamp_ns;
-
-SELECT cycle, family, SUM(lost_count) AS omitted
-FROM recording_gaps
-GROUP BY cycle, family
-ORDER BY cycle, family;
-
-SELECT transactions, checkpoints, queue_high_water, output_bytes,
-       omitted_events, writer_failed, output_limited,
-       writer_active_wall_ns, writer_idle_wall_ns, writer_cpu_ns
-FROM recorder_health;
-```
-
 `clean_shutdown = 1` means orderly finalization completed. Consult
 `final_state` and `measurement_status` before drawing a conclusion. The status
 table incorporates detail policy and `recording_gaps`; consumers should not try
 to reconstruct completeness from an empty detail table.
 
-## Analyze a capture
+## Query a capture
 
-The versioned, read-only SQL corpus in `scripts/observatory_queries/` is the
-author-facing analysis interface. Run query `01` first to validate the capture
-and query `22` to see which conclusions its evidence supports. Each diagnostic
-query returns `evidence_status` and `evidence_reason`; measurements are SQL
-`NULL` unless the required family is complete. This deliberately prefers “not
-known from this capture” to a plausible but unsupported performance claim.
+The standalone, read-only SQL files in `scripts/observatory_queries/` are the
+author-facing analysis API. Each file documents the question it answers, the
+detail level it requires, its result bound, and any interpretation limits.
+Run one with SQLite's command-line tool:
 
-The corpus covers recording
-trust, cycle tails and attribution, zones and marks, effect copy costs,
-allocation and task lifetimes, worker availability, queues, resources,
-input-to-presentation latency, rendering, recorder health, and comparison.
-CI executes every query read-only, locks its result-column names, and exercises
-semantic fixtures for partial evidence and task active-versus-parked time. The
-Python analyzer is retained as a CI/reference consumer of the same trust rules;
-it is not the public workflow.
+```sh
+sqlite3 -readonly -header -column capture.rrstats \
+  < scripts/observatory_queries/cycles.sql
+```
 
-The demonstrated-analysis section covers presentation-budget misses when a
-numeric host cap exists, effect tail and copy costs, allocation lifetimes and
-reallocation moves, task active/parked/delivery intervals, queue saturation
-and oldest age, resource destruction delay, and structural
-input-to-presentation latency. Vsync alone does not disclose an enforceable
-numeric budget, so that analysis reports unavailable. The comparison form
-validates both captures and prints cycle median/p95/p99 deltas. It refuses to
-present a comparison as authoritative when target profile, backend, operating
-system, or architecture differ; build identity may differ because comparing
-two builds is the purpose of the command.
+Every query returns `evidence_status` and `evidence_reason`. Measurements are
+SQL `NULL` when the required evidence is partial, not recorded, or unavailable.
+This deliberately prefers “not known from this capture” to a plausible but
+unsupported performance claim. The Python analyzer remains a non-public CI
+reference for the same rules; the SQL files are the supported interface.
 
 On the native raylib backend, `gpu_facts` also separates the `render!`
 callback, drawing-scope begin, host capture/submission work, and `EndDrawing`.

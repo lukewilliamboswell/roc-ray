@@ -30,12 +30,12 @@ class AnalyzerTests(unittest.TestCase):
           CREATE TABLE resource_lifecycle(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
           CREATE TABLE structural_latency(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
           CREATE TABLE draw_summaries(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
-          CREATE TABLE allocation_events(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT,phase INTEGER,task_id INTEGER,zone_id INTEGER,bytes INTEGER,prior_bytes INTEGER,copied_bytes INTEGER);
+          CREATE TABLE allocation_events(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,phase INTEGER,task_id INTEGER,zone_id INTEGER,bytes INTEGER,prior_bytes INTEGER,copied_bytes INTEGER);
           CREATE TABLE gpu_facts(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
           CREATE TABLE recorder_health(id INTEGER,transactions INTEGER,checkpoints INTEGER,queue_high_water INTEGER,output_bytes INTEGER,omitted_events INTEGER,rows_written INTEGER,writer_failed INTEGER,output_limited INTEGER,writer_active_wall_ns INTEGER,writer_idle_wall_ns INTEGER,writer_cpu_ns INTEGER);
           CREATE TABLE recording_gaps(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,family INTEGER,lost_count INTEGER,first_cycle INTEGER,last_cycle INTEGER,started_ns INTEGER,ended_ns INTEGER,producer_track TEXT);
           INSERT INTO cycles(cycle,start_ns,duration_ns,update_ns,render_callback_ns,task_executor_ns,host_other_ns,alloc_bytes,alloc_calls) VALUES(0,0,1000000,400000,300000,100000,200000,0,0),(1,0,3000000,1000000,500000,200000,1300000,128,2),(2,0,2000000,500000,500000,100000,900000,0,0);
-          INSERT INTO annotations VALUES(1,1,0,1,2,'load',NULL,NULL,0,2000000,1500000,500000);
+          INSERT INTO annotations VALUES(1,1,0,1,2,'load',9,NULL,0,2000000,1500000,500000);
           INSERT INTO annotations VALUES(2,1,500000,1,0,'loaded',NULL,NULL,0,0,0,0);
           INSERT INTO hosted_effects VALUES(1,1,0,1,0,0,750000,0,0,'File.read',0,0,NULL,NULL,200000,500000);
           INSERT INTO hosted_effects VALUES(2,1,0,1,0,0,1750000,128,0,'File.read',64,0,NULL,NULL,NULL,NULL);
@@ -43,8 +43,8 @@ class AnalyzerTests(unittest.TestCase):
           INSERT INTO queue_pressure VALUES(1,0,0,2,0,0,4000000,8,8,'cmd children');
           INSERT INTO resource_lifecycle VALUES(1,0,0,3,9,0,6000000,0,0,'texture'),(2,1,0,0,10,0,0,0,0,'font');
           INSERT INTO structural_latency VALUES(1,0,0,1,1,0,5000000,0,0,'input_to_presentation'),(2,1,0,1,2,0,7000000,0,0,'input_to_presentation');
-          INSERT INTO allocation_events VALUES(1,0,100000,0,11,0,0,64,0,'alloc',2,0,0,64,0,0),(2,0,200000,2,11,0,0,128,64,'realloc_move',2,0,0,128,64,64),(3,1,2100000,1,11,0,0,128,0,'free',2,0,0,128,128,0),(4,2,2200000,0,12,0,0,32,0,'alloc',4,7,9,32,0,0);
-          INSERT INTO gpu_facts VALUES(1,0,0,2,0,0,0,0,500,'host_fps_cap'),(2,0,0,4,0,0,400000,0,0,'render_callback'),(3,0,0,5,0,0,100000,0,0,'begin_drawing'),(4,0,0,6,0,0,200000,0,0,'host_draw_submission'),(5,0,0,7,0,0,800000,0,0,'end_drawing_including_presentation_and_pacing');
+          INSERT INTO allocation_events VALUES(1,0,100000,0,11,2,0,0,64,0,0),(2,0,200000,2,11,2,0,0,128,64,64),(3,1,2100000,1,11,2,0,0,128,128,0),(4,2,2200000,0,12,4,7,9,32,0,0);
+          INSERT INTO gpu_facts VALUES(1,0,0,0,0,0,0,0,0,'raylib_native'),(2,0,0,2,0,0,0,0,500,'host_fps_cap'),(3,0,0,4,0,0,400000,0,0,'render_callback'),(4,0,0,5,0,0,100000,0,0,'begin_drawing'),(5,0,0,6,0,0,200000,0,0,'host_draw_submission'),(6,0,0,7,0,0,800000,0,0,'end_drawing_including_presentation_and_pacing'),(7,1,0,1,0,0,0,1,0,'presentation_completed');
           INSERT INTO draw_summaries VALUES(1,1,0,1,0,0,300000,12,2,'public_draw_effects');
           INSERT INTO recorder_health VALUES(1,2,1,4,4096,0,8,0,0,1500000,2500000,NULL);
         """)
@@ -60,7 +60,16 @@ class AnalyzerTests(unittest.TestCase):
             "INSERT INTO measurement_status VALUES(?,?,?,'complete','complete evidence; zero rows means measured zero',1,0)",
             measurements,
         )
-        db.executemany("INSERT INTO metadata VALUES(?,?)", (("schema_version", str(analyzer.SUPPORTED_SCHEMA)), ("clean_shutdown", clean), ("final_state", final), ("effective_detail", "full"), ("host_os", "linux"), ("host_arch", "x86_64"), ("target_profile", "native-headless"), ("backend", "headless_stub"), ("unavailable_sources", "gpu_timing,writer_thread_cpu_time")))
+        db.executemany("INSERT INTO metadata VALUES(?,?)", (
+            ("schema_version", str(analyzer.SUPPORTED_SCHEMA)), ("clean_shutdown", clean),
+            ("final_state", final), ("requested_detail", "full"), ("effective_detail", "full"),
+            ("host_os", "linux"), ("host_arch", "x86_64"),
+            ("target_profile", "native-graphical"), ("backend", "raylib_native"),
+            ("app_name", "fixture-app"), ("chunk_count", "256"),
+            ("summary_reserve", "8"), ("transaction_chunks", "32"),
+            ("max_output_bytes", "16777216"), ("benchmark_writer_delay_ms", "0"),
+            ("unavailable_sources", "gpu_timing,writer_thread_cpu_time"),
+        ))
         db.commit()
         db.close()
         return temporary, path
@@ -73,7 +82,6 @@ class AnalyzerTests(unittest.TestCase):
         self.assertIn("median=2.000ms p95=2.900ms p99=2.980ms", report)
         self.assertIn("Slowest cycles (top 2):", report)
         self.assertIn("Zones: 1 completed zone(s)", report)
-        self.assertIn("Effects: 2 event(s)", report)
         self.assertIn("Recorder health:", report)
         self.assertIn("writer_active_wall=1.500ms", report)
         self.assertIn("writer_cpu=unavailable", report)
@@ -130,7 +138,7 @@ class AnalyzerTests(unittest.TestCase):
         self.addCleanup(first_temp.cleanup)
         self.addCleanup(second_temp.cleanup)
         db = sqlite3.connect(second)
-        db.execute("UPDATE metadata SET value='raylib_native' WHERE key='backend'")
+        db.execute("UPDATE metadata SET value='headless_stub' WHERE key='backend'")
         db.commit()
         db.close()
         with self.assertRaisesRegex(analyzer.CaptureError, "different target/backend/host"):

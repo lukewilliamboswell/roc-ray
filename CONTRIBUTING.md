@@ -19,6 +19,7 @@ Install:
 - The exact Roc nightly named in [`.roc-version`](.roc-version), available as
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
+- SQLite's `sqlite3` command-line tool for inspecting Observatory captures
 
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
 come first on it. A local debug build of the compiler is not a substitute: it

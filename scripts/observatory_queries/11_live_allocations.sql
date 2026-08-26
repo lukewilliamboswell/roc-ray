@@ -1,2 +1,0 @@
-WITH evidence AS (SELECT status,reason FROM measurement_status WHERE name='allocation_lifecycle'), latest AS (SELECT *,row_number() OVER(PARTITION BY subject_id ORDER BY timestamp_ns DESC,id DESC) n FROM allocation_events)
-SELECT evidence.status evidence_status,evidence.reason evidence_reason,subject_id,bytes,phase,task_id,zone_id FROM evidence LEFT JOIN latest ON evidence.status='complete' AND n=1 AND kind<>1 ORDER BY bytes DESC,subject_id;

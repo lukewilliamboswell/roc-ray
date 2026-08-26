@@ -501,6 +501,12 @@ def run_graphical_observatory_probe(
                     "'end_drawing_including_presentation_and_pacing') GROUP BY name"
                 )
             )
+            render_totals = db.execute(
+                "SELECT "
+                "(SELECT coalesce(sum(duration_ns),0) FROM callback_summaries WHERE phase=2), "
+                "(SELECT coalesce(sum(render_callback_ns),0) FROM cycles), "
+                "(SELECT coalesce(sum(duration_ns),0) FROM gpu_facts WHERE name='render_callback')"
+            ).fetchone()
         finally:
             db.close()
         if metadata.get("target_profile") != "native-graphical":
@@ -517,6 +523,11 @@ def run_graphical_observatory_probe(
         }
         if set(facts) != expected or any(count < 1 for count in facts.values()):
             failures.append(f"graphical Observatory backend facts are incomplete: {facts!r}")
+        if render_totals is None or render_totals[0] <= 0 or len(set(render_totals)) != 1:
+            failures.append(
+                "graphical Observatory render duration disagrees across callbacks, cycles, "
+                f"and backend facts: {render_totals!r}"
+            )
     except (OSError, sqlite3.Error) as err:
         failures.append(f"query graphical Observatory capture: {err}")
 
@@ -704,7 +715,7 @@ def run_observatory_probe(
         try:
             metadata = dict(db.execute("SELECT key, value FROM metadata"))
             required_metadata = {
-                "schema_version": "11",
+                "schema_version": "1",
                 "requested_detail": "standard",
                 "effective_detail": "standard",
                 "clean_shutdown": "1",
@@ -761,6 +772,18 @@ def run_observatory_probe(
             ).fetchone()
             if cycles is None or cycles[0] < 2 or cycles[1] != 0 or cycles[3] < 0:
                 failures.append(f"Observatory cycle summaries are incomplete: {cycles!r}")
+
+            presented = db.execute(
+                "SELECT count(*) FROM gpu_facts WHERE name='presentation_completed'"
+            ).fetchone()[0]
+            nonzero_presentation = db.execute(
+                "SELECT count(*) FROM draw_summaries WHERE value_b<>0"
+            ).fetchone()[0]
+            if presented != 0 or nonzero_presentation != 0:
+                failures.append(
+                    "headless Observatory capture claimed presentation: "
+                    f"facts={presented}, draw_rows={nonzero_presentation}"
+                )
 
             measured_wait = db.execute(
                 "SELECT count(*) FROM hosted_effects "

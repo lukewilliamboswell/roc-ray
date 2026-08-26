@@ -746,7 +746,7 @@ const TaskHooks = struct {
 
 const AppTasks = tasks_mod.Tasks(TaskHooks);
 
-/// Stable version-two `task_events.kind` codes. New lifecycle kinds append;
+/// Stable schema-version-one `task_events.kind` codes. New lifecycle kinds append;
 /// existing captures keep these meanings for read-only analysis tools.
 const ObservatoryTaskKind = enum(u8) {
     spawned,
@@ -764,7 +764,7 @@ fn packedTaskCounters(counters: tasks_mod.ObserverCounters) u64 {
         @as(u64, @intCast(@min(counters.queued, std.math.maxInt(u32))));
 }
 
-/// Version-two task row payloads use `value_a` for the kind-specific scalar
+/// Schema-version-one task rows use `value_a` for the kind-specific scalar
 /// (tasks ahead, queued cycles, wait hint, or cancellation stage). `value_b`
 /// packs live in its high 32 bits and queued in its low 32 bits. `parent_id`
 /// stays zero until the scheduler supplies a real parent task identity.
@@ -2657,6 +2657,9 @@ fn traceEmit(kind: observatory.AnnotationKind, label: []const u8, integer: i64, 
 
 fn observeHostResource(event: host_resource.Observation) u64 {
     observatory_cycle_counts.resource +|= 1;
+    // Per-use volume is already represented by the cycle counter. Persist
+    // only lifecycle and capacity transitions at standard/full detail.
+    if (event.operation == .use) return 0;
     if (!observatory_task_detail) return 0;
     const now = traceNowNs();
     const session = active_observatory orelse return now;
@@ -2810,19 +2813,24 @@ const EffectScope = struct {
     items: u64 = 1,
     draw_bytes: u64 = 0,
     draw_metrics_set: bool = false,
+    is_draw: bool = false,
+    draw_kind: ?u8 = null,
 
     fn begin(name: []const u8, inbound_copied_bytes: u64) EffectScope {
+        const draw_kind = if (active_phase == .render) drawDetailKind(name) else null;
+        const is_draw = draw_kind != null;
         if (active_observatory == null) {
-            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = false };
+            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = false, .is_draw = is_draw, .draw_kind = draw_kind };
         }
-        if (!observatory_task_detail) {
+        if (!observatory_task_detail or (is_draw and !observatory_full_detail)) {
             // Summary needs only the scalar aggregate call count. It neither
-            // assigns a detail identity nor samples the trace clock.
-            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = true };
+            // assigns a detail identity nor samples the trace clock. Standard
+            // treats draw calls the same way; their individual detail is full-only.
+            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = true, .is_draw = is_draw, .draw_kind = draw_kind };
         }
         const effect_id = observatory_next_effect_id;
         observatory_next_effect_id +|= 1;
-        return .{ .name = name, .phase = active_phase, .started_ns = observatoryAwakeNs(), .effect_id = effect_id, .correlation_id = active_trace_owner, .inbound_copied_bytes = inbound_copied_bytes, .active = true };
+        return .{ .name = name, .phase = active_phase, .started_ns = observatoryAwakeNs(), .effect_id = effect_id, .correlation_id = active_trace_owner, .inbound_copied_bytes = inbound_copied_bytes, .active = true, .is_draw = is_draw, .draw_kind = draw_kind };
     }
 
     fn setOutcome(self: *EffectScope, outcome: observatory.EffectOutcome) void {
@@ -2870,6 +2878,22 @@ const EffectScope = struct {
     fn end(self: EffectScope) void {
         if (!self.active) return;
         observatory_cycle_counts.effect +|= 1;
+        if (self.is_draw) {
+            if (!observatory_full_detail) return;
+            const kind = self.draw_kind.?;
+            const session = active_observatory orelse return;
+            const values = self.drawValues();
+            _ = session.recordDraw(.{
+                .cycle = observatory_cycle,
+                .timestamp_ns = @intCast(@max(self.started_ns - observatory_origin_ns, 0)),
+                .kind = kind,
+                .duration_ns = @intCast(@max(observatoryAwakeNs() - self.started_ns, 0)),
+                .value_a = values.items,
+                .value_b = values.bytes,
+                .name = self.name,
+            });
+            return;
+        }
         if (!observatory_task_detail) return;
         const session = active_observatory orelse return;
         _ = session.recordEffect(.{
@@ -2889,18 +2913,6 @@ const EffectScope = struct {
             .external_ns = self.external_ns,
             .name = self.name,
         });
-        if (observatory_full_detail) if (drawDetailKind(self.name)) |kind| {
-            const values = self.drawValues();
-            _ = session.recordDraw(.{
-                .cycle = observatory_cycle,
-                .timestamp_ns = @intCast(@max(self.started_ns - observatory_origin_ns, 0)),
-                .kind = kind,
-                .duration_ns = @intCast(@max(observatoryAwakeNs() - self.started_ns, 0)),
-                .value_a = values.items,
-                .value_b = values.bytes,
-                .name = self.name,
-            });
-        };
     }
 };
 
@@ -10348,6 +10360,7 @@ fn callRender(boxed_model: RocBox) RocResult {
 }
 
 const BackendFrameTiming = struct {
+    render_callback_started_ns: i96 = 0,
     render_callback_ns: u64 = 0,
     begin_drawing_ns: u64 = 0,
     host_submission_ns: u64 = 0,
@@ -10362,6 +10375,7 @@ fn renderFrame(boxed_model: RocBox) RocResult {
     observatory_backend_timing = .{};
     if (active_headless) {
         const callback_start = observatoryMeasurementStart();
+        observatory_backend_timing.render_callback_started_ns = callback_start;
         const result = callRender(boxed_model);
         observatory_backend_timing.render_callback_ns = observatoryMeasurementElapsed(callback_start);
         return result;
@@ -10371,6 +10385,7 @@ fn renderFrame(boxed_model: RocBox) RocResult {
     raylib.beginDrawing();
     observatory_backend_timing.begin_drawing_ns = observatoryMeasurementElapsed(started);
     started = observatoryMeasurementStart();
+    observatory_backend_timing.render_callback_started_ns = started;
     const result = callRender(boxed_model);
     observatory_backend_timing.render_callback_ns = observatoryMeasurementElapsed(started);
     started = observatoryMeasurementStart();
@@ -12254,6 +12269,7 @@ fn recordObservatoryCallback(
     phase: observatory.CallbackPhase,
     cycle: u64,
     started_ns: i96,
+    duration_ns: u64,
     outcome: observatory.CallbackOutcome,
     name: []const u8,
 ) void {
@@ -12262,7 +12278,7 @@ fn recordObservatoryCallback(
         .cycle = cycle,
         .timestamp_ns = @intCast(@max(started_ns - observatory_origin_ns, 0)),
         .kind = @intFromEnum(phase),
-        .duration_ns = @intCast(@max(observatoryAwakeNs() - started_ns, 0)),
+        .duration_ns = duration_ns,
         .value_a = @intFromEnum(outcome),
         .name = name,
     });
@@ -12530,10 +12546,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     const init_started_ns = observatoryMeasurementStart();
     const init_result = initModel();
+    const init_duration_ns = observatoryMeasurementElapsed(init_started_ns);
     recordObservatoryCallback(
         .init,
         0,
         init_started_ns,
+        init_duration_ns,
         if (init_result.isErr()) .application_error else .success,
         "init!",
     );
@@ -12651,6 +12669,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             .update,
             cycle_count,
             stats_update_start,
+            stats_update_ns,
             if (update_result.tag == .Err) .application_error else .success,
             "update!",
         );
@@ -12671,13 +12690,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // cycle. A backend that omits it still calls update once for the fresh
         // input above; presentation is not another transition.
         if (callbacks.presentations == 1) {
-            const render_started = observatoryMeasurementStart();
             const render_result = renderFrame(takeModelForRender(&boxed_model));
             stats_render_ns = observatory_backend_timing.render_callback_ns;
             recordObservatoryCallback(
                 .render,
                 cycle_count,
-                render_started,
+                observatory_backend_timing.render_callback_started_ns,
+                stats_render_ns,
                 if (render_result.isErr()) .application_error else .success,
                 "render!",
             );
@@ -12748,10 +12767,12 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     const init_started_ns = observatoryMeasurementStart();
     const init_result = initModel();
+    const init_duration_ns = observatoryMeasurementElapsed(init_started_ns);
     recordObservatoryCallback(
         .init,
         0,
         init_started_ns,
+        init_duration_ns,
         if (init_result.isErr()) .application_error else .success,
         "init!",
     );
@@ -12850,6 +12871,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             .update,
             cycle_count,
             stats_update_start,
+            stats_update_ns,
             if (update_result.tag == .Err) .application_error else .success,
             "update!",
         );
@@ -12864,16 +12886,16 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         app_tasks.pump(cycle_count, .yield);
         stats_task_ns +|= app_tasks.last_pump_ns;
 
-        // Headless examples schedule semantic presentation to cover render and
-        // resource paths. The host-cycle contract itself permits omission.
+        // Headless examples run render! to cover semantic render and resource
+        // paths, but the stub has no presentation surface.
         if (callbacks.presentations == 1) {
-            const render_started = observatoryMeasurementStart();
             const render_result = renderFrame(takeModelForRender(&boxed_model));
             stats_render_ns = observatory_backend_timing.render_callback_ns;
             recordObservatoryCallback(
                 .render,
                 cycle_count,
-                render_started,
+                observatory_backend_timing.render_callback_started_ns,
+                stats_render_ns,
                 if (render_result.isErr()) .application_error else .success,
                 "render!",
             );
@@ -12890,7 +12912,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             // facts above disclose that omission explicitly.
         }
         drainRetiredResources();
-        recordObservatoryDrawSummary(callbacks.presentations == 1, stats_render_ns);
+        recordObservatoryDrawSummary(false, stats_render_ns);
         recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
         reportCycleAllocStats(cycle_count);
         if (exit_requested) |code| {

@@ -387,7 +387,7 @@ extern fn rocray_sqlite_exec(db: ?*anyopaque, sql: [*:0]const u8) c_int;
 extern fn rocray_sqlite_storage_size(db: ?*anyopaque) i64;
 
 /// Version of the SQLite schema created by this recorder.
-pub const schema_version: u32 = 11;
+pub const schema_version: u32 = 1;
 
 /// Low-volume timing and allocation facts recorded for every admitted cycle.
 pub const CycleSummary = struct {
@@ -473,7 +473,7 @@ pub const EffectEvent = struct {
     name: []const u8,
     producer: Producer = .frame_thread,
 };
-/// Stable `EffectEvent.kind` phase values stored by schema version 2.
+/// Stable `EffectEvent.kind` phase values stored by schema version 1.
 pub const EffectPhase = enum(u8) { init = 1, update = 2, render = 3, task = 4 };
 /// Stable effect result categories stored in `EffectEvent.value_b`.
 pub const EffectOutcome = enum(u8) { success = 0, runtime_error = 1, refused = 2, cancelled = 3 };
@@ -929,7 +929,7 @@ const schema_sql =
     \\CREATE TABLE resource_lifecycle(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, value_a INTEGER NOT NULL, value_b INTEGER NOT NULL, name TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE structural_latency(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, value_a INTEGER NOT NULL, value_b INTEGER NOT NULL, name TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE draw_summaries(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, value_a INTEGER NOT NULL, value_b INTEGER NOT NULL, name TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
-    \\CREATE TABLE allocation_events(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, value_a INTEGER NOT NULL, value_b INTEGER NOT NULL, name TEXT NOT NULL, phase INTEGER NOT NULL, task_id INTEGER NOT NULL, zone_id INTEGER NOT NULL, bytes INTEGER NOT NULL, prior_bytes INTEGER NOT NULL, copied_bytes INTEGER NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
+    \\CREATE TABLE allocation_events(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, phase INTEGER NOT NULL, task_id INTEGER NOT NULL, zone_id INTEGER NOT NULL, bytes INTEGER NOT NULL, prior_bytes INTEGER NOT NULL, copied_bytes INTEGER NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE gpu_facts(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, kind INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, value_a INTEGER NOT NULL, value_b INTEGER NOT NULL, name TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE callback_summaries(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, phase INTEGER NOT NULL, subject_id INTEGER NOT NULL, parent_id INTEGER NOT NULL, duration_ns INTEGER NOT NULL, outcome INTEGER NOT NULL, reserved INTEGER NOT NULL, name TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE INDEX annotations_by_run_cycle_time ON annotations(run_id,cycle,timestamp_ns);
@@ -940,7 +940,7 @@ const schema_sql =
     \\CREATE INDEX resources_by_run_subject_time ON resource_lifecycle(run_id,subject_id,timestamp_ns);
     \\CREATE INDEX allocations_live_by_run_subject ON allocation_events(run_id,subject_id,kind);
     \\CREATE INDEX allocations_by_run_cycle_phase ON allocation_events(run_id,cycle,phase);
-    \\INSERT INTO metadata VALUES('schema_version','11');
+    \\INSERT INTO metadata VALUES('schema_version','1');
     \\INSERT INTO metadata VALUES('clean_shutdown','0');
     \\INSERT INTO metadata VALUES('final_state','recording');
     \\INSERT INTO measurement_status VALUES('cycle_summary',0,'summary','unfinalized','capture has not finalized',0,0);
@@ -1016,7 +1016,7 @@ fn writerMain(shared: *Shared) void {
         prepare(db, "INSERT INTO resource_lifecycle(cycle,timestamp_ns,kind,subject_id,parent_id,duration_ns,value_a,value_b,name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
         prepare(db, "INSERT INTO structural_latency(cycle,timestamp_ns,kind,subject_id,parent_id,duration_ns,value_a,value_b,name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
         prepare(db, "INSERT INTO draw_summaries(cycle,timestamp_ns,kind,subject_id,parent_id,duration_ns,value_a,value_b,name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
-        prepare(db, "INSERT INTO allocation_events(cycle,timestamp_ns,kind,subject_id,parent_id,duration_ns,value_a,value_b,name,phase,task_id,zone_id,bytes,prior_bytes,copied_bytes) VALUES(?1,?2,(?3&15),?4,?5,?6,?7,?8,?9,(?3>>4),?5,?6,?7,?8,CASE WHEN (?3&15)=2 THEN min(?7,?8) ELSE 0 END)"),
+        prepare(db, "INSERT INTO allocation_events(cycle,timestamp_ns,kind,subject_id,phase,task_id,zone_id,bytes,prior_bytes,copied_bytes) VALUES(?1,?2,(?3&15),?4,(?3>>4),?5,?6,?7,?8,CASE WHEN (?3&15)=2 THEN min(?7,?8) ELSE 0 END)"),
         prepare(db, "INSERT INTO gpu_facts(cycle,timestamp_ns,kind,subject_id,parent_id,duration_ns,value_a,value_b,name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
         prepare(db, "INSERT INTO callback_summaries(cycle,timestamp_ns,phase,subject_id,parent_id,duration_ns,outcome,reserved,name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)"),
     };
@@ -1325,6 +1325,17 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
             const expected_len: usize = 61 + name_len + (if (is_effect) @as(usize, 56) else 0);
             if (expected_len != bytes.len) return false;
             const stmt = detail_stmts[bytes[1]];
+            if (bytes[1] == @intFromEnum(DetailFamily.allocation)) {
+                if (!bindU64(stmt, 1, std.mem.readInt(u64, bytes[3..11], .little)) or
+                    !bindU64(stmt, 2, std.mem.readInt(u64, bytes[11..19], .little)) or
+                    rocray_sqlite_bind_int64(stmt, 3, bytes[2]) != SQLITE_OK or
+                    !bindU64(stmt, 4, std.mem.readInt(u64, bytes[19..27], .little)) or
+                    !bindU64(stmt, 5, std.mem.readInt(u64, bytes[27..35], .little)) or
+                    !bindU64(stmt, 6, std.mem.readInt(u64, bytes[35..43], .little)) or
+                    !bindU64(stmt, 7, std.mem.readInt(u64, bytes[43..51], .little)) or
+                    !bindU64(stmt, 8, std.mem.readInt(u64, bytes[51..59], .little))) return false;
+                return finishStatement(stmt);
+            }
             for (0..7) |index| {
                 if (!bindU64(stmt, @intCast(index + 1), std.mem.readInt(u64, bytes[3 + index * 8 ..][0..8], .little))) return false;
             }
@@ -1880,7 +1891,7 @@ test "detail SQL preserves lifecycle saturation and structural semantics" {
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
     defer _ = rocray_sqlite_close(db);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM resource_lifecycle a JOIN resource_lifecycle b USING(subject_id) WHERE a.kind=1 AND b.kind=2 AND b.duration_ns=15").?);
-    try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM allocation_events a JOIN allocation_events r USING(subject_id) JOIN allocation_events f USING(subject_id) WHERE a.kind=0 AND r.kind=2 AND f.kind=1 AND a.value_a=64 AND r.value_a=128 AND r.value_b=64 AND f.value_a=128").?);
+    try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM allocation_events a JOIN allocation_events r USING(subject_id) JOIN allocation_events f USING(subject_id) WHERE a.kind=0 AND r.kind=2 AND f.kind=1 AND a.bytes=64 AND r.bytes=128 AND r.prior_bytes=64 AND f.bytes=128").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM queue_pressure WHERE kind=2 AND value_a=parent_id AND duration_ns=9").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM structural_latency WHERE kind=1 AND subject_id=91 AND duration_ns=20 AND name='input_to_presentation'").?);
 }

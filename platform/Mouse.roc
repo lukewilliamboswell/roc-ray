@@ -119,7 +119,9 @@ Mouse := [].{
 
 	## Horizontal and vertical wheel movement since the previous input: every
 	## scroll event in the interval summed, so notches turned between two
-	## cycles are all counted rather than only the last.
+	## cycles are all counted rather than only the last. Each notch is also a
+	## `Wheel` entry in `input.devices.events`, in order with the clicks and
+	## keys around it.
 	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
 	wheel_delta = RrtMouse.wheel_delta
 
@@ -137,9 +139,12 @@ Mouse := [].{
 	##
 	## An interval event recorded from the window system, so a click that
 	## began and ended between two cycles is still pressed (and released) in
-	## the next input. Presses of one button inside one interval coalesce into
-	## one answer, and every click in the interval shares the boundary
-	## position `position` reports.
+	## the next input. This is the coalesced view: presses of one button
+	## inside one interval answer once, and `position` is where the pointer
+	## was at the cycle boundary. For a drag that ended and began again inside
+	## one frame, a double click, or the exact spot each click landed at,
+	## walk `input.devices.events`: every `ButtonPressed` and `ButtonReleased`
+	## is there in order, each with its own position.
 	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
 	button_pressed = RrtMouse.button_pressed
 

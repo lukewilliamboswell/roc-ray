@@ -151,6 +151,18 @@
           "keys": "3:A,4:A,8:Q",
           "text": "5:hi",
           "timeout_seconds": 30
+        },
+        {
+          "name": "events-in-order",
+          "frames": 1000000,
+          "keys": "3:A^+B^,4:Q",
+          "text": "3:hi",
+          "timeout_seconds": 30,
+          "contains": [
+            "events: KeyPressed(65) KeyReleased(65) KeyPressed(66) KeyReleased(66) Text(104) Text(105)",
+            "events: KeyPressed(81)"
+          ],
+          "_note": "Two taps and two characters inside cycle 3 must reach the app as six ordered events -- the bits alone would show one press per key -- and the held Q on cycle 4 as a press event that also quits"
         }
       ]
     },

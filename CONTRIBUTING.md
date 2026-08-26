@@ -341,6 +341,18 @@ to both. `zig build lint` enforces this and points at the first line that
 drifted; without it a missing entry only surfaces when someone links against the
 Wayland bundle.
 
+A value that crosses the host boundary is flat: scalars, `List` of scalars, or
+`List` of a record of scalars. Unions and boxed lists do not cross. The input
+event record is the worked example -- the host fills
+`List({ kind : U8, code : U32, x : F32, y : F32 })` and
+`Devices.events_from_raw` in the types package decodes it into the typed
+`Devices.Event`; the `kind` numbering is stated on both sides
+(`InputEventKind` in `src/backend_raylib.zig`, `event_from_raw` in
+`types/Devices.roc`) so neither can drift alone. A new field on
+`Devices.Snapshot` touches `InputFromHost` and `input_from_raw` in both
+platform headers, `Devices.none` and `Devices.empty`, and the ABI regeneration
+below.
+
 Every hosted effect carries a phase set in `src/host_native.zig` --
 `enforcePhase(name, during_update)` and friends -- that says which app
 callbacks may reach it: `during_load` and `during_update` for anything that

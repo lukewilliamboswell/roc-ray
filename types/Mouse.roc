@@ -83,7 +83,12 @@ Mouse := [].{
 	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
 
 	## Standard mouse buttons sampled by the platform.
-	Button := [Left, Right, Middle, Side, Extra, Forward, Back]
+	Button := [Left, Right, Middle, Side, Extra, Forward, Back].{
+
+		## Compare two of these values, so a `Devices.Event` can be compared
+		## and a click can be matched against a remembered button.
+		is_eq : _
+	}
 
 	## Select hardware pointer samples or deterministic application-provided samples.
 	## Where pointer input comes from: `Hardware`, or a `Virtual` pointer whose
@@ -110,6 +115,8 @@ Mouse := [].{
 
 	## Check if a mouse button was pressed at least once since the previous
 	## input. A click that began and ended between two cycles still counts.
+	## Coalesced per button; the ordered record with every click and its
+	## position is `Devices.Snapshot.events`.
 	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
 	button_pressed = |mouse, button| button_state(mouse.buttons, button, 2)
 

@@ -346,28 +346,33 @@ below hold independently of frame timing.
 | Field | Kind | Source | Capacity and coalescing |
 | --- | --- | --- | --- |
 | `keys` held bit, `mouse` held bits, `mouse` position and delta | State sample | raylib's level at the cycle boundary | Latest value |
-| `keys` and `mouse.buttons` pressed and released bits | Interval event | Window-system key and mouse-button callbacks | Per key or button, at least one press and at least one release since the previous input; several of one key coalesce into one bit, count and order not retained; auto-repeat is not a press |
-| `mouse` wheel | Interval event | Window-system scroll callback | Every notch in the interval summed |
-| `text_input` | Interval event | Window-system character callback | 32 codepoints in the order typed; `text_input_overflow` set when more arrived and the rest were discarded |
+| `events` | Interval event | Window-system key, mouse-button, scroll and character callbacks | 256 per interval, in delivery order across all four sources, each click with the pointer position it landed at; `events_overflow` set when more arrived and the rest were discarded; auto-repeat is not an event |
+| `keys` and `mouse.buttons` pressed and released bits | Interval event, coalesced | The same callbacks | Per key or button, at least one press and at least one release since the previous input; several of one key coalesce into one bit. The bits coalesce; the list does not |
+| `mouse` wheel | Interval event, coalesced | Window-system scroll callback | Every notch in the interval summed; each notch is also an `events` entry |
+| `text_input` | Interval event | Window-system character callback | 32 codepoints in the order typed; `text_input_overflow` set when more arrived and the rest were discarded; each character is also an `events` entry, ordered relative to the key edges around it |
 | `gamepads` held bits and axes | State sample | raylib's per-cycle gamepad poll | Latest value |
-| `gamepads` pressed and released bits | Sampled edge | Comparison of two consecutive polls | Intentionally lossy: a press and release between two polls is not seen; there is no callback to record from |
+| `gamepads` pressed and released bits | Sampled edge | Comparison of two consecutive polls | Intentionally lossy: a press and release between two polls is not seen; there is no callback to record from, and gamepads never appear in `events` |
 
 The guarantee this gives an application is that every key, mouse-button,
-scroll and character event that reaches the process is either delivered in
-the next `Input` or reported as an overflow -- never silently lost -- with a
-latency of at most one cycle. A key tapped between two cycles is pressed and
-released in one input and held in neither; a button released and pressed
-again between two cycles is released and pressed in one input and held in
-both. Order across sources within one interval -- a character relative to a
-key edge, one key relative to another -- is not defined, and clicks in one
-interval all share the boundary pointer position. Gamepad buttons carry no
-such guarantee and say so.
+scroll and character event that reaches the process is delivered in the next
+`Input`, in order, with count and (for clicks) position preserved up to the
+stated capacity, or reported as overflow -- never silently lost -- with a
+latency of at most one cycle. `events` is the authoritative record; the
+packed bits, the wheel sum and `text_input` are coalesced conveniences
+derived alongside it, and they keep recording when the list is full, so the
+coalesced view is complete even on an interval whose list overflowed. A key
+tapped between two cycles is pressed and released in one input and held in
+neither; a button released and pressed again between two cycles is released
+and pressed in one input and held in both; two taps are two pairs of events
+and one pair of bits. Gamepad buttons carry no such guarantee and say so.
 
 A scripted keyboard (`Keys.set_source!`, `--host-keys`) is the same derivation
 over a scripted level, with a scripted tap recorded as an edge inside the
 cycle, so a headless or windowed test can state the between-polls case that a
-level per cycle could never express, and hardware edges are shut out entirely
-while a script is the source.
+level per cycle could never express. Scripted input feeds `events` too -- a
+tap as a press and a release, a held-set change as the edge it implies, typed
+text as characters in script order -- and hardware events are shut out
+entirely, device by device, while a script is that device's source.
 
 `App.Input(msg)` is also the type witness that ties a task's message to the
 application's own `Msg`. Only the platform's entry module can name the

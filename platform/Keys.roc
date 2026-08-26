@@ -51,8 +51,12 @@ Keys := [].{
 	##
 	## An interval event recorded from the window system, so a key that went
 	## down and up between two cycles is still pressed (and released) in the
-	## next input, never lost to frame timing. Presses of one key inside one
-	## interval coalesce into one answer. Pass `input.devices` directly.
+	## next input, never lost to frame timing. This is the coalesced view:
+	## presses of one key inside one interval answer once. When the count or
+	## the order matters -- a double tap, a chord, a keystroke between two
+	## typed characters -- walk `input.devices.events`, which holds every
+	## `KeyPressed` and `KeyReleased` in delivery order. Pass `input.devices`
+	## directly.
 	key_pressed : { keys : List(U8), ..state }, Key -> Bool
 	key_pressed = RrtKeys.key_pressed
 

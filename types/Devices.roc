@@ -14,6 +14,16 @@
 ## Gamepad buttons are the exception: raylib polls them with no callback, so
 ## their edges are sampled and a press-and-release between two polls is lost.
 ##
+## The interval events come in two views. The packed bits behind
+## `key_pressed`, `mouse.button_pressed` and friends are the *coalesced* view:
+## at least one press, at least one release, per key or button. `events` is
+## the *record*: every event in delivery order, with count, order across
+## sources and the pointer position of every click preserved up to a stated
+## capacity. Read the bits for simple held-or-pressed logic; read the list
+## when order or count matters -- a double tap, a drag that ended and began
+## again inside one frame, text editing where a keystroke has to land between
+## two characters.
+##
 ## Tests can start from `Devices.none` and set only the relevant state with the
 ## `with_key_*` and `with_mouse_*` receivers.
 ##
@@ -55,6 +65,25 @@ Devices := [].{
 		## `text_input` is the first 32 of them rather than all. Clear means
 		## nothing was lost.
 		text_input_overflow : Bool,
+
+		## Every key edge, click, wheel notch and typed character since the
+		## previous input, in the order the window system delivered them,
+		## across all of those sources. This is the authoritative record the
+		## packed bits and `text_input` summarize: where the bits coalesce two
+		## taps into one, this holds both; where `text_input` is bounded at
+		## 32, this holds text in order relative to the key edges around it;
+		## a click carries the pointer position it landed at. At most 256
+		## events per input; past that the rest are discarded and
+		## `events_overflow` is set, while the bits, the wheel sum and
+		## `text_input` keep recording regardless, so the coalesced view is
+		## complete even when the list is not. Gamepad buttons are sampled and
+		## never appear here.
+		events : List(Event),
+
+		## Whether more than 256 events arrived in this interval, so `events`
+		## is the first 256 of them rather than all. Clear means the list is
+		## the whole interval.
+		events_overflow : Bool,
 
 		## Gamepad input sampled once per host-cycle input. The held bits and
 		## axes are state samples; the pressed and released bits are derived by
@@ -178,7 +207,74 @@ Devices := [].{
 			..snapshot_fields(input),
 			text_input_overflow: overflow,
 		}
+
+		## State the interval's event record, as
+		## `Devices.none.with_events([KeyPressed(KeySpace), KeyReleased(KeySpace)])`.
+		##
+		## The bits are not derived from it: a test that wants both views to
+		## agree states both, as the host would have. Unlike the `with_key_*`
+		## receivers this works on `Devices.empty` too, since a list has no
+		## fixed length to fit.
+		with_events : Snapshot, List(Event) -> Snapshot
+		with_events = |input, events| {
+			..snapshot_fields(input),
+			events: events,
+		}
+
+		## Say whether the event record was cut at its capacity, which is what
+		## `events_overflow` reports.
+		with_events_overflow : Snapshot, Bool -> Snapshot
+		with_events_overflow = |input, overflow| {
+			..snapshot_fields(input),
+			events_overflow: overflow,
+		}
 	}
+
+	## One input event, as the window system delivered it.
+	##
+	## `KeyPressed` and `KeyReleased` are physical key edges; auto-repeat is
+	## not an event. `ButtonPressed` and `ButtonReleased` carry the pointer
+	## position the click landed at, in the same logical coordinates as
+	## `mouse.position()`. `Wheel` is one scroll event's offsets, which
+	## `mouse.wheel_delta()` sums. `Text` is one typed codepoint, following the
+	## active keyboard layout, which is why it is separate from the key edge
+	## that produced it.
+	Event : [
+		KeyPressed(Keys.Key),
+		KeyReleased(Keys.Key),
+		ButtonPressed(Mouse.Button, { x : F32, y : F32 }),
+		ButtonReleased(Mouse.Button, { x : F32, y : F32 }),
+		Wheel({ x : F32, y : F32 }),
+		Text(U32),
+	]
+
+	## The flat record one event crosses the host boundary as. Not for
+	## applications: the platform decodes it into `Event` before `update!`
+	## sees an input, and `events_from_raw` is the decoder.
+	##
+	## `kind` numbers the `Event` variants in declaration order from 0;
+	## `code` is the key code, mouse button code or codepoint that kind
+	## implies; `x` and `y` are a click's position or a wheel notch's offsets.
+	RawEvent : { kind : U8, code : U32, x : F32, y : F32 }
+
+	## Decode a cycle's flat events into `Event`s, keeping their order.
+	##
+	## A record the decoder cannot read -- a `kind` this package does not
+	## know, or a code past the key or button tables -- is dropped rather
+	## than crashing the app. Such a record can only come from a host newer
+	## than this package, and a kind of event the app could not have matched
+	## on anyway is not one it can act on.
+	events_from_raw : List(RawEvent) -> List(Event)
+	events_from_raw = |raw|
+		List.fold(
+			raw,
+			[],
+			|acc, record|
+				match event_from_raw(record) {
+					Ok(event) => List.append(acc, event)
+					Err(_) => acc
+				},
+		)
 
 	## A neutral snapshot with the host's own packed list lengths, for tests.
 	##
@@ -201,6 +297,8 @@ Devices := [].{
 		keys: List.repeat(0, key_state_len),
 		text_input: [],
 		text_input_overflow: Bool.False,
+		events: [],
+		events_overflow: Bool.False,
 		gamepads: {
 			connected: List.repeat(0, gamepad_count),
 			buttons: List.repeat(0, gamepad_count * gamepad_button_count),
@@ -232,6 +330,8 @@ Devices := [].{
 		keys: [],
 		text_input: [],
 		text_input_overflow: Bool.False,
+		events: [],
+		events_overflow: Bool.False,
 		gamepads: {
 			connected: [],
 			buttons: [],
@@ -265,6 +365,8 @@ Devices := [].{
 	expect Devices.empty.mouse.wheel_delta() == { x: 0, y: 0 }
 	expect List.len(Devices.empty.text_input) == 0
 	expect !(Devices.empty.text_input_overflow)
+	expect Devices.empty.events == []
+	expect !(Devices.empty.events_overflow)
 }
 
 ## Held bit in a packed key or mouse-button state byte.
@@ -308,10 +410,66 @@ snapshot_fields : Devices.Snapshot -> {
 	keys : List(U8),
 	text_input : List(U32),
 	text_input_overflow : Bool,
+	events : List(Devices.Event),
+	events_overflow : Bool,
 	gamepads : Gamepad.Snapshot,
 	mouse : Mouse.Snapshot,
 }
 snapshot_fields = |input| input
+
+## Decode one flat event. The numbering mirrors `InputEventKind` in
+## `src/backend_raylib.zig`; both sides state it so neither can drift alone.
+event_from_raw : Devices.RawEvent -> Try(Devices.Event, [UnknownEvent])
+event_from_raw = |record|
+	match record.kind {
+		0 => Keys.from_code(U32.to_u64(record.code)) |> Try.map_ok(|key| KeyPressed(key)) |> Try.map_err(|_| UnknownEvent)
+		1 => Keys.from_code(U32.to_u64(record.code)) |> Try.map_ok(|key| KeyReleased(key)) |> Try.map_err(|_| UnknownEvent)
+		2 => mouse_button_from_code(U32.to_u64(record.code)) |> Try.map_ok(|button| ButtonPressed(button, { x: record.x, y: record.y })) |> Try.map_err(|_| UnknownEvent)
+		3 => mouse_button_from_code(U32.to_u64(record.code)) |> Try.map_ok(|button| ButtonReleased(button, { x: record.x, y: record.y })) |> Try.map_err(|_| UnknownEvent)
+		4 => Ok(Wheel({ x: record.x, y: record.y }))
+		5 => Ok(Text(record.code))
+		_ => Err(UnknownEvent)
+	}
+
+## The inverse of `mouse_button_code`, for decoding a click's button.
+mouse_button_from_code : U64 -> Try(Mouse.Button, [InvalidMouseButtonCode])
+mouse_button_from_code = |code|
+	match code {
+		0 => Ok(Left)
+		1 => Ok(Right)
+		2 => Ok(Middle)
+		3 => Ok(Side)
+		4 => Ok(Extra)
+		5 => Ok(Forward)
+		6 => Ok(Back)
+		_ => Err(InvalidMouseButtonCode)
+	}
+
+## A flat event for the decode expects below.
+raw : U8, U32, F32, F32 -> Devices.RawEvent
+raw = |kind, code, x, y| { kind, code, x, y }
+
+## Every variant decodes, with its payload intact.
+expect event_from_raw(raw(0, 65, 0, 0)) == Ok(KeyPressed(KeyA))
+expect event_from_raw(raw(1, 256, 0, 0)) == Ok(KeyReleased(KeyEscape))
+expect event_from_raw(raw(2, 0, 12.5, 34)) == Ok(ButtonPressed(Left, { x: 12.5, y: 34 }))
+expect event_from_raw(raw(3, 6, 1, 2)) == Ok(ButtonReleased(Back, { x: 1, y: 2 }))
+expect event_from_raw(raw(4, 0, -0.5, 2)) == Ok(Wheel({ x: -0.5, y: 2 }))
+expect event_from_raw(raw(5, 0x20ac, 0, 0)) == Ok(Text(0x20ac))
+
+## A kind or code this package cannot read is dropped, not a crash.
+expect event_from_raw(raw(6, 0, 0, 0)) == Err(UnknownEvent)
+expect event_from_raw(raw(255, 65, 0, 0)) == Err(UnknownEvent)
+expect event_from_raw(raw(0, 100000, 0, 0)) == Err(UnknownEvent)
+expect event_from_raw(raw(2, 7, 0, 0)) == Err(UnknownEvent)
+expect Devices.events_from_raw([raw(0, 65, 0, 0), raw(9, 0, 0, 0), raw(5, 104, 0, 0)]) == [KeyPressed(KeyA), Text(104)]
+
+## Decoding keeps delivery order.
+expect Devices.events_from_raw([raw(5, 104, 0, 0), raw(2, 1, 3, 4), raw(1, 65, 0, 0)]) == [Text(104), ButtonPressed(Right, { x: 3, y: 4 }), KeyReleased(KeyA)]
+expect Devices.events_from_raw([]) == []
+
+## The button tables agree in both directions.
+expect List.all(every_mouse_button, |button| mouse_button_from_code(mouse_button_code(button)) == Ok(button))
 
 ## The same, for the sampled mouse state nested inside it.
 mouse_fields : Mouse.Snapshot -> {
@@ -470,6 +628,14 @@ expect Devices.none.with_mouse_button_down(Middle).mouse.middle
 expect !(Devices.none.with_mouse_button_down(Left).mouse.right)
 expect !(Devices.none.with_mouse_button_released(Left).mouse.left)
 expect !(Devices.none.with_mouse_button_down(Side).mouse.left)
+
+## The event record is stated directly, on either kind of snapshot.
+expect Devices.none.events == []
+expect Devices.none.with_events([KeyPressed(KeySpace), KeyReleased(KeySpace)]).events == [KeyPressed(KeySpace), KeyReleased(KeySpace)]
+expect Devices.empty.with_events([Text(97)]).events == [Text(97)]
+expect Devices.none.with_events_overflow(Bool.True).events_overflow
+expect !(Devices.none.with_events([Wheel({ x: 0, y: 1 })]).events_overflow)
+expect Devices.none.with_events([KeyPressed(KeyR)]).with_key_pressed(KeyR).key_pressed(KeyR)
 
 ## Text overflow is an ordinary flag on the sample, clear until stated.
 expect !(Devices.none.text_input_overflow)

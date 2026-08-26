@@ -143,13 +143,124 @@ Keys := [].{
 			ExitKey(key) => U64.to_i32_wrap(Keys.key_code(key))
 		}
 
-	## Validate and wrap a raw raylib key code.
+	## Validate a raw raylib key code and name it.
+	##
+	## A code with a named key decodes to that key, so a value that came from
+	## the host -- a `Devices.Event` -- pattern-matches on `KeyA` exactly as
+	## one written in the app does. A code in range with no name is `Raw`.
 	from_code : U64 -> Try(Key, [InvalidKeyCode, ..])
 	from_code = |code|
-		if code < key_count {
-			Ok(Raw(code))
-		} else {
-			Err(InvalidKeyCode)
+		match code {
+			4 => Ok(KeyAndroidBack)
+			5 => Ok(KeyAndroidMenu)
+			24 => Ok(KeyVolumeUp)
+			25 => Ok(KeyVolumeDown)
+			32 => Ok(KeySpace)
+			39 => Ok(KeyApostrophe)
+			44 => Ok(KeyComma)
+			45 => Ok(KeyMinus)
+			46 => Ok(KeyPeriod)
+			47 => Ok(KeySlash)
+			48 => Ok(Key0)
+			49 => Ok(Key1)
+			50 => Ok(Key2)
+			51 => Ok(Key3)
+			52 => Ok(Key4)
+			53 => Ok(Key5)
+			54 => Ok(Key6)
+			55 => Ok(Key7)
+			56 => Ok(Key8)
+			57 => Ok(Key9)
+			59 => Ok(KeySemicolon)
+			61 => Ok(KeyEqual)
+			65 => Ok(KeyA)
+			66 => Ok(KeyB)
+			67 => Ok(KeyC)
+			68 => Ok(KeyD)
+			69 => Ok(KeyE)
+			70 => Ok(KeyF)
+			71 => Ok(KeyG)
+			72 => Ok(KeyH)
+			73 => Ok(KeyI)
+			74 => Ok(KeyJ)
+			75 => Ok(KeyK)
+			76 => Ok(KeyL)
+			77 => Ok(KeyM)
+			78 => Ok(KeyN)
+			79 => Ok(KeyO)
+			80 => Ok(KeyP)
+			81 => Ok(KeyQ)
+			82 => Ok(KeyR)
+			83 => Ok(KeyS)
+			84 => Ok(KeyT)
+			85 => Ok(KeyU)
+			86 => Ok(KeyV)
+			87 => Ok(KeyW)
+			88 => Ok(KeyX)
+			89 => Ok(KeyY)
+			90 => Ok(KeyZ)
+			91 => Ok(KeyLeftBracket)
+			92 => Ok(KeyBackslash)
+			93 => Ok(KeyRightBracket)
+			96 => Ok(KeyGrave)
+			256 => Ok(KeyEscape)
+			257 => Ok(KeyEnter)
+			258 => Ok(KeyTab)
+			259 => Ok(KeyBackspace)
+			260 => Ok(KeyInsert)
+			261 => Ok(KeyDelete)
+			262 => Ok(KeyRight)
+			263 => Ok(KeyLeft)
+			264 => Ok(KeyDown)
+			265 => Ok(KeyUp)
+			266 => Ok(KeyPageUp)
+			267 => Ok(KeyPageDown)
+			268 => Ok(KeyHome)
+			269 => Ok(KeyEnd)
+			280 => Ok(KeyCapsLock)
+			281 => Ok(KeyScrollLock)
+			282 => Ok(KeyNumLock)
+			283 => Ok(KeyPrintScreen)
+			284 => Ok(KeyPause)
+			290 => Ok(KeyF1)
+			291 => Ok(KeyF2)
+			292 => Ok(KeyF3)
+			293 => Ok(KeyF4)
+			294 => Ok(KeyF5)
+			295 => Ok(KeyF6)
+			296 => Ok(KeyF7)
+			297 => Ok(KeyF8)
+			298 => Ok(KeyF9)
+			299 => Ok(KeyF10)
+			300 => Ok(KeyF11)
+			301 => Ok(KeyF12)
+			320 => Ok(KeyKp0)
+			321 => Ok(KeyKp1)
+			322 => Ok(KeyKp2)
+			323 => Ok(KeyKp3)
+			324 => Ok(KeyKp4)
+			325 => Ok(KeyKp5)
+			326 => Ok(KeyKp6)
+			327 => Ok(KeyKp7)
+			328 => Ok(KeyKp8)
+			329 => Ok(KeyKp9)
+			330 => Ok(KeyKpDecimal)
+			331 => Ok(KeyKpDivide)
+			332 => Ok(KeyKpMultiply)
+			333 => Ok(KeyKpSubtract)
+			334 => Ok(KeyKpAdd)
+			335 => Ok(KeyKpEnter)
+			336 => Ok(KeyKpEqual)
+			340 => Ok(KeyLeftShift)
+			341 => Ok(KeyLeftControl)
+			342 => Ok(KeyLeftAlt)
+			343 => Ok(KeyLeftSuper)
+			344 => Ok(KeyRightShift)
+			345 => Ok(KeyRightControl)
+			346 => Ok(KeyRightAlt)
+			347 => Ok(KeyRightSuper)
+			348 => Ok(KeyKbMenu)
+			_ => if code < key_count Ok(Raw(code)) else Err(InvalidKeyCode)
 		}
 
 	## raylib key code for a key (index into the snapshot key-state list).
@@ -279,7 +390,9 @@ Keys := [].{
 
 	## Check if a key was pressed at least once since the previous input. An
 	## interval event: a key tapped between two cycles is pressed and released
-	## in the next input and held in neither. Pass `host` directly.
+	## in the next input and held in neither. Coalesced per key; the ordered
+	## record with every press is `Devices.Snapshot.events`. Pass `host`
+	## directly.
 	key_pressed : { keys : List(U8), ..state }, Key -> Bool
 	key_pressed = |host, key| key_state(host.keys, key, 2)
 
@@ -291,7 +404,11 @@ Keys := [].{
 	expect key_code(KeyA) == 65
 	expect key_code(KeyEscape) == 256
 	expect key_code(KeyLeftShift) == 340
-	expect from_code(262) == Ok(Raw(262))
+	expect from_code(262) == Ok(KeyRight)
+	expect from_code(65) == Ok(KeyA)
+	expect from_code(0) == Ok(Raw(0))
+	expect from_code(key_code(KeyKbMenu)) == Ok(KeyKbMenu)
+	expect from_code(key_code(Raw(7))) == Ok(Raw(7))
 	expect from_code(key_count) == Err(InvalidKeyCode)
 	expect key_down({ keys: [7] }, Raw(0)) and key_pressed({ keys: [7] }, Raw(0)) and key_released({ keys: [7] }, Raw(0))
 

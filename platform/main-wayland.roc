@@ -219,6 +219,7 @@ import DrawHost
 import Text
 import Color
 import Devices
+import rrt.Devices as RrtDevices
 import Files
 import FilesHost
 import Window
@@ -268,6 +269,8 @@ InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	text_input : List(U32), ## Unicode codepoints typed this interval, at most 32
 	text_input_overflow : Bool, ## whether more than 32 were typed and the rest discarded
+	events : List(RrtDevices.RawEvent), ## every event this interval in delivery order, at most 256
+	events_overflow : Bool, ## whether more than 256 arrived and the rest were discarded
 	gamepads : {
 		available : List(U8), ## 4 availability bytes
 		buttons : List(U8), ## 4 * 18 packed button-state bytes
@@ -316,14 +319,16 @@ app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostHost.
 
 ## Reshape the flat sampled input into the public `Devices.Snapshot` record.
 ##
-## Only `gamepads.available` is renamed; the compiler may optimize the rest of
-## this into a direct pass-through, which is why the two layouts are kept
-## deliberately compatible.
+## `gamepads.available` is renamed and the flat event records are decoded into
+## the typed `Devices.Event` union -- a union cannot cross the host boundary --
+## and the rest passes through unchanged.
 input_from_raw : InputFromHost -> Devices.Snapshot
 input_from_raw = |raw| {
 	keys: raw.keys,
 	text_input: raw.text_input,
 	text_input_overflow: raw.text_input_overflow,
+	events: RrtDevices.events_from_raw(raw.events),
+	events_overflow: raw.events_overflow,
 	gamepads: {
 		connected: raw.gamepads.available,
 		buttons: raw.gamepads.buttons,

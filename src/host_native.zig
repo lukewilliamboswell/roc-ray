@@ -70,6 +70,8 @@ const CaptureFromHost = abi.Update_for_hostArg1Capture;
 /// One file dropped onto the window, crossing as the public `App.Dropped`.
 const DroppedFile = abi.Update_for_hostArg1Dropped;
 const DroppedPosition = abi.Update_for_hostArg1DroppedPosition;
+/// One input event in the flat shape the types package decodes.
+const InputEventRecord = abi.Update_for_hostArg1DevicesEvents;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -6370,6 +6372,8 @@ fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) call
     virtual_mouse_x = args.x;
     virtual_mouse_y = args.y;
     virtual_mouse_wheel = args.wheel;
+    // The sum is the field above; the event list gets the notch as well.
+    if (args.wheel != 0) raylib.recordVirtualWheel(0, args.wheel);
     // Indices follow raylib's mouse button codes, which `Mouse` also uses.
     virtual_mouse_buttons[0] = args.left;
     virtual_mouse_buttons[1] = args.right;
@@ -6415,6 +6419,9 @@ fn applyVirtualText(codepoints: []const u32) void {
     @memcpy(virtual_text[0..kept], codepoints[0..kept]);
     virtual_text_len = kept;
     virtual_text_overflowed = codepoints.len > kept;
+    // Every codepoint goes to the event list in script order, the one past
+    // the text cap included: the list has its own, larger bound.
+    for (codepoints) |codepoint| raylib.recordVirtualText(codepoint);
 }
 
 /// Take the queued scripted text, or null when the frame's text is hardware's.
@@ -6445,6 +6452,7 @@ fn resetVirtualInput() void {
     virtual_text_overflowed = false;
     raylib.clearKeyState();
     raylib.clearMouseButtonState();
+    raylib.clearInputEvents();
 }
 
 fn hostedCaptureSetVirtualKeys(host: *RocHost, args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
@@ -7365,15 +7373,20 @@ const RuntimeOptions = struct {
 };
 
 const InputState = struct {
+    roc_host: *RocHost,
     keys: ffi.Keys,
     mouse_buttons: ffi.MouseButtons,
     gamepad_available: ffi.GamepadAvailability,
     gamepad_buttons: ffi.GamepadButtons,
     gamepad_axes: ffi.GamepadAxes,
     text_input: ffi.TextInput,
+    /// This cycle's ordered events, taken once alongside the packed bits and
+    /// borrowed from the backend's scratch until `hostState` copies them out.
+    events: raylib.InputEvents = .{ .events = &.{}, .overflowed = false },
 
     fn init(roc_host: *RocHost) InputState {
         return .{
+            .roc_host = roc_host,
             .keys = ffi.Keys.init(roc_host),
             .mouse_buttons = ffi.MouseButtons.init(roc_host),
             .gamepad_available = ffi.GamepadAvailability.init(roc_host),
@@ -7411,10 +7424,16 @@ const InputState = struct {
     ) InputSnapshot {
         self.text_input.update(text_input.codepoints);
         self.retainForRoc();
+        // Fresh each cycle and transferred whole, like the dropped files:
+        // Roc releases it with the input.
+        const events = inputEventsSnapshot(self.roc_host, self.events);
+        self.events = .{ .events = &.{}, .overflowed = false };
         return .{
             .keys = self.keys.list,
             .text_input = self.text_input.list,
             .text_input_overflow = text_input.overflowed,
+            .events = events.list,
+            .events_overflow = events.overflowed,
             .gamepads = .{
                 .available = self.gamepad_available.list,
                 .buttons = self.gamepad_buttons.list,
@@ -7436,7 +7455,9 @@ const InputState = struct {
         };
     }
 
-    fn updateFromRaylib(self: *InputState) void {
+    /// Sample input for a windowed cycle. `text_source` says whether this
+    /// cycle's text is scripted, which decides whose text events are taken.
+    fn updateFromRaylib(self: *InputState, text_source: raylib.InputSource) void {
         // A scripted keyboard goes through the same derivation as hardware,
         // so pressed/released this interval behave identically for the app.
         if (virtual_keys_active) {
@@ -7449,7 +7470,7 @@ const InputState = struct {
         // A scripted pointer goes through the same derivation as hardware,
         // so pressed/released this interval behave identically for the app.
         if (virtual_mouse_active) {
-            raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
+            raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons, .{ .x = virtual_mouse_x, .y = virtual_mouse_y });
         } else {
             raylib.updateMouseButtonState();
         }
@@ -7459,6 +7480,14 @@ const InputState = struct {
         self.gamepad_available.update(raylib.getGamepadAvailability());
         self.gamepad_buttons.update(raylib.getGamepadButtonState());
         self.gamepad_axes.update(raylib.getGamepadAxes());
+
+        // After both derivations, so a transition they logged is in this
+        // cycle's list next to the bit it set.
+        self.events = raylib.takeInputEvents(.{
+            .keyboard = if (virtual_keys_active) .virtual else .hardware,
+            .mouse = if (virtual_mouse_active) .virtual else .hardware,
+            .text = text_source,
+        });
     }
 
     /// Sample input for a headless cycle, where there is no hardware to ask.
@@ -7468,13 +7497,113 @@ const InputState = struct {
     /// released bits real devices would have produced. With nothing scripted
     /// both arrays are all false, which is what no keyboard and no mouse look
     /// like -- so an app that scripts neither sees what it always saw.
-    fn updateHeadless(self: *InputState) void {
+    fn updateHeadless(self: *InputState, text_source: raylib.InputSource) void {
         raylib.updateKeyboardStateFrom(&virtual_key_down);
         self.keys.update(raylib.getKeyState());
-        raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
+        raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons, .{ .x = virtual_mouse_x, .y = virtual_mouse_y });
         self.mouse_buttons.update(raylib.getMouseButtonState());
+        self.events = raylib.takeInputEvents(.{ .keyboard = .virtual, .mouse = .virtual, .text = text_source });
     }
 };
+
+/// One cycle's ordered input events on their way to `update!`.
+///
+/// `list` is owned; handing it to Roc transfers it, exactly as a cycle's
+/// dropped files are transferred.
+const InputEventsList = struct {
+    list: abi.RocListWith(InputEventRecord, false),
+    overflowed: bool,
+};
+
+/// Copy this cycle's events into a Roc list, in delivery order.
+///
+/// The backend's scratch is overwritten by the next recorded event, so the
+/// records are copied out here rather than borrowed. The count is already
+/// bounded by `raylib.INPUT_EVENT_CAPACITY`; `overflowed` is the backend's
+/// word that something past it was discarded, carried through unchanged so
+/// an app that got a full list can tell whether it was the whole interval.
+fn inputEventsSnapshot(roc_host: *RocHost, events: raylib.InputEvents) InputEventsList {
+    if (events.events.len == 0) return .{ .list = abi.RocListWith(InputEventRecord, false).empty(), .overflowed = events.overflowed };
+
+    var buffer: [raylib.INPUT_EVENT_CAPACITY]InputEventRecord = undefined;
+    for (events.events, buffer[0..events.events.len]) |record, *slot| {
+        slot.* = .{ .kind = record.kind, .code = record.code, .x = record.x, .y = record.y };
+    }
+    return .{
+        .list = abi.RocListWith(InputEventRecord, false).fromSlice(buffer[0..events.events.len], roc_host),
+        .overflowed = events.overflowed,
+    };
+}
+
+test "a quiet cycle delivers no events and reports no overflow" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const sampled = inputEventsSnapshot(&roc_host, .{ .events = &.{}, .overflowed = false });
+    defer sampled.list.deinit(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), sampled.list.len());
+    try std.testing.expect(!sampled.overflowed);
+}
+
+test "events are copied out in order and the list is released with the input" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const records = [_]raylib.InputEventRecord{
+        .{ .kind = 0, .code = 65, .x = 0, .y = 0 },
+        .{ .kind = 2, .code = 0, .x = 12.5, .y = 34 },
+        .{ .kind = 5, .code = 0x20ac, .x = 0, .y = 0 },
+    };
+    const sampled = inputEventsSnapshot(&roc_host, .{ .events = &records, .overflowed = false });
+    try std.testing.expectEqual(@as(usize, 3), sampled.list.len());
+    const items = sampled.list.items();
+    try std.testing.expectEqual(@as(u8, 0), items[0].kind);
+    try std.testing.expectEqual(@as(u32, 65), items[0].code);
+    try std.testing.expectEqual(@as(f32, 12.5), items[1].x);
+    try std.testing.expectEqual(@as(f32, 34), items[1].y);
+    try std.testing.expectEqual(@as(u32, 0x20ac), items[2].code);
+    // The testing allocator is what checks the release: an unbalanced
+    // refcount is a leak or a double free here, not a no-op.
+    sampled.list.deinit(&roc_host);
+
+    // Overflow travels with the interval that overflowed.
+    const full = inputEventsSnapshot(&roc_host, .{ .events = &records, .overflowed = true });
+    defer full.list.deinit(&roc_host);
+    try std.testing.expect(full.overflowed);
+    try std.testing.expectEqual(@as(usize, 3), full.list.len());
+}
+
+test "a scripted cycle's events reach the snapshot list in delivery order" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    var input = InputState.init(&roc_host);
+    defer input.deinit();
+    defer resetVirtualInput();
+
+    // Tap Escape, then type "hi", then hold S from this cycle: the script
+    // order is the delivery order.
+    const options = RuntimeOptions{ .key_script = "3:ESCAPE^+S", .text_script = "3:hi" };
+    applyInputScripts(options, 3);
+    const scripted_text = takeVirtualText().?;
+    input.updateHeadless(.virtual);
+    const snapshot = input.hostState(0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, scripted_text);
+    defer snapshot.decref(&roc_host);
+
+    try std.testing.expect(!snapshot.events_overflow);
+    try std.testing.expectEqual(@as(usize, 5), snapshot.events.len());
+    const items = snapshot.events.items();
+    try std.testing.expectEqual(@as(u8, 0), items[0].kind); // KeyPressed(Escape)
+    try std.testing.expectEqual(@as(u32, 256), items[0].code);
+    try std.testing.expectEqual(@as(u8, 1), items[1].kind); // KeyReleased(Escape)
+    try std.testing.expectEqual(@as(u8, 5), items[2].kind); // Text('h')
+    try std.testing.expectEqual(@as(u32, 'h'), items[2].code);
+    try std.testing.expectEqual(@as(u32, 'i'), items[3].code);
+    try std.testing.expectEqual(@as(u8, 0), items[4].kind); // KeyPressed(S): the held set changed
+    try std.testing.expectEqual(@as(u32, 'S'), items[4].code);
+    // And the bits agree with the list.
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, input.keys.list.items()[256]);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, input.keys.list.items()['S']);
+}
 
 /// One cycle's file drops on their way to `update!`.
 ///
@@ -10165,7 +10294,14 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         updateMusicStreams();
 
         applyInputScripts(options, cycle_count);
-        input.updateFromRaylib();
+        // Text is taken first, and either way: a scripted frame that left the
+        // hardware characters behind would deliver them on the next one, and
+        // which source the text came from decides whose text events the cycle
+        // takes below.
+        const typed_text = raylib.takeTextInput();
+        const scripted_text = takeVirtualText();
+        const text_input = scripted_text orelse typed_text;
+        input.updateFromRaylib(if (scripted_text != null) .virtual else .hardware);
         const mouse_pos = if (virtual_mouse_active)
             raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
         else
@@ -10185,11 +10321,6 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             // again on every subsequent frame.
             virtual_mouse_wheel = 0;
         }
-        // Taken either way, for the same reason as the wheel: a scripted frame
-        // that left the hardware characters behind would deliver them on the
-        // next one.
-        const typed_text = raylib.takeTextInput();
-        const text_input = takeVirtualText() orelse typed_text;
         const input_snapshot = input.hostState(
             mouse_pos.x,
             mouse_pos.y,
@@ -10321,8 +10452,9 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
-        input.updateHeadless();
-        const text_input = takeVirtualText() orelse raylib.TextInput{ .codepoints = &.{}, .overflowed = false };
+        const scripted_text = takeVirtualText();
+        const text_input = scripted_text orelse raylib.TextInput{ .codepoints = &.{}, .overflowed = false };
+        input.updateHeadless(if (scripted_text != null) .virtual else .hardware);
         // A headless run has no pointer, so a scripted one is the only pointer
         // there is. Everything a windowed run derives from it -- position,
         // delta, the wheel's single frame of movement -- is derived here the

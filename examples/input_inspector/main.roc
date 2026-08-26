@@ -2,8 +2,10 @@
 ##
 ## The window lists its controls; Q quits because Escape is displayed as an
 ## ordinary key. This example shows how each `Input` gives `update!` the latest
-## device state, and how `update!` can change the clipboard, cursor, and window
-## or read a pixel from the previous drawing.
+## device state and the ordered record of what the devices did, and how
+## `update!` can change the clipboard, cursor, and window or read a pixel from
+## the previous drawing. Every cycle with events prints them to stdout in
+## delivery order, which is what the windowed sweep asserts on.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
@@ -16,6 +18,7 @@ import rr.Mouse
 import rr.Gamepad
 import rr.App
 import rr.Capture
+import rr.Stdout
 
 ## State kept between updates: accumulated typed text, clipboard feedback, the
 ## latest device snapshot, and the last colour read beneath the pointer. The
@@ -38,6 +41,9 @@ Model : {
 
 	## The colour the eyedropper last found under the pointer.
 	picked : Picked,
+
+	## The most recent cycle's event record, described.
+	events_line : Str,
 }
 
 ## What one screen readback under the pointer came back with.
@@ -66,7 +72,7 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty, picked: Err(Unavailable) }),
+	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty, picked: Err(Unavailable), events_line: "events: none yet" }),
 )
 
 title : Str
@@ -149,12 +155,63 @@ update! = |model, program_input| {
 	pointer = input.mouse.position()
 	picked = Capture.pixel_at!(Screen, { x: F32.to_i32_wrap(pointer.x), y: F32.to_i32_wrap(pointer.y) })
 
+	# The record, as opposed to the bits the chips show: every edge, click,
+	# notch and character in the order it happened. A cycle with nothing in
+	# it keeps the previous line on screen and prints nothing.
+	events_line =
+		if List.is_empty(input.events) {
+			model.events_line
+		} else {
+			line = describe_events(input.events, input.events_overflow)
+			_ = Stdout.line!(line)
+			line
+		}
+
 	if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
-		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked })
+		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked, events_line: events_line })
 	}
 }
+
+## One event as a short label, by code rather than name so the line stays
+## one token per event: `KeyPressed(65)`, `ButtonReleased(Left at 12,34)`.
+event_label : Devices.Event -> Str
+event_label = |event|
+	match event {
+		KeyPressed(key) => "KeyPressed(${U64.to_str(Keys.key_code(key))})"
+		KeyReleased(key) => "KeyReleased(${U64.to_str(Keys.key_code(key))})"
+		ButtonPressed(button, at) => "ButtonPressed(${button_label(button)} at ${F32.to_str(at.x)},${F32.to_str(at.y)})"
+		ButtonReleased(button, at) => "ButtonReleased(${button_label(button)} at ${F32.to_str(at.x)},${F32.to_str(at.y)})"
+		Wheel(delta) => "Wheel(${F32.to_str(delta.x)},${F32.to_str(delta.y)})"
+		Text(codepoint) => "Text(${U32.to_str(codepoint)})"
+	}
+
+button_label : Mouse.Button -> Str
+button_label = |button|
+	match button {
+		Left => "Left"
+		Right => "Right"
+		Middle => "Middle"
+		Side => "Side"
+		Extra => "Extra"
+		Forward => "Forward"
+		Back => "Back"
+	}
+
+## The whole record on one line, in delivery order, with the overflow flag.
+describe_events : List(Devices.Event), Bool -> Str
+describe_events = |events, overflowed| {
+	labels = Str.join_with(List.map(events, event_label), " ")
+	if overflowed "events: ${labels} (overflowed)" else "events: ${labels}"
+}
+
+expect event_label(KeyPressed(KeyA)) == "KeyPressed(65)"
+expect event_label(ButtonReleased(Left, { x: 12, y: 34 })) == "ButtonReleased(Left at 12,34)"
+expect event_label(Wheel({ x: 0, y: 1 })) == "Wheel(0,1)"
+expect event_label(Text(104)) == "Text(104)"
+expect describe_events([KeyPressed(KeyA), KeyReleased(KeyA), Text(104)], Bool.False) == "events: KeyPressed(65) KeyReleased(65) Text(104)"
+expect describe_events([Text(104)], Bool.True) == "events: Text(104) (overflowed)"
 
 ## Say what the eyedropper found, or why it found nothing.
 ##
@@ -303,7 +360,7 @@ render! = |model, frame| {
 
 	frame.clear!(theme.bg)
 	frame.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font })
-	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
+	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live; the bits as chips, the event record as a line", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
 
 	panel!(frame, font, { x: 20, y: 84, width: 780, height: 258, label: "KEYS AND BUTTONS" })
 	chip!(frame, font, { x: 70, y: 126, width: 30, label: "W", on: w_down })
@@ -330,6 +387,7 @@ render! = |model, frame| {
 	light!(frame, font, { x: 220, y: 424, label: "Left stick", on: stick_moved })
 	light!(frame, font, { x: 410, y: 424, label: "Face down", on: gamepad_action_pressed })
 	line!(frame, font, { x: 600, y: 391, text: "Mouse ${F32.to_str(mouse_position.x)}, ${F32.to_str(mouse_position.y)}", color: theme.muted })
+	frame.text!({ pos: { x: 30, y: 446 }, text: model.events_line, size: 13, spacing: Draw.default_spacing, color: theme.ink, font: font })
 
 	panel!(frame, font, { x: 20, y: 478, width: 780, height: 184, label: "HOST EFFECTS" })
 	line!(frame, font, { x: 30, y: 510, text: cursor_help_visibility, color: theme.muted })

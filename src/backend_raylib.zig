@@ -116,8 +116,9 @@ pub const InputSource = enum { hardware, virtual };
 ///
 /// Recording the same edge twice is idempotent. The accumulator says whether at
 /// least one press and at least one release happened, not how many or in what
-/// order; that coalescing is the whole of what it loses, and it has no
-/// capacity to exhaust, so there is no overflow to report.
+/// order; that is the coalesced view, and it has no capacity to exhaust. The
+/// event log below is the authoritative one: it keeps count, order and, for
+/// clicks, position.
 fn EdgeAccumulator(comptime count: usize) type {
     return struct {
         bits: [count]u8 = [_]u8{0} ** count,
@@ -161,6 +162,303 @@ test "an edge accumulator coalesces repeats and empties when taken" {
 
     edges.clear();
     try std.testing.expectEqual(@as(u8, 0), edges.take(3));
+}
+
+// ---- The event log ----
+//
+// The packed bits above are the coalesced view: at least one press, at least
+// one release. The log is the record: every key edge, click, wheel notch and
+// typed character in the order the window system delivered them, with the
+// pointer position a click landed at. It is bounded and says when it overflowed;
+// the bits, the wheel sum and the text buffer keep recording regardless, so the
+// coalesced view stays complete even when the list did not.
+
+/// How many events one input interval records, across every source.
+///
+/// A human cannot produce this many between two polls even through a
+/// multi-second stall -- auto-repeat is not recorded -- so overflow marks a
+/// synthetic source or a hung frame, and the flag says so rather than the
+/// tail going missing.
+pub const INPUT_EVENT_CAPACITY: usize = 256;
+
+/// What one recorded event was. The numbering is the wire contract with
+/// `Devices.events_from_raw` in the types package.
+pub const InputEventKind = enum(u8) {
+    key_pressed = 0,
+    key_released = 1,
+    button_pressed = 2,
+    button_released = 3,
+    wheel = 4,
+    text = 5,
+};
+
+/// One recorded event in the flat shape that crosses to Roc.
+///
+/// `code` is the key code, mouse button code or codepoint the kind implies;
+/// `x` and `y` are the pointer position for a click and the offsets for a
+/// wheel notch, and zero otherwise.
+pub const InputEventRecord = extern struct {
+    kind: u8,
+    code: u32,
+    x: f32,
+    y: f32,
+};
+
+/// Which device an event came from, so a scripted source can shut out the
+/// hardware one device at a time.
+const InputClass = enum { keyboard, mouse, text };
+
+const LoggedEvent = struct {
+    seq: u64,
+    class: InputClass,
+    record: InputEventRecord,
+};
+
+/// Global delivery order across both logs, so the hardware mouse and a
+/// scripted keyboard still interleave the way they happened.
+var input_event_seq: u64 = 0;
+
+/// One source's events for the interval, in delivery order.
+const EventLog = struct {
+    entries: [INPUT_EVENT_CAPACITY]LoggedEvent = undefined,
+    len: usize = 0,
+    overflowed: bool = false,
+
+    fn append(self: *@This(), class: InputClass, record: InputEventRecord) void {
+        if (self.len == self.entries.len) {
+            self.overflowed = true;
+            return;
+        }
+        self.entries[self.len] = .{ .seq = input_event_seq, .class = class, .record = record };
+        input_event_seq += 1;
+        self.len += 1;
+    }
+
+    fn clear(self: *@This()) void {
+        self.len = 0;
+        self.overflowed = false;
+    }
+};
+
+/// Events the window system delivered, recorded by the chained callbacks.
+var hardware_events: EventLog = .{};
+/// Events a script produced: taps, held-set transitions, typed text.
+var virtual_events: EventLog = .{};
+
+/// Which source each device class takes its events from this cycle.
+pub const EventSources = struct {
+    keyboard: InputSource,
+    mouse: InputSource,
+    text: InputSource,
+};
+
+/// One interval's events, and whether any were dropped past the capacity.
+pub const InputEvents = struct {
+    events: []const InputEventRecord,
+    overflowed: bool,
+};
+
+/// Stable scratch the taken events are returned in.
+var taken_events: [INPUT_EVENT_CAPACITY]InputEventRecord = undefined;
+
+fn keyRecord(code: usize, edge: InputEdge) InputEventRecord {
+    return .{
+        .kind = @intFromEnum(@as(InputEventKind, if (edge == .press) .key_pressed else .key_released)),
+        .code = @intCast(code),
+        .x = 0,
+        .y = 0,
+    };
+}
+
+fn buttonRecord(button: usize, edge: InputEdge, position: Vec2) InputEventRecord {
+    return .{
+        .kind = @intFromEnum(@as(InputEventKind, if (edge == .press) .button_pressed else .button_released)),
+        .code = @intCast(button),
+        .x = position.x,
+        .y = position.y,
+    };
+}
+
+fn wheelRecord(x_offset: f32, y_offset: f32) InputEventRecord {
+    return .{ .kind = @intFromEnum(InputEventKind.wheel), .code = 0, .x = x_offset, .y = y_offset };
+}
+
+fn textRecord(codepoint: u32) InputEventRecord {
+    return .{ .kind = @intFromEnum(InputEventKind.text), .code = codepoint, .x = 0, .y = 0 };
+}
+
+fn sourceFeeds(sources: EventSources, source: InputSource) bool {
+    return sources.keyboard == source or sources.mouse == source or sources.text == source;
+}
+
+/// Take the interval's events: both logs merged in delivery order, keeping
+/// each event only if its device's source is the log it came from.
+///
+/// Taken once per cycle, in the same cycle as the packed bits and after they
+/// are derived, so an event and the bit it set are never split across two
+/// inputs. Both logs are cleared, so an event recorded for a source that was
+/// not chosen this cycle is gone rather than surfacing later. A log that
+/// overflowed lost events of some class it cannot name, so the overflow is
+/// reported if any class was taking from it.
+pub fn takeInputEvents(sources: EventSources) InputEvents {
+    var count: usize = 0;
+    var overflowed = false;
+    var h: usize = 0;
+    var v: usize = 0;
+    while (h < hardware_events.len or v < virtual_events.len) {
+        const from_hardware = v == virtual_events.len or
+            (h < hardware_events.len and hardware_events.entries[h].seq < virtual_events.entries[v].seq);
+        const entry = if (from_hardware) hardware_events.entries[h] else virtual_events.entries[v];
+        const source: InputSource = if (from_hardware) .hardware else .virtual;
+        if (from_hardware) h += 1 else v += 1;
+
+        const wanted = switch (entry.class) {
+            .keyboard => sources.keyboard,
+            .mouse => sources.mouse,
+            .text => sources.text,
+        };
+        if (wanted != source) continue;
+        if (count == taken_events.len) {
+            overflowed = true;
+            break;
+        }
+        taken_events[count] = entry.record;
+        count += 1;
+    }
+    if (hardware_events.overflowed and sourceFeeds(sources, .hardware)) overflowed = true;
+    if (virtual_events.overflowed and sourceFeeds(sources, .virtual)) overflowed = true;
+    hardware_events.clear();
+    virtual_events.clear();
+    return .{ .events = taken_events[0..count], .overflowed = overflowed };
+}
+
+/// Forget both logs, so one app lifetime cannot inherit another's events.
+pub fn clearInputEvents() void {
+    hardware_events.clear();
+    virtual_events.clear();
+}
+
+const all_hardware = EventSources{ .keyboard = .hardware, .mouse = .hardware, .text = .hardware };
+const all_virtual = EventSources{ .keyboard = .virtual, .mouse = .virtual, .text = .virtual };
+
+fn expectEvent(record: InputEventRecord, kind: InputEventKind, code: u32, x: f32, y: f32) !void {
+    try std.testing.expectEqual(@intFromEnum(kind), record.kind);
+    try std.testing.expectEqual(code, record.code);
+    try std.testing.expectEqual(x, record.x);
+    try std.testing.expectEqual(y, record.y);
+}
+
+test "events keep window-system delivery order across every source" {
+    defer clearInputEvents();
+    defer clearRecordedHardwareInput();
+
+    recordHardwareKeyEdge(65, .press);
+    recordHardwareMouseButtonEdge(0, .press, .{ .x = 12, .y = 34 });
+    recordCodepoint('a');
+    recordScroll(0, 1);
+    recordHardwareMouseButtonEdge(0, .release, .{ .x = 15, .y = 30 });
+    recordHardwareKeyEdge(65, .release);
+
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expect(!taken.overflowed);
+    try std.testing.expectEqual(@as(usize, 6), taken.events.len);
+    try expectEvent(taken.events[0], .key_pressed, 65, 0, 0);
+    try expectEvent(taken.events[1], .button_pressed, 0, 12, 34);
+    try expectEvent(taken.events[2], .text, 'a', 0, 0);
+    try expectEvent(taken.events[3], .wheel, 0, 0, 1);
+    try expectEvent(taken.events[4], .button_released, 0, 15, 30);
+    try expectEvent(taken.events[5], .key_released, 65, 0, 0);
+
+    // Taken with the interval: the next one starts empty.
+    try std.testing.expectEqual(@as(usize, 0), takeInputEvents(all_hardware).events.len);
+}
+
+test "the log keeps every tap where the bits keep one" {
+    defer clearKeyState();
+    defer clearInputEvents();
+    const key_e = 69;
+    const up: [ffi.KEY_COUNT]bool = @splat(false);
+
+    recordHardwareKeyEdge(key_e, .press);
+    recordHardwareKeyEdge(key_e, .release);
+    recordHardwareKeyEdge(key_e, .press);
+    recordHardwareKeyEdge(key_e, .release);
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED | ffi.INPUT_RELEASED, getKeyState()[key_e]);
+
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(@as(usize, 4), taken.events.len);
+    try expectEvent(taken.events[0], .key_pressed, key_e, 0, 0);
+    try expectEvent(taken.events[1], .key_released, key_e, 0, 0);
+    try expectEvent(taken.events[2], .key_pressed, key_e, 0, 0);
+    try expectEvent(taken.events[3], .key_released, key_e, 0, 0);
+}
+
+test "past the capacity the list reports overflow while the coalesced view keeps recording" {
+    defer clearKeyState();
+    defer clearInputEvents();
+    defer clearRecordedHardwareInput();
+    const up: [ffi.KEY_COUNT]bool = @splat(false);
+
+    for (0..INPUT_EVENT_CAPACITY) |_| recordHardwareKeyEdge(65, .press);
+    // These are past the cap: dropped from the list, but the bit, the wheel
+    // sum and the text buffer still see them.
+    recordHardwareKeyEdge(66, .press);
+    recordScroll(0, 2);
+    recordScroll(0, 3);
+    recordCodepoint('z');
+
+    deriveKeyboardState(.hardware, &up);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED, getKeyState()[65]);
+    try std.testing.expectEqual(ffi.INPUT_PRESSED, getKeyState()[66]);
+    try std.testing.expectEqual(@as(f32, 5), takeRecordedWheel().y);
+    try std.testing.expectEqualSlices(u32, &.{'z'}, takeRecordedText().codepoints);
+
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expect(taken.overflowed);
+    try std.testing.expectEqual(INPUT_EVENT_CAPACITY, taken.events.len);
+    try expectEvent(taken.events[INPUT_EVENT_CAPACITY - 1], .key_pressed, 65, 0, 0);
+
+    // The flag travels with the interval that overflowed.
+    try std.testing.expect(!takeInputEvents(all_hardware).overflowed);
+
+    // Exactly the capacity is not an overflow.
+    for (0..INPUT_EVENT_CAPACITY) |_| recordHardwareKeyEdge(65, .press);
+    const exact = takeInputEvents(all_hardware);
+    try std.testing.expect(!exact.overflowed);
+    try std.testing.expectEqual(INPUT_EVENT_CAPACITY, exact.events.len);
+}
+
+test "each device takes events from its own source and the rest are discarded" {
+    defer clearKeyState();
+    defer clearInputEvents();
+    defer clearRecordedHardwareInput();
+
+    recordHardwareKeyEdge(65, .press);
+    recordVirtualKeyEdge(66, .press);
+    recordHardwareMouseButtonEdge(1, .press, .{ .x = 1, .y = 2 });
+    recordCodepoint('h');
+    recordVirtualText('v');
+    recordVirtualKeyEdge(66, .release);
+
+    // Scripted keyboard and text, hardware mouse: the hardware key and char
+    // are not delivered, and what is delivered stays in delivery order.
+    const taken = takeInputEvents(.{ .keyboard = .virtual, .mouse = .hardware, .text = .virtual });
+    try std.testing.expect(!taken.overflowed);
+    try std.testing.expectEqual(@as(usize, 4), taken.events.len);
+    try expectEvent(taken.events[0], .key_pressed, 66, 0, 0);
+    try expectEvent(taken.events[1], .button_pressed, 1, 1, 2);
+    try expectEvent(taken.events[2], .text, 'v', 0, 0);
+    try expectEvent(taken.events[3], .key_released, 66, 0, 0);
+
+    // The discarded events do not resurface when the source changes back.
+    try std.testing.expectEqual(@as(usize, 0), takeInputEvents(all_hardware).events.len);
+
+    // An overflowed log is reported only to the devices reading from it.
+    for (0..INPUT_EVENT_CAPACITY + 1) |_| recordHardwareKeyEdge(65, .press);
+    try std.testing.expect(!takeInputEvents(all_virtual).overflowed);
+    for (0..INPUT_EVENT_CAPACITY + 1) |_| recordHardwareKeyEdge(65, .press);
+    try std.testing.expect(takeInputEvents(.{ .keyboard = .virtual, .mouse = .hardware, .text = .virtual }).overflowed);
 }
 
 fn gamepadButtonIndex(gamepad: usize, button: usize) usize {
@@ -334,9 +632,9 @@ test "gamepad button edges survive disconnect and reconnect" {
 // happens between two polls collapses into whatever came last, and the poll
 // period is the frame time. So the host chains its own callbacks behind
 // raylib's on the same window and records every event itself: edges into the
-// accumulators above, wheel offsets into a sum, characters into a bounded
-// buffer with an overflow flag. raylib's callback is still forwarded every
-// event, so its own state -- and its exit key, which its key callback
+// accumulators and the log above, wheel offsets into a sum, characters into a
+// bounded buffer with an overflow flag. raylib's callback is still forwarded
+// every event, so its own state -- and its exit key, which its key callback
 // handles -- keep working unchanged. All of it runs on the frame thread,
 // inside `glfwPollEvents`.
 
@@ -367,6 +665,30 @@ var raylib_mouse_button_callback: GlfwMouseButtonFn = null;
 var raylib_scroll_callback: GlfwScrollFn = null;
 var raylib_char_callback: GlfwCharFn = null;
 var input_callbacks_installed: bool = false;
+
+/// Where a click's position is read from inside the button callback.
+///
+/// raylib's while the callbacks are installed; the origin before that, so a
+/// test can drive the callback without a window (and without linking raylib
+/// into the test binary).
+var callback_mouse_position: *const fn () Vec2 = &originPosition;
+
+fn originPosition() Vec2 {
+    return .{ .x = 0, .y = 0 };
+}
+
+/// The pointer as raylib reports it, in the same logical coordinates as
+/// `mouse.position()`.
+///
+/// Read inside the button callback on purpose: GLFW dispatches the motion
+/// events that precede a click before the click itself, and raylib's
+/// cursor-position callback has already applied its offset and scale by the
+/// time ours runs, so this is the position the click landed at without
+/// re-deriving raylib's scaling here.
+fn raylibMousePosition() Vec2 {
+    const position = rl.GetMousePosition();
+    return .{ .x = position.x, .y = position.y };
+}
 
 fn hostKeyCallback(window: ?*GlfwWindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
     if (raylib_key_callback) |forward| forward(window, key, scancode, action, mods);
@@ -411,20 +733,24 @@ fn recordMouseButtonAction(button: c_int, action: c_int) void {
         GLFW_RELEASE => .release,
         else => return,
     };
-    recordHardwareMouseButtonEdge(@intCast(button), edge);
+    recordHardwareMouseButtonEdge(@intCast(button), edge, callback_mouse_position());
 }
 
-/// Record a key edge the window system delivered.
+/// Record a key edge the window system delivered: into the coalesced bits
+/// and the ordered log alike.
 ///
 /// The callback above is the caller in a windowed run; a test is the other,
 /// standing in for the window system between two polls.
 pub fn recordHardwareKeyEdge(code: usize, edge: InputEdge) void {
     hardware_key_edges.record(code, edge);
+    hardware_events.append(.keyboard, keyRecord(code, edge));
 }
 
-/// Record a mouse button edge the window system delivered.
-pub fn recordHardwareMouseButtonEdge(button: usize, edge: InputEdge) void {
+/// Record a mouse button edge the window system delivered, with the pointer
+/// position the click landed at.
+pub fn recordHardwareMouseButtonEdge(button: usize, edge: InputEdge, position: Vec2) void {
     hardware_mouse_button_edges.record(button, edge);
+    hardware_events.append(.mouse, buttonRecord(button, edge, position));
 }
 
 /// Record a key edge a script placed inside the current cycle.
@@ -435,15 +761,32 @@ pub fn recordHardwareMouseButtonEdge(button: usize, edge: InputEdge) void {
 pub fn recordVirtualKeyEdge(code: u64, edge: InputEdge) void {
     if (code >= ffi.KEY_COUNT) return;
     virtual_key_edges.record(@intCast(code), edge);
+    virtual_events.append(.keyboard, keyRecord(@intCast(code), edge));
 }
 
-/// Add one scroll event to the interval's wheel movement.
+/// Record a wheel movement a script placed inside the current cycle. The
+/// scripted pointer's own sum is the host's; only the event is logged here.
+pub fn recordVirtualWheel(x_offset: f32, y_offset: f32) void {
+    virtual_events.append(.mouse, wheelRecord(x_offset, y_offset));
+}
+
+/// Record one scripted codepoint in the ordered log. The scripted text buffer
+/// itself is the host's.
+pub fn recordVirtualText(codepoint: u32) void {
+    virtual_events.append(.text, textRecord(codepoint));
+}
+
+/// Add one scroll event to the interval's wheel movement and the log.
 pub fn recordScroll(x_offset: f64, y_offset: f64) void {
-    hardware_wheel.x += @floatCast(x_offset);
-    hardware_wheel.y += @floatCast(y_offset);
+    const x: f32 = @floatCast(x_offset);
+    const y: f32 = @floatCast(y_offset);
+    hardware_wheel.x += x;
+    hardware_wheel.y += y;
+    hardware_events.append(.mouse, wheelRecord(x, y));
 }
 
-/// Append one typed codepoint, or note that the interval's buffer is full.
+/// Append one typed codepoint, or note that the interval's buffer is full;
+/// the log records it either way, up to its own capacity.
 pub fn recordCodepoint(codepoint: u32) void {
     if (text_input_len < text_input.len) {
         text_input[text_input_len] = codepoint;
@@ -451,6 +794,7 @@ pub fn recordCodepoint(codepoint: u32) void {
     } else {
         text_input_overflowed = true;
     }
+    hardware_events.append(.text, textRecord(codepoint));
 }
 
 /// Chain the host's input callbacks behind raylib's on the live window.
@@ -468,6 +812,7 @@ pub fn installInputEventCallbacks() bool {
     raylib_mouse_button_callback = glfwSetMouseButtonCallback(window, hostMouseButtonCallback);
     raylib_scroll_callback = glfwSetScrollCallback(window, hostScrollCallback);
     raylib_char_callback = glfwSetCharCallback(window, hostCharCallback);
+    callback_mouse_position = &raylibMousePosition;
     input_callbacks_installed = true;
     clearRecordedHardwareInput();
     return true;
@@ -480,6 +825,7 @@ fn forgetInputEventCallbacks() void {
     raylib_mouse_button_callback = null;
     raylib_scroll_callback = null;
     raylib_char_callback = null;
+    callback_mouse_position = &originPosition;
     clearRecordedHardwareInput();
 }
 
@@ -487,6 +833,7 @@ fn forgetInputEventCallbacks() void {
 fn clearRecordedHardwareInput() void {
     hardware_key_edges.clear();
     hardware_mouse_button_edges.clear();
+    hardware_events.clear();
     hardware_wheel = .{ .x = 0, .y = 0 };
     text_input_len = 0;
     text_input_overflowed = false;
@@ -513,6 +860,35 @@ test "GLFW key actions become edges, except repeats and unknown keys" {
     hostMouseButtonCallback(null, ffi.MOUSE_BUTTON_COUNT, GLFW_PRESS, 0);
     try std.testing.expectEqual(ffi.INPUT_PRESSED, hardware_mouse_button_edges.take(1));
     for (hardware_mouse_button_edges.bits) |bits| try std.testing.expectEqual(@as(u8, 0), bits);
+
+    // The log saw exactly the edges: two for A, one for the button; no
+    // repeats, no unknown keys.
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(@as(usize, 3), taken.events.len);
+    try expectEvent(taken.events[0], .key_pressed, key_a, 0, 0);
+    try expectEvent(taken.events[1], .key_released, key_a, 0, 0);
+    try expectEvent(taken.events[2], .button_pressed, 1, 0, 0);
+}
+
+test "a click carries the pointer position read at the moment it fired" {
+    const Pointer = struct {
+        var at: Vec2 = .{ .x = 0, .y = 0 };
+        fn position() Vec2 {
+            return at;
+        }
+    };
+    callback_mouse_position = &Pointer.position;
+    defer forgetInputEventCallbacks();
+
+    Pointer.at = .{ .x = 100, .y = 40 };
+    hostMouseButtonCallback(null, 0, GLFW_PRESS, 0);
+    Pointer.at = .{ .x = 180, .y = 90 };
+    hostMouseButtonCallback(null, 0, GLFW_RELEASE, 0);
+
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(@as(usize, 2), taken.events.len);
+    try expectEvent(taken.events[0], .button_pressed, 0, 100, 40);
+    try expectEvent(taken.events[1], .button_released, 0, 180, 90);
 }
 
 test "every event is forwarded to raylib's callback unchanged" {
@@ -566,26 +942,42 @@ test "every event is forwarded to raylib's callback unchanged" {
 /// `down` is the level at the interval's end and `source` names the edge
 /// accumulator to consume; the other accumulator is discarded, so a scripted
 /// keyboard never leaks a hardware edge and a script's tap cannot surface after
-/// the app hands the keyboard back.
+/// the app hands the keyboard back. A transition the level shows but no edge
+/// recorded -- a scripted held set changing between cycles, or a hardware
+/// callback that was somehow missed -- is logged here, so the list stays the
+/// authoritative record of everything the bits say.
 pub fn deriveKeyboardState(source: InputSource, down: *const [ffi.KEY_COUNT]bool) void {
-    const consumed, const discarded = switch (source) {
-        .hardware => .{ &hardware_key_edges, &virtual_key_edges },
-        .virtual => .{ &virtual_key_edges, &hardware_key_edges },
+    const consumed, const discarded, const log = switch (source) {
+        .hardware => .{ &hardware_key_edges, &virtual_key_edges, &hardware_events },
+        .virtual => .{ &virtual_key_edges, &hardware_key_edges, &virtual_events },
     };
     discarded.clear();
     for (0..ffi.KEY_COUNT) |i| {
-        key_state[i] = nextInputState(key_state[i], down[i], consumed.take(i));
+        const edges = consumed.take(i);
+        const next = nextInputState(key_state[i], down[i], edges);
+        if (next & ffi.INPUT_PRESSED != 0 and edges & ffi.INPUT_PRESSED == 0) log.append(.keyboard, keyRecord(i, .press));
+        if (next & ffi.INPUT_RELEASED != 0 and edges & ffi.INPUT_RELEASED == 0) log.append(.keyboard, keyRecord(i, .release));
+        key_state[i] = next;
     }
 }
 
 /// Derive the packed mouse button state for one interval, as
 /// `deriveKeyboardState` does. Only hardware records button edges; a virtual
 /// pointer states levels, so `virtual` consumes nothing and discards the
-/// hardware edges.
-pub fn deriveMouseButtonState(source: InputSource, down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
+/// hardware edges, and its transitions are logged with the pointer's scripted
+/// position.
+pub fn deriveMouseButtonState(source: InputSource, down: *const [ffi.MOUSE_BUTTON_COUNT]bool, position: Vec2) void {
+    const log = switch (source) {
+        .hardware => &hardware_events,
+        .virtual => &virtual_events,
+    };
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
-        const edges = hardware_mouse_button_edges.take(i);
-        mouse_button_state[i] = nextInputState(mouse_button_state[i], down[i], if (source == .hardware) edges else 0);
+        const recorded = hardware_mouse_button_edges.take(i);
+        const edges = if (source == .hardware) recorded else 0;
+        const next = nextInputState(mouse_button_state[i], down[i], edges);
+        if (next & ffi.INPUT_PRESSED != 0 and edges & ffi.INPUT_PRESSED == 0) log.append(.mouse, buttonRecord(i, .press, position));
+        if (next & ffi.INPUT_RELEASED != 0 and edges & ffi.INPUT_RELEASED == 0) log.append(.mouse, buttonRecord(i, .release, position));
+        mouse_button_state[i] = next;
     }
 }
 
@@ -629,7 +1021,7 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 pub fn updateMouseButtonState() void {
     var down: [ffi.MOUSE_BUTTON_COUNT]bool = undefined;
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| down[i] = rl.IsMouseButtonDown(@intCast(i));
-    deriveMouseButtonState(.hardware, &down);
+    deriveMouseButtonState(.hardware, &down, raylibMousePosition());
 }
 
 /// Get the current packed mouse button state array.
@@ -643,18 +1035,20 @@ pub fn clearMouseButtonState() void {
     hardware_mouse_button_edges.clear();
 }
 
-/// Advance the packed mouse button state from caller-supplied down flags.
+/// Advance the packed mouse button state from caller-supplied down flags and
+/// the scripted pointer's position.
 ///
 /// Used by the virtual mouse in place of `updateMouseButtonState`. It runs the
 /// same derivation, so a scripted pointer produces real pressed-this-interval
 /// and released-this-interval bits and an app's ordinary click handling
 /// reacts to it exactly as it would to hardware.
-pub fn updateMouseButtonStateFrom(down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
-    deriveMouseButtonState(.virtual, down);
+pub fn updateMouseButtonStateFrom(down: *const [ffi.MOUSE_BUTTON_COUNT]bool, position: Vec2) void {
+    deriveMouseButtonState(.virtual, down, position);
 }
 
 test "a tap between two polls is pressed and released, never held" {
     defer clearKeyState();
+    defer clearInputEvents();
     const key_e = 69;
     const up: [ffi.KEY_COUNT]bool = @splat(false);
 
@@ -675,29 +1069,33 @@ test "a tap between two polls is pressed and released, never held" {
 
 test "a release and re-press between two polls is not one long hold" {
     defer clearMouseButtonState();
+    defer clearInputEvents();
     const left = 0;
+    const at = Vec2{ .x = 5, .y = 6 };
     var down: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
 
     down[left] = true;
-    recordHardwareMouseButtonEdge(left, .press);
-    deriveMouseButtonState(.hardware, &down);
+    recordHardwareMouseButtonEdge(left, .press, at);
+    deriveMouseButtonState(.hardware, &down, at);
     try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, getMouseButtonState()[left]);
 
     // RELEASE then PRESS inside the interval; the level is down at both polls.
-    recordHardwareMouseButtonEdge(left, .release);
-    recordHardwareMouseButtonEdge(left, .press);
-    deriveMouseButtonState(.hardware, &down);
+    recordHardwareMouseButtonEdge(left, .release, at);
+    recordHardwareMouseButtonEdge(left, .press, at);
+    deriveMouseButtonState(.hardware, &down, at);
     try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_RELEASED | ffi.INPUT_PRESSED, getMouseButtonState()[left]);
 
-    deriveMouseButtonState(.hardware, &down);
+    deriveMouseButtonState(.hardware, &down, at);
     try std.testing.expectEqual(ffi.INPUT_HELD, getMouseButtonState()[left]);
 }
 
 test "each source consumes its own edges and discards the other's" {
     defer clearKeyState();
     defer clearMouseButtonState();
+    defer clearInputEvents();
     const key_a = 65;
     const up: [ffi.KEY_COUNT]bool = @splat(false);
+    const origin = Vec2{ .x = 0, .y = 0 };
 
     // A hardware tap while a script owns the keyboard is not the script's.
     recordHardwareKeyEdge(key_a, .press);
@@ -725,11 +1123,45 @@ test "each source consumes its own edges and discards the other's" {
 
     // A virtual pointer states levels only; hardware button edges are dropped.
     const buttons_up: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
-    recordHardwareMouseButtonEdge(0, .press);
-    deriveMouseButtonState(.virtual, &buttons_up);
+    recordHardwareMouseButtonEdge(0, .press, origin);
+    deriveMouseButtonState(.virtual, &buttons_up, origin);
     try std.testing.expectEqual(@as(u8, 0), getMouseButtonState()[0]);
-    deriveMouseButtonState(.hardware, &buttons_up);
+    deriveMouseButtonState(.hardware, &buttons_up, origin);
     try std.testing.expectEqual(@as(u8, 0), getMouseButtonState()[0]);
+}
+
+test "a level transition with no recorded edge is logged so the list stays complete" {
+    defer clearKeyState();
+    defer clearMouseButtonState();
+    defer clearInputEvents();
+    var down: [ffi.KEY_COUNT]bool = @splat(false);
+    var buttons: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
+
+    // A scripted held set: S goes down on one cycle and up on the next, and
+    // the pointer's button with it, at the scripted position.
+    down['S'] = true;
+    buttons[0] = true;
+    deriveKeyboardState(.virtual, &down);
+    deriveMouseButtonState(.virtual, &buttons, .{ .x = 7, .y = 8 });
+    down['S'] = false;
+    buttons[0] = false;
+    deriveKeyboardState(.virtual, &down);
+    deriveMouseButtonState(.virtual, &buttons, .{ .x = 9, .y = 10 });
+
+    const taken = takeInputEvents(all_virtual);
+    try std.testing.expectEqual(@as(usize, 4), taken.events.len);
+    try expectEvent(taken.events[0], .key_pressed, 'S', 0, 0);
+    try expectEvent(taken.events[1], .button_pressed, 0, 7, 8);
+    try expectEvent(taken.events[2], .key_released, 'S', 0, 0);
+    try expectEvent(taken.events[3], .button_released, 0, 9, 10);
+
+    // A recorded edge and the level agreeing is one event, not two.
+    recordHardwareKeyEdge('S', .press);
+    down['S'] = true;
+    deriveKeyboardState(.hardware, &down);
+    const once = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(@as(usize, 1), once.events.len);
+    try expectEvent(once.events[0], .key_pressed, 'S', 0, 0);
 }
 
 /// Sample all supported gamepads once for this frame.
@@ -849,6 +1281,11 @@ test "wheel notches inside one interval are summed, then consumed" {
     const next = takeRecordedWheel();
     try std.testing.expectEqual(@as(f32, 0), next.x);
     try std.testing.expectEqual(@as(f32, 0), next.y);
+
+    // Each notch is its own event in the log.
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(@as(usize, 3), taken.events.len);
+    try expectEvent(taken.events[2], .wheel, 0, -0.5, -0.25);
 }
 
 /// One interval's typed text, and whether any of it was discarded.
@@ -880,12 +1317,14 @@ fn takeRecordedText() TextInput {
 /// drops the rest without saying so. A full queue cannot be told apart from an
 /// overflowed one, so it is reported as an overflow: the honest answer is
 /// "possibly", and the flag's contract is that a clear flag means nothing was
-/// lost.
+/// lost. The codepoints are logged as they are drained so the event list sees
+/// them on this path too.
 fn drainRaylibTextQueue() TextInput {
     var count: usize = 0;
     while (true) {
         const codepoint = rl.GetCharPressed();
         if (codepoint <= 0) break;
+        hardware_events.append(.text, textRecord(@intCast(codepoint)));
         if (count < text_input.len) {
             text_input[count] = @intCast(codepoint);
             count += 1;
@@ -923,6 +1362,12 @@ test "typed text past the interval's capacity is reported, not silently cut" {
 
     // The flag travels with the interval that overflowed, not the next one.
     try std.testing.expect(!takeRecordedText().overflowed);
+
+    // The log kept every character, including the one past the text cap.
+    const taken = takeInputEvents(all_hardware);
+    try std.testing.expectEqual(2 + TEXT_INPUT_CAPACITY + TEXT_INPUT_CAPACITY + 1, taken.events.len);
+    try expectEvent(taken.events[0], .text, 'h', 0, 0);
+    try expectEvent(taken.events[taken.events.len - 1], .text, 'x', 0, 0);
 }
 
 /// Return raylib's built-in font, which is not owned by a resource heap.

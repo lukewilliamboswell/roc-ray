@@ -19,16 +19,17 @@ pub const chunk_bytes: usize = 4096;
 /// Event families have separate loss counts so a recording can say what was
 /// omitted instead of presenting an incomplete interval as complete.
 pub const Family = enum(u8) {
-    cycle,
+    cycle_summary,
     annotation,
-    effect,
-    task,
-    allocation,
-    resource,
-    queue,
-    draw,
-    input,
-    gpu,
+    hosted_effect,
+    task_lifecycle,
+    allocation_lifecycle,
+    resource_lifecycle,
+    queue_pressure,
+    draw_observation,
+    structural_latency,
+    backend_fact,
+    callback_summary,
 };
 
 /// Number of independently accounted event families.
@@ -41,7 +42,7 @@ pub const Priority = enum { summary, detail };
 pub const Chunk = struct {
     bytes: [chunk_bytes]u8 = undefined,
     len: usize = 0,
-    family: Family = .cycle,
+    family: Family = .cycle_summary,
     priority: Priority = .detail,
 
     pub fn slice(self: *Chunk) []u8 {
@@ -221,6 +222,49 @@ pub const Pool = struct {
         self.ready_high_water = @max(self.ready_high_water, self.ready_len);
     }
 
+    /// Append one encoded event to the newest queued chunk when possible.
+    /// Events are length-prefixed so a 4 KiB chunk carries many ordinary
+    /// records instead of reserving 4 KiB for every small event.
+    fn appendEncoded(self: *Pool, priority: Priority, family: Family, bytes: []const u8, context: LossContext) bool {
+        std.debug.assert(bytes.len + 2 <= chunk_bytes);
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        if (self.ready_len != 0) {
+            const tail = (self.ready_head + self.ready_len - 1) % self.ready.len;
+            const index = self.ready[tail];
+            const chunk = &self.chunks[index];
+            if (chunk.priority == priority and chunk.len + 2 + bytes.len <= chunk_bytes) {
+                std.mem.writeInt(u16, chunk.bytes[chunk.len..][0..2], @intCast(bytes.len), .little);
+                @memcpy(chunk.bytes[chunk.len + 2 ..][0..bytes.len], bytes);
+                chunk.len += 2 + bytes.len;
+                return true;
+            }
+        }
+
+        const admitted = switch (priority) {
+            .summary => self.free_len != 0,
+            .detail => self.free_len > self.summary_reserve,
+        };
+        if (!admitted) {
+            self.noteLossLocked(family, 1, context);
+            return false;
+        }
+        self.free_len -= 1;
+        const index = self.free[self.free_len];
+        const chunk = &self.chunks[index];
+        chunk.family = family;
+        chunk.priority = priority;
+        std.mem.writeInt(u16, chunk.bytes[0..2], @intCast(bytes.len), .little);
+        @memcpy(chunk.bytes[2..][0..bytes.len], bytes);
+        chunk.len = 2 + bytes.len;
+        const tail = (self.ready_head + self.ready_len) % self.ready.len;
+        self.ready[tail] = index;
+        self.ready_len += 1;
+        self.ready_high_water = @max(self.ready_high_water, self.ready_len);
+        return true;
+    }
+
     /// Abandon a reservation that could not be encoded. This is not a
     /// saturation loss: no event was admitted, so the caller decides whether
     /// it represents a programmer error or should be counted separately.
@@ -302,6 +346,10 @@ pub const Pool = struct {
     fn noteLoss(self: *Pool, family: Family, count: u64, context: LossContext) void {
         self.mutex.lock();
         defer self.mutex.unlock();
+        self.noteLossLocked(family, count, context);
+    }
+
+    fn noteLossLocked(self: *Pool, family: Family, count: u64, context: LossContext) void {
         const index = @intFromEnum(family);
         if (self.losses[index] == 0) {
             self.loss_first_cycles[index] = context.cycle;
@@ -347,8 +395,14 @@ pub const CycleSummary = struct {
     start_ns: u64,
     duration_ns: u64,
     update_ns: u64,
-    render_ns: u64,
-    task_pump_ns: u64,
+    /// Time inside the application's render callback. This excludes backend
+    /// submission, presentation, and pacing.
+    render_callback_ns: u64,
+    /// Wall time inside executor pumps. This may include event-loop polling or
+    /// deliberate headless pacing and is not synonymous with Roc task work.
+    task_executor_ns: u64,
+    /// Cycle wall time outside update!, render!, and executor pumps.
+    host_other_ns: u64,
     alloc_bytes: u64 = 0,
     alloc_calls: u64 = 0,
     free_bytes: u64 = 0,
@@ -576,32 +630,27 @@ pub const Session = struct {
     pub fn recordCycle(self: *Session, value: CycleSummary) bool {
         self.noteProducerPosition(value.cycle, value.start_ns +| value.duration_ns);
         if (!self.shared.accepting.load(.acquire)) return false;
-        const reservation = self.shared.pool.reserveAt(.summary, .cycle, .{
-            .cycle = value.cycle,
-            .timestamp_ns = value.start_ns +| value.duration_ns,
-            .producer = .frame_thread,
-        }) orelse return false;
-        const out = reservation.chunk(&self.shared.pool).slice();
+        var encoded: [chunk_bytes - 2]u8 = undefined;
+        const out = encoded[0..];
         out[0] = @intFromEnum(EventKind.cycle);
         var at: usize = 1;
-        inline for (.{ value.cycle, value.start_ns, value.duration_ns, value.update_ns, value.render_ns, value.task_pump_ns, value.alloc_bytes, value.alloc_calls, value.free_bytes, value.free_calls, value.live_bytes, value.peak_live_bytes, value.update_alloc_bytes, value.update_alloc_calls, value.task_events, value.effect_calls, value.draw_calls, value.resource_events, value.queue_events }) |field| {
+        inline for (.{ value.cycle, value.start_ns, value.duration_ns, value.update_ns, value.render_callback_ns, value.task_executor_ns, value.host_other_ns, value.alloc_bytes, value.alloc_calls, value.free_bytes, value.free_calls, value.live_bytes, value.peak_live_bytes, value.update_alloc_bytes, value.update_alloc_calls, value.task_events, value.effect_calls, value.draw_calls, value.resource_events, value.queue_events }) |field| {
             std.mem.writeInt(u64, out[at..][0..8], field, .little);
             at += 8;
         }
-        self.shared.pool.submit(reservation, at);
-        return true;
+        return self.shared.pool.appendEncoded(.summary, .cycle_summary, out[0..at], .{
+            .cycle = value.cycle,
+            .timestamp_ns = value.start_ns +| value.duration_ns,
+            .producer = .frame_thread,
+        });
     }
 
     pub fn recordAnnotation(self: *Session, value: Annotation) bool {
         self.noteProducerPosition(value.cycle, value.timestamp_ns);
         if (!self.shared.accepting.load(.acquire)) return false;
-        const reservation = self.shared.pool.reserveAt(.detail, .annotation, .{
-            .cycle = value.cycle,
-            .timestamp_ns = value.timestamp_ns,
-            .producer = .frame_thread,
-        }) orelse return false;
-        const out = reservation.chunk(&self.shared.pool).slice();
-        const kept = @min(value.name.len, chunk_bytes - 62);
+        var encoded: [chunk_bytes - 2]u8 = undefined;
+        const out = encoded[0..];
+        const kept = @min(value.name.len, encoded.len - 62);
         out[0] = @intFromEnum(EventKind.annotation);
         std.mem.writeInt(u64, out[1..9], value.cycle, .little);
         std.mem.writeInt(u64, out[9..17], value.timestamp_ns, .little);
@@ -618,8 +667,11 @@ pub const Session = struct {
             std.mem.writeInt(u64, out[durations_at..][0..8], duration, .little);
             durations_at += 8;
         }
-        self.shared.pool.submit(reservation, durations_at);
-        return true;
+        return self.shared.pool.appendEncoded(.detail, .annotation, out[0..durations_at], .{
+            .cycle = value.cycle,
+            .timestamp_ns = value.timestamp_ns,
+            .producer = .frame_thread,
+        });
     }
 
     fn recordDetail(self: *Session, family: DetailFamily, loss_family: Family, value: DetailEvent) bool {
@@ -630,13 +682,9 @@ pub const Session = struct {
         self.noteProducerPosition(value.cycle, value.timestamp_ns);
         if (!self.shared.accepting.load(.acquire)) return false;
         if (!detailAdmits(self.shared.effective_detail, family)) return false;
-        const reservation = self.shared.pool.reserveAt(priority, loss_family, .{
-            .cycle = value.cycle,
-            .timestamp_ns = value.timestamp_ns,
-            .producer = value.producer,
-        }) orelse return false;
-        const out = reservation.chunk(&self.shared.pool).slice();
-        const kept = @min(value.name.len, chunk_bytes - 61);
+        var encoded: [chunk_bytes - 2]u8 = undefined;
+        const out = encoded[0..];
+        const kept = @min(value.name.len, encoded.len - 61);
         out[0] = @intFromEnum(EventKind.detail);
         out[1] = @intFromEnum(family);
         out[2] = value.kind;
@@ -648,23 +696,22 @@ pub const Session = struct {
         std.mem.writeInt(u16, out[at..][0..2], @intCast(kept), .little);
         at += 2;
         @memcpy(out[at .. at + kept], value.name[0..kept]);
-        self.shared.pool.submit(reservation, at + kept);
-        return true;
+        return self.shared.pool.appendEncoded(priority, loss_family, out[0 .. at + kept], .{
+            .cycle = value.cycle,
+            .timestamp_ns = value.timestamp_ns,
+            .producer = value.producer,
+        });
     }
 
     pub fn recordTask(self: *Session, value: TaskEvent) bool {
-        return self.recordDetail(.task, .task, value);
+        return self.recordDetail(.task, .task_lifecycle, value);
     }
     pub fn recordEffect(self: *Session, value: EffectEvent) bool {
         if (!self.shared.accepting.load(.acquire) or self.shared.effective_detail == .summary) return false;
         self.noteProducerPosition(value.cycle, value.timestamp_ns);
-        const reservation = self.shared.pool.reserveAt(.detail, .effect, .{
-            .cycle = value.cycle,
-            .timestamp_ns = value.timestamp_ns,
-            .producer = value.producer,
-        }) orelse return false;
-        const out = reservation.chunk(&self.shared.pool).slice();
-        const kept = @min(value.name.len, chunk_bytes - 117);
+        var encoded: [chunk_bytes - 2]u8 = undefined;
+        const out = encoded[0..];
+        const kept = @min(value.name.len, encoded.len - 117);
         out[0] = @intFromEnum(EventKind.detail);
         out[1] = @intFromEnum(DetailFamily.effect);
         out[2] = value.kind;
@@ -685,32 +732,35 @@ pub const Session = struct {
             std.mem.writeInt(u64, out[at..][0..8], field, .little);
             at += 8;
         }
-        self.shared.pool.submit(reservation, at);
-        return true;
+        return self.shared.pool.appendEncoded(.detail, .hosted_effect, out[0..at], .{
+            .cycle = value.cycle,
+            .timestamp_ns = value.timestamp_ns,
+            .producer = value.producer,
+        });
     }
     pub fn recordQueue(self: *Session, value: QueueEvent) bool {
-        return self.recordDetail(.queue, .queue, value);
+        return self.recordDetail(.queue, .queue_pressure, value);
     }
     pub fn recordResource(self: *Session, value: ResourceEvent) bool {
-        return self.recordDetail(.resource, .resource, value);
+        return self.recordDetail(.resource, .resource_lifecycle, value);
     }
     pub fn recordLatency(self: *Session, value: LatencyEvent) bool {
-        return self.recordDetail(.latency, .input, value);
+        return self.recordDetail(.latency, .structural_latency, value);
     }
     pub fn recordDraw(self: *Session, value: DrawEvent) bool {
-        return self.recordDetail(.draw, .draw, value);
+        return self.recordDetail(.draw, .draw_observation, value);
     }
     pub fn recordAllocation(self: *Session, value: AllocationEvent) bool {
-        return self.recordDetail(.allocation, .allocation, value);
+        return self.recordDetail(.allocation, .allocation_lifecycle, value);
     }
     pub fn recordGpu(self: *Session, value: GpuEvent) bool {
-        return self.recordDetail(.gpu, .gpu, value);
+        return self.recordDetail(.gpu, .backend_fact, value);
     }
 
     /// Record one automatic callback interval. It contains timing and outcome
     /// only; the opaque model and callback result payload never cross here.
     pub fn recordCallback(self: *Session, value: CallbackEvent) bool {
-        return self.recordDetailWithPriority(.callback, .task, .summary, value);
+        return self.recordDetailWithPriority(.callback, .callback_summary, .summary, value);
     }
 
     /// Account for detail omitted before it could reserve an event chunk.
@@ -735,16 +785,8 @@ pub const Session = struct {
         var all_written = true;
         for (losses.counts, 0..) |lost, family_index| {
             if (lost == 0) continue;
-            const reservation = self.shared.pool.reserveAt(.summary, @enumFromInt(family_index), .{
-                .cycle = cycle,
-                .timestamp_ns = timestamp_ns,
-                .producer = .frame_thread,
-            }) orelse {
-                restoreLoss(&self.shared.pool, @enumFromInt(family_index), losses, family_index);
-                all_written = false;
-                continue;
-            };
-            const out = reservation.chunk(&self.shared.pool).slice();
+            var encoded: [59]u8 = undefined;
+            const out = encoded[0..];
             out[0] = @intFromEnum(EventKind.gap);
             std.mem.writeInt(u64, out[1..9], losses.last_cycles[family_index], .little);
             std.mem.writeInt(u64, out[9..17], losses.ended_ns[family_index], .little);
@@ -755,7 +797,14 @@ pub const Session = struct {
             std.mem.writeInt(u64, out[42..50], losses.started_ns[family_index], .little);
             std.mem.writeInt(u64, out[50..58], losses.ended_ns[family_index], .little);
             out[58] = @intFromEnum(losses.producers[family_index]);
-            self.shared.pool.submit(reservation, 59);
+            if (!self.shared.pool.appendEncoded(.summary, @enumFromInt(family_index), out, .{
+                .cycle = cycle,
+                .timestamp_ns = timestamp_ns,
+                .producer = .frame_thread,
+            })) {
+                restoreLoss(&self.shared.pool, @enumFromInt(family_index), losses, family_index);
+                all_written = false;
+            }
         }
         return all_written;
     }
@@ -869,7 +918,8 @@ const schema_sql =
     \\CREATE TABLE runs(id INTEGER PRIMARY KEY CHECK(id=1));
     \\INSERT INTO runs VALUES(1);
     \\CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    \\CREATE TABLE cycles(cycle INTEGER PRIMARY KEY, start_ns INTEGER NOT NULL, duration_ns INTEGER NOT NULL, update_ns INTEGER NOT NULL, render_ns INTEGER NOT NULL, task_pump_ns INTEGER NOT NULL, alloc_bytes INTEGER NOT NULL, alloc_calls INTEGER NOT NULL, free_bytes INTEGER NOT NULL, free_calls INTEGER NOT NULL, live_bytes INTEGER NOT NULL, peak_live_bytes INTEGER NOT NULL, update_alloc_bytes INTEGER NOT NULL, update_alloc_calls INTEGER NOT NULL, task_events INTEGER NOT NULL, effect_calls INTEGER NOT NULL, draw_calls INTEGER NOT NULL, resource_events INTEGER NOT NULL, queue_events INTEGER NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
+    \\CREATE TABLE measurement_status(name TEXT PRIMARY KEY, family INTEGER, required_detail TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('unfinalized','complete','partial','not_recorded','unavailable')), reason TEXT NOT NULL, rows_recorded INTEGER NOT NULL, omitted_events INTEGER NOT NULL);
+    \\CREATE TABLE cycles(cycle INTEGER PRIMARY KEY, start_ns INTEGER NOT NULL, duration_ns INTEGER NOT NULL, update_ns INTEGER NOT NULL, render_callback_ns INTEGER NOT NULL, task_executor_ns INTEGER NOT NULL, host_other_ns INTEGER NOT NULL, alloc_bytes INTEGER NOT NULL, alloc_calls INTEGER NOT NULL, free_bytes INTEGER NOT NULL, free_calls INTEGER NOT NULL, live_bytes INTEGER NOT NULL, peak_live_bytes INTEGER NOT NULL, update_alloc_bytes INTEGER NOT NULL, update_alloc_calls INTEGER NOT NULL, task_events INTEGER NOT NULL, effect_calls INTEGER NOT NULL, draw_calls INTEGER NOT NULL, resource_events INTEGER NOT NULL, queue_events INTEGER NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE annotations(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, phase INTEGER NOT NULL, kind INTEGER NOT NULL, name TEXT NOT NULL, integer_value INTEGER, real_value REAL, unit INTEGER NOT NULL, wall_ns INTEGER NOT NULL, active_ns INTEGER NOT NULL, parked_ns INTEGER NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE recording_gaps(id INTEGER PRIMARY KEY, cycle INTEGER NOT NULL, timestamp_ns INTEGER NOT NULL, family INTEGER NOT NULL, lost_count INTEGER NOT NULL, first_cycle INTEGER NOT NULL, last_cycle INTEGER NOT NULL, started_ns INTEGER NOT NULL, ended_ns INTEGER NOT NULL, producer_track TEXT NOT NULL, run_id INTEGER NOT NULL DEFAULT 1 REFERENCES runs(id));
     \\CREATE TABLE recorder_health(id INTEGER PRIMARY KEY CHECK(id=1), transactions INTEGER NOT NULL, checkpoints INTEGER NOT NULL, queue_high_water INTEGER NOT NULL, output_bytes INTEGER NOT NULL, omitted_events INTEGER NOT NULL, rows_written INTEGER NOT NULL, writer_failed INTEGER NOT NULL, output_limited INTEGER NOT NULL, writer_active_wall_ns INTEGER NOT NULL, writer_idle_wall_ns INTEGER NOT NULL, writer_cpu_ns INTEGER);
@@ -893,6 +943,19 @@ const schema_sql =
     \\INSERT INTO metadata VALUES('schema_version','11');
     \\INSERT INTO metadata VALUES('clean_shutdown','0');
     \\INSERT INTO metadata VALUES('final_state','recording');
+    \\INSERT INTO measurement_status VALUES('cycle_summary',0,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('allocation_counters',0,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('annotations',1,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('hosted_effects',2,'standard','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('task_lifecycle',3,'standard','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('allocation_lifecycle',4,'full','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('resource_lifecycle',5,'standard','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('queue_pressure',6,'standard','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('draw_observations',7,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('structural_latency',8,'standard','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('backend_facts',9,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('callback_summaries',10,'summary','unfinalized','capture has not finalized',0,0);
+    \\INSERT INTO measurement_status VALUES('gpu_timing',NULL,'summary','unavailable','selected backends expose no honest non-stalling GPU timing',0,0);
 ;
 
 fn writerMain(shared: *Shared) void {
@@ -940,7 +1003,7 @@ fn writerMain(shared: *Shared) void {
         return startupFailed(shared, error.SchemaFailed);
     }
 
-    const cycle_stmt = prepare(db, "INSERT INTO cycles(cycle,start_ns,duration_ns,update_ns,render_ns,task_pump_ns,alloc_bytes,alloc_calls,free_bytes,free_calls,live_bytes,peak_live_bytes,update_alloc_bytes,update_alloc_calls,task_events,effect_calls,draw_calls,resource_events,queue_events) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)") orelse return startupFailed(shared, error.SchemaFailed);
+    const cycle_stmt = prepare(db, "INSERT INTO cycles(cycle,start_ns,duration_ns,update_ns,render_callback_ns,task_executor_ns,host_other_ns,alloc_bytes,alloc_calls,free_bytes,free_calls,live_bytes,peak_live_bytes,update_alloc_bytes,update_alloc_calls,task_events,effect_calls,draw_calls,resource_events,queue_events) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)") orelse return startupFailed(shared, error.SchemaFailed);
     defer _ = rocray_sqlite_finalize(cycle_stmt);
     const annotation_stmt = prepare(db, "INSERT INTO annotations(cycle,timestamp_ns,phase,kind,name,integer_value,real_value,unit,wall_ns,active_ns,parked_ns) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)") orelse return startupFailed(shared, error.SchemaFailed);
     defer _ = rocray_sqlite_finalize(annotation_stmt);
@@ -983,8 +1046,8 @@ fn writerMain(shared: *Shared) void {
             while (current) |item| {
                 const writable = !shared.failed.load(.acquire) and !shared.output_limited.load(.acquire);
                 if (writable) {
-                    if (writeEvent(cycle_stmt, annotation_stmt, gap_stmt, &detail_stmts, item.chunk(&shared.pool).written())) {
-                        rows_in_transaction += 1;
+                    if (writeChunk(cycle_stmt, annotation_stmt, gap_stmt, &detail_stmts, item.chunk(&shared.pool).written())) |rows| {
+                        rows_in_transaction +|= rows;
                     } else {
                         shared.failed.store(true, .release);
                         shared.accepting.store(false, .release);
@@ -1031,6 +1094,21 @@ fn writerMain(shared: *Shared) void {
     finalizeRecording(shared, db);
 }
 
+fn writeChunk(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?*anyopaque, detail_stmts: *const [9]?*anyopaque, bytes: []const u8) ?u64 {
+    var at: usize = 0;
+    var rows: u64 = 0;
+    while (at < bytes.len) {
+        if (bytes.len - at < 2) return null;
+        const len: usize = std.mem.readInt(u16, bytes[at..][0..2], .little);
+        at += 2;
+        if (len == 0 or len > bytes.len - at) return null;
+        if (!writeEvent(cycle_stmt, annotation_stmt, gap_stmt, detail_stmts, bytes[at .. at + len])) return null;
+        at += len;
+        rows +|= 1;
+    }
+    return rows;
+}
+
 fn finalizeRecording(shared: *Shared, db: ?*anyopaque) void {
     defer shared.finalized.store(true, .release);
     shared.drain_duration_ns = elapsedWallNs(shared.shutdown_started_ms.load(.acquire));
@@ -1072,6 +1150,7 @@ fn finalizeRecording(shared: *Shared, db: ?*anyopaque) void {
         rocray_sqlite_bind_null(health, 11) == SQLITE_OK and
         finishStatement(health);
     if (!health_ok) shared.failed.store(true, .release);
+    if (rocray_sqlite_exec(db, finalize_measurements_sql) != SQLITE_OK) shared.failed.store(true, .release);
     writeFinalMetadata(shared, db);
     if (rocray_sqlite_exec(db, "PRAGMA wal_checkpoint(TRUNCATE)") == SQLITE_OK) {
         _ = shared.checkpoints.fetchAdd(1, .monotonic);
@@ -1083,6 +1162,38 @@ fn finalizeRecording(shared: *Shared, db: ?*anyopaque) void {
         _ = rocray_sqlite_exec(db, "PRAGMA wal_checkpoint(TRUNCATE)");
     }
 }
+
+/// Final evidence status is written outside the bounded event stream so a
+/// consumer never has to infer whether an empty table means measured zero.
+/// The gap family numbers are the stable `Family` order above.
+const finalize_measurements_sql =
+    \\UPDATE measurement_status SET rows_recorded = CASE name
+    \\ WHEN 'cycle_summary' THEN (SELECT count(*) FROM cycles)
+    \\ WHEN 'allocation_counters' THEN (SELECT count(*) FROM cycles)
+    \\ WHEN 'annotations' THEN (SELECT count(*) FROM annotations)
+    \\ WHEN 'hosted_effects' THEN (SELECT count(*) FROM hosted_effects)
+    \\ WHEN 'task_lifecycle' THEN (SELECT count(*) FROM task_events)
+    \\ WHEN 'allocation_lifecycle' THEN (SELECT count(*) FROM allocation_events)
+    \\ WHEN 'resource_lifecycle' THEN (SELECT count(*) FROM resource_lifecycle)
+    \\ WHEN 'queue_pressure' THEN (SELECT count(*) FROM queue_pressure)
+    \\ WHEN 'draw_observations' THEN (SELECT count(*) FROM draw_summaries)
+    \\ WHEN 'structural_latency' THEN (SELECT count(*) FROM structural_latency)
+    \\ WHEN 'backend_facts' THEN (SELECT count(*) FROM gpu_facts)
+    \\ WHEN 'callback_summaries' THEN (SELECT count(*) FROM callback_summaries)
+    \\ ELSE 0 END;
+    \\UPDATE measurement_status SET omitted_events = coalesce((SELECT sum(lost_count) FROM recording_gaps WHERE recording_gaps.family=measurement_status.family),0) WHERE family IS NOT NULL;
+    \\UPDATE measurement_status SET status = CASE
+    \\ WHEN status='unavailable' THEN 'unavailable'
+    \\ WHEN required_detail='full' AND (SELECT value FROM metadata WHERE key='effective_detail')<>'full' THEN 'not_recorded'
+    \\ WHEN required_detail='standard' AND (SELECT value FROM metadata WHERE key='effective_detail')='summary' THEN 'not_recorded'
+    \\ WHEN omitted_events<>0 THEN 'partial'
+    \\ ELSE 'complete' END;
+    \\UPDATE measurement_status SET reason = CASE status
+    \\ WHEN 'complete' THEN 'complete evidence; zero rows means measured zero'
+    \\ WHEN 'partial' THEN 'recorder omitted events for this measurement'
+    \\ WHEN 'not_recorded' THEN 'selected detail level does not record this measurement'
+    \\ ELSE reason END;
+;
 
 fn recorderWallTimeMs() u64 {
     return @intCast(@max(rocray_sqlite_wall_time_ms(), 0));
@@ -1162,8 +1273,8 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
     if (bytes.len == 0) return false;
     switch (bytes[0]) {
         @intFromEnum(EventKind.cycle) => {
-            if (bytes.len != 153) return false;
-            for (1..20) |index| {
+            if (bytes.len != 161) return false;
+            for (1..21) |index| {
                 if (!bindU64(cycle_stmt, @intCast(index), std.mem.readInt(u64, bytes[1 + (index - 1) * 8 ..][0..8], .little))) return false;
             }
             return finishStatement(cycle_stmt);
@@ -1257,14 +1368,14 @@ test "detail admission preserves summary capacity" {
     var pool = try Pool.init(std.testing.allocator, 4, 2);
     defer pool.deinit();
 
-    const first = pool.reserve(.detail, .effect).?;
-    const second = pool.reserve(.detail, .task).?;
-    try std.testing.expect(pool.reserve(.detail, .draw) == null);
+    const first = pool.reserve(.detail, .hosted_effect).?;
+    const second = pool.reserve(.detail, .task_lifecycle).?;
+    try std.testing.expect(pool.reserve(.detail, .draw_observation) == null);
     try std.testing.expectEqual(@as(usize, 2), pool.available());
 
-    const summary_a = pool.reserve(.summary, .cycle).?;
-    const summary_b = pool.reserve(.summary, .cycle).?;
-    try std.testing.expect(pool.reserve(.summary, .cycle) == null);
+    const summary_a = pool.reserve(.summary, .cycle_summary).?;
+    const summary_b = pool.reserve(.summary, .cycle_summary).?;
+    try std.testing.expect(pool.reserve(.summary, .cycle_summary) == null);
 
     pool.cancel(first);
     pool.cancel(second);
@@ -1285,7 +1396,7 @@ test "a blocked writer cannot make producer reservation wait or grow" {
 
     var held: [3]Reservation = undefined;
     for (&held) |*reservation| {
-        reservation.* = pool.reserve(.detail, .effect).?;
+        reservation.* = pool.reserve(.detail, .hosted_effect).?;
         pool.submit(reservation.*, 0);
     }
     try std.testing.expectEqual(@as(usize, 1), pool.available());
@@ -1293,7 +1404,7 @@ test "a blocked writer cannot make producer reservation wait or grow" {
     // Model a writer retaining every submitted detail chunk. Each producer
     // attempt performs one bounded reserve and returns; no clock, allocator,
     // condition wait, or writer progress participates in this loop.
-    for (0..100_000) |_| try std.testing.expect(pool.reserve(.detail, .effect) == null);
+    for (0..100_000) |_| try std.testing.expect(pool.reserve(.detail, .hosted_effect) == null);
     try std.testing.expectEqual(@as(usize, 1), pool.available());
     try std.testing.expectEqual(refused_before + 100_000, pool.refusedTotal());
     for (held) |_| pool.release(pool.take().?);
@@ -1303,7 +1414,7 @@ test "submitted chunks are FIFO and require writer release" {
     var pool = try Pool.init(std.testing.allocator, 3, 1);
     defer pool.deinit();
 
-    const a = pool.reserve(.summary, .cycle).?;
+    const a = pool.reserve(.summary, .cycle_summary).?;
     @memcpy(a.chunk(&pool).slice()[0..3], "one");
     pool.submit(a, 3);
     const b = pool.reserve(.detail, .annotation).?;
@@ -1327,19 +1438,19 @@ test "loss snapshots are per-family saturating and drain once" {
     var pool = try Pool.init(std.testing.allocator, 1, 1);
     defer pool.deinit();
 
-    try std.testing.expect(pool.reserveAt(.detail, .allocation, .{ .cycle = 4, .timestamp_ns = 40, .producer = .frame_thread }) == null);
-    try std.testing.expect(pool.reserveAt(.detail, .allocation, .{ .cycle = 7, .timestamp_ns = 90, .producer = .host_worker }) == null);
-    const summary = pool.reserve(.summary, .cycle).?;
-    try std.testing.expect(pool.reserve(.summary, .cycle) == null);
+    try std.testing.expect(pool.reserveAt(.detail, .allocation_lifecycle, .{ .cycle = 4, .timestamp_ns = 40, .producer = .frame_thread }) == null);
+    try std.testing.expect(pool.reserveAt(.detail, .allocation_lifecycle, .{ .cycle = 7, .timestamp_ns = 90, .producer = .host_worker }) == null);
+    const summary = pool.reserve(.summary, .cycle_summary).?;
+    try std.testing.expect(pool.reserve(.summary, .cycle_summary) == null);
 
     const losses = pool.takeLosses();
-    try std.testing.expectEqual(@as(u64, 2), losses.count(.allocation));
-    try std.testing.expectEqual(@as(u64, 4), losses.first_cycles[@intFromEnum(Family.allocation)]);
-    try std.testing.expectEqual(@as(u64, 7), losses.last_cycles[@intFromEnum(Family.allocation)]);
-    try std.testing.expectEqual(@as(u64, 40), losses.started_ns[@intFromEnum(Family.allocation)]);
-    try std.testing.expectEqual(@as(u64, 90), losses.ended_ns[@intFromEnum(Family.allocation)]);
-    try std.testing.expectEqual(Producer.multiple, losses.producers[@intFromEnum(Family.allocation)]);
-    try std.testing.expectEqual(@as(u64, 1), losses.count(.cycle));
+    try std.testing.expectEqual(@as(u64, 2), losses.count(.allocation_lifecycle));
+    try std.testing.expectEqual(@as(u64, 4), losses.first_cycles[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 7), losses.last_cycles[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 40), losses.started_ns[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 90), losses.ended_ns[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(Producer.multiple, losses.producers[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 1), losses.count(.cycle_summary));
     try std.testing.expectEqual(@as(u64, 3), losses.total());
     try std.testing.expectEqual(@as(u64, 0), pool.takeLosses().total());
 
@@ -1368,19 +1479,21 @@ test "summary starvation restores gap counts until capacity returns" {
     };
     defer shared.pool.deinit();
     var session = Session{ .shared = &shared, .thread = undefined };
-    const occupied_a = shared.pool.reserve(.summary, .cycle).?;
-    const occupied_b = shared.pool.reserve(.summary, .cycle).?;
-    session.noteLoss(.draw, 3);
+    const occupied_a = shared.pool.reserve(.summary, .cycle_summary).?;
+    const occupied_b = shared.pool.reserve(.summary, .cycle_summary).?;
+    session.noteLoss(.draw_observation, 3);
     try std.testing.expect(!session.flushGaps(9, 10));
     // The failed attempt to reserve the gap row is itself disclosed, so the
     // restored count includes the three original omissions plus that refusal.
-    try std.testing.expectEqual(@as(u64, 4), shared.pool.losses[@intFromEnum(Family.draw)]);
+    try std.testing.expectEqual(@as(u64, 4), shared.pool.losses[@intFromEnum(Family.draw_observation)]);
 
     shared.pool.cancel(occupied_a);
     try std.testing.expect(session.flushGaps(9, 10));
-    try std.testing.expectEqual(@as(u64, 0), shared.pool.losses[@intFromEnum(Family.draw)]);
+    try std.testing.expectEqual(@as(u64, 0), shared.pool.losses[@intFromEnum(Family.draw_observation)]);
     const gap = shared.pool.take().?;
-    const bytes = gap.chunk(&shared.pool).written();
+    const framed = gap.chunk(&shared.pool).written();
+    const encoded_len: usize = std.mem.readInt(u16, framed[0..2], .little);
+    const bytes = framed[2 .. 2 + encoded_len];
     try std.testing.expectEqual(@intFromEnum(EventKind.gap), bytes[0]);
     try std.testing.expectEqual(@as(u64, 4), std.mem.readInt(u64, bytes[18..26], .little));
     shared.pool.release(gap);
@@ -1442,8 +1555,9 @@ test "session writer creates and finalizes a queryable stage one database" {
         .start_ns = 100,
         .duration_ns = 20,
         .update_ns = 8,
-        .render_ns = 9,
-        .task_pump_ns = 3,
+        .render_callback_ns = 9,
+        .task_executor_ns = 3,
+        .host_other_ns = 0,
         .alloc_bytes = 512,
         .alloc_calls = 4,
         .free_bytes = 128,
@@ -1521,6 +1635,9 @@ test "session writer creates and finalizes a queryable stage one database" {
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(DISTINCT a.subject_id) FROM allocation_events a WHERE kind IN (0,2,3) AND NOT EXISTS (SELECT 1 FROM allocation_events f WHERE f.subject_id=a.subject_id AND f.kind=1 AND f.timestamp_ns>=a.timestamp_ns)").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM gpu_facts").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM callback_summaries WHERE phase=0 AND outcome=0 AND duration_ns=99").?);
+    try std.testing.expectEqual(@as(i64, 12), queryI64(db, "SELECT count(*) FROM measurement_status WHERE status='complete'").?);
+    try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM measurement_status WHERE name='gpu_timing' AND status='unavailable'").?);
+    try std.testing.expectEqual(@as(i64, 0), queryI64(db, "SELECT count(*) FROM measurement_status WHERE status IN ('unfinalized','partial','not_recorded')").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT CAST(value AS INTEGER) FROM metadata WHERE key='clean_shutdown'").?);
     try std.testing.expectEqual(@as(i64, schema_version), queryI64(db, "SELECT CAST(value AS INTEGER) FROM metadata WHERE key='schema_version'").?);
     try std.testing.expectEqual(@as(i64, 3), queryI64(db, "SELECT count(*) FROM sqlite_master WHERE type='index' AND name IN ('annotations_by_run_cycle_time','gaps_by_run_cycle','cycles_by_run_duration')").?);
@@ -1572,8 +1689,9 @@ test "session refuses overwrite and an output limit still shuts down cleanly" {
         .start_ns = 1,
         .duration_ns = 1,
         .update_ns = 1,
-        .render_ns = 0,
-        .task_pump_ns = 0,
+        .render_callback_ns = 0,
+        .task_executor_ns = 0,
+        .host_other_ns = 0,
     }));
     for (0..100_000) |_| {
         if (session.outputLimited()) break;
@@ -1606,28 +1724,28 @@ test "blocked writer saturation persists an explicit gap without borrowing summa
         .test_fault = .block_after_start,
     });
 
-    for (0..6) |index| try std.testing.expect(session.recordAnnotation(.{
-        .cycle = index,
-        .timestamp_ns = index,
-        .phase = 1,
-        .kind = .mark,
-        .name = "admitted",
-    }));
-    try std.testing.expect(!session.recordAnnotation(.{
-        .cycle = 6,
-        .timestamp_ns = 6,
-        .phase = 1,
-        .kind = .mark,
-        .name = "omitted",
-    }));
+    const long_label = [_]u8{'x'} ** 255;
+    var admitted: u64 = 0;
+    while (admitted < 10_000) : (admitted += 1) {
+        if (!session.recordAnnotation(.{
+            .cycle = 6,
+            .timestamp_ns = 6,
+            .phase = 1,
+            .kind = .mark,
+            .name = long_label[0..],
+        })) break;
+    }
+    try std.testing.expect(admitted > 6);
+    try std.testing.expect(admitted < 10_000);
     try std.testing.expect(session.flushGaps(6, 6));
     try std.testing.expect(session.recordCycle(.{
         .cycle = 6,
         .start_ns = 6,
         .duration_ns = 1,
         .update_ns = 1,
-        .render_ns = 0,
-        .task_pump_ns = 0,
+        .render_callback_ns = 0,
+        .task_executor_ns = 0,
+        .host_other_ns = 0,
     }));
     session.releaseTestWriter();
     const report = session.stop();
@@ -1697,7 +1815,7 @@ test "abrupt shutdown leaves a queryable committed prefix marked unclean" {
         .transaction_chunks = 1,
         .test_fault = .abrupt_after_first_commit,
     });
-    try std.testing.expect(session.recordCycle(.{ .cycle = 41, .start_ns = 1, .duration_ns = 2, .update_ns = 1, .render_ns = 1, .task_pump_ns = 0 }));
+    try std.testing.expect(session.recordCycle(.{ .cycle = 41, .start_ns = 1, .duration_ns = 2, .update_ns = 1, .render_callback_ns = 1, .task_executor_ns = 0, .host_other_ns = 0 }));
     while (session.shared.accepting.load(.acquire)) std.Thread.yield() catch std.atomic.spinLoopHint();
     _ = session.stop();
 
@@ -1723,12 +1841,12 @@ test "post-start writer failure refuses recording without stopping the applicati
         .transaction_chunks = 1,
         .test_fault = .fail_after_first_commit,
     });
-    try std.testing.expect(session.recordCycle(.{ .cycle = 1, .start_ns = 1, .duration_ns = 1, .update_ns = 1, .render_ns = 0, .task_pump_ns = 0 }));
+    try std.testing.expect(session.recordCycle(.{ .cycle = 1, .start_ns = 1, .duration_ns = 1, .update_ns = 1, .render_callback_ns = 0, .task_executor_ns = 0, .host_other_ns = 0 }));
     while (!session.failed()) std.Thread.yield() catch std.atomic.spinLoopHint();
     var application_progress: u32 = 0;
     application_progress += 1;
     try std.testing.expectEqual(@as(u32, 1), application_progress);
-    try std.testing.expect(!session.recordCycle(.{ .cycle = 2, .start_ns = 2, .duration_ns = 1, .update_ns = 1, .render_ns = 0, .task_pump_ns = 0 }));
+    try std.testing.expect(!session.recordCycle(.{ .cycle = 2, .start_ns = 2, .duration_ns = 1, .update_ns = 1, .render_callback_ns = 0, .task_executor_ns = 0, .host_other_ns = 0 }));
     _ = session.stop();
 
     const zpath = try std.testing.allocator.dupeZ(u8, path);
@@ -1777,7 +1895,7 @@ test "stop flushes tail loss and returns persisted terminal facts" {
         .chunk_count = 8,
         .summary_reserve = 2,
     });
-    session.noteLoss(.effect, 3);
+    session.noteLoss(.hosted_effect, 3);
     session.setApplicationOutcome("success");
     const report = session.stop();
     try std.testing.expect(report.complete);
@@ -1808,7 +1926,7 @@ test "unresolved run relationship prevents a clean finalization" {
         .summary_reserve = 2,
         .test_fault = .unresolved_relationship,
     });
-    try std.testing.expect(session.recordCycle(.{ .cycle = 0, .start_ns = 0, .duration_ns = 1, .update_ns = 1, .render_ns = 0, .task_pump_ns = 0 }));
+    try std.testing.expect(session.recordCycle(.{ .cycle = 0, .start_ns = 0, .duration_ns = 1, .update_ns = 1, .render_callback_ns = 0, .task_executor_ns = 0, .host_other_ns = 0 }));
     const report = session.stop();
     try std.testing.expect(report.failed);
     try std.testing.expect(!report.complete);

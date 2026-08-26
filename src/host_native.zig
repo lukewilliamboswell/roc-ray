@@ -819,7 +819,7 @@ fn recordObservatoryTask(context: *anyopaque, event: tasks_mod.ObserverEvent) vo
     if (!observatory_task_detail) return;
     switch (event.kind) {
         .finished => {
-            if (!rememberTaskFinish(event.task_id, event.timestamp_ns)) sessionFromContext(context).noteLoss(.input, 1);
+            if (!rememberTaskFinish(event.task_id, event.timestamp_ns)) sessionFromContext(context).noteLoss(.structural_latency, 1);
         },
         .delivered => if (takeTaskFinish(event.task_id)) |finished_ns| recordStructuralLatency(3, event.task_id, observatory_current_input_id, finished_ns, "task_finish_to_delivery"),
         else => {},
@@ -2666,7 +2666,7 @@ fn observeHostResource(event: host_resource.Observation) u64 {
         .retire, .destroy, .use, .reuse => resourceCorrelation(event.subject_id, false),
     };
     if (event.subject_id != 0 and private_id == 0) {
-        session.noteLoss(.resource, 1);
+        session.noteLoss(.resource_lifecycle, 1);
         return now;
     }
     _ = session.recordResource(.{
@@ -11988,14 +11988,24 @@ const AllocMeter = struct {
 var alloc_meter: AllocMeter = .{ .inner = undefined };
 /// Whether `ROC_RAY_ALLOC_STATS` asked for metering on this run.
 var alloc_meter_enabled: bool = false;
+/// Whether allocation counters should also be printed to stderr.
+///
+/// Observatory needs the meter for its cycle summaries, but recording must
+/// not silently turn on a high-volume diagnostic stream or perturb an
+/// application's ordinary stderr behavior.
+var alloc_meter_reporting_enabled: bool = false;
 
 /// Wrap `inner` in the meter when the environment asks for it, else pass it
 /// through untouched so an unmetered run keeps its original allocator vtable.
 fn meteredAllocator(inner: std.mem.Allocator, record_stats: bool) std.mem.Allocator {
     const requested = hostGetEnv(ALLOC_STATS_ENV);
-    if (!record_stats and (requested == null or requested.?.len == 0 or std.mem.eql(u8, requested.?, "0"))) return inner;
+    const reporting = requested != null and requested.?.len != 0 and !std.mem.eql(u8, requested.?, "0");
+    alloc_meter_enabled = false;
+    alloc_meter_reporting_enabled = false;
+    if (!record_stats and !reporting) return inner;
     alloc_meter = .{ .inner = inner };
     alloc_meter_enabled = true;
+    alloc_meter_reporting_enabled = reporting;
     return alloc_meter.allocator();
 }
 
@@ -12016,28 +12026,32 @@ fn allocMeterRecordUpdate(since: AllocMeter.Mark) void {
 /// per-frame lines are not polluted by config and `init!`.
 fn reportStartupAllocStats() void {
     if (!alloc_meter_enabled) return;
-    std.debug.print(
-        "[roc-ray-alloc] startup alloc_bytes={d} allocs={d} frees={d} free_bytes={d}\n",
-        .{ alloc_meter.alloc_bytes, alloc_meter.alloc_calls, alloc_meter.free_calls, alloc_meter.free_bytes },
-    );
+    if (alloc_meter_reporting_enabled) {
+        std.debug.print(
+            "[roc-ray-alloc] startup alloc_bytes={d} allocs={d} frees={d} free_bytes={d}\n",
+            .{ alloc_meter.alloc_bytes, alloc_meter.alloc_calls, alloc_meter.free_calls, alloc_meter.free_bytes },
+        );
+    }
     alloc_meter.clearFrame();
 }
 
 /// Report and clear one host cycle's metered traffic.
 fn reportCycleAllocStats(cycle_index: u64) void {
     if (!alloc_meter_enabled) return;
-    std.debug.print(
-        "[roc-ray-alloc] cycle={d} alloc_bytes={d} allocs={d} frees={d} free_bytes={d} update_bytes={d} update_allocs={d}\n",
-        .{
-            cycle_index,
-            alloc_meter.alloc_bytes,
-            alloc_meter.alloc_calls,
-            alloc_meter.free_calls,
-            alloc_meter.free_bytes,
-            alloc_meter.update_bytes,
-            alloc_meter.update_calls,
-        },
-    );
+    if (alloc_meter_reporting_enabled) {
+        std.debug.print(
+            "[roc-ray-alloc] cycle={d} alloc_bytes={d} allocs={d} frees={d} free_bytes={d} update_bytes={d} update_allocs={d}\n",
+            .{
+                cycle_index,
+                alloc_meter.alloc_bytes,
+                alloc_meter.alloc_calls,
+                alloc_meter.free_calls,
+                alloc_meter.free_bytes,
+                alloc_meter.update_bytes,
+                alloc_meter.update_calls,
+            },
+        );
+    }
     alloc_meter.clearFrame();
 }
 
@@ -12199,13 +12213,16 @@ test "Observatory benchmark writer delay is bounded and opt in" {
 
 fn recordObservatoryCycle(cycle: u64, started_ns: i96, update_ns: u64, render_ns: u64, task_ns: u64) void {
     const session = active_observatory orelse return;
+    const duration_ns: u64 = @intCast(@max(observatoryAwakeNs() - started_ns, 0));
+    const measured_ns = update_ns +| render_ns +| task_ns;
     _ = session.recordCycle(.{
         .cycle = cycle,
         .start_ns = @intCast(@max(started_ns - observatory_origin_ns, 0)),
-        .duration_ns = @intCast(@max(observatoryAwakeNs() - started_ns, 0)),
+        .duration_ns = duration_ns,
         .update_ns = update_ns,
-        .render_ns = render_ns,
-        .task_pump_ns = task_ns,
+        .render_callback_ns = render_ns,
+        .task_executor_ns = task_ns,
+        .host_other_ns = duration_ns -| measured_ns,
         .alloc_bytes = alloc_meter.alloc_bytes,
         .alloc_calls = alloc_meter.alloc_calls,
         .free_bytes = alloc_meter.free_bytes,
@@ -12410,7 +12427,7 @@ fn allocationAllocated(pointer: usize, bytes: usize) void {
     if (!moving) observatory_next_allocation_id +|= 1;
     allocation_realloc_in_place = moving and pointer == allocation_realloc_old_pointer;
     if (!allocation_identities.put(pointer, id, bytes)) {
-        if (active_observatory) |session| session.noteLoss(.allocation, 1);
+        if (active_observatory) |session| session.noteLoss(.allocation_lifecycle, 1);
         return;
     }
     recordAllocationEvent(if (!moving) 0 else if (allocation_realloc_in_place) 3 else 2, id, bytes, if (moving) allocation_realloc_old_bytes else 0);
@@ -12548,10 +12565,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         var stats_task_ns: u64 = 0;
         var stats_update_ns: u64 = 0;
         var stats_render_ns: u64 = 0;
-        const first_task_pump_started = observatoryMeasurementStart();
         app_tasks.pump(cycle_count, .yield);
         stats_task_ns +|= app_tasks.last_pump_ns;
-        recordObservatoryCallback(.task_turn, cycle_count, first_task_pump_started, .success, "task pump");
         stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
@@ -12649,10 +12664,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         boxed_model = update_result.payload_ok();
         // Newly spawned tasks run to their first park before the frame is
         // drawn, so their waiting overlaps rendering.
-        const second_task_pump_started = observatoryMeasurementStart();
         app_tasks.pump(cycle_count, .yield);
         stats_task_ns +|= app_tasks.last_pump_ns;
-        recordObservatoryCallback(.task_turn, cycle_count, second_task_pump_started, .success, "task pump");
 
         // This graphical backend schedules one optional presentation for every
         // cycle. A backend that omits it still calls update once for the fresh
@@ -12773,10 +12786,8 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // A headless run has no frame pacing and no real clock, but task
         // timers are real time. While a task is live, pace the cycle to the
         // simulated 60 Hz so "18 cycles later" means what it means windowed.
-        const first_task_pump_started = observatoryMeasurementStart();
         app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
         stats_task_ns +|= app_tasks.last_pump_ns;
-        recordObservatoryCallback(.task_turn, cycle_count, first_task_pump_started, .success, "task pump");
         stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
@@ -12850,10 +12861,8 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             break;
         }
         boxed_model = update_result.payload_ok();
-        const second_task_pump_started = observatoryMeasurementStart();
         app_tasks.pump(cycle_count, .yield);
         stats_task_ns +|= app_tasks.last_pump_ns;
-        recordObservatoryCallback(.task_turn, cycle_count, second_task_pump_started, .success, "task pump");
 
         // Headless examples schedule semantic presentation to cover render and
         // resource paths. The host-cycle contract itself permits omission.

@@ -432,7 +432,7 @@ def run_windowed_examples(
 
 
 def run_graphical_observatory_probe(
-    built: list[tuple[Path, Path]], verbose: bool
+    root: Path, built: list[tuple[Path, Path]], verbose: bool
 ) -> list[str]:
     """Verify graphical backend/presentation facts separately from headless timing."""
     if not has_display() or not built:
@@ -445,7 +445,7 @@ def run_graphical_observatory_probe(
     executable = executable_for(staged)
     capture = staged.parent / "graphical-observatory.rrstats"
     print("\nRunning graphical Observatory probe...", end=" ", flush=True)
-    if not run_cmd(
+    graphical_run = subprocess.run(
         [
             str(executable),
             "--host-hidden",
@@ -453,12 +453,40 @@ def run_graphical_observatory_probe(
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
         ],
-        "run graphical Observatory probe",
-        verbose,
-        cwd=staged.parent,
-    ):
+        # Match the ordinary windowed sweep: example asset paths are rooted at
+        # the checkout, not at the temporary directory containing the staged
+        # executable. A different cwd can turn an asset lookup failure into a
+        # false Observatory/runtime failure.
+        cwd=root,
+        stdout=None if verbose else subprocess.PIPE,
+        stderr=None if verbose else subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if graphical_run.returncode != 0:
+        if not verbose:
+            print(graphical_run.stdout or "")
+            print(graphical_run.stderr or "", file=sys.stderr)
+        diagnostic = "capture unavailable"
+        try:
+            failure_db = sqlite3.connect(f"file:{capture}?mode=ro", uri=True)
+            try:
+                outcome = failure_db.execute(
+                    "SELECT value FROM metadata WHERE key='application_outcome'"
+                ).fetchone()
+                callbacks = failure_db.execute(
+                    "SELECT cycle,phase,outcome FROM callback_summaries "
+                    "WHERE outcome<>0 ORDER BY id"
+                ).fetchall()
+                diagnostic = f"application_outcome={outcome!r}, callback_errors={callbacks!r}"
+            finally:
+                failure_db.close()
+        except sqlite3.Error as err:
+            diagnostic = f"capture query failed: {err}"
         print("FAILED")
-        return ["run graphical Observatory probe"]
+        return [
+            f"run graphical Observatory probe (exit {graphical_run.returncode}; {diagnostic})"
+        ]
 
     failures: list[str] = []
     try:
@@ -583,7 +611,7 @@ def run_observatory_probe(
         return ["build Observatory probe"]
 
     capture = staged.parent / "probe.rrstats"
-    if not run_cmd(
+    recorded_run = subprocess.run(
         [
             str(executable_for(staged)),
             "--host-headless",
@@ -593,12 +621,21 @@ def run_observatory_probe(
             "--host-stats-buffer-mib=1",
             "--host-stats-max-mib=16",
         ],
-        "run Observatory probe",
-        verbose,
         cwd=staged.parent,
-    ):
+        stdout=None if verbose else subprocess.PIPE,
+        stderr=None if verbose else subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if recorded_run.returncode != 0:
+        if not verbose:
+            print(recorded_run.stdout or "")
+            print(recorded_run.stderr or "", file=sys.stderr)
         print("FAILED")
         return ["run Observatory probe"]
+    if not verbose and "[roc-ray-alloc]" in (recorded_run.stderr or ""):
+        print("FAILED")
+        return ["Observatory enabled allocation metering printed unsolicited diagnostics"]
 
     init_sentinel = staged.parent / "observatory-init-ran"
     if not init_sentinel.is_file():
@@ -681,6 +718,26 @@ def run_observatory_probe(
                         f"Observatory metadata {key}: expected {expected!r}, got {metadata.get(key)!r}"
                     )
 
+            measurement_status = dict(
+                db.execute("SELECT name,status FROM measurement_status")
+            )
+            for measurement in (
+                "cycle_summary", "annotations", "hosted_effects", "task_lifecycle",
+                "resource_lifecycle", "queue_pressure", "draw_observations",
+                "structural_latency", "backend_facts", "callback_summaries",
+            ):
+                if measurement_status.get(measurement) != "complete":
+                    failures.append(
+                        f"Observatory measurement {measurement} is not complete: "
+                        f"{measurement_status.get(measurement)!r}"
+                    )
+            if measurement_status.get("allocation_lifecycle") != "not_recorded":
+                failures.append(
+                    "Observatory standard capture did not identify allocation lifecycle as not recorded"
+                )
+            if measurement_status.get("gpu_timing") != "unavailable":
+                failures.append("Observatory did not identify GPU timing as unavailable")
+
             for key in (
                 "host_os", "host_arch", "rocray_version", "roc_compiler_pin",
                 "executable_name", "app_name", "unavailable_sources",
@@ -715,7 +772,10 @@ def run_observatory_probe(
             callback_phases = {
                 row[0] for row in db.execute("SELECT DISTINCT phase FROM callback_summaries")
             }
-            if callback_phases != {0, 1, 2, 3}:
+            # Task executor polling is host work, not an application callback.
+            # Task-body activity is represented by task lifecycle events and
+            # task-owned effects/zones rather than a fabricated callback row.
+            if callback_phases != {0, 1, 2}:
                 failures.append(
                     f"Observatory callback phase coverage is incomplete: {sorted(callback_phases)!r}"
                 )
@@ -1800,7 +1860,7 @@ def _run_example_stages(
                 Path(args.windowed_dll_dir).resolve() if args.windowed_dll_dir else None,
             )
         )
-        failed.extend(run_graphical_observatory_probe(built, args.verbose))
+        failed.extend(run_graphical_observatory_probe(root, built, args.verbose))
 
     if not (args.skip_runtime or args.skip_roc_build):
         failed.extend(run_cli_args_integration(root, packages, args.verbose))

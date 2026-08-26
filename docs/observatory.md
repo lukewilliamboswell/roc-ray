@@ -80,8 +80,13 @@ assuming table or column meanings.
   `clock_source`, `clock_resolution_ns`, and `utc_origin_unix_ns` make the
   monotonic-relative timestamp domain and its wall-clock correlation explicit;
   UTC is identification metadata and is never used to calculate durations.
-- `cycles` records one admitted host-cycle summary with update, render, and
-  task-pump timing; task/effect/draw/resource/queue counts; and Roc allocation,
+- `measurement_status` is the authority for interpreting every measurement
+  family. Its final status is `complete`, `partial`, `not_recorded`, or
+  `unavailable`, with row and omission counts and a reason. A missing detail row
+  means zero activity only when that family's status is `complete`.
+- `cycles` records one admitted host-cycle summary with application update and
+  render-callback time, task-executor time (including polling or pacing), and
+  residual host time; task/effect/draw/resource/queue counts; and Roc allocation,
   free, live, peak-live, and update-attributed allocation counters.
 - `annotations` records marks, zone endpoints, and numeric samples. The
   irrelevant numeric column is SQL `NULL`. Zone-end rows include `wall_ns`,
@@ -155,10 +160,15 @@ SQLite's command-line tool can inspect a capture directly:
 ```sql
 SELECT key, value FROM metadata ORDER BY key;
 
-SELECT cycle, duration_ns, update_ns, render_ns
+SELECT cycle, duration_ns, update_ns, render_callback_ns,
+       task_executor_ns, host_other_ns
 FROM cycles
 ORDER BY duration_ns DESC
 LIMIT 20;
+
+SELECT name AS measurement, status, rows_recorded, omitted_events, reason
+FROM measurement_status
+ORDER BY name;
 
 SELECT cycle, timestamp_ns, kind, name, integer_value, real_value, unit
 FROM annotations
@@ -176,33 +186,27 @@ FROM recorder_health;
 ```
 
 `clean_shutdown = 1` means orderly finalization completed. Consult
-`final_state`, `recording_gaps`, and `recorder_health` before treating absent
-detail as evidence that no event occurred.
+`final_state` and `measurement_status` before drawing a conclusion. The status
+table incorporates detail policy and `recording_gaps`; consumers should not try
+to reconstruct completeness from an empty detail table.
 
 ## Analyze a capture
 
-The standard-library-only analyzer opens captures with SQLite `mode=ro`; it
-never creates, repairs, checkpoints, or otherwise mutates them:
+The versioned, read-only SQL corpus in `scripts/observatory_queries/` is the
+author-facing analysis interface. Run query `01` first to validate the capture
+and query `22` to see which conclusions its evidence supports. Each diagnostic
+query returns `evidence_status` and `evidence_reason`; measurements are SQL
+`NULL` unless the required family is complete. This deliberately prefers “not
+known from this capture” to a plausible but unsupported performance claim.
 
-```sh
-python3 scripts/analyze_observatory.py capture.rrstats
-python3 scripts/analyze_observatory.py --slowest 25 capture.rrstats
-python3 scripts/analyze_observatory.py before.rrstats --compare after.rrstats
-```
-
-It first requires the current schema version, `clean_shutdown = 1`, and
-`final_state = complete`. It then reports cycle percentiles and slow cycles,
-callbacks, application zones, hosted effects, tasks, bounded queues,
-resources, draw summaries, allocations, structural latency, recording gaps,
-and recorder health. A family with no table in an older or reduced capture is
-omitted rather than interpreted as zero activity.
-
-The versioned SQL corpus in `scripts/observatory_queries/` covers recording
+The corpus covers recording
 trust, cycle tails and attribution, zones and marks, effect copy costs,
 allocation and task lifetimes, worker availability, queues, resources,
 input-to-presentation latency, rendering, recorder health, and comparison.
-CI executes every query read-only and locks its result-column names. Missing
-target measurements remain SQL `NULL` or an explicit `available = 0`.
+CI executes every query read-only, locks its result-column names, and exercises
+semantic fixtures for partial evidence and task active-versus-parked time. The
+Python analyzer is retained as a CI/reference consumer of the same trust rules;
+it is not the public workflow.
 
 The demonstrated-analysis section covers presentation-budget misses when a
 numeric host cap exists, effect tail and copy costs, allocation lifetimes and

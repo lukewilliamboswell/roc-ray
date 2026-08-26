@@ -10,6 +10,7 @@ import rr.Color
 import rr.Draw
 import rr.Stdout
 import rr.Text
+import rr.Trace
 
 ## State retained between updates: whether the Task is still waiting, the
 ## current cycle and animation time, and prepared drawing resources. The Model
@@ -60,7 +61,9 @@ update! = |model, input| {
 		Task.spawn!(
 			input,
 			|| {
+				zone = Trace.begin!("waiting for wake timer")
 				Task.sleep!(sleep_millis)
+				Trace.end!(zone)
 				Woke
 			},
 		)

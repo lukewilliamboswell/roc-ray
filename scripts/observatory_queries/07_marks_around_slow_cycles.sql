@@ -1,2 +1,3 @@
-WITH slow AS (SELECT cycle FROM cycles ORDER BY duration_ns DESC LIMIT :limit)
-SELECT a.cycle,a.timestamp_ns,a.name FROM annotations a JOIN slow USING(cycle) WHERE a.kind=0 ORDER BY a.cycle,a.timestamp_ns,a.id;
+WITH evidence AS (SELECT CASE WHEN c.status='complete' AND a.status='complete' THEN 'complete' ELSE 'unavailable' END status,CASE WHEN c.status<>'complete' THEN c.reason ELSE a.reason END reason FROM measurement_status c JOIN measurement_status a ON a.name='annotations' WHERE c.name='cycle_summary'),
+slow AS (SELECT cycle FROM cycles WHERE (SELECT status FROM evidence)='complete' ORDER BY duration_ns DESC LIMIT :limit), data AS (SELECT a.cycle,a.timestamp_ns,a.name FROM annotations a JOIN slow USING(cycle) WHERE a.kind=0)
+SELECT evidence.status evidence_status,evidence.reason evidence_reason,data.* FROM evidence LEFT JOIN data ON evidence.status='complete' ORDER BY cycle,timestamp_ns;

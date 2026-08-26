@@ -21,7 +21,8 @@ class AnalyzerTests(unittest.TestCase):
         db = sqlite3.connect(path)
         db.executescript("""
           CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-          CREATE TABLE cycles(cycle INTEGER,start_ns INTEGER,duration_ns INTEGER,update_ns INTEGER,render_ns INTEGER,task_pump_ns INTEGER,alloc_bytes INTEGER,alloc_calls INTEGER,free_bytes INTEGER DEFAULT 0,free_calls INTEGER DEFAULT 0,live_bytes INTEGER DEFAULT 0,peak_live_bytes INTEGER DEFAULT 0,update_alloc_bytes INTEGER DEFAULT 0,update_alloc_calls INTEGER DEFAULT 0,task_events INTEGER DEFAULT 0,effect_calls INTEGER DEFAULT 0,draw_calls INTEGER DEFAULT 0,resource_events INTEGER DEFAULT 0,queue_events INTEGER DEFAULT 0);
+          CREATE TABLE measurement_status(name TEXT PRIMARY KEY,family INTEGER,required_detail TEXT,status TEXT,reason TEXT,rows_recorded INTEGER,omitted_events INTEGER);
+          CREATE TABLE cycles(cycle INTEGER,start_ns INTEGER,duration_ns INTEGER,update_ns INTEGER,render_callback_ns INTEGER,task_executor_ns INTEGER,host_other_ns INTEGER,alloc_bytes INTEGER,alloc_calls INTEGER,free_bytes INTEGER DEFAULT 0,free_calls INTEGER DEFAULT 0,live_bytes INTEGER DEFAULT 0,peak_live_bytes INTEGER DEFAULT 0,update_alloc_bytes INTEGER DEFAULT 0,update_alloc_calls INTEGER DEFAULT 0,task_events INTEGER DEFAULT 0,effect_calls INTEGER DEFAULT 0,draw_calls INTEGER DEFAULT 0,resource_events INTEGER DEFAULT 0,queue_events INTEGER DEFAULT 0);
           CREATE TABLE annotations(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,phase INTEGER,kind INTEGER,name TEXT,integer_value INTEGER,real_value REAL,unit INTEGER,wall_ns INTEGER,active_ns INTEGER,parked_ns INTEGER);
           CREATE TABLE hosted_effects(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT,outbound_copied_bytes INTEGER,ownership_transfer_bytes INTEGER,validation_ns INTEGER,conversion_ns INTEGER,worker_ns INTEGER,external_ns INTEGER);
           CREATE TABLE task_events(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
@@ -32,8 +33,8 @@ class AnalyzerTests(unittest.TestCase):
           CREATE TABLE allocation_events(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT,phase INTEGER,task_id INTEGER,zone_id INTEGER,bytes INTEGER,prior_bytes INTEGER,copied_bytes INTEGER);
           CREATE TABLE gpu_facts(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,kind INTEGER,subject_id INTEGER,parent_id INTEGER,duration_ns INTEGER,value_a INTEGER,value_b INTEGER,name TEXT);
           CREATE TABLE recorder_health(id INTEGER,transactions INTEGER,checkpoints INTEGER,queue_high_water INTEGER,output_bytes INTEGER,omitted_events INTEGER,rows_written INTEGER,writer_failed INTEGER,output_limited INTEGER,writer_active_wall_ns INTEGER,writer_idle_wall_ns INTEGER,writer_cpu_ns INTEGER);
-          CREATE TABLE recording_gaps(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,family INTEGER,lost_count INTEGER);
-          INSERT INTO cycles(cycle,start_ns,duration_ns,update_ns,render_ns,task_pump_ns,alloc_bytes,alloc_calls) VALUES(0,0,1000000,400000,300000,100000,0,0),(1,0,3000000,1000000,500000,200000,128,2),(2,0,2000000,500000,500000,100000,0,0);
+          CREATE TABLE recording_gaps(id INTEGER,cycle INTEGER,timestamp_ns INTEGER,family INTEGER,lost_count INTEGER,first_cycle INTEGER,last_cycle INTEGER,started_ns INTEGER,ended_ns INTEGER,producer_track TEXT);
+          INSERT INTO cycles(cycle,start_ns,duration_ns,update_ns,render_callback_ns,task_executor_ns,host_other_ns,alloc_bytes,alloc_calls) VALUES(0,0,1000000,400000,300000,100000,200000,0,0),(1,0,3000000,1000000,500000,200000,1300000,128,2),(2,0,2000000,500000,500000,100000,900000,0,0);
           INSERT INTO annotations VALUES(1,1,0,1,2,'load',NULL,NULL,0,2000000,1500000,500000);
           INSERT INTO annotations VALUES(2,1,500000,1,0,'loaded',NULL,NULL,0,0,0,0);
           INSERT INTO hosted_effects VALUES(1,1,0,1,0,0,750000,0,0,'File.read',0,0,NULL,NULL,200000,500000);
@@ -47,7 +48,19 @@ class AnalyzerTests(unittest.TestCase):
           INSERT INTO draw_summaries VALUES(1,1,0,1,0,0,300000,12,2,'public_draw_effects');
           INSERT INTO recorder_health VALUES(1,2,1,4,4096,0,8,0,0,1500000,2500000,NULL);
         """)
-        db.executemany("INSERT INTO metadata VALUES(?,?)", (("schema_version", str(analyzer.SUPPORTED_SCHEMA)), ("clean_shutdown", clean), ("final_state", final), ("effective_detail", "standard"), ("host_os", "linux"), ("host_arch", "x86_64"), ("target_profile", "native-headless"), ("backend", "headless_stub"), ("unavailable_sources", "gpu_timing,writer_thread_cpu_time")))
+        measurements = (
+            ("cycle_summary", 0, "summary"), ("allocation_counters", 0, "summary"),
+            ("annotations", 1, "summary"), ("hosted_effects", 2, "standard"),
+            ("task_lifecycle", 3, "standard"), ("allocation_lifecycle", 4, "full"),
+            ("resource_lifecycle", 5, "standard"), ("queue_pressure", 6, "standard"),
+            ("draw_observations", 7, "summary"), ("structural_latency", 8, "standard"),
+            ("backend_facts", 9, "summary"), ("callback_summaries", 10, "summary"),
+        )
+        db.executemany(
+            "INSERT INTO measurement_status VALUES(?,?,?,'complete','complete evidence; zero rows means measured zero',1,0)",
+            measurements,
+        )
+        db.executemany("INSERT INTO metadata VALUES(?,?)", (("schema_version", str(analyzer.SUPPORTED_SCHEMA)), ("clean_shutdown", clean), ("final_state", final), ("effective_detail", "full"), ("host_os", "linux"), ("host_arch", "x86_64"), ("target_profile", "native-headless"), ("backend", "headless_stub"), ("unavailable_sources", "gpu_timing,writer_thread_cpu_time")))
         db.commit()
         db.close()
         return temporary, path
@@ -133,6 +146,31 @@ class AnalyzerTests(unittest.TestCase):
         report = analyzer.analyze(path)
         self.assertIn("Input-to-presentation: unavailable", report)
         self.assertIn("upper_bound_p95=6.900ms", report)
+
+    def test_uncaptured_summary_detail_is_never_reported_as_zero(self):
+        temporary, path = self.fixture()
+        self.addCleanup(temporary.cleanup)
+        db = sqlite3.connect(path)
+        db.execute("UPDATE metadata SET value='summary' WHERE key='effective_detail'")
+        for measurement in ("hosted_effects", "task_lifecycle", "allocation_lifecycle", "resource_lifecycle", "queue_pressure", "structural_latency"):
+            db.execute("UPDATE measurement_status SET status='not_recorded',reason='selected detail level does not record this measurement',rows_recorded=0 WHERE name=?", (measurement,))
+        db.commit()
+        db.close()
+        report = analyzer.analyze(path)
+        self.assertIn("Allocation lifetimes: unavailable (evidence=not_recorded", report)
+        self.assertIn("Task intervals: unavailable (evidence=not_recorded", report)
+        self.assertIn("Queue pressure: unavailable (evidence=not_recorded", report)
+        self.assertNotIn("Resources retained at shutdown: 0", report)
+
+    def test_refuses_partial_cycle_distribution(self):
+        temporary, path = self.fixture()
+        self.addCleanup(temporary.cleanup)
+        db = sqlite3.connect(path)
+        db.execute("UPDATE measurement_status SET status='partial',reason='recorder omitted events',omitted_events=1 WHERE name='cycle_summary'")
+        db.commit()
+        db.close()
+        with self.assertRaisesRegex(analyzer.CaptureError, "cycle summary evidence is partial"):
+            analyzer.analyze(path)
 
 
 if __name__ == "__main__":

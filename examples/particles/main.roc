@@ -16,6 +16,7 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
+import rr.Trace
 
 ## State kept between updates: each particle's position and motion, the drawing
 ## instances made from those particles, the shared sprite and prepared label,
@@ -184,7 +185,9 @@ update! = |model, program_input| {
 			pointer
 		}
 
+	step_zone = Trace.begin!("advance particles")
 	particles = List.map(model.particles, |particle| particle.step(emitter, spread, dt))
+	Trace.end!(step_zone)
 
 	exit =
 		if model.demo {
@@ -201,7 +204,12 @@ update! = |model, program_input| {
 
 	match exit {
 		Err(code) => Err(code)
-		Ok({}) => Ok({ ..model, particles, instances: List.map(particles, Particle.to_instance) })
+		Ok({}) => {
+			instance_zone = Trace.begin!("prepare particle instances")
+			instances = List.map(particles, Particle.to_instance)
+			Trace.end!(instance_zone)
+			Ok({ ..model, particles, instances })
+		}
 	}
 }
 

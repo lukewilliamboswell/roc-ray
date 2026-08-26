@@ -481,6 +481,15 @@ ordinary effect protocol and are the sole non-drawing effects permitted during
 control operation, and therefore cannot make application behavior depend on a
 diagnostic sink.
 
+Diagnostic evidence must distinguish a measured zero from evidence that was
+not captured. Every measurement family has an explicit completeness state;
+loss, disabled detail, unsupported facilities, and unfinished recording remain
+different states. Author-facing analysis may draw a conclusion only from
+complete evidence, and must report partial or unavailable evidence instead of
+turning missing rows into a claim that no work occurred. Timing names describe
+the boundary actually measured and never attribute an indivisible host interval
+to application code, a worker, presentation, or a device by inference.
+
 ### Choosing where work goes
 
 | Need | Mechanism |

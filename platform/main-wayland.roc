@@ -58,7 +58,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -208,6 +208,11 @@ platform ""
 		"roc_sqlite_run_once": SqliteHost.run_once!,
 		"roc_sqlite_exec_script": SqliteHost.exec_script!,
 		"roc_cmd_run": CmdHost.run!,
+		"roc_trace_mark": TraceHost.mark!,
+		"roc_trace_begin": TraceHost.begin!,
+		"roc_trace_end": TraceHost.end!,
+		"roc_trace_sample_i64": TraceHost.sample_i64!,
+		"roc_trace_sample_f64": TraceHost.sample_f64!,
 	}
 	targets: {
 		inputs_dir: "targets/",
@@ -248,6 +253,8 @@ import AppTransport
 import Random
 import TaskHost
 import Task
+import Trace
+import TraceHost
 import HttpHost
 import SqliteHost
 import Http

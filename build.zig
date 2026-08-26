@@ -1,6 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const roc_compiler_pin = std.mem.trim(u8, @embedFile(".roc-version"), " \t\r\n");
+
+fn addBuildMetadata(b: *std.Build, module: *std.Build.Module) void {
+    const options = b.addOptions();
+    options.addOption([]const u8, "roc_compiler_pin", roc_compiler_pin);
+    module.addOptions("build_metadata", options);
+}
+
 /// Roc target definitions for native platforms
 /// Maps to vendored raylib library directories
 const RocTarget = enum {
@@ -282,6 +290,54 @@ pub fn build(b: *std.Build) void {
     release_helper_tests.setCwd(b.path("."));
     test_step.dependOn(&release_helper_tests.step);
 
+    const observatory_analysis_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_analyze_observatory.py",
+    });
+    observatory_analysis_tests.setCwd(b.path("."));
+    test_step.dependOn(&observatory_analysis_tests.step);
+
+    const observatory_benchmark_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_benchmark_observatory.py",
+    });
+    observatory_benchmark_tests.setCwd(b.path("."));
+    test_step.dependOn(&observatory_benchmark_tests.step);
+
+    // Timing is deliberately an opt-in report, never a universal CI gate.
+    // The build dependency supplies a ReleaseFast native host; the script
+    // builds its deterministic Roc fixture once and randomizes the four modes.
+    const observatory_benchmark = b.addSystemCommand(&.{
+        "python3",
+        "scripts/benchmark_observatory.py",
+        "--skip-platform-build",
+        "--json-out",
+        "zig-out/observatory-benchmark.json",
+        "--markdown-out",
+        "zig-out/observatory-benchmark.md",
+    });
+    observatory_benchmark.setCwd(b.path("."));
+    observatory_benchmark.step.dependOn(&copy_all.step);
+    const observatory_benchmark_step = b.step(
+        "observatory-bench",
+        "Report disabled/summary/standard/full Observatory overhead",
+    );
+    observatory_benchmark_step.dependOn(&observatory_benchmark.step);
+
+    const observatory_query_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_observatory_queries.py",
+    });
+    observatory_query_tests.setCwd(b.path("."));
+    test_step.dependOn(&observatory_query_tests.step);
+
+    const effect_scope_audit_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_effect_scope_audit.py",
+    });
+    effect_scope_audit_tests.setCwd(b.path("."));
+    test_step.dependOn(&effect_scope_audit_tests.step);
+
     // The platform's re-export shims for `roc-ray-types` modules are generated,
     // so a hand-edit there would silently diverge from the package.
     const reexport_shims_check = b.addSystemCommand(&.{
@@ -303,6 +359,7 @@ pub fn build(b: *std.Build) void {
             }),
         });
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        addBuildMetadata(b, native_tests.root_module);
         native_tests.root_module.link_libc = true;
         native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
         // The sqlite tests in src/sqlite_effect.zig run against a real
@@ -312,6 +369,20 @@ pub fn build(b: *std.Build) void {
         native_tests.root_module.linkLibrary(buildSqlite3(b, native_target, optimize, roc_target));
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
+
+        // Observatory owns a separate SQLite connection on its writer thread,
+        // and its focused tests exercise a real finalized `.rrstats` file.
+        const observatory_tests = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/observatory.zig"),
+                .target = native_target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
+        observatory_tests.root_module.linkLibrary(buildSqlite3(b, native_target, optimize, roc_target));
+        const run_observatory_tests = b.addRunArtifact(observatory_tests);
+        test_step.dependOn(&run_observatory_tests.step);
 
         // SIMD/C parity for the vendored libvpx. This has to run *on* the
         // target -- it is the only check that a NEON or SSE2 kernel actually
@@ -1026,6 +1097,7 @@ fn buildHostLib(
     });
 
     host_lib.root_module.addIncludePath(raylib_include_path);
+    addBuildMetadata(b, host_lib.root_module);
     host_lib.root_module.addLibraryPath(raylib_lib_path);
 
     // Coroutine runtime for app tasks. Configured to a single executor on the

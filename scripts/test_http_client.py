@@ -29,6 +29,7 @@ from __future__ import annotations
 import http.server
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -44,7 +45,7 @@ import local_bundles  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 
 # Distinctive enough that finding it in the output cannot be a coincidence.
-SERVED_BODY = b"roc-ray-http-token-9f3a\nsecond line of the served file\n"
+SERVED_BODY = b"HTTP_PAYLOAD_SECRET_178\nsecond line of the served file\n"
 
 # Long enough that a 200 ms deadline cannot be met, short enough not to slow the
 # suite down: the client gives up well before the handler replies.
@@ -164,6 +165,7 @@ def run_http_client_test(
     token = SERVED_BODY.split(b"\n")[0].decode()
 
     failures: list[str] = []
+    privacy_capture = staged.parent / "http-privacy.rrstats"
     with serve() as base_url:
         cases = (
             (
@@ -173,6 +175,8 @@ def run_http_client_test(
                     f"{base_url}/data.txt",
                     "--http-expect",
                     token,
+                    f"--host-stats-output={privacy_capture}",
+                    "--host-stats-detail=full",
                 ],
                 # The host echoes the body it read; the probe's exit code says
                 # the app received the same bytes.
@@ -207,6 +211,20 @@ def run_http_client_test(
             failure = _run_case(executable, name, args, expected_trace, verbose)
             if failure is not None:
                 failures.append(failure)
+
+    if not failures:
+        secret = SERVED_BODY.split(b"\n")[0]
+        leaked = secret in privacy_capture.read_bytes()
+        db = sqlite3.connect(f"file:{privacy_capture}?mode=ro", uri=True)
+        try:
+            for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+                columns = [row[1] for row in db.execute(f'SELECT * FROM pragma_table_info("{table}")') if "TEXT" in row[2].upper()]
+                for column in columns:
+                    leaked = leaked or any(secret in value.encode() for (value,) in db.execute(f'SELECT "{column}" FROM "{table}" WHERE "{column}" IS NOT NULL'))
+        finally:
+            db.close()
+        if leaked:
+            failures.append("HTTP payload leaked into Observatory capture")
 
     print("ok" if not failures else "FAILED")
     return failures

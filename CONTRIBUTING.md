@@ -89,6 +89,16 @@ Run the main test suite:
 zig build test
 ```
 
+Generate the optional, threshold-free Observatory overhead report with:
+
+```bash
+zig build -Doptimize=ReleaseFast observatory-bench
+```
+
+The JSON and Markdown reports are written under `zig-out/`. Timing is not a CI
+pass/fail threshold; deterministic recorder invariants remain in the ordinary
+test suite. See [the Observatory methodology](docs/observatory.md#regression-and-microbenchmark-methodology).
+
 This covers lints, Zig tests, platform privacy checks, and Roc checks/tests over
 the examples. The lower-level example driver is also useful while iterating:
 

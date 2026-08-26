@@ -34,10 +34,10 @@ scripted_cycles = 4
 
 ## The text the script types, and the codepoints it has to arrive as.
 typed : Str
-typed = "ab"
+typed = "INPUT_PAYLOAD_SECRET_178"
 
 typed_codepoints : List(U32)
-typed_codepoints = [97, 98]
+typed_codepoints = [73, 78, 80, 85, 84, 95, 80, 65, 89, 76, 79, 65, 68, 95, 83, 69, 67, 82, 69, 84, 95, 49, 55, 56]
 
 expect Keys.typing(typed) == typed_codepoints
 

@@ -291,9 +291,12 @@ architecture change, not a feature.
 8. **A phase violation is a programmer error.** Every effect declares the
    phases it is legal in. Reaching one from another phase fails immediately,
    naming the effect, the phase it was called from, and where it belongs.
-9. **Rendering only draws.** `render!` cannot change the model, change host
-   state, or start work. Anything that must affect the next model has a
-   representation in `App.Input`.
+9. **Rendering draws and may annotate diagnostics.** `render!` cannot change
+   the model, change operational host state, or start work. Its only
+   non-drawing effects are one-way diagnostic annotations: they cannot report
+   recorder state or admission, influence drawing, or become application
+   input. Anything that must affect the next model has a representation in
+   `App.Input`.
 
 ## Boundary protocols
 
@@ -472,6 +475,12 @@ the active surface or metrics of a draw resource. Such a query may influence
 drawing only. Anything that must affect the next model, hit testing, or host
 state also needs a representation in `App.Input`.
 
+Rendering may also emit bounded, one-way diagnostic annotations. These use the
+ordinary effect protocol and are the sole non-drawing effects permitted during
+`render!`. They expose no recorder status, timestamp, admission result, or
+control operation, and therefore cannot make application behavior depend on a
+diagnostic sink.
+
 ### Choosing where work goes
 
 | Need | Mechanism |
@@ -481,6 +490,7 @@ state also needs a representation in `App.Input`.
 | Bytes out, where only saturation need be observed | Queued effect called from `update!` |
 | Work that waits, and whose outcome matters | Task, reporting one message |
 | Drawing or draw state ordered within a frame | `render!` and `Draw.Frame` |
+| One-way diagnostic annotation | Effect from any application callback or task |
 | One-time load or allocation before the first frame | `init!` startup authority |
 
 The classification follows semantics, not backend convenience. An operating-
@@ -500,6 +510,9 @@ functions:
   `init!`, `update!`, and a task, and refused in `render!`.
 - Anything that **draws** is legal only in `render!`, inside the frame scope
   the host opens around it.
+- A **one-way diagnostic annotation** is legal in every application callback
+  and a task. It may copy only a bounded diagnostic payload into host-owned
+  recording storage and cannot expose admission or operational state.
 - Anything that **waits** is legal only in `init!`, where it blocks startup
   deliberately, and on a task, where it parks that task.
 - **Starting a task** is legal in `update!` and in another task. It is refused

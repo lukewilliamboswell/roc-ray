@@ -1,0 +1,2 @@
+WITH starts AS (SELECT subject_id,timestamp_ns,lead(timestamp_ns) OVER(PARTITION BY subject_id ORDER BY timestamp_ns,id) ended_ns,lead(kind) OVER(PARTITION BY subject_id ORDER BY timestamp_ns,id) ended_kind FROM task_events WHERE kind IN (2,3,5,7))
+SELECT subject_id,timestamp_ns AS started_ns,ended_ns-timestamp_ns AS active_ns FROM starts WHERE ended_kind IN (3,5,7) ORDER BY active_ns DESC,subject_id LIMIT :limit;

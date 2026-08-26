@@ -16,6 +16,7 @@
 // call returns.
 
 #include "sqlite3.h"
+#include <string.h>
 
 int rocray_sqlite_init(void) {
     return sqlite3_initialize();
@@ -25,7 +26,63 @@ void rocray_sqlite_shutdown(void) {
     sqlite3_shutdown();
 }
 
-// mode: 0 read/write/create, 1 read/write, 2 read-only.
+// Cross-platform bounded idle wait for the dedicated Observatory writer.
+// This delegates to SQLite's configured OS sleep primitive, avoiding a
+// pthread/Win32 condition-variable abstraction in the freestanding Zig host.
+int rocray_sqlite_sleep(int milliseconds) {
+    return sqlite3_sleep(milliseconds);
+}
+
+// Cross-platform wall clock exposed by SQLite's selected VFS. This is used
+// only for recorder self-observation intervals; it is not CPU time and is not
+// used for application timestamps. The VFS unit is 1/86400000 of a day.
+sqlite3_int64 rocray_sqlite_wall_time_ms(void) {
+    sqlite3_vfs *vfs = sqlite3_vfs_find(0);
+    sqlite3_int64 julian_ms = 0;
+    if (!vfs || !vfs->xCurrentTimeInt64 || vfs->xCurrentTimeInt64(vfs, &julian_ms) != SQLITE_OK) return 0;
+    return julian_ms;
+}
+
+static sqlite3_int64 rocray_vfs_file_size(sqlite3_vfs *vfs, const char *path, int type_flag) {
+    sqlite3_file *file;
+    sqlite3_int64 size = 0;
+    int exists = 0;
+    int flags = 0;
+    if (vfs->xAccess(vfs, path, SQLITE_ACCESS_EXISTS, &exists) != SQLITE_OK || !exists) return 0;
+    file = sqlite3_malloc64((sqlite3_uint64)vfs->szOsFile);
+    if (!file) return -1;
+    memset(file, 0, (size_t)vfs->szOsFile);
+    if (vfs->xOpen(vfs, path, file, SQLITE_OPEN_READONLY | type_flag, &flags) != SQLITE_OK) {
+        sqlite3_free(file);
+        return -1;
+    }
+    if (file->pMethods->xFileSize(file, &size) != SQLITE_OK) size = -1;
+    file->pMethods->xClose(file);
+    sqlite3_free(file);
+    return size;
+}
+
+// Logical bytes currently held by the main database and its active WAL.
+sqlite3_int64 rocray_sqlite_storage_size(void *opaque_db) {
+    sqlite3 *db = (sqlite3 *)opaque_db;
+    sqlite3_vfs *vfs = sqlite3_vfs_find(0);
+    const char *main_path = sqlite3_db_filename(db, "main");
+    sqlite3_int64 main_size;
+    sqlite3_int64 wal_size;
+    char *wal_path;
+    if (!vfs || !main_path) return -1;
+    main_size = rocray_vfs_file_size(vfs, main_path, SQLITE_OPEN_MAIN_DB);
+    if (main_size < 0) return -1;
+    wal_path = sqlite3_mprintf("%s-wal", main_path);
+    if (!wal_path) return -1;
+    wal_size = rocray_vfs_file_size(vfs, wal_path, SQLITE_OPEN_WAL);
+    sqlite3_free(wal_path);
+    if (wal_size < 0) return -1;
+    return main_size + wal_size;
+}
+
+// mode: 0 read/write/create, 1 read/write, 2 read-only,
+// 3 read/write/exclusive-create (used by Observatory, which never overwrites).
 //
 // A read-only connection is also locked down: DEFENSIVE blocks the writable_schema
 // and rowid-table tricks that turn a "read-only" handle into a writer, and an
@@ -39,6 +96,7 @@ int rocray_sqlite_open(const char *path, int mode, int busy_timeout_ms, void **o
     switch (mode) {
         case 1: flags = SQLITE_OPEN_READWRITE; break;
         case 2: flags = SQLITE_OPEN_READONLY; break;
+        case 3: flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXCLUSIVE; break;
         default: flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE; break;
     }
     flags |= SQLITE_OPEN_EXRESCODE;

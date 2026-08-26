@@ -34,6 +34,8 @@ This script runs:
                     arrives with the right tag and payload (test/task_delivery).
 - task cap        - Spawn a hundred tasks against the host's cap of 32 and
                     assert every one of them still answers (test/task_cap).
+- observatory     - Record an annotated headless run and query its metadata,
+                    cycle, annotation, gap and recorder-health tables.
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
 - udp sockets     - Send datagrams between two loopback sockets and assert the
@@ -80,9 +82,11 @@ import os
 import platform
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -427,6 +431,71 @@ def run_windowed_examples(
     return failed
 
 
+def run_graphical_observatory_probe(
+    built: list[tuple[Path, Path]], verbose: bool
+) -> list[str]:
+    """Verify graphical backend/presentation facts separately from headless timing."""
+    if not has_display() or not built:
+        return []
+
+    staged = next(
+        (entry for example, entry in built if example_name(example) == "hello_world"),
+        built[0][1],
+    )
+    executable = executable_for(staged)
+    capture = staged.parent / "graphical-observatory.rrstats"
+    print("\nRunning graphical Observatory probe...", end=" ", flush=True)
+    if not run_cmd(
+        [
+            str(executable),
+            "--host-hidden",
+            "--host-frames=3",
+            f"--host-stats-output={capture}",
+            "--host-stats-detail=full",
+        ],
+        "run graphical Observatory probe",
+        verbose,
+        cwd=staged.parent,
+    ):
+        print("FAILED")
+        return ["run graphical Observatory probe"]
+
+    failures: list[str] = []
+    try:
+        db = sqlite3.connect(f"file:{capture}?mode=ro", uri=True)
+        try:
+            metadata = dict(db.execute("SELECT key,value FROM metadata"))
+            facts = dict(
+                db.execute(
+                    "SELECT name,count(*) FROM gpu_facts "
+                    "WHERE name IN "
+                    "('render_callback','begin_drawing','host_draw_submission',"
+                    "'end_drawing_including_presentation_and_pacing') GROUP BY name"
+                )
+            )
+        finally:
+            db.close()
+        if metadata.get("target_profile") != "native-graphical":
+            failures.append("graphical Observatory target profile is not native-graphical")
+        if metadata.get("backend") != "raylib_native":
+            failures.append("graphical Observatory backend is not raylib_native")
+        if metadata.get("clean_shutdown") != "1" or metadata.get("final_state") != "complete":
+            failures.append("graphical Observatory capture is incomplete")
+        expected = {
+            "render_callback",
+            "begin_drawing",
+            "host_draw_submission",
+            "end_drawing_including_presentation_and_pacing",
+        }
+        if set(facts) != expected or any(count < 1 for count in facts.values()):
+            failures.append(f"graphical Observatory backend facts are incomplete: {facts!r}")
+    except (OSError, sqlite3.Error) as err:
+        failures.append(f"query graphical Observatory capture: {err}")
+
+    print("ok" if not failures else "FAILED")
+    return failures
+
+
 def run_cli_args_integration(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -495,6 +564,370 @@ def run_task_delivery_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run task delivery probe"]
+
+
+def run_observatory_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Record a headless run and verify the public Stage-1 database contract."""
+    fixture = root / "test" / "observatory" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning Observatory capture probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "observatory")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build Observatory probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build Observatory probe"]
+
+    capture = staged.parent / "probe.rrstats"
+    if not run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=8",
+            f"--host-stats-output={capture}",
+            "--host-stats-detail=standard",
+            "--host-stats-buffer-mib=1",
+            "--host-stats-max-mib=16",
+        ],
+        "run Observatory probe",
+        verbose,
+        cwd=staged.parent,
+    ):
+        print("FAILED")
+        return ["run Observatory probe"]
+
+    init_sentinel = staged.parent / "observatory-init-ran"
+    if not init_sentinel.is_file():
+        print("FAILED")
+        return ["Observatory probe init sentinel was not created"]
+    init_sentinel.unlink()
+    unwritable = subprocess.run(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=8",
+            f"--host-stats-output={staged.parent / 'missing-parent' / 'capture.rrstats'}",
+        ],
+        cwd=staged.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if unwritable.returncode == 0 or init_sentinel.exists():
+        print("FAILED")
+        return ["Observatory unwritable output did not fail before init"]
+
+    # Recorder startup owns the destination exclusively and happens before the
+    # application's init callback. A second launch must refuse the existing
+    # path and leave even its SQLite bytes unchanged.
+    capture_before_refusal = capture.read_bytes()
+    refusal = subprocess.run(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=8",
+            f"--host-stats-output={capture}",
+            "--host-stats-detail=standard",
+        ],
+        cwd=staged.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if refusal.returncode == 0 or capture.read_bytes() != capture_before_refusal:
+        print("FAILED")
+        return ["Observatory existing output was not refused before init"]
+
+    # Exercise the exclusive-create race itself, not only the preliminary
+    # existence check: of two simultaneous starts exactly one owns the file.
+    race_capture = staged.parent / "race.rrstats"
+    race_command = [
+        str(executable_for(staged)),
+        "--host-headless",
+        "--host-headless-frames=8",
+        f"--host-stats-output={race_capture}",
+        "--host-stats-detail=summary",
+    ]
+    racers = [
+        subprocess.Popen(race_command, cwd=staged.parent, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        for _ in range(2)
+    ]
+    race_codes = [process.communicate()[0] is not None and process.returncode for process in racers]
+    if sorted(race_codes) != [0, 1]:
+        print("FAILED")
+        return [f"Observatory exclusive-create race returned {race_codes!r}"]
+
+    failures: list[str] = []
+    try:
+        db = sqlite3.connect(f"file:{capture}?mode=ro", uri=True)
+        try:
+            metadata = dict(db.execute("SELECT key, value FROM metadata"))
+            required_metadata = {
+                "schema_version": "11",
+                "requested_detail": "standard",
+                "effective_detail": "standard",
+                "clean_shutdown": "1",
+                "final_state": "complete",
+                "target_profile": "native-headless",
+                "backend": "headless_stub",
+            }
+            for key, expected in required_metadata.items():
+                if metadata.get(key) != expected:
+                    failures.append(
+                        f"Observatory metadata {key}: expected {expected!r}, got {metadata.get(key)!r}"
+                    )
+
+            for key in (
+                "host_os", "host_arch", "rocray_version", "roc_compiler_pin",
+                "executable_name", "app_name", "unavailable_sources",
+                "chunk_bytes", "chunk_count", "summary_reserve",
+                "transaction_chunks", "max_output_bytes", "clock_source",
+                "clock_resolution_ns", "utc_origin_unix_ns",
+            ):
+                if not metadata.get(key):
+                    failures.append(f"Observatory metadata {key} is missing or empty")
+            unavailable = set(metadata.get("unavailable_sources", "").split(","))
+            expected_unavailable = {
+                "gpu_timing", "zio_worker_queue_timing", "writer_thread_cpu_time"
+            }
+            if not expected_unavailable <= unavailable:
+                failures.append(
+                    f"Observatory unavailable_sources is incomplete: {sorted(unavailable)!r}"
+                )
+
+            cycles = db.execute(
+                "SELECT count(*), min(cycle), max(cycle), min(duration_ns) FROM cycles"
+            ).fetchone()
+            if cycles is None or cycles[0] < 2 or cycles[1] != 0 or cycles[3] < 0:
+                failures.append(f"Observatory cycle summaries are incomplete: {cycles!r}")
+
+            measured_wait = db.execute(
+                "SELECT count(*) FROM hosted_effects "
+                "WHERE name='Task.sleep!' AND external_ns IS NOT NULL AND external_ns>0"
+            ).fetchone()[0]
+            if measured_wait == 0:
+                failures.append("Observatory did not persist a measured waiting-effect interval")
+
+            callback_phases = {
+                row[0] for row in db.execute("SELECT DISTINCT phase FROM callback_summaries")
+            }
+            if callback_phases != {0, 1, 2, 3}:
+                failures.append(
+                    f"Observatory callback phase coverage is incomplete: {sorted(callback_phases)!r}"
+                )
+
+            labels = {
+                row[0] for row in db.execute("SELECT DISTINCT name FROM annotations")
+            }
+            expected_labels = {
+                "probe init",
+                "probe startup wait",
+                "probe update",
+                "probe items",
+                "load ratio",
+                "probe render",
+                "probe task wait",
+                "probe task annotation",
+                "cancel outer",
+                "cancel inner",
+            }
+            missing = expected_labels - labels
+            if missing:
+                failures.append(f"Observatory annotations missing labels: {sorted(missing)!r}")
+
+            integer_sample = db.execute(
+                "SELECT integer_value, real_value FROM annotations WHERE name='probe items'"
+            ).fetchone()
+            real_sample = db.execute(
+                "SELECT integer_value, real_value FROM annotations WHERE name='load ratio'"
+            ).fetchone()
+            task_zone = db.execute(
+                "SELECT wall_ns,active_ns,parked_ns FROM annotations "
+                "WHERE name='probe task wait' AND kind=2"
+            ).fetchone()
+            startup_zone = db.execute(
+                "SELECT wall_ns,active_ns,parked_ns FROM annotations "
+                "WHERE name='probe startup wait' AND kind=2"
+            ).fetchone()
+            if integer_sample != (7, None) or real_sample != (None, 0.5):
+                failures.append(
+                    f"Observatory scalar NULL semantics are invalid: {integer_sample!r}, {real_sample!r}"
+                )
+            if task_zone is None or task_zone[0] != task_zone[1] + task_zone[2] or task_zone[2] <= 0:
+                failures.append(f"Observatory task wait zone timing is invalid: {task_zone!r}")
+            sleep_effect = db.execute(
+                "SELECT duration_ns,external_ns,validation_ns,conversion_ns,worker_ns "
+                "FROM hosted_effects WHERE name='Task.sleep!' ORDER BY id LIMIT 1"
+            ).fetchone()
+            if sleep_effect is None or sleep_effect[1] is None or sleep_effect[1] <= 0 or sleep_effect[1] > sleep_effect[0]:
+                failures.append(f"Observatory sleep external interval is invalid: {sleep_effect!r}")
+            elif sleep_effect[2:] != (None, None, None):
+                failures.append(f"Observatory sleep invented unavailable sub-intervals: {sleep_effect!r}")
+            if startup_zone is None or startup_zone[0] != startup_zone[1] + startup_zone[2] or startup_zone[2] <= 0:
+                failures.append(f"Observatory startup wait zone timing is invalid: {startup_zone!r}")
+
+            aborted = db.execute(
+                "SELECT name,timestamp_ns FROM annotations "
+                "WHERE kind=5 AND name IN ('cancel inner','cancel outer') ORDER BY id"
+            ).fetchall()
+            cancellation = db.execute(
+                "SELECT timestamp_ns FROM task_events WHERE kind=7 AND name='live' ORDER BY id LIMIT 1"
+            ).fetchone()
+            if [row[0] for row in aborted] != ["cancel inner", "cancel outer"]:
+                failures.append(f"Observatory zone abort order is invalid: {aborted!r}")
+            elif cancellation is None or aborted[-1][1] > cancellation[0]:
+                failures.append(
+                    f"Observatory cancellation did not follow zone aborts: {aborted!r}, {cancellation!r}"
+                )
+
+            capture_bytes = capture.read_bytes()
+            privacy_sentinels = (
+                b"TASK_PAYLOAD_SECRET_178",
+                b"INPUT_PAYLOAD_SECRET_178",
+                b"FILE_PAYLOAD_SECRET_178",
+                b"HTTP_PAYLOAD_SECRET_178",
+                b"SQLITE_PAYLOAD_SECRET_178",
+                b"CMD_PAYLOAD_SECRET_178",
+                b"0x7fffdeadbeef178",
+            )
+            leaked = [value.decode() for value in privacy_sentinels if value in capture_bytes]
+            if leaked:
+                failures.append(f"Observatory capture leaked private sentinels: {leaked!r}")
+
+            expected_detail_tables = {
+                "task_events",
+                "hosted_effects",
+                "queue_pressure",
+                "resource_lifecycle",
+                "structural_latency",
+                "draw_summaries",
+                "allocation_events",
+                "callback_summaries",
+            }
+            present_detail_tables = {
+                row[0]
+                for row in db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            missing_tables = expected_detail_tables - present_detail_tables
+            if missing_tables:
+                failures.append(
+                    f"Observatory schema missing detail tables: {sorted(missing_tables)!r}"
+                )
+
+            health = db.execute(
+                "SELECT transactions, checkpoints, queue_high_water, output_bytes, "
+                "omitted_events, rows_written, writer_failed, output_limited, "
+                "writer_active_wall_ns, writer_idle_wall_ns, writer_cpu_ns "
+                "FROM recorder_health"
+            ).fetchone()
+            if health is None or health[0] < 1 or health[1] < 1 or health[3] <= 0 or health[5] < 1:
+                failures.append(f"Observatory recorder health is incomplete: {health!r}")
+            elif health[6] != 0 or health[7] != 0:
+                failures.append(f"Observatory recorder unexpectedly stopped early: {health!r}")
+            elif health[8] < 0 or health[9] < 0 or health[10] is not None:
+                failures.append(f"Observatory recorder timing disclosure is invalid: {health!r}")
+
+            # The table is required even in a loss-free capture. Its aggregate
+            # must agree with the recorder's cumulative omission counter.
+            gap_total = db.execute(
+                "SELECT coalesce(sum(lost_count), 0) FROM recording_gaps"
+            ).fetchone()[0]
+            if health is not None and gap_total != health[4]:
+                failures.append(
+                    f"Observatory gap total {gap_total} disagrees with health omissions {health[4]}"
+                )
+        finally:
+            db.close()
+    except (OSError, sqlite3.Error) as err:
+        failures.append(f"query Observatory capture: {err}")
+
+    abrupt_fixture = root / "test" / "observatory_abrupt" / "main.roc"
+    abrupt_staged = local_bundles.stage_app(
+        abrupt_fixture, packages, packages.scratch_dir / "observatory-abrupt"
+    )
+    if not run_cmd(
+        ["roc", "build", abrupt_staged.name, *LIMITS],
+        "build abrupt Observatory probe",
+        verbose,
+        cwd=abrupt_staged.parent,
+    ):
+        failures.append("build abrupt Observatory probe")
+    else:
+        abrupt_capture = abrupt_staged.parent / "abrupt.rrstats"
+        process = subprocess.Popen(
+            [
+                str(executable_for(abrupt_staged)),
+                "--host-headless",
+                "--host-headless-frames=1000000000",
+                f"--host-stats-output={abrupt_capture}",
+                "--host-stats-detail=summary",
+            ],
+            cwd=abrupt_staged.parent,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        committed = False
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and process.poll() is None:
+            try:
+                probe_db = sqlite3.connect(f"file:{abrupt_capture}?mode=ro", uri=True)
+                try:
+                    committed = probe_db.execute("SELECT count(*) FROM cycles").fetchone()[0] > 0
+                finally:
+                    probe_db.close()
+            except sqlite3.Error:
+                pass
+            if committed:
+                break
+            time.sleep(0.01)
+        process.kill()
+        process.wait(timeout=5)
+        try:
+            killed_db = sqlite3.connect(f"file:{abrupt_capture}?mode=ro", uri=True)
+            try:
+                killed_metadata = dict(killed_db.execute("SELECT key,value FROM metadata"))
+                killed_cycles = killed_db.execute("SELECT count(*) FROM cycles").fetchone()[0]
+            finally:
+                killed_db.close()
+            if not committed or killed_cycles == 0:
+                failures.append("abrupt Observatory capture has no recoverable committed prefix")
+            if killed_metadata.get("clean_shutdown") != "0" or killed_metadata.get("final_state") != "recording":
+                failures.append(
+                    "abrupt Observatory capture was not left explicitly unclean: "
+                    f"{killed_metadata.get('clean_shutdown')!r}, {killed_metadata.get('final_state')!r}"
+                )
+        except (OSError, sqlite3.Error) as err:
+            failures.append(f"reopen abrupt Observatory capture: {err}")
+
+    print("ok" if not failures else "FAILED")
+    return failures
+
+
+def observatory_privacy_leaks(capture: Path, sentinels: tuple[bytes, ...]) -> list[str]:
+    """Return sentinels found in raw capture bytes or any SQLite TEXT cell."""
+    leaked: set[str] = set()
+    raw = capture.read_bytes()
+    leaked.update(value.decode("utf-8", "replace") for value in sentinels if value in raw)
+    db = sqlite3.connect(f"file:{capture}?mode=ro", uri=True)
+    try:
+        for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+            columns = [
+                row[1] for row in db.execute(f'SELECT * FROM pragma_table_info("{table}")')
+                if "TEXT" in row[2].upper()
+            ]
+            for column in columns:
+                for (value,) in db.execute(f'SELECT "{column}" FROM "{table}" WHERE "{column}" IS NOT NULL'):
+                    encoded = value.encode("utf-8")
+                    leaked.update(secret.decode("utf-8", "replace") for secret in sentinels if secret in encoded)
+    finally:
+        db.close()
+    return sorted(leaked)
 
 
 def run_task_cap_probe(
@@ -568,13 +1001,16 @@ def run_file_write_probe(
             str(executable_for(staged)),
             "--host-headless",
             "--host-headless-frames=200",
+            f"--host-stats-output={staged.parent / 'file-privacy.rrstats'}",
+            "--host-stats-detail=full",
         ],
         "run file write probe",
         verbose,
         cwd=staged.parent,
     )
-    print("ok" if ok else "FAILED")
-    return [] if ok else ["run file write probe"]
+    leaks = observatory_privacy_leaks(staged.parent / "file-privacy.rrstats", ("roc-ray file write probe\nsecond line\né✓\n".encode(),)) if ok else []
+    print("ok" if ok and not leaks else "FAILED")
+    return [] if ok and not leaks else [f"file privacy leak: {leaks!r}" if leaks else "run file write probe"]
 
 
 def run_cmd_probe(
@@ -609,13 +1045,16 @@ def run_cmd_probe(
             str(executable_for(staged)),
             "--host-headless",
             "--host-headless-frames=400",
+            f"--host-stats-output={staged.parent / 'cmd-privacy.rrstats'}",
+            "--host-stats-detail=full",
         ],
         "run cmd probe",
         verbose,
         cwd=staged.parent,
     )
-    print("ok" if ok else "FAILED")
-    return [] if ok else ["run cmd probe"]
+    leaks = observatory_privacy_leaks(staged.parent / "cmd-privacy.rrstats", (b"roc-ray-cmd-probe",)) if ok else []
+    print("ok" if ok and not leaks else "FAILED")
+    return [] if ok and not leaks else [f"cmd privacy leak: {leaks!r}" if leaks else "run cmd probe"]
 
 
 def run_udp_probe(
@@ -699,13 +1138,14 @@ def run_virtual_keys_probe(
         return ["build virtual keys probe"]
 
     ok = run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8"],
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
         "run virtual keys probe",
         verbose,
         cwd=staged.parent,
     )
-    print("ok" if ok else "FAILED")
-    return [] if ok else ["run virtual keys probe"]
+    leaks = observatory_privacy_leaks(staged.parent / "input-privacy.rrstats", (b"INPUT_PAYLOAD_SECRET_178",)) if ok else []
+    print("ok" if ok and not leaks else "FAILED")
+    return [] if ok and not leaks else [f"input privacy leak: {leaks!r}" if leaks else "run virtual keys probe"]
 
 
 def run_sqlite_probe(
@@ -741,13 +1181,16 @@ def run_sqlite_probe(
             str(executable_for(staged)),
             "--host-headless",
             "--host-headless-frames=200",
+            f"--host-stats-output={staged.parent / 'sqlite-privacy.rrstats'}",
+            "--host-stats-detail=full",
         ],
         "run sqlite probe",
         verbose,
         cwd=staged.parent,
     )
-    print("ok" if ok else "FAILED")
-    return [] if ok else ["run sqlite probe"]
+    leaks = observatory_privacy_leaks(staged.parent / "sqlite-privacy.rrstats", ("row one\nsecond lineé✓".encode(),)) if ok else []
+    print("ok" if ok and not leaks else "FAILED")
+    return [] if ok and not leaks else [f"sqlite privacy leak: {leaks!r}" if leaks else "run sqlite probe"]
 
 
 def run_model_allocation_check(
@@ -1357,9 +1800,11 @@ def _run_example_stages(
                 Path(args.windowed_dll_dir).resolve() if args.windowed_dll_dir else None,
             )
         )
+        failed.extend(run_graphical_observatory_probe(built, args.verbose))
 
     if not (args.skip_runtime or args.skip_roc_build):
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
+        failed.extend(run_observatory_probe(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))

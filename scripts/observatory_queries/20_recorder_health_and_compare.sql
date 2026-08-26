@@ -1,0 +1,1 @@
+SELECT transactions,checkpoints,queue_high_water,output_bytes,omitted_events,writer_failed,output_limited,writer_cpu_ns FROM recorder_health WHERE id=1;

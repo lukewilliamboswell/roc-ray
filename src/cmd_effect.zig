@@ -208,12 +208,55 @@ var live_children: LiveChildren = .{};
 /// count with nothing to synchronize -- the same shape, and for the same
 /// reason, as the byte-list delivery reservations in `host_native.zig`.
 var admitted: usize = 0;
+var admitted_high_water: usize = 0;
+var oldest_admitted_at: u64 = 0;
+
+/// Scalar-only observation of the bounded child-process admission queue.
+pub const QueueObservation = struct {
+    operation: enum(u8) { reserve, release, saturation },
+    current: usize,
+    high_water: usize,
+    capacity: usize,
+    oldest_at: u64,
+};
+
+/// Optional host observer. It returns the current recorder timestamp, retained
+/// when the queue changes from empty to non-empty for oldest-item age.
+pub const QueueObserver = *const fn (QueueObservation) u64;
+var queue_observer: ?QueueObserver = null;
+
+/// Install or remove queue-pressure observation for the active host run.
+pub fn setQueueObserver(next: ?QueueObserver) void {
+    queue_observer = next;
+}
+
+fn observeQueue(event: QueueObservation) u64 {
+    return if (queue_observer) |callback| callback(event) else 0;
+}
 
 /// Take a child slot, or report that every one is taken.
 pub fn reserve() bool {
     std.debug.assert(admitted <= max_live_children);
-    if (admitted == max_live_children) return false;
+    if (admitted == max_live_children) {
+        _ = observeQueue(.{
+            .operation = .saturation,
+            .current = admitted,
+            .high_water = admitted_high_water,
+            .capacity = max_live_children,
+            .oldest_at = oldest_admitted_at,
+        });
+        return false;
+    }
     admitted += 1;
+    admitted_high_water = @max(admitted_high_water, admitted);
+    const now = observeQueue(.{
+        .operation = .reserve,
+        .current = admitted,
+        .high_water = admitted_high_water,
+        .capacity = max_live_children,
+        .oldest_at = oldest_admitted_at,
+    });
+    if (admitted == 1) oldest_admitted_at = now;
     return true;
 }
 
@@ -221,6 +264,14 @@ pub fn reserve() bool {
 pub fn release() void {
     std.debug.assert(admitted != 0);
     admitted -= 1;
+    _ = observeQueue(.{
+        .operation = .release,
+        .current = admitted,
+        .high_water = admitted_high_water,
+        .capacity = max_live_children,
+        .oldest_at = oldest_admitted_at,
+    });
+    if (admitted == 0) oldest_admitted_at = 0;
 }
 
 /// Slots taken right now. Shutdown asserts this is zero.
@@ -249,6 +300,8 @@ pub fn killLiveChildren() void {
 /// them.
 pub fn clearAfterWorkStops() void {
     admitted = 0;
+    admitted_high_water = 0;
+    oldest_admitted_at = 0;
     live_children.mutex.lock();
     defer live_children.mutex.unlock();
     live_children.stopping = false;
@@ -557,6 +610,34 @@ test "the child bound admits exactly its own number of runs" {
 
     release();
     try std.testing.expect(reserve());
+}
+
+test "queue observer reports reserve saturation release and oldest stamp" {
+    const Probe = struct {
+        var events: [max_live_children + 2]QueueObservation = undefined;
+        var count: usize = 0;
+        fn callback(event: QueueObservation) u64 {
+            events[count] = event;
+            count += 1;
+            return 77;
+        }
+    };
+    clearAfterWorkStops();
+    defer clearAfterWorkStops();
+    Probe.count = 0;
+    setQueueObserver(Probe.callback);
+    defer setQueueObserver(null);
+
+    for (0..max_live_children) |_| try std.testing.expect(reserve());
+    try std.testing.expect(!reserve());
+    release();
+
+    try std.testing.expectEqual(.reserve, Probe.events[0].operation);
+    try std.testing.expectEqual(max_live_children, Probe.events[max_live_children - 1].high_water);
+    try std.testing.expectEqual(.saturation, Probe.events[max_live_children].operation);
+    try std.testing.expectEqual(@as(u64, 77), Probe.events[max_live_children].oldest_at);
+    try std.testing.expectEqual(.release, Probe.events[max_live_children + 1].operation);
+    try std.testing.expectEqual(max_live_children - 1, Probe.events[max_live_children + 1].current);
 }
 
 // Shutdown must not leave a registration behind that would make the next app

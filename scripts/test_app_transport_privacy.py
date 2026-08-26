@@ -108,6 +108,10 @@ CASES = (
         ("package module is private", "`rr.TaskHost`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "trace_host_module.roc",
+        ("package module is private", "`rr.TraceHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "program_module_removed.roc",
         ("package module is private", "`rr.Program`"),
     ),

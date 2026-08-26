@@ -18,7 +18,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | capture_plot | 131.8 us | 168 B / 3.0 calls | 46.0 | Baseline captured; analysis pending |
 | capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Exits after 6 cycles headlessly; workload-specific capture still needed |
 | capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Baseline captured; analysis pending |
-| cave_climb | — | — | — | Bulk builder skips its unusually slow compiler path; dedicated capture pending |
+| cave_climb | 251.1 us | 816 B / 1.0 calls | 69.0 | Dedicated baseline captured; analysis pending |
 | drop_viewer | 106.5 us | 11,219 B / 92.0 calls | 8.0 | Optimized; see result below |
 | generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Baseline captured; analysis pending |
 | hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
@@ -72,11 +72,22 @@ in recurring allocation bytes and a 58.1% median-cycle reduction in this run.
   locate work and before/after captures use identical recorder settings.
 - Headless presentation and GPU measurements are correctly unavailable; apps
   dominated by drawing still require a graphical follow-up.
-- The bulk example builder deliberately skips `cave_climb`, requiring a
-  separate slow build for this campaign.
+- The bulk example builder deliberately skips `cave_climb`; a dedicated runner
+  invocation was required to capture it.
 - `capture_screenshot` exits after six headless cycles because its capture
   lifecycle completes; its representative workload must be scripted rather
   than treated as a 240-cycle steady-state run.
 - Many examples have no Trace zones. Observatory identifies the expensive
   callback and allocation phase, but source-level attribution then requires
   inspection or a temporary/additional annotation.
+- A `generated_assets` experiment prepared its four swatch numbers and one
+  static subtitle. It reduced allocation from 1,852 B/18 calls to 128 B/one
+  call, but two repeat captures showed update time rising by about 9 us with
+  unchanged render time. The candidate was rejected: allocation reduction is
+  diagnostic evidence, not by itself proof of a performance improvement.
+- Two `snake` experiments were rejected. Retaining a prepared score label
+  reduced allocation but increased update cost; replacing short list-built
+  drawing loops with effectful recursion reduced allocation by only three
+  calls per cycle while increasing both update and render timings. Identical
+  repeat captures are needed before interpreting the cross-build update shift,
+  but neither candidate meets the acceptance rule now.

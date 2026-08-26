@@ -7582,7 +7582,7 @@ test "a scripted cycle's events reach the snapshot list in delivery order" {
 
     // Tap Escape, then type "hi", then hold S from this cycle: the script
     // order is the delivery order.
-    const options = RuntimeOptions{ .key_script = "3:ESCAPE^+S", .text_script = "3:hi" };
+    const options = RuntimeOptions{ .key_script = "3:ESCAPE~+S", .text_script = "3:hi" };
     applyInputScripts(options, 3);
     const scripted_text = takeVirtualText().?;
     input.updateHeadless(.virtual);
@@ -7735,8 +7735,8 @@ fn printUsage() void {
         \\  --host-frames=N   exit after N cycles of a real windowed run
         \\  --host-hidden     open the real window hidden (needs a display server)
         \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32";
-        \\                      a ^ suffix taps the key inside that cycle instead
-        \\                      of holding it, e.g. "3:ESCAPE^"
+        \\                      a ~ suffix taps the key inside that cycle instead
+        \\                      of holding it, e.g. "3:ESCAPE~"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
         \\
     , .{});
@@ -7814,8 +7814,14 @@ const ScriptedKeyBuffers = struct {
     taps: [KEY_SCRIPT_CAPACITY]u64 = undefined,
 };
 
-/// The suffix that turns a held key into a tap: `S^`.
-const TAP_SUFFIX = '^';
+/// The suffix that turns a held key into a tap: `S~`.
+///
+/// Chosen for being inert unquoted in every shell the sweep runs under: cmd
+/// does nothing with a `~`, PowerShell expands one only as a whole token, and
+/// bash and zsh tilde-expand only a word that starts with it. `^` was the
+/// first choice and is cmd's escape character, so `3:A^+B^` reached the host
+/// as `3:A+B` on Windows -- a held pair instead of two taps -- silently.
+const TAP_SUFFIX = '~';
 
 /// The keys a `--host-keys` script holds and taps on `cycle`, or null when it
 /// scripts nothing there.
@@ -7825,6 +7831,8 @@ fn scriptedKeysAtCycle(spec: []const u8, cycle: u64, out: *ScriptedKeyBuffers) S
     var held: usize = 0;
     var taps: usize = 0;
     while (tokens.next()) |token| {
+        // A bare suffix taps nothing; it is a typo, not a key.
+        if (token.len == 1 and token[0] == TAP_SUFFIX) return error.InvalidScript;
         if (token.len > 1 and token[token.len - 1] == TAP_SUFFIX) {
             if (taps == out.taps.len) return error.InvalidScript;
             out.taps[taps] = try parseScriptedKey(token[0 .. token.len - 1]);
@@ -7900,9 +7908,9 @@ test "a key script holds only the cycles it names" {
     }
 }
 
-test "a ^ suffix scripts a tap rather than a hold" {
+test "a ~ suffix scripts a tap rather than a hold" {
     var buffers = ScriptedKeyBuffers{};
-    const spec = "3:ESCAPE^,4:S^+a+SPACE^";
+    const spec = "3:ESCAPE~,4:S~+a+SPACE~";
 
     const escape = (try scriptedKeysAtCycle(spec, 3, &buffers)).?;
     try std.testing.expectEqual(@as(usize, 0), escape.held.len);
@@ -7912,10 +7920,9 @@ test "a ^ suffix scripts a tap rather than a hold" {
     try std.testing.expectEqualSlices(u64, &.{'A'}, mixed.held);
     try std.testing.expectEqualSlices(u64, &.{ 'S', 32 }, mixed.taps);
 
-    // A bare ^ is the key that types it, not a tap of nothing.
-    const caret = (try scriptedKeysAtCycle("1:^", 1, &buffers)).?;
-    try std.testing.expectEqualSlices(u64, &.{'^'}, caret.held);
-    try std.testing.expectEqual(@as(usize, 0), caret.taps.len);
+    // A bare ~ is a tap of nothing, which is a typo rather than a key.
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("1:~", 1, &buffers));
+    try std.testing.expectError(error.InvalidScript, validateScript("1:S+~", true));
     try validateScript(spec, true);
 }
 
@@ -7925,7 +7932,7 @@ test "a malformed script is rejected rather than scripting nothing" {
     try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:", 3, &buffers));
     try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("x:S", 3, &buffers));
     try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE", 3, &buffers));
-    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE^", 3, &buffers));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE~", 3, &buffers));
     try std.testing.expectError(error.InvalidScript, validateScript("3:S,", true));
     try validateScript("1:ab,2:c", false);
 }
@@ -7933,7 +7940,7 @@ test "a malformed script is rejected rather than scripting nothing" {
 test "a scripted tap lands inside one cycle as a press and a release" {
     defer resetVirtualInput();
     const escape = 256;
-    const options = RuntimeOptions{ .key_script = "2:S,3:ESCAPE^,4:S" };
+    const options = RuntimeOptions{ .key_script = "2:S,3:ESCAPE~,4:S" };
 
     // Cycle 1 is not scripted: hardware, with nothing recorded.
     applyInputScripts(options, 1);

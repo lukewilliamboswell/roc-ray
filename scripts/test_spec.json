@@ -7,7 +7,7 @@
     "Every examples/<name> directory must appear exactly once, and each app has",
     "one or more named cases. Case fields, all optional except name:",
     "  frames           cycles to run before the host exits by itself",
-    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys; a ^ suffix taps the key inside the cycle)",
+    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys; a ~ suffix taps the key inside the cycle)",
     "  text             --host-text script, e.g. \"5:hi\" (cycle:typed text)",
     "  args             extra application arguments",
     "  contains         substrings the combined output must contain",
@@ -155,7 +155,7 @@
         {
           "name": "events-in-order",
           "frames": 1000000,
-          "keys": "3:A^+B^,4:Q",
+          "keys": "3:A~+B~,4:Q",
           "text": "3:hi",
           "timeout_seconds": 30,
           "contains": [
@@ -200,7 +200,7 @@
         {
           "name": "tapped-quit",
           "frames": 1000000,
-          "keys": "3:W,6:ESCAPE^",
+          "keys": "3:W,6:ESCAPE~",
           "timeout_seconds": 30,
           "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
         }

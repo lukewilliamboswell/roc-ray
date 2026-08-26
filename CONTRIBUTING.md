@@ -47,10 +47,12 @@ The host reserves a few `--host-` switches for unattended runs. `--host-frames=N
 ends a real windowed run after N cycles, `--host-hidden` opens that window
 hidden, and `--host-keys=3:S,4:LEFT+X` / `--host-text=5:hi` script the keyboard
 and typed text on the cycles they name (a key is a character, one of a few names
-such as `LEFT` or `SPACE`, or a raw key code; a `^` suffix, as in `3:ESCAPE^`,
+such as `LEFT` or `SPACE`, or a raw key code; a `~` suffix, as in `3:ESCAPE~`,
 taps the key inside that cycle -- pressed and released in one input, never
 held -- which is what a hardware key that went down and up between two polls
-looks like). They are what the windowed sweep below drives the examples with;
+looks like. `~` because it is inert unquoted in cmd, PowerShell, bash and zsh
+alike; `^` is cmd's escape character and vanished on Windows). They are what
+the windowed sweep below drives the examples with;
 `--host-headless` and `--host-headless-frames=N` select the stub backend
 instead, which draws nothing.
 

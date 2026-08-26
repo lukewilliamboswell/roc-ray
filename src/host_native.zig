@@ -6778,6 +6778,8 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
 
 fn hostedDrawBeginCamera3D(args: abi.DrawHostBegin_camera_3dArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_camera_3d!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera_3d!", 0);
+    defer effect.end();
     if (camera_3d_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginMode3D(args);
     camera_3d_scopes[camera_3d_scope_count] = args;
@@ -6829,6 +6831,8 @@ fn hostedDrawEndCamera() callconv(.c) void {
 
 fn hostedDrawEndCamera3D() callconv(.c) void {
     enforcePhase("Draw.with_camera_3d!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera_3d!", 0);
+    defer effect.end();
     if (camera_3d_scope_count == 0) return;
     if (!headlessMode()) raylib.endMode3D();
     camera_3d_scope_count -= 1;
@@ -7359,6 +7363,12 @@ fn hostedDrawTexturedTriangles3DRaw(host: *RocHost, args: abi.DrawHostDraw_textu
     defer args.decref(host);
     const vertices = args.vertices.items();
     const indices = args.indices.items();
+    const effect = EffectScope.begin(
+        "Draw.textured_triangles_3d!",
+        vertices.len *| @sizeOf(@typeInfo(@TypeOf(vertices)).pointer.child) +|
+            indices.len *| @sizeOf(@typeInfo(@TypeOf(indices)).pointer.child),
+    );
+    defer effect.end();
     if (!texturedTriangleIndicesValid(vertices.len, indices)) {
         @panic("roc-ray: Draw.textured_triangles_3d! requires an index count divisible by three and every index in range");
     }

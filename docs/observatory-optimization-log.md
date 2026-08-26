@@ -19,9 +19,9 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Exits after 6 cycles headlessly; workload-specific capture still needed |
 | capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Baseline captured; analysis pending |
 | cave_climb | — | — | — | Bulk builder skips its unusually slow compiler path; dedicated capture pending |
-| drop_viewer | 106.5 us | 11,219 B / 92.0 calls | 8.0 | Baseline captured; analysis pending |
+| drop_viewer | 106.5 us | 11,219 B / 92.0 calls | 8.0 | Optimized; see result below |
 | generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Baseline captured; analysis pending |
-| hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Baseline captured; analysis pending |
+| hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
 | http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Baseline captured; task workload needs separate interpretation |
 | input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Baseline captured; analysis pending |
 | live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Highest-priority baseline; file workload and update folding need separation |
@@ -38,6 +38,24 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Baseline captured; network workload needs scripted capture |
 
 ## Accepted optimizations
+
+### drop_viewer: prepare static interface copy
+
+Four invariant labels were rebuilt in `render!`, including the empty-state
+prompt. Preparing them during `init!` reduced recurring allocation from 11,219
+B and 92 calls to 224 B and one call per cycle. Accepted draw calls fell from
+8 to 5 because prepared text crosses through the prepared-text operation, and
+average render callback time fell from 88.8 us to 34.5 us. The headless median
+cycle fell from 106.5 us to 61.4 us.
+
+### hello_world: retain the invariant layout
+
+The baseline attributed 4,778 B and 39 allocation calls per cycle to an
+`update!` that measured the same title and rebuilt the same fixed layout every
+time. Retaining the layout created during `init!` reduced traffic to 96 B and
+one call per cycle, reduced average update time from 33.1 us to 12.7 us, and
+reduced the headless median cycle from 85.8 us to 71.8 us. The model also no
+longer retains a separate font capability solely to repeat that measurement.
 
 ### post_process: prepare invariant text once
 

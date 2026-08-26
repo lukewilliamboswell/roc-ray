@@ -13,6 +13,7 @@ import rr.Camera
 import rr.Color
 import rr.Draw
 import rr.Stdout
+import rr.Text
 import RocDoomLevel
 import RocDoomControls
 import RocDoomDebug
@@ -53,6 +54,7 @@ Model : {
 	pending : RocDoomControls.Pending,
 	sounds : Sounds,
 	title : Bool,
+	title_font : Text.Font,
 }
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
@@ -85,6 +87,7 @@ init! = App.init(
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
 		logical_target = Draw.load_render_texture!({ width: 320.I32, height: 200.I32 })?
 		sounds = load_sounds!()?
+		title_font = Draw.default_font!()
 
 		map = RocDoomMap.e1m1
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
@@ -107,7 +110,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: RocDoomView.initial, pending: RocDoomControls.pending_none, sounds, title: Bool.True })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: RocDoomView.initial, pending: RocDoomControls.pending_none, sounds, title: Bool.True, title_font })
 	},
 )
 
@@ -223,7 +226,7 @@ render! = |model, frame| {
 }
 
 draw_logical! = |model, frame| if model.title {
-	draw_title!(frame)
+	draw_title!(frame, model.title_font)
 	Ok({})
 } else draw_world!(model, frame)
 
@@ -497,16 +500,16 @@ atlas_rect = |rect| { x: U64.to_f32(rect.x), y: U64.to_f32(rect.y), width: U64.t
 ## than imitating either one's presentation.
 title_seconds = 8.0
 
-draw_title! = |frame| {
+draw_title! = |frame, font| {
 	frame.clear!(Color.from_hex_rgb(0x0b0b0b))
-	frame.text_centered!({ pos: { x: 160, y: 54 }, text: "RocDOOM", size: 34, color: Color.from_hex_rgb(0xd7433f) })
-	frame.text_centered!({ pos: { x: 160, y: 80 }, text: "E1M1", size: 15, color: Color.ray_white })
+	Text.from("RocDOOM", font).size(34).draw!(frame, { pos: { x: 160, y: 54 }, color: Color.from_hex_rgb(0xd7433f), align: (Middle, Center) })
+	Text.from("E1M1", font).size(15).draw!(frame, { pos: { x: 160, y: 80 }, color: Color.ray_white, align: (Middle, Center) })
 	frame.rectangle!({ x: 92, y: 95, width: 136, height: 1, style: Draw.filled(Color.with_alpha(Color.ray_white, 90)) })
-	frame.text_centered!({ pos: { x: 160, y: 112 }, text: "A Doom-compatible engine written in Roc", size: 8, color: Color.with_alpha(Color.ray_white, 200) })
-	frame.text_centered!({ pos: { x: 160, y: 124 }, text: "Freedoom 0.13.0 assets, modified BSD licence", size: 8, color: Color.with_alpha(Color.ray_white, 140) })
-	frame.text_centered!({ pos: { x: 160, y: 136 }, text: "Not affiliated with or endorsed by id Software", size: 8, color: Color.with_alpha(Color.ray_white, 140) })
-	frame.text_centered!({ pos: { x: 160, y: 148 }, text: "or the Freedoom project", size: 8, color: Color.with_alpha(Color.ray_white, 140) })
-	frame.text_centered!({ pos: { x: 160, y: 176 }, text: "PRESS SPACE", size: 11, color: Color.from_hex_rgb(0xd6b64c) })
+	Text.from("A Doom-compatible engine written in Roc", font).size(8).draw!(frame, { pos: { x: 160, y: 112 }, color: Color.with_alpha(Color.ray_white, 200), align: (Middle, Center) })
+	Text.from("Freedoom 0.13.0 assets, modified BSD licence", font).size(8).draw!(frame, { pos: { x: 160, y: 124 }, color: Color.with_alpha(Color.ray_white, 140), align: (Middle, Center) })
+	Text.from("Not affiliated with or endorsed by id Software", font).size(8).draw!(frame, { pos: { x: 160, y: 136 }, color: Color.with_alpha(Color.ray_white, 140), align: (Middle, Center) })
+	Text.from("or the Freedoom project", font).size(8).draw!(frame, { pos: { x: 160, y: 148 }, color: Color.with_alpha(Color.ray_white, 140), align: (Middle, Center) })
+	Text.from("PRESS SPACE", font).size(11).draw!(frame, { pos: { x: 160, y: 176 }, color: Color.from_hex_rgb(0xd6b64c), align: (Middle, Center) })
 }
 
 overlay! = |frame, size, title, subtitle| {

@@ -19,6 +19,10 @@ import rr.Text
 Model : {
 	font : Text.Font,
 	title : Text.Prepared,
+	subtitle : Text.Prepared,
+	empty_hint : Text.Prepared,
+	overflow_hint : Text.Prepared,
+	footer : Text.Prepared,
 	status : Status,
 	image : [NoImage, Shown(Assets.Texture)],
 	partial_drop : Bool,
@@ -50,6 +54,10 @@ init! = App.init(
 		Ok({
 			font,
 			title: Text.from("Drop Viewer", font).size(28).prepare!()?,
+			subtitle: Text.from("A dropped path, read off the frame thread and decoded into a texture", font).size(15).prepare!()?,
+			empty_hint: Text.from("Drop a PNG, JPEG, GIF, QOI or BMP file here", font).size(18).prepare!()?,
+			overflow_hint: Text.from("That drop carried more than 64 files; only the first 64 were delivered", font).size(16).prepare!()?,
+			footer: Text.from("Drag a file onto the window  |  ESC quits", font).size(14).prepare!()?,
 			status: WaitingForDrop,
 			image: NoImage,
 			partial_drop: Bool.False,
@@ -228,7 +236,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(theme.bg)
 	model.title.draw!(frame, { pos: { x: 40, y: 34 }, color: theme.ink })
-	frame.text_at!({ pos: { x: 40, y: 70 }, text: "A dropped path, read off the frame thread and decoded into a texture", size: 15, color: theme.muted })
+	model.subtitle.draw!(frame, { pos: { x: 40, y: 70 }, color: theme.muted })
 
 	# The drop target: a card first, an outline second, so an empty viewer still
 	# looks like a place a file is meant to go.
@@ -236,9 +244,7 @@ render! = |model, frame| {
 
 	match model.image {
 		NoImage =>
-			Text.from("Drop a PNG, JPEG, GIF, QOI or BMP file here", model.font)
-				.size(18)
-				.draw!(frame, { pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, color: theme.faint, align: (Middle, Center) })
+			model.empty_hint.draw!(frame, { pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, color: theme.faint, align: (Middle, Center) })
 
 		Shown(texture) =>
 			frame.texture!({
@@ -255,9 +261,9 @@ render! = |model, frame| {
 	frame.circle!({ center: { x: 47, y: 105 }, radius: 5, style: Draw.filled(status_color(model.status)) })
 	frame.text_at!({ pos: { x: 62, y: 96 }, text: describe(model.status), size: 17, color: theme.ink })
 	if model.partial_drop {
-		frame.text_at!({ pos: { x: 40, y: window_height - 74 }, text: "That drop carried more than 64 files; only the first 64 were delivered", size: 16, color: theme.warn })
+		model.overflow_hint.draw!(frame, { pos: { x: 40, y: window_height - 74 }, color: theme.warn })
 	} else {}
-	frame.text_at!({ pos: { x: 40, y: window_height - 44 }, text: "Drag a file onto the window  |  ESC quits", size: 14, color: theme.faint })
+	model.footer.draw!(frame, { pos: { x: 40, y: window_height - 44 }, color: theme.faint })
 	Ok({})
 }
 

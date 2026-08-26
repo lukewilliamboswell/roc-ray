@@ -21,6 +21,13 @@ const udp_effect = @import("udp_effect.zig");
 const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
 const cmd_effect = @import("cmd_effect.zig");
+const observatory = @import("observatory.zig");
+const build_metadata = @import("build_metadata");
+
+// There is not yet an authoritative RocRay release version embedded by the
+// build. Report that absence instead of borrowing unrelated package metadata.
+const rocray_build_version = "unavailable";
+const roc_compiler_pin = build_metadata.roc_compiler_pin;
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -319,6 +326,11 @@ var last_wall_nanos: u64 = 0;
 /// collide with a new app.
 fn beginAppLifetime() void {
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
+    trace_tracks = [_]TraceTrack{.{}} ** TRACE_TRACK_CAPACITY;
+    task_trace_owners = [_]TaskTraceOwner{.{}} ** tasks_mod.max_live_tasks;
+    resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+    observatory_next_resource_id = 1;
+    active_trace_owner = 0;
     exit_requested = null;
 }
 
@@ -333,6 +345,8 @@ fn beginAppLifetime() void {
 /// and a burst only pays while it establishes a larger high-water mark.
 const TaskResultStaging = struct {
     items: std.ArrayListUnmanaged(TaskResultEnvelope) = .empty,
+    high_water: usize = 0,
+    oldest_at_ns: u64 = 0,
 
     fn count(self: *const TaskResultStaging) usize {
         return self.items.items.len;
@@ -346,6 +360,9 @@ const TaskResultStaging = struct {
         self.items.ensureUnusedCapacity(allocatorFromHost(roc_host), 1) catch
             @panic("roc-ray: out of memory while staging a task result");
         self.items.appendAssumeCapacity(.{ .deliver = deliver });
+        self.high_water = @max(self.high_water, self.count());
+        const observed_at = recordTaskStagingQueue(.reserve, 1, self.count(), self.high_water, self.oldest_at_ns);
+        if (self.count() == 1) self.oldest_at_ns = observed_at;
     }
 
     /// Hand this input's task messages to Roc and empty the staging area.
@@ -354,22 +371,55 @@ const TaskResultStaging = struct {
     /// them, to avoid a double free; a task that finishes afterwards is staged
     /// again and delivered on the next input.
     fn take(self: *TaskResultStaging, roc_host: *RocHost) abi.RocList(TaskResultEnvelope) {
+        const released = self.count();
         const list = if (self.count() == 0)
             abi.RocList(TaskResultEnvelope).empty()
         else
             abi.RocList(TaskResultEnvelope).fromSlice(self.items.items, roc_host);
         self.items.clearRetainingCapacity();
+        if (released != 0) _ = recordTaskStagingQueue(.release, released, 0, self.high_water, self.oldest_at_ns);
+        self.oldest_at_ns = 0;
         return list;
     }
 
     /// Release messages staged but never delivered, such as a task that
     /// finished during the frame the app exited on.
     fn release(self: *TaskResultStaging, roc_host: *RocHost) void {
+        const released = self.count();
         for (self.items.items) |item| item.decref(roc_host);
         self.items.deinit(allocatorFromHost(roc_host));
         self.items = .empty;
+        if (released != 0) _ = recordTaskStagingQueue(.release, released, 0, self.high_water, self.oldest_at_ns);
+        self.oldest_at_ns = 0;
     }
 };
+
+const TaskStagingQueueOperation = enum(u8) { reserve = 0, release = 1 };
+
+fn taskStagingQueueEvent(operation: TaskStagingQueueOperation, amount: usize, current: usize, high_water: usize, oldest_at_ns: u64, now: u64) observatory.QueueEvent {
+    return .{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = @intFromEnum(operation),
+        .subject_id = high_water,
+        // Zero deliberately means application-proportional: there is no
+        // platform admission cap and therefore no saturation/refusal row.
+        .parent_id = 0,
+        .duration_ns = if (oldest_at_ns != 0) now -| oldest_at_ns else 0,
+        .value_a = current,
+        .value_b = amount,
+        .name = "task staged messages",
+    };
+}
+
+fn recordTaskStagingQueue(operation: TaskStagingQueueOperation, amount: usize, current: usize, high_water: usize, oldest_at_ns: u64) u64 {
+    if (!observatory_task_detail) return 0;
+    const now = traceNowNs();
+    const session = active_observatory orelse return now;
+    observatory_cycle_counts.queue +|= 1;
+    _ = session.recordQueue(taskStagingQueueEvent(operation, amount, current, high_water, oldest_at_ns, now));
+    return now;
+}
 
 const TRACE_HOST = false;
 const DEFAULT_HEADLESS_FRAMES: u64 = 3;
@@ -385,6 +435,194 @@ var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init
 var active_roc_host: ?*RocHost = null;
 var active_headless = false;
 var active_mouse_cursor_code: u8 = 255;
+var active_observatory: ?*observatory.Session = null;
+var observatory_origin_ns: i96 = 0;
+var observatory_cycle: u64 = 0;
+var observatory_failure_reported: bool = false;
+var observatory_task_detail: bool = false;
+var observatory_full_detail: bool = false;
+var observatory_draw_calls: u64 = 0;
+const ObservatoryCycleCounts = struct { task: u64 = 0, effect: u64 = 0, resource: u64 = 0, queue: u64 = 0 };
+var observatory_cycle_counts = ObservatoryCycleCounts{};
+var observatory_next_input_id: u64 = 1;
+var observatory_next_effect_id: u64 = 1;
+var observatory_current_input_id: u64 = 0;
+const task_finish_correlation_capacity: usize = 256;
+const TaskFinishCorrelation = struct { id: u64 = 0, at_ns: u64 = 0 };
+var task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+
+fn rememberTaskFinish(id: u64, at_ns: u64) bool {
+    for (&task_finish_correlations) |*slot| {
+        if (slot.id == 0) {
+            slot.* = .{ .id = id, .at_ns = at_ns };
+            return true;
+        }
+    }
+    return false;
+}
+
+fn takeTaskFinish(id: u64) ?u64 {
+    for (&task_finish_correlations) |*slot| {
+        if (slot.id == id) {
+            const at_ns = slot.at_ns;
+            slot.* = .{};
+            return at_ns;
+        }
+    }
+    return null;
+}
+var observatory_next_allocation_id: u64 = 1;
+var observatory_next_resource_id: u64 = 1;
+
+const resource_correlation_capacity: usize = 4096;
+const ResourceCorrelation = struct { token: u64 = 0, id: u64 = 0 };
+var resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+
+fn resourceCorrelation(token: u64, create: bool) u64 {
+    if (token == 0) return 0;
+    for (&resource_correlations) |*entry| if (entry.token == token) return entry.id;
+    if (!create) return 0;
+    for (&resource_correlations) |*entry| if (entry.token == 0) {
+        const id = observatory_next_resource_id;
+        observatory_next_resource_id +|= 1;
+        entry.* = .{ .token = token, .id = id };
+        return id;
+    };
+    return 0;
+}
+
+fn forgetResourceCorrelation(token: u64) void {
+    for (&resource_correlations) |*entry| if (entry.token == token) {
+        entry.* = .{};
+        return;
+    };
+}
+
+test "resource correlations replace lifecycle tokens with bounded private IDs" {
+    resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+    observatory_next_resource_id = 1;
+    defer {
+        resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+        observatory_next_resource_id = 1;
+    }
+    const first = resourceCorrelation(0xABCD_1234, true);
+    try std.testing.expectEqual(@as(u64, 1), first);
+    try std.testing.expectEqual(first, resourceCorrelation(0xABCD_1234, false));
+    try std.testing.expectEqual(@as(u64, 2), resourceCorrelation(0xFFFF_0001, true));
+    forgetResourceCorrelation(0xABCD_1234);
+    try std.testing.expectEqual(@as(u64, 0), resourceCorrelation(0xABCD_1234, false));
+}
+
+const allocation_identity_capacity: usize = 4096;
+const AllocationIdentity = struct { pointer: usize = 0, id: u64 = 0, bytes: usize = 0, state: enum(u8) { empty, live, tombstone } = .empty };
+const AllocationIdentities = struct {
+    slots: [allocation_identity_capacity]AllocationIdentity = [_]AllocationIdentity{.{}} ** allocation_identity_capacity,
+    live: usize = 0,
+
+    fn reset(self: *@This()) void {
+        self.* = .{};
+    }
+
+    fn index(pointer: usize) usize {
+        return (pointer *% 0x9E3779B97F4A7C15) % allocation_identity_capacity;
+    }
+
+    fn put(self: *@This(), pointer: usize, id: u64, bytes: usize) bool {
+        if (pointer == 0 or self.live == allocation_identity_capacity) return false;
+        var first_tombstone: ?usize = null;
+        var probe: usize = 0;
+        while (probe < allocation_identity_capacity) : (probe += 1) {
+            const at = (index(pointer) + probe) % allocation_identity_capacity;
+            switch (self.slots[at].state) {
+                .empty => {
+                    const target = first_tombstone orelse at;
+                    self.slots[target] = .{ .pointer = pointer, .id = id, .bytes = bytes, .state = .live };
+                    self.live += 1;
+                    return true;
+                },
+                .tombstone => if (first_tombstone == null) {
+                    first_tombstone = at;
+                },
+                .live => if (self.slots[at].pointer == pointer) {
+                    self.slots[at].id = id;
+                    self.slots[at].bytes = bytes;
+                    return true;
+                },
+            }
+        }
+        if (first_tombstone) |at| {
+            self.slots[at] = .{ .pointer = pointer, .id = id, .bytes = bytes, .state = .live };
+            self.live += 1;
+            return true;
+        }
+        return false;
+    }
+
+    fn take(self: *@This(), pointer: usize) ?AllocationIdentity {
+        var probe: usize = 0;
+        while (probe < allocation_identity_capacity) : (probe += 1) {
+            const at = (index(pointer) + probe) % allocation_identity_capacity;
+            switch (self.slots[at].state) {
+                .empty => return null,
+                .tombstone => {},
+                .live => if (self.slots[at].pointer == pointer) {
+                    const found = self.slots[at];
+                    self.slots[at].state = .tombstone;
+                    self.live -= 1;
+                    return found;
+                },
+            }
+        }
+        return null;
+    }
+
+    fn get(self: *const @This(), pointer: usize) ?AllocationIdentity {
+        var probe: usize = 0;
+        while (probe < allocation_identity_capacity) : (probe += 1) {
+            const at = (index(pointer) + probe) % allocation_identity_capacity;
+            switch (self.slots[at].state) {
+                .empty => return null,
+                .tombstone => {},
+                .live => if (self.slots[at].pointer == pointer) return self.slots[at],
+            }
+        }
+        return null;
+    }
+};
+var allocation_identities: AllocationIdentities = .{};
+var allocation_realloc_id: u64 = 0;
+var allocation_realloc_old_pointer: usize = 0;
+var allocation_realloc_old_bytes: usize = 0;
+var allocation_realloc_in_place: bool = false;
+
+test "bounded allocation identities preserve live IDs across moves and frees" {
+    var identities = AllocationIdentities{};
+    try std.testing.expect(identities.put(0x1000, 7, 64));
+    try std.testing.expectEqual(@as(usize, 1), identities.live);
+    try std.testing.expectEqual(@as(u64, 7), identities.get(0x1000).?.id);
+
+    // Realloc allocates the destination before freeing the source. Both slots
+    // temporarily name the same private identity; removing the source leaves
+    // one live allocation at the destination.
+    try std.testing.expect(identities.put(0x2000, 7, 96));
+    _ = identities.take(0x1000).?;
+    try std.testing.expectEqual(@as(usize, 1), identities.live);
+    const moved = identities.get(0x2000).?;
+    try std.testing.expectEqual(@as(u64, 7), moved.id);
+    try std.testing.expectEqual(@as(usize, 96), moved.bytes);
+    try std.testing.expectEqual(@as(u64, 7), identities.take(0x2000).?.id);
+    try std.testing.expectEqual(@as(usize, 0), identities.live);
+}
+
+test "allocation identity registry refuses saturation without overwriting live entries" {
+    var identities = AllocationIdentities{};
+    for (0..allocation_identity_capacity) |index| {
+        try std.testing.expect(identities.put(0x1000 + index * 16, index + 1, index));
+    }
+    try std.testing.expectEqual(allocation_identity_capacity, identities.live);
+    try std.testing.expect(!identities.put(0xFFFF_FFF0, 99_999, 1));
+    try std.testing.expectEqual(@as(u64, 1), identities.get(0x1000).?.id);
+}
 
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
@@ -460,6 +698,10 @@ const during_spawn = PhaseSet.initMany(&.{ .update, .task });
 /// copy, allocate, write files, or access a driver do not belong in this set.
 const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .update, .render, .task });
 
+/// One-way diagnostic annotations. Kept distinct from constant-time queries:
+/// annotations may validate and copy a bounded label into recorder storage.
+const diagnostic_anywhere = PhaseSet.initMany(&.{ .startup, .update, .render, .task });
+
 /// Effects that wait. On a task they park the coroutine; in `init!` they
 /// block. Never during a frame.
 const during_wait = PhaseSet.initMany(&.{ .startup, .task });
@@ -478,10 +720,15 @@ const during_frame_wait = PhaseSet.initOne(.task);
 /// The host-side hooks the task registry needs: Roc entry points and the
 /// phase guard, kept here because `active_phase` is file-private.
 const TaskHooks = struct {
-    pub fn enterTaskPhase() void {
+    pub fn enterTaskPhase(task_id: u64) void {
         active_phase = .task;
+        const owner = beginTraceOwner();
+        rememberTaskTraceOwner(task_id, owner);
     }
-    pub fn leaveTaskPhase() void {
+    pub fn leaveTaskPhase(task_id: u64) void {
+        forgetTaskTraceOwner(task_id);
+        finishTraceOwner(active_trace_owner);
+        active_trace_owner = 0;
         active_phase = .idle;
     }
     pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
@@ -499,6 +746,178 @@ const TaskHooks = struct {
 
 const AppTasks = tasks_mod.Tasks(TaskHooks);
 
+/// Stable schema-version-one `task_events.kind` codes. New lifecycle kinds append;
+/// existing captures keep these meanings for read-only analysis tools.
+const ObservatoryTaskKind = enum(u8) {
+    spawned,
+    queued,
+    started,
+    parked,
+    resumed,
+    finished,
+    delivered,
+    cancelled,
+};
+
+fn packedTaskCounters(counters: tasks_mod.ObserverCounters) u64 {
+    return (@as(u64, @intCast(@min(counters.live, std.math.maxInt(u32)))) << 32) |
+        @as(u64, @intCast(@min(counters.queued, std.math.maxInt(u32))));
+}
+
+/// Schema-version-one task rows use `value_a` for the kind-specific scalar
+/// (tasks ahead, queued cycles, wait hint, or cancellation stage). `value_b`
+/// packs live in its high 32 bits and queued in its low 32 bits. `parent_id`
+/// stays zero until the scheduler supplies a real parent task identity.
+fn observatoryTaskEvent(event: tasks_mod.ObserverEvent) observatory.TaskEvent {
+    var detail = observatory.TaskEvent{
+        .cycle = event.cycle,
+        .timestamp_ns = event.timestamp_ns,
+        .kind = undefined,
+        .subject_id = event.task_id,
+        .value_b = packedTaskCounters(event.counters),
+    };
+    switch (event.kind) {
+        .spawned => detail.kind = @intFromEnum(ObservatoryTaskKind.spawned),
+        .queued => |queued| {
+            detail.kind = @intFromEnum(ObservatoryTaskKind.queued);
+            detail.value_a = queued.tasks_ahead;
+        },
+        .started => |started| {
+            detail.kind = @intFromEnum(ObservatoryTaskKind.started);
+            detail.value_a = started.queued_cycles;
+        },
+        .parked => |parked| {
+            detail.kind = @intFromEnum(ObservatoryTaskKind.parked);
+            detail.value_a = parked.millis_hint;
+            detail.name = parked.effect;
+        },
+        .resumed => |resumed| {
+            detail.kind = @intFromEnum(ObservatoryTaskKind.resumed);
+            detail.name = resumed.effect;
+        },
+        .finished => detail.kind = @intFromEnum(ObservatoryTaskKind.finished),
+        .delivered => detail.kind = @intFromEnum(ObservatoryTaskKind.delivered),
+        .cancelled => |stage| {
+            detail.kind = @intFromEnum(ObservatoryTaskKind.cancelled);
+            detail.value_a = @intFromEnum(stage);
+            detail.name = @tagName(stage);
+        },
+    }
+    return detail;
+}
+
+fn observatoryTaskNow(_: *anyopaque) u64 {
+    return if (observatory_task_detail) traceNowNs() else 0;
+}
+
+fn recordObservatoryTask(context: *anyopaque, event: tasks_mod.ObserverEvent) void {
+    observatory_cycle_counts.task +|= 1;
+    switch (event.kind) {
+        .cancelled => |stage| if (stage == .live) abortTaskTraceOwner(event.task_id, sessionFromContext(context)),
+        else => {},
+    }
+    if (!observatory_task_detail) return;
+    switch (event.kind) {
+        .finished => {
+            if (!rememberTaskFinish(event.task_id, event.timestamp_ns)) sessionFromContext(context).noteLoss(.structural_latency, 1);
+        },
+        .delivered => if (takeTaskFinish(event.task_id)) |finished_ns| recordStructuralLatency(3, event.task_id, observatory_current_input_id, finished_ns, "task_finish_to_delivery"),
+        else => {},
+    }
+    const session: *observatory.Session = @ptrCast(@alignCast(context));
+    var detail = observatoryTaskEvent(event);
+    switch (event.kind) {
+        .delivered => detail.parent_id = observatory_current_input_id,
+        // zone_abort rows were submitted synchronously just above. Sample the
+        // cancellation row afterwards so cross-table timestamp comparison
+        // preserves that causal ordering in an end-to-end capture.
+        .cancelled => detail.timestamp_ns = traceNowNs(),
+        else => {},
+    }
+    _ = session.recordTask(detail);
+}
+
+fn recordObservatoryTaskQueue(context: *anyopaque, event: tasks_mod.QueueObservation) void {
+    if (!observatory_task_detail) return;
+    observatory_cycle_counts.queue +|= 1;
+    _ = sessionFromContext(context).recordQueue(.{
+        .cycle = event.cycle,
+        .timestamp_ns = event.timestamp_ns,
+        .kind = @intFromEnum(event.operation),
+        .subject_id = event.high_water,
+        .parent_id = if (event.capacity) |capacity| capacity else 0,
+        .duration_ns = if (event.oldest_at_ns != 0) event.timestamp_ns -| event.oldest_at_ns else 0,
+        .value_a = event.current,
+        .value_b = event.amount,
+        .name = "task pending closures",
+    });
+}
+
+test "task finish correlations are bounded private identities consumed once" {
+    task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+    defer task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+    try std.testing.expect(rememberTaskFinish(41, 900));
+    try std.testing.expectEqual(@as(u64, 900), takeTaskFinish(41).?);
+    try std.testing.expect(takeTaskFinish(41) == null);
+    for (0..task_finish_correlation_capacity) |index| try std.testing.expect(rememberTaskFinish(index + 1, index));
+    try std.testing.expect(!rememberTaskFinish(9999, 1));
+}
+
+fn sessionFromContext(context: *anyopaque) *observatory.Session {
+    return @ptrCast(@alignCast(context));
+}
+
+fn taskObserver(session: *observatory.Session) tasks_mod.Observer {
+    return .{ .context = session, .now_ns = observatoryTaskNow, .on_event = recordObservatoryTask, .on_queue = recordObservatoryTaskQueue };
+}
+
+test "task observer adapter preserves identity timing kinds waits and bounded counters" {
+    const base = tasks_mod.ObserverEvent{
+        .task_id = 17,
+        .cycle = 9,
+        .timestamp_ns = 1234,
+        .counters = .{ .live = 4, .queued = 6, .finished = 2, .delivered = 1 },
+        .kind = .spawned,
+    };
+    const spawned = observatoryTaskEvent(base);
+    try std.testing.expectEqual(@as(u8, 0), spawned.kind);
+    try std.testing.expectEqual(@as(u64, 17), spawned.subject_id);
+    try std.testing.expectEqual(@as(u64, 9), spawned.cycle);
+    try std.testing.expectEqual(@as(u64, 1234), spawned.timestamp_ns);
+    try std.testing.expectEqual((@as(u64, 4) << 32) | 6, spawned.value_b);
+    try std.testing.expectEqual(@as(u64, 0), spawned.parent_id);
+
+    var event = base;
+    event.kind = .{ .queued = .{ .tasks_ahead = 11 } };
+    const queued = observatoryTaskEvent(event);
+    try std.testing.expectEqual(@as(u8, 1), queued.kind);
+    try std.testing.expectEqual(@as(u64, 11), queued.value_a);
+    event.kind = .{ .started = .{ .queued_cycles = 3 } };
+    const started = observatoryTaskEvent(event);
+    try std.testing.expectEqual(@as(u8, 2), started.kind);
+    try std.testing.expectEqual(@as(u64, 3), started.value_a);
+
+    event.kind = .{ .parked = .{ .effect = "sqlite.run", .millis_hint = 50 } };
+    const parked = observatoryTaskEvent(event);
+    try std.testing.expectEqual(@as(u8, 3), parked.kind);
+    try std.testing.expectEqualStrings("sqlite.run", parked.name);
+    try std.testing.expectEqual(@as(u64, 50), parked.value_a);
+    event.kind = .{ .resumed = .{ .effect = "sqlite.run" } };
+    const resumed = observatoryTaskEvent(event);
+    try std.testing.expectEqual(@as(u8, 4), resumed.kind);
+    try std.testing.expectEqualStrings("sqlite.run", resumed.name);
+
+    event.kind = .finished;
+    try std.testing.expectEqual(@as(u8, 5), observatoryTaskEvent(event).kind);
+    event.kind = .delivered;
+    try std.testing.expectEqual(@as(u8, 6), observatoryTaskEvent(event).kind);
+    event.kind = .{ .cancelled = .live };
+    const cancelled = observatoryTaskEvent(event);
+    try std.testing.expectEqual(@as(u8, 7), cancelled.kind);
+    try std.testing.expectEqual(@as(u64, @intFromEnum(tasks_mod.CancellationStage.live)), cancelled.value_a);
+    try std.testing.expectEqualStrings("live", cancelled.name);
+}
+
 /// `Task.spawn!`: hand an erased `() => Msg` closure to the task runtime.
 ///
 /// The closure is owned by this call. It starts on its own coroutine at the
@@ -506,6 +925,8 @@ const AppTasks = tasks_mod.Tasks(TaskHooks);
 /// task spawned this cycle parks on its first wait before the frame is drawn.
 fn hostedTaskSpawn(run: abi.RocErasedCallable) callconv(.c) void {
     enforcePhase("Task.spawn!", during_spawn);
+    const effect = EffectScope.begin("Task.spawn!", 0);
+    defer effect.end();
     // Spawning can hand control to the executor before it returns -- zio runs
     // a newly spawned coroutine as soon as its tick budget says to -- and a
     // task sets phases of its own while it runs, and clears them when it
@@ -521,7 +942,12 @@ fn hostedTaskSpawn(run: abi.RocErasedCallable) callconv(.c) void {
 fn stageTaskResults(app_tasks: *AppTasks, staging: *TaskResultStaging, roc_host: *RocHost) void {
     const finished = app_tasks.takeFinished();
     defer app_tasks.releaseTaken(finished);
-    for (finished) |item| staging.append(roc_host, item.result);
+    for (finished) |item| {
+        // The recorder sees only its task identity and when the message became
+        // eligible for a later Input, never the message or its layout.
+        recordStructuralLatency(2, item.id, 0, traceNowNs(), "task_message_staged");
+        staging.append(roc_host, item.result);
+    }
 }
 
 /// The phase a waiting effect must restore when its park returns.
@@ -531,15 +957,26 @@ fn stageTaskResults(app_tasks: *AppTasks, staging: *TaskResultStaging, roc_host:
 /// when it resumes.
 const WaitScope = struct {
     resumed: Phase,
+    resumed_trace_owner: u32,
+    parked_started_ns: i96,
 
     fn enter() WaitScope {
-        const scope = WaitScope{ .resumed = active_phase };
+        const scope = WaitScope{
+            .resumed = active_phase,
+            .resumed_trace_owner = active_trace_owner,
+            .parked_started_ns = if (active_observatory != null) observatoryAwakeNs() else 0,
+        };
         active_phase = .idle;
+        active_trace_owner = 0;
         return scope;
     }
 
     fn leave(self: WaitScope) void {
+        if (active_observatory != null and (self.resumed == .startup or self.resumed == .task) and self.resumed_trace_owner != 0) {
+            chargeTraceParked(self.resumed_trace_owner, @intCast(@max(observatoryAwakeNs() - self.parked_started_ns, 0)));
+        }
         active_phase = self.resumed;
+        active_trace_owner = self.resumed_trace_owner;
     }
 };
 
@@ -560,14 +997,18 @@ fn waitingIo() std.Io {
 /// `Task.sleep!`: park the calling task, or block during `init!`.
 fn hostedTaskSleep(millis: u64) callconv(.c) void {
     enforcePhase("Task.sleep!", during_wait);
+    var effect = EffectScope.begin("Task.sleep!", 0);
+    defer effect.end();
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sleep", millis);
+    const park = AppTasks.observePark("sleep", millis);
+    const external_started = observatoryDetailMeasurementStart();
     zio.sleep(.fromMilliseconds(@intCast(millis))) catch |err| switch (err) {
         // Cancelled at shutdown: return at once so the task can run to its end.
         error.Canceled => {},
     };
-    AppTasks.traceResume("sleep");
+    effect.setExternalElapsed(external_started);
+    AppTasks.observeResume(park, "sleep");
 }
 
 /// Read a whole file on the waiting path, parked rather than blocking.
@@ -579,8 +1020,8 @@ fn hostedTaskSleep(millis: u64) callconv(.c) void {
 fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize, out_err: *u8) ?[]u8 {
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("read", 0);
-    defer AppTasks.traceResume("read");
+    const park = AppTasks.observePark("read", 0);
+    defer AppTasks.observeResume(park, "read");
     return std.Io.Dir.cwd().readFileAlloc(waitingIo(), path, allocator, .limited(limit)) catch |err| {
         out_err.* = readErrorCode(err);
         return null;
@@ -596,18 +1037,33 @@ fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize,
 /// an invalid one would be undefined.
 fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
     enforcePhase("Files.read_text!", during_wait);
+    var effect = EffectScope.begin("Files.read_text!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
     var err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse
+    const external_started = observatoryDetailMeasurementStart();
+    const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse {
+        effect.setExternalElapsed(external_started);
+        effect.setOutcome(if (err == READ_ERR_BUSY or err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
         return .{ .err = err, .contents = abi.RocStr.empty() };
+    };
+    effect.setExternalElapsed(external_started);
     defer allocator.free(bytes);
 
+    const validation_started = observatoryDetailMeasurementStart();
     if (!std.unicode.utf8ValidateSlice(bytes)) {
+        effect.setValidationElapsed(validation_started);
+        effect.setOutcome(.runtime_error);
         return .{ .err = READ_ERR_NOT_UTF8, .contents = abi.RocStr.empty() };
     }
-    return .{ .err = 0, .contents = abi.RocStr.fromSlice(bytes, roc_host) };
+    effect.setValidationElapsed(validation_started);
+    effect.addCopiedBytes(bytes.len);
+    const conversion_started = observatoryDetailMeasurementStart();
+    const contents = abi.RocStr.fromSlice(bytes, roc_host);
+    effect.setConversionElapsed(conversion_started);
+    return .{ .err = 0, .contents = contents };
 }
 
 fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
@@ -623,8 +1079,16 @@ fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_te
 /// discarding it.
 fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
     enforcePhase("Files.read_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.read_bytes!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
-    return readByteListWaiting(roc_host, path_arg.asSlice(), .read);
+    const result = readByteListWaiting(roc_host, path_arg.asSlice(), .read);
+    if (result.err != 0) {
+        effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    } else {
+        effect.addOwnershipTransferBytes(result.bytes.items().len);
+    }
+    return result;
 }
 
 fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
@@ -635,10 +1099,13 @@ fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_b
 /// read delivers and decoded by `Files`.
 fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
     enforcePhase("Files.list!", during_wait);
+    var effect = EffectScope.begin("Files.list!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
     // Structurally the same record as a byte read's, but a distinct generated
     // type, so copy it across field by field rather than casting.
     const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
+    if (result.err != 0) effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
     return .{ .err = result.err, .bytes = result.bytes };
 }
 
@@ -694,12 +1161,16 @@ fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) abi.FilesHostMetad
 /// `Files.metadata!`: what one path is, how big it is, and when it changed.
 fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
     enforcePhase("Files.metadata!", during_wait);
+    var effect = EffectScope.begin("Files.metadata!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("stat", 0);
-    defer AppTasks.traceResume("stat");
-    return statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+    const park = AppTasks.observePark("stat", 0);
+    defer AppTasks.observeResume(park, "stat");
+    const result = statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+    if (result.err != 0) effect.setOutcome(if (result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    return result;
 }
 
 fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
@@ -719,8 +1190,8 @@ fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadat
 fn writeFileWaiting(path: []const u8, bytes: []const u8) u8 {
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("write", 0);
-    defer AppTasks.traceResume("write");
+    const park = AppTasks.observePark("write", 0);
+    defer AppTasks.observeResume(park, "write");
     // Written through std's threaded implementation on zio's blocking pool
     // rather than through the runtime's own file backend: creating
     // directories and files through that backend fails on Windows. The pool
@@ -752,9 +1223,13 @@ fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []c
 /// `Files.write_text!`: replace a file's contents with a UTF-8 string.
 fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
     enforcePhase("Files.write_text!", during_wait);
+    var effect = EffectScope.begin("Files.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
     defer contents_arg.decref(roc_host);
-    return writeFileWaiting(path_arg.asSlice(), contents_arg.asSlice());
+    const result = writeFileWaiting(path_arg.asSlice(), contents_arg.asSlice());
+    if (result != 0) effect.setOutcome(if (result == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    return result;
 }
 
 fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
@@ -764,9 +1239,13 @@ fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callco
 /// `Files.write_bytes!`: replace a file's contents with the app's bytes.
 fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
     enforcePhase("Files.write_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
     defer bytes_arg.decref(roc_host);
-    return writeFileWaiting(path_arg.asSlice(), bytes_arg.items());
+    const result = writeFileWaiting(path_arg.asSlice(), bytes_arg.items());
+    if (result != 0) effect.setOutcome(if (result == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    return result;
 }
 
 fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
@@ -805,6 +1284,8 @@ fn timestampFromNanos(nanos: i128) abi.TimeHostNowRetRecord {
 /// `WaitScope` and needs none of the parking machinery a waiting effect has.
 fn hostedTimeNow() callconv(.c) abi.TimeHostNowRetRecord {
     enforcePhase("Time.now!", during_update);
+    const effect = EffectScope.begin("Time.now!", 0);
+    defer effect.end();
     return timestampFromNanos(std.Io.Clock.real.now(waitingIo()).nanoseconds);
 }
 
@@ -832,9 +1313,14 @@ fn queueStreamWrite(stream: u8, head: []const u8, tail: []const u8) u8 {
 
 /// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
 fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!", during_update);
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!";
+    enforcePhase(name, during_update);
+    var effect = EffectScope.begin(name, text_arg.asSlice().len);
+    defer effect.end();
     defer text_arg.decref(roc_host);
-    return queueStreamWrite(stream, text_arg.asSlice(), &.{});
+    const result = queueStreamWrite(stream, text_arg.asSlice(), &.{});
+    if (result != 0) effect.setOutcome(.refused);
+    return result;
 }
 
 fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
@@ -846,9 +1332,14 @@ fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
 /// The newline is the host's byte rather than a copy of the app's string with
 /// one appended, so a line costs no allocation and is queued as one payload.
 fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!", during_update);
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!";
+    enforcePhase(name, during_update);
+    var effect = EffectScope.begin(name, text_arg.asSlice().len);
+    defer effect.end();
     defer text_arg.decref(roc_host);
-    return queueStreamWrite(stream, text_arg.asSlice(), "\n");
+    const result = queueStreamWrite(stream, text_arg.asSlice(), "\n");
+    if (result != 0) effect.setOutcome(.refused);
+    return result;
 }
 
 fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
@@ -857,9 +1348,14 @@ fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
 
 /// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
 fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!", during_update);
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!";
+    enforcePhase(name, during_update);
+    var effect = EffectScope.begin(name, bytes_arg.items().len);
+    defer effect.end();
     defer bytes_arg.decref(roc_host);
-    return queueStreamWrite(stream, bytes_arg.items(), &.{});
+    const result = queueStreamWrite(stream, bytes_arg.items(), &.{});
+    if (result != 0) effect.setOutcome(.refused);
+    return result;
 }
 
 fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
@@ -879,6 +1375,8 @@ fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) ca
 /// `during_frame_wait`.
 fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
     enforcePhase("Capture.screenshot!", during_frame_wait);
+    var effect = EffectScope.begin("Capture.screenshot!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
     const path = path_arg.asSlice();
 
@@ -916,8 +1414,8 @@ fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     {
         const scope = WaitScope.enter();
         defer scope.leave();
-        AppTasks.tracePark("screenshot", 0);
-        defer AppTasks.traceResume("screenshot");
+        const park = AppTasks.observePark("screenshot", 0);
+        defer AppTasks.observeResume(park, "screenshot");
         wait.ready.wait() catch {
             // Cancelled at shutdown before the frame ended. Nothing was
             // captured, so there is nothing to free.
@@ -928,6 +1426,7 @@ fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     }
     screenshot_wait = null;
     if (wait.err != capture.err_none) return wait.err;
+    effect.setDrawMetrics(@as(u64, wait.width) *| wait.height, @intCast(wait.pixels.len));
 
     const allocator = allocatorFromHost(roc_host);
     defer allocator.free(wait.pixels);
@@ -977,6 +1476,8 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
 /// place to call this and is not for `Capture.screenshot!`.
 fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.CaptureHostScreenshot_textureArgs) callconv(.c) u8 {
     enforcePhase("Capture.screenshot_texture!", during_wait);
+    var effect = EffectScope.begin("Capture.screenshot_texture!", 0);
+    defer effect.end();
     defer args.path.decref(roc_host);
     const path = args.path.asSlice();
 
@@ -1041,6 +1542,7 @@ fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.CaptureHostScree
     // Headless, or a unit test with no graphics context: admitted, read
     // nothing, wrote nothing.
     if (pixels.len == 0) return capture.err_none;
+    effect.setDrawMetrics(@as(u64, width) *| height, @intCast(pixels.len));
 
     const allocator = allocatorFromHost(roc_host);
     defer allocator.free(pixels);
@@ -1052,8 +1554,8 @@ fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.CaptureHostScree
 
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("export", 0);
-    defer AppTasks.traceResume("export");
+    const park = AppTasks.observePark("export", 0);
+    defer AppTasks.observeResume(park, "export");
     // No runtime means `init!` on a host whose task runtime never started, so
     // the encode happens inline the way a file write does there.
     const rt = AppTasks.currentRuntime() orelse
@@ -1247,6 +1749,8 @@ fn pixelReadFailure(err: u8) abi.CaptureHostPixel_atRetRecord {
 /// thread owns, so there is nothing here to park on.
 fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.CaptureHostPixel_atArgs) abi.CaptureHostPixel_atRetRecord {
     enforcePhase("Capture.pixel_at!", during_update);
+    var effect = EffectScope.begin("Capture.pixel_at!", 0);
+    defer effect.end();
     defer releaseResourceBox(roc_host, args.source.target.handle);
 
     var err: u8 = capture.err_readback_failed;
@@ -1257,6 +1761,7 @@ fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.CaptureHostPixel_atArgs) a
     if (bounds != capture.err_none) return pixelReadFailure(bounds);
 
     const channels = capture.pixelAt(pixels.bytes, pixels.width, args.x, args.y);
+    effect.setDrawMetrics(1, 4);
     return .{ .err = capture.err_none, .r = channels[0], .g = channels[1], .b = channels[2], .a = channels[3] };
 }
 
@@ -1274,6 +1779,8 @@ fn exportedCapturePixelAt(args: abi.CaptureHostPixel_atArgs) callconv(.c) abi.Ca
 /// opens a path, and for the same reason.
 fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.CaptureHostRead_regionArgs) abi.CaptureHostRead_regionRetRecord {
     enforcePhase("Capture.read_region!", during_update);
+    var effect = EffectScope.begin("Capture.read_region!", 0);
+    defer effect.end();
     defer releaseResourceBox(roc_host, args.source.target.handle);
 
     const empty = abi.RocListWith(u8, false).empty();
@@ -1304,6 +1811,8 @@ fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.CaptureHostRead_regionA
     // already reserved against and reports as `Busy`.
     const installed = installReadBytes(allocator, copy);
     if (installed.err != 0) return .{ .err = capture.err_busy, .bytes = empty };
+    effect.addOwnershipTransferBytes(@intCast(bytes));
+    effect.setDrawMetrics(@as(u64, @intCast(args.width)) *| @as(u64, @intCast(args.height)), bytes);
     return .{ .err = capture.err_none, .bytes = installed.bytes };
 }
 
@@ -1335,8 +1844,8 @@ fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait)
         .list => blk: {
             const scope = WaitScope.enter();
             defer scope.leave();
-            AppTasks.tracePark("list", 0);
-            defer AppTasks.traceResume("list");
+            const park = AppTasks.observePark("list", 0);
+            defer AppTasks.observeResume(park, "list");
             var encoded: ?[]u8 = null;
             const err = encodeListing(waitingIo(), allocator, path, &encoded);
             break :blk encoded orelse return .{
@@ -1382,11 +1891,17 @@ fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) abi.FilesHostRead
 /// the task must see `.task` again when the response arrives.
 fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Response {
     enforcePhase("Http.send!", during_wait);
+    var effect = EffectScope.begin("Http.send!", 0);
+    defer effect.end();
     const roc_host = activeHost();
     const resume_phase = active_phase;
     active_phase = .idle;
     defer active_phase = resume_phase;
-    return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+    const external_started = observatoryMeasurementStart();
+    const result = http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+    effect.setExternalElapsed(external_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 /// This process's own environment, as `std.process.Environ`.
@@ -1476,23 +1991,32 @@ fn copyCmdSpec(arena: std.mem.Allocator, args: abi.CmdHostRunArgs) ?cmd_effect.S
 /// allocation per slot, and both are already bounded by limits the app stated.
 fn hostedCmdRun(roc_host: *RocHost, args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord {
     enforcePhase("Cmd.run!", during_wait);
+    var effect = EffectScope.begin("Cmd.run!", 0);
+    defer effect.end();
     defer args.decref(roc_host);
 
-    if (!cmd_effect.reserve()) return cmdRunFailure(cmd_effect.ERR_BUSY);
+    if (!cmd_effect.reserve()) {
+        effect.setOutcome(.refused);
+        return cmdRunFailure(cmd_effect.ERR_BUSY);
+    }
     defer cmd_effect.release();
 
     const allocator = allocatorFromHost(roc_host);
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const spec = copyCmdSpec(arena_state.allocator(), args) orelse
-        return cmdRunFailure(cmd_effect.ERR_SPAWN_FAILED);
+        {
+            effect.setOutcome(.runtime_error);
+            return cmdRunFailure(cmd_effect.ERR_SPAWN_FAILED);
+        };
 
     const environ = hostProcessEnviron();
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("cmd", spec.timeout_ms);
-    defer AppTasks.traceResume("cmd");
+    const park = AppTasks.observePark("cmd", spec.timeout_ms);
+    defer AppTasks.observeResume(park, "cmd");
 
+    const worker_started = observatoryMeasurementStart();
     const outcome = outcome: {
         // No runtime means `init!` on a host whose task runtime never started,
         // so the child runs inline the way a file write does there.
@@ -1510,7 +2034,9 @@ fn hostedCmdRun(roc_host: *RocHost, args: abi.CmdHostRunArgs) callconv(.c) abi.C
             };
         break :outcome blocking.join();
     };
+    effect.setWorkerElapsed(worker_started);
     defer outcome.deinit(allocator);
+    if (outcome.err != 0) effect.setOutcome(.runtime_error);
 
     return .{
         .err = outcome.err,
@@ -1535,16 +2061,23 @@ fn exportedCmdRun(args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord
 /// phase afterwards, exactly as `Task.spawn!` does.
 fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
     enforcePhase("Udp.bind!", during_load);
+    var effect = EffectScope.begin("Udp.bind!", args.ip.asSlice().len);
+    defer effect.end();
     defer args.decref(host);
     const scope = PhaseScope.enter(active_phase);
     defer scope.leave();
 
-    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse {
+        effect.setOutcome(.runtime_error);
         return udpBindFailure(udp_effect.ERR_INVALID_ADDRESS);
+    };
 
     const socket = switch (udp_effect.bind(ip, args.port)) {
         .ok => |value| value,
-        .err => |code| return udpBindFailure(code),
+        .err => |code| {
+            effect.setOutcome(.runtime_error);
+            return udpBindFailure(code);
+        },
     };
 
     // The descriptor exists before its slot does, so a full heap closes it
@@ -1555,6 +2088,7 @@ fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.Udp
     const handle = udp_socket_heap.insert(0, socket) orelse {
         var rejected = socket;
         destroyUdpSocket(&rejected);
+        effect.setOutcome(.refused);
         return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
     };
     return .{
@@ -1583,11 +2117,27 @@ fn udpBindFailure(code: u8) abi.UdpHostBindRetRecord {
 /// which another task's Roc code could run in the middle of an update.
 fn hostedUdpSend(host: *RocHost, args: abi.UdpHostSendArgs) callconv(.c) u8 {
     enforcePhase("Udp.send!", during_update);
+    var effect = EffectScope.begin("Udp.send!", args.ip.asSlice().len +| args.bytes.items().len);
+    defer effect.end();
     defer args.decref(host);
 
-    const socket = udp_socket_heap.get(args.socket.*) orelse return udp_effect.ERR_UNAVAILABLE;
-    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse return udp_effect.ERR_INVALID_ADDRESS;
-    return udp_effect.send(socket, ip, args.port, args.bytes.items());
+    const validation_started = observatoryMeasurementStart();
+    const socket = udp_socket_heap.get(args.socket.*) orelse {
+        effect.setValidationElapsed(validation_started);
+        effect.setOutcome(.refused);
+        return udp_effect.ERR_UNAVAILABLE;
+    };
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse {
+        effect.setValidationElapsed(validation_started);
+        effect.setOutcome(.runtime_error);
+        return udp_effect.ERR_INVALID_ADDRESS;
+    };
+    effect.setValidationElapsed(validation_started);
+    const external_started = observatoryMeasurementStart();
+    const result = udp_effect.send(socket, ip, args.port, args.bytes.items());
+    effect.setExternalElapsed(external_started);
+    if (result != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn exportedUdpSend(args: abi.UdpHostSendArgs) callconv(.c) u8 {
@@ -1605,10 +2155,14 @@ fn exportedUdpSend(args: abi.UdpHostSendArgs) callconv(.c) u8 {
 /// half-built Roc value behind.
 fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
     enforcePhase("Udp.receive!", during_wait);
+    var effect = EffectScope.begin("Udp.receive!", 0);
+    defer effect.end();
     defer args.decref(host);
 
-    const socket = udp_socket_heap.get(args.socket.*) orelse
+    const socket = udp_socket_heap.get(args.socket.*) orelse {
+        effect.setOutcome(.refused);
         return udpReceiveFailure(udp_effect.ERR_UNAVAILABLE);
+    };
 
     const allocator = allocatorFromHost(host);
     var slices: std.ArrayList(udp_effect.Slice) = .empty;
@@ -1618,7 +2172,8 @@ fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) a
 
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("udp receive", args.timeout_ms);
+    const park = AppTasks.observePark("udp receive", args.timeout_ms);
+    const external_started = observatoryMeasurementStart();
     const outcome = udp_effect.receive(
         socket,
         args.timeout_ms,
@@ -1627,17 +2182,24 @@ fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) a
         &payload,
         allocator,
     );
-    AppTasks.traceResume("udp receive");
+    effect.setExternalElapsed(external_started);
+    AppTasks.observeResume(park, "udp receive");
 
     const batch = switch (outcome) {
         .ok => |value| value,
-        .err => |code| return udpReceiveFailure(code),
+        .err => |code| {
+            effect.setOutcome(.runtime_error);
+            return udpReceiveFailure(code);
+        },
     };
-    return .{
+    const conversion_started = observatoryMeasurementStart();
+    const result: abi.UdpHostReceiveRetRecord = .{
         .err = 0,
         .payload = abi.RocListWith(u8, false).fromSlice(batch.payload, host),
         .slices = udpRocSlices(host, batch.slices),
     };
+    effect.setConversionElapsed(conversion_started);
+    return result;
 }
 
 fn exportedUdpReceive(args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
@@ -1687,13 +2249,16 @@ fn hostedSqliteOpen(
     max_result_bytes: u64,
 ) callconv(.c) abi.SqliteHostOpen {
     enforcePhase("Sqlite.Db.open!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Db.open!", path_arg.asSlice().len);
+    defer effect.end();
     const roc_host = activeHost();
     defer path_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.open", 0);
-    defer AppTasks.traceResume("sqlite.open");
-    return sqlite_effect.open(
+    const park = AppTasks.observePark("sqlite.open", 0);
+    defer AppTasks.observeResume(park, "sqlite.open");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.open(
         roc_host,
         AppTasks.currentRuntime(),
         path_arg,
@@ -1701,29 +2266,44 @@ fn hostedSqliteOpen(
         busy_timeout_ms,
         max_result_bytes,
     );
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.SqliteHostClose {
     enforcePhase("Sqlite.Db.close!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Db.close!", 0);
+    defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.close", 0);
-    defer AppTasks.traceResume("sqlite.close");
-    return sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+    const park = AppTasks.observePark("sqlite.close", 0);
+    defer AppTasks.observeResume(park, "sqlite.close");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostPrepare {
     enforcePhase("Sqlite.prepare!", during_wait);
+    var effect = EffectScope.begin("Sqlite.prepare!", sql_arg.asSlice().len);
+    defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
     defer sql_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.prepare", 0);
-    defer AppTasks.traceResume("sqlite.prepare");
-    return sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const park = AppTasks.observePark("sqlite.prepare", 0);
+    defer AppTasks.observeResume(park, "sqlite.prepare");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn hostedSqliteRunStmt(
@@ -1731,14 +2311,20 @@ fn hostedSqliteRunStmt(
     bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
 ) callconv(.c) abi.SqliteHostRun_stmt {
     enforcePhase("Sqlite.Stmt.query!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Stmt.query!", 0);
+    defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, stmt_arg);
     defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.run", 0);
-    defer AppTasks.traceResume("sqlite.run");
-    return sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+    const park = AppTasks.observePark("sqlite.run", 0);
+    defer AppTasks.observeResume(park, "sqlite.run");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn hostedSqliteRunOnce(
@@ -1747,27 +2333,39 @@ fn hostedSqliteRunOnce(
     bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
 ) callconv(.c) abi.SqliteHostRun_once {
     enforcePhase("Sqlite.query!", during_wait);
+    var effect = EffectScope.begin("Sqlite.query!", sql_arg.asSlice().len);
+    defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
     defer sql_arg.decref(roc_host);
     defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.run", 0);
-    defer AppTasks.traceResume("sqlite.run");
-    return sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+    const park = AppTasks.observePark("sqlite.run", 0);
+    defer AppTasks.observeResume(park, "sqlite.run");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostExec_script {
     enforcePhase("Sqlite.exec_script!", during_wait);
+    var effect = EffectScope.begin("Sqlite.exec_script!", sql_arg.asSlice().len);
+    defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
     defer sql_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("sqlite.script", 0);
-    defer AppTasks.traceResume("sqlite.script");
-    return sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const park = AppTasks.observePark("sqlite.script", 0);
+    defer AppTasks.observeResume(park, "sqlite.script");
+    const worker_started = observatoryMeasurementStart();
+    const result = sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    effect.setWorkerElapsed(worker_started);
+    if (result.err != 0) effect.setOutcome(.runtime_error);
+    return result;
 }
 
 var active_phase: Phase = .idle;
@@ -1775,15 +2373,22 @@ var active_phase: Phase = .idle;
 /// Enter a phase for one call, restoring the prior phase to preserve nesting.
 const PhaseScope = struct {
     previous: Phase,
+    previous_trace_owner: u32,
+    trace_owner: u32,
 
     fn enter(phase: Phase) PhaseScope {
-        const scope = PhaseScope{ .previous = active_phase };
+        const previous = active_phase;
+        const previous_trace_owner = active_trace_owner;
+        const trace_owner = if (previous == .idle and phase != .idle) beginTraceOwner() else active_trace_owner;
+        const scope = PhaseScope{ .previous = previous, .previous_trace_owner = previous_trace_owner, .trace_owner = trace_owner };
         active_phase = phase;
         return scope;
     }
 
     fn leave(self: PhaseScope) void {
+        if (self.previous == .idle and self.trace_owner != 0) finishTraceOwner(self.trace_owner);
         active_phase = self.previous;
+        active_trace_owner = self.previous_trace_owner;
     }
 };
 
@@ -1813,7 +2418,15 @@ fn describePhases(allowed: PhaseSet, buffer: []u8) []const u8 {
 /// tests call hosted effects directly, with no callback entered, and aborting
 /// the runner would make the guard itself untestable.
 fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
-    if (allowed.contains(active_phase)) return;
+    if (allowed.contains(active_phase)) {
+        // A draw summary counts accepted public Draw effects, including scope
+        // changes and frame queries. It is a boundary-crossing summary, not a
+        // claim about backend batches or GPU draw calls.
+        if ((active_observatory != null or (builtin.is_test and observatory_task_detail)) and active_phase == .render and allowed.eql(during_render) and std.mem.startsWith(u8, operation, "Draw.")) {
+            observatory_draw_calls +|= 1;
+        }
+        return;
+    }
     last_phase_violation = .{ .operation = operation, .allowed = allowed, .actual = active_phase };
     if (comptime builtin.is_test) return;
     var buffer: [160]u8 = undefined;
@@ -1836,6 +2449,847 @@ fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
         else
             "",
     });
+}
+
+test "draw summary counts accepted public draw boundary calls only" {
+    const previous = observatory_draw_calls;
+    defer observatory_draw_calls = previous;
+    const previous_detail = observatory_task_detail;
+    defer observatory_task_detail = previous_detail;
+    observatory_task_detail = true;
+    observatory_draw_calls = 0;
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+
+    enforcePhase("Draw.circle!", during_render);
+    const effect = EffectScope.begin("Draw.circle!", 0);
+    defer effect.end();
+    enforcePhase("Draw.frame_size!", during_render);
+    enforcePhase("Trace.mark!", diagnostic_anywhere);
+    try std.testing.expectEqual(@as(u64, 2), observatory_draw_calls);
+}
+
+const TRACE_LABEL_MAX_BYTES: usize = 255;
+const TRACE_ZONE_DEPTH: usize = 64;
+const TRACE_TRACK_CAPACITY: usize = tasks_mod.max_live_tasks + 2;
+
+const TraceZoneEntry = struct {
+    token: u64,
+    started_ns: u64,
+    parked_ns: u64 = 0,
+    label_len: u8,
+    label: [TRACE_LABEL_MAX_BYTES]u8,
+};
+const TraceTrack = struct {
+    owner: u32 = 0,
+    depth: u8 = 0,
+    cancelling: bool = false,
+    zones: [TRACE_ZONE_DEPTH]TraceZoneEntry = undefined,
+};
+var trace_tracks: [TRACE_TRACK_CAPACITY]TraceTrack = [_]TraceTrack{.{}} ** TRACE_TRACK_CAPACITY;
+var active_trace_owner: u32 = 0;
+var next_trace_owner: u32 = 1;
+var next_trace_token: u32 = 1;
+var last_trace_violation: ?[]const u8 = null;
+const TaskTraceOwner = struct { task_id: u64 = 0, owner: u32 = 0 };
+var task_trace_owners: [tasks_mod.max_live_tasks]TaskTraceOwner = [_]TaskTraceOwner{.{}} ** tasks_mod.max_live_tasks;
+
+fn rememberTaskTraceOwner(task_id: u64, owner: u32) void {
+    if (task_id == 0) return;
+    for (&task_trace_owners) |*entry| if (entry.task_id == 0) {
+        entry.* = .{ .task_id = task_id, .owner = owner };
+        return;
+    };
+    traceProgrammerError("no bounded task annotation owner slot is available");
+}
+
+fn forgetTaskTraceOwner(task_id: u64) void {
+    for (&task_trace_owners) |*entry| if (entry.task_id == task_id) {
+        entry.* = .{};
+        return;
+    };
+}
+
+fn abortTaskTraceOwner(task_id: u64, session: *observatory.Session) void {
+    for (&task_trace_owners) |*mapping| {
+        if (mapping.task_id != task_id) continue;
+        const track = traceTrack(mapping.owner, false) orelse {
+            mapping.* = .{};
+            return;
+        };
+        const ended_ns = traceNowNs();
+        while (track.depth != 0) {
+            const entry = &track.zones[track.depth - 1];
+            const durations = traceZoneDurations(entry.started_ns, entry.parked_ns, ended_ns);
+            _ = session.recordAnnotation(.{
+                .cycle = observatory_cycle,
+                .timestamp_ns = ended_ns,
+                .phase = @intFromEnum(Phase.task),
+                .kind = .zone_abort,
+                .name = entry.label[0..entry.label_len],
+                .integer = @bitCast(entry.token),
+                .wall_ns = durations.wall,
+                .active_ns = durations.active,
+                .parked_ns = durations.parked,
+            });
+            track.depth -= 1;
+        }
+        // Keep the bounded track until cancellation has unwound the Roc task.
+        // Cleanup may call `Trace.end!` for the zones just recorded as aborted;
+        // those calls acknowledge cancellation rather than double-end a zone.
+        track.cancelling = true;
+        mapping.* = .{};
+        return;
+    }
+}
+
+fn traceProgrammerError(message: []const u8) void {
+    last_trace_violation = message;
+    if (!builtin.is_test) std.debug.panic("roc-ray: invalid Trace annotation: {s}", .{message});
+}
+
+fn beginTraceOwner() u32 {
+    const owner = next_trace_owner;
+    next_trace_owner +%= 1;
+    if (next_trace_owner == 0) next_trace_owner = 1;
+    active_trace_owner = owner;
+    return owner;
+}
+
+fn traceTrack(owner: u32, create: bool) ?*TraceTrack {
+    for (&trace_tracks) |*track| if (track.owner == owner) return track;
+    if (!create) return null;
+    for (&trace_tracks) |*track| {
+        if (track.owner == 0) {
+            track.owner = owner;
+            track.depth = 0;
+            track.cancelling = false;
+            return track;
+        }
+    }
+    traceProgrammerError("no bounded annotation track is available");
+    return null;
+}
+
+fn finishTraceOwner(owner: u32) void {
+    const track = traceTrack(owner, false) orelse return;
+    if (track.depth != 0) traceProgrammerError("an annotation zone escaped its callback or task body");
+    track.owner = 0;
+    track.depth = 0;
+    track.cancelling = false;
+}
+
+/// Charge one completed wait to every open zone for its callback/task owner.
+/// Nested zones intentionally receive the same parked interval.
+fn chargeTraceParked(owner: u32, duration_ns: u64) void {
+    const track = traceTrack(owner, false) orelse return;
+    for (track.zones[0..track.depth]) |*zone| zone.parked_ns +|= duration_ns;
+}
+
+fn traceZoneDurations(started_ns: u64, parked_ns: u64, ended_ns: u64) struct { wall: u64, active: u64, parked: u64 } {
+    const wall = ended_ns -| started_ns;
+    const parked = @min(parked_ns, wall);
+    return .{ .wall = wall, .active = wall - parked, .parked = parked };
+}
+
+fn activeTraceZoneToken() u64 {
+    const track = traceTrack(active_trace_owner, false) orelse return 0;
+    if (track.depth == 0) return 0;
+    return track.zones[track.depth - 1].token;
+}
+
+fn validateTraceLabel(label: abi.RocStr) bool {
+    const bytes = label.asSlice();
+    if (bytes.len > TRACE_LABEL_MAX_BYTES) {
+        traceProgrammerError("annotation labels must be at most 255 UTF-8 bytes");
+        return false;
+    }
+    if (!std.unicode.utf8ValidateSlice(bytes)) {
+        traceProgrammerError("annotation labels must be valid UTF-8");
+        return false;
+    }
+    return true;
+}
+
+fn traceNowNs() u64 {
+    if (observatory_origin_ns == 0) return 0;
+    return @intCast(@max(std.Io.Clock.awake.now(mainThreadIo()).nanoseconds - observatory_origin_ns, 0));
+}
+
+var observatory_test_clock: ?*const fn () i96 = null;
+
+fn observatoryAwakeNs() i96 {
+    if (observatory_test_clock) |clock| return clock();
+    return std.Io.Clock.awake.now(mainThreadIo()).nanoseconds;
+}
+
+/// Start an automatic Observatory interval only while a sink is installed.
+/// This keeps the recorder's automatic clock sampling off every ordinary run.
+fn observatoryMeasurementStart() i96 {
+    if (active_observatory == null) return 0;
+    return observatoryAwakeNs();
+}
+
+/// Start a high-volume sub-interval only when standard/full detail admits it.
+fn observatoryDetailMeasurementStart() i96 {
+    if (!observatory_task_detail) return 0;
+    return observatoryMeasurementStart();
+}
+
+fn observatoryMeasurementElapsed(started_ns: i96) u64 {
+    if (started_ns == 0 or active_observatory == null) return 0;
+    return @intCast(@max(observatoryAwakeNs() - started_ns, 0));
+}
+
+fn traceEmit(kind: observatory.AnnotationKind, label: []const u8, integer: i64, real: f64, unit: u8) void {
+    const session = active_observatory orelse return;
+    _ = session.recordAnnotation(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .phase = @intFromEnum(active_phase),
+        .kind = kind,
+        .name = label,
+        .integer = integer,
+        .real = real,
+        .unit = unit,
+    });
+}
+
+fn observeHostResource(event: host_resource.Observation) u64 {
+    observatory_cycle_counts.resource +|= 1;
+    // Per-use volume is already represented by the cycle counter. Persist
+    // only lifecycle and capacity transitions at standard/full detail.
+    if (event.operation == .use) return 0;
+    if (!observatory_task_detail) return 0;
+    const now = traceNowNs();
+    const session = active_observatory orelse return now;
+    const private_id = switch (event.operation) {
+        .create => resourceCorrelation(event.subject_id, true),
+        .saturation => 0,
+        .retire, .destroy, .use, .reuse => resourceCorrelation(event.subject_id, false),
+    };
+    if (event.subject_id != 0 and private_id == 0) {
+        session.noteLoss(.resource_lifecycle, 1);
+        return now;
+    }
+    _ = session.recordResource(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = @intFromEnum(event.operation),
+        .subject_id = private_id,
+        .duration_ns = if (event.retired_at != 0) now -| event.retired_at else 0,
+        .value_a = @intCast(event.active),
+        .value_b = @intCast(event.high_water),
+        .name = @tagName(event.kind),
+    });
+    if (event.operation == .destroy) forgetResourceCorrelation(event.subject_id);
+    return now;
+}
+
+fn observeCommandQueue(event: cmd_effect.QueueObservation) u64 {
+    observatory_cycle_counts.queue +|= 1;
+    if (!observatory_task_detail) return 0;
+    const now = traceNowNs();
+    const session = active_observatory orelse return now;
+    _ = session.recordQueue(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = @intFromEnum(event.operation),
+        .subject_id = @intCast(event.high_water),
+        .parent_id = @intCast(event.capacity),
+        .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
+        .value_a = @intCast(event.current),
+        .value_b = @intCast(event.capacity),
+        .name = "cmd children",
+        .producer = switch (event.operation) {
+            .release => .host_worker,
+            .reserve, .saturation => .frame_thread,
+        },
+    });
+    return now;
+}
+
+fn observeCaptureQueue(event: capture.StillBudget.QueueObservation) u64 {
+    observatory_cycle_counts.queue +|= 1;
+    if (!observatory_task_detail) return 0;
+    const now = traceNowNs();
+    const session = active_observatory orelse return now;
+    _ = session.recordQueue(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = @intFromEnum(event.operation),
+        .subject_id = event.high_water,
+        .parent_id = event.capacity,
+        .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
+        .value_a = event.current,
+        .value_b = event.amount,
+        .name = "capture still bytes",
+        .producer = switch (event.operation) {
+            .release => .host_worker,
+            .reserve, .saturation => .frame_thread,
+        },
+    });
+    return now;
+}
+
+fn observeStdioQueue(event: stdio_effect.QueueObservation) void {
+    observatory_cycle_counts.queue +|= 1;
+    if (!observatory_task_detail) return;
+    const session = active_observatory orelse return;
+    const at: i96 = @intCast(event.timestamp_ns);
+    _ = session.recordQueue(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = @intCast(@max(at - observatory_origin_ns, 0)),
+        .kind = @intFromEnum(event.operation),
+        .subject_id = event.high_water,
+        .parent_id = event.capacity_bytes,
+        .duration_ns = if (event.oldest_at_ns != 0) event.timestamp_ns -| event.oldest_at_ns else 0,
+        .value_a = event.current,
+        .value_b = event.amount,
+        .name = if (event.stream == 0) "stdio stdout bytes" else "stdio stderr bytes",
+        .producer = switch (event.operation) {
+            .release => .host_worker,
+            .reserve, .saturation => .frame_thread,
+        },
+    });
+}
+
+fn observeInputQueue(event: raylib.InputQueueObservation) u64 {
+    observatory_cycle_counts.queue +|= 1;
+    if (!observatory_task_detail) return 0;
+    const now = traceNowNs();
+    const session = active_observatory orelse return now;
+    _ = session.recordQueue(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = @intFromEnum(event.operation),
+        .subject_id = event.high_water,
+        .parent_id = event.capacity,
+        .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
+        .value_a = event.current,
+        .value_b = event.amount,
+        .name = switch (event.buffer) {
+            .hardware_events => "input hardware events",
+            .virtual_events => "input virtual events",
+            .text_codepoints => "input text codepoints",
+        },
+    });
+    return now;
+}
+
+/// Record a lossy interval overflow distinctly from queue saturation. The
+/// source only exposes that at least one item was lost, not an invented count.
+fn recordInputOverflow(name: []const u8, retained: usize) void {
+    const session = active_observatory orelse return;
+    if (!observatory_task_detail) return;
+    _ = session.recordQueue(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .kind = 3,
+        .value_a = @intCast(retained),
+        .value_b = 1,
+        .name = name,
+    });
+}
+
+/// Brackets one hosted call after its phase check. `copied_bytes` counts bytes
+/// copied across the boundary when the entry point can know that exactly;
+/// zero means none or not measured, never an inferred payload size.
+const EffectScope = struct {
+    name: []const u8,
+    phase: Phase,
+    started_ns: i96,
+    effect_id: u64,
+    correlation_id: u64,
+    inbound_copied_bytes: u64,
+    outbound_copied_bytes: u64 = 0,
+    ownership_transfer_bytes: u64 = 0,
+    validation_ns: ?u64 = null,
+    conversion_ns: ?u64 = null,
+    worker_ns: ?u64 = null,
+    external_ns: ?u64 = null,
+    outcome: observatory.EffectOutcome = .success,
+    active: bool,
+    items: u64 = 1,
+    draw_bytes: u64 = 0,
+    draw_metrics_set: bool = false,
+    is_draw: bool = false,
+    draw_kind: ?u8 = null,
+
+    fn begin(name: []const u8, inbound_copied_bytes: u64) EffectScope {
+        const draw_kind = if (active_phase == .render) drawDetailKind(name) else null;
+        const is_draw = draw_kind != null;
+        if (active_observatory == null) {
+            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = false, .is_draw = is_draw, .draw_kind = draw_kind };
+        }
+        if (!observatory_task_detail or (is_draw and !observatory_full_detail)) {
+            // Summary needs only the scalar aggregate call count. It neither
+            // assigns a detail identity nor samples the trace clock. Standard
+            // treats draw calls the same way; their individual detail is full-only.
+            return .{ .name = name, .phase = active_phase, .started_ns = 0, .effect_id = 0, .correlation_id = 0, .inbound_copied_bytes = 0, .active = true, .is_draw = is_draw, .draw_kind = draw_kind };
+        }
+        const effect_id = observatory_next_effect_id;
+        observatory_next_effect_id +|= 1;
+        return .{ .name = name, .phase = active_phase, .started_ns = observatoryAwakeNs(), .effect_id = effect_id, .correlation_id = active_trace_owner, .inbound_copied_bytes = inbound_copied_bytes, .active = true, .is_draw = is_draw, .draw_kind = draw_kind };
+    }
+
+    fn setOutcome(self: *EffectScope, outcome: observatory.EffectOutcome) void {
+        self.outcome = outcome;
+    }
+
+    fn addCopiedBytes(self: *EffectScope, bytes: usize) void {
+        self.outbound_copied_bytes +|= bytes;
+    }
+
+    fn addOwnershipTransferBytes(self: *EffectScope, bytes: usize) void {
+        self.ownership_transfer_bytes +|= bytes;
+    }
+
+    /// Attach full draw detail derived from boundary structure, never payload.
+    fn setDrawMetrics(self: *EffectScope, items: u64, bytes: u64) void {
+        self.items = items;
+        self.draw_bytes = bytes;
+        self.draw_metrics_set = true;
+    }
+
+    fn drawValues(self: EffectScope) struct { items: u64, bytes: u64 } {
+        return .{
+            .items = self.items,
+            .bytes = if (self.draw_metrics_set) self.draw_bytes else self.inbound_copied_bytes +| self.outbound_copied_bytes,
+        };
+    }
+
+    fn setValidationElapsed(self: *EffectScope, started_ns: i96) void {
+        if (self.active) self.validation_ns = observatoryMeasurementElapsed(started_ns);
+    }
+
+    fn setConversionElapsed(self: *EffectScope, started_ns: i96) void {
+        if (self.active) self.conversion_ns = observatoryMeasurementElapsed(started_ns);
+    }
+
+    fn setWorkerElapsed(self: *EffectScope, started_ns: i96) void {
+        if (self.active) self.worker_ns = observatoryMeasurementElapsed(started_ns);
+    }
+
+    fn setExternalElapsed(self: *EffectScope, started_ns: i96) void {
+        if (self.active) self.external_ns = observatoryMeasurementElapsed(started_ns);
+    }
+
+    fn end(self: EffectScope) void {
+        if (!self.active) return;
+        observatory_cycle_counts.effect +|= 1;
+        if (self.is_draw) {
+            if (!observatory_full_detail) return;
+            const kind = self.draw_kind.?;
+            const session = active_observatory orelse return;
+            const values = self.drawValues();
+            _ = session.recordDraw(.{
+                .cycle = observatory_cycle,
+                .timestamp_ns = @intCast(@max(self.started_ns - observatory_origin_ns, 0)),
+                .kind = kind,
+                .duration_ns = @intCast(@max(observatoryAwakeNs() - self.started_ns, 0)),
+                .value_a = values.items,
+                .value_b = values.bytes,
+                .name = self.name,
+            });
+            return;
+        }
+        if (!observatory_task_detail) return;
+        const session = active_observatory orelse return;
+        _ = session.recordEffect(.{
+            .cycle = observatory_cycle,
+            .timestamp_ns = @intCast(@max(self.started_ns - observatory_origin_ns, 0)),
+            .kind = @intFromEnum(self.phase),
+            .effect_id = self.effect_id,
+            .correlation_id = self.correlation_id,
+            .duration_ns = @intCast(@max(observatoryAwakeNs() - self.started_ns, 0)),
+            .outcome = self.outcome,
+            .inbound_copied_bytes = self.inbound_copied_bytes,
+            .outbound_copied_bytes = self.outbound_copied_bytes,
+            .ownership_transfer_bytes = self.ownership_transfer_bytes,
+            .validation_ns = self.validation_ns,
+            .conversion_ns = self.conversion_ns,
+            .worker_ns = self.worker_ns,
+            .external_ns = self.external_ns,
+            .name = self.name,
+        });
+    }
+};
+
+fn drawByteCount(comptime Element: type, count: usize) u64 {
+    return std.math.mul(u64, @intCast(count), @sizeOf(Element)) catch std.math.maxInt(u64);
+}
+
+/// Stable full-detail draw categories: primitive, batch, upload, state,
+/// readback, and render-target change. Classification uses public effect names
+/// only and never examines an application payload.
+fn drawDetailKind(name: []const u8) ?u8 {
+    if (std.mem.indexOf(u8, name, "read_region") != null or std.mem.indexOf(u8, name, "pixel_at") != null or std.mem.indexOf(u8, name, "screenshot") != null) return 4;
+    if (std.mem.indexOf(u8, name, "with_render_texture") != null) return 5;
+    if (std.mem.indexOf(u8, name, "instances") != null or std.mem.indexOf(u8, name, "Tilemap.draw_layers") != null) return 1;
+    if (std.mem.indexOf(u8, name, "TextureUniform.set") != null) return 3;
+    if (std.mem.indexOf(u8, name, "update_texture") != null or std.mem.indexOf(u8, name, "from_bytes") != null or std.mem.indexOf(u8, name, "Uniform.set") != null) return 2;
+    if (std.mem.indexOf(u8, name, "with_") != null or std.mem.indexOf(u8, name, "set_texture_") != null or std.mem.indexOf(u8, name, "clear!") != null) return 3;
+    if (std.mem.startsWith(u8, name, "Draw.") or std.mem.startsWith(u8, name, "Text.Prepared.draw")) return 0;
+    return null;
+}
+
+test "full draw detail names map to stable non-payload categories" {
+    try std.testing.expectEqual(@as(?u8, 0), drawDetailKind("Draw.circle!"));
+    try std.testing.expectEqual(@as(?u8, 1), drawDetailKind("Draw.texture_instances!"));
+    try std.testing.expectEqual(@as(?u8, 2), drawDetailKind("Assets.update_texture!"));
+    try std.testing.expectEqual(@as(?u8, 2), drawDetailKind("Draw.Vec4Uniform.set!"));
+    try std.testing.expectEqual(@as(?u8, 3), drawDetailKind("Draw.TextureUniform.set!"));
+    try std.testing.expectEqual(@as(?u8, 3), drawDetailKind("Draw.with_shader!"));
+    try std.testing.expectEqual(@as(?u8, 4), drawDetailKind("Capture.read_region!"));
+    try std.testing.expectEqual(@as(?u8, 5), drawDetailKind("Draw.with_render_texture!"));
+    try std.testing.expect(drawDetailKind("Http.send!") == null);
+    try std.testing.expectEqual(@as(u64, 12), drawByteCount(u32, 3));
+    try std.testing.expectEqual(@as(u64, 4), drawByteCount(abi.ColorRgba, 1));
+
+    var exact = EffectScope.begin("test", 99);
+    exact.setDrawMetrics(6, 24);
+    try std.testing.expectEqual(@as(u64, 6), exact.drawValues().items);
+    try std.testing.expectEqual(@as(u64, 24), exact.drawValues().bytes);
+    var fallback = EffectScope.begin("test", 9);
+    fallback.inbound_copied_bytes = 9;
+    fallback.outbound_copied_bytes = 3;
+    try std.testing.expectEqual(@as(u64, 12), fallback.drawValues().bytes);
+}
+
+test "disabled and summary effect scopes do not read a clock" {
+    const Clock = struct {
+        var reads: usize = 0;
+        fn now() i96 {
+            reads += 1;
+            return 1;
+        }
+    };
+    const previous_clock = observatory_test_clock;
+    const previous_observatory = active_observatory;
+    const previous_detail = observatory_task_detail;
+    defer {
+        observatory_test_clock = previous_clock;
+        active_observatory = previous_observatory;
+        observatory_task_detail = previous_detail;
+    }
+    observatory_test_clock = Clock.now;
+    active_observatory = null;
+    observatory_task_detail = false;
+    const allocations_before = alloc_meter.alloc_calls;
+    const bytes_before = alloc_meter.alloc_bytes;
+    var disabled = EffectScope.begin("test.disabled!", 4);
+    try std.testing.expect(!disabled.active);
+    disabled.addCopiedBytes(8);
+    disabled.end();
+    try std.testing.expectEqual(@as(i96, 0), observatoryMeasurementStart());
+    try std.testing.expectEqual(@as(u64, 0), observatoryMeasurementElapsed(1));
+    try std.testing.expectEqual(@as(usize, 0), Clock.reads);
+    try std.testing.expectEqual(allocations_before, alloc_meter.alloc_calls);
+    try std.testing.expectEqual(bytes_before, alloc_meter.alloc_bytes);
+    active_observatory = @ptrFromInt(@alignOf(observatory.Session));
+    var summary = EffectScope.begin("test.summary!", 4);
+    try std.testing.expect(summary.active);
+    try std.testing.expectEqual(@as(i96, 0), observatoryDetailMeasurementStart());
+    summary.end();
+    try std.testing.expectEqual(@as(usize, 0), Clock.reads);
+    active_observatory = null;
+    observatory_task_detail = false;
+    try std.testing.expectEqual(@as(u64, 0), observatoryTaskNow(@ptrCast(&Clock.reads)));
+}
+
+fn hostedTraceMark(label: abi.RocStr) callconv(.c) void {
+    defer label.decref(activeHost());
+    enforcePhase("Trace.mark!", diagnostic_anywhere);
+    if (!diagnostic_anywhere.contains(active_phase) or !validateTraceLabel(label)) return;
+    traceEmit(.mark, label.asSlice(), 0, 0, 0);
+}
+
+fn hostedTraceBegin(label: abi.RocStr) callconv(.c) u64 {
+    defer label.decref(activeHost());
+    enforcePhase("Trace.begin!", diagnostic_anywhere);
+    if (!diagnostic_anywhere.contains(active_phase) or !validateTraceLabel(label)) return 0;
+    if (active_trace_owner == 0) {
+        traceProgrammerError("Trace.begin! has no active callback or task owner");
+        return 0;
+    }
+    const track = traceTrack(active_trace_owner, true) orelse return 0;
+    if (track.depth == TRACE_ZONE_DEPTH) {
+        traceProgrammerError("annotation zones may nest at most 64 deep");
+        return 0;
+    }
+    const sequence = next_trace_token;
+    next_trace_token +%= 1;
+    if (next_trace_token == 0) next_trace_token = 1;
+    const token = (@as(u64, active_trace_owner) << 32) | sequence;
+    const entry = &track.zones[track.depth];
+    entry.token = token;
+    // Disabled annotations preserve the exact same structural stack without
+    // paying for timestamps that cannot be observed or persisted.
+    entry.started_ns = if (active_observatory != null) traceNowNs() else 0;
+    entry.parked_ns = 0;
+    entry.label_len = @intCast(label.asSlice().len);
+    @memcpy(entry.label[0..entry.label_len], label.asSlice());
+    track.depth += 1;
+    traceEmit(.zone_begin, label.asSlice(), @bitCast(token), 0, 0);
+    return token;
+}
+
+fn hostedTraceEnd(token: u64) callconv(.c) void {
+    enforcePhase("Trace.end!", diagnostic_anywhere);
+    if (!diagnostic_anywhere.contains(active_phase)) return;
+    const owner: u32 = @truncate(token >> 32);
+    if (owner == 0 or owner != active_trace_owner) {
+        traceProgrammerError("annotation zone belongs to another callback or task");
+        return;
+    }
+    const track = traceTrack(owner, false) orelse {
+        traceProgrammerError("annotation zone is expired or already ended");
+        return;
+    };
+    if (track.cancelling) return;
+    if (track.depth == 0 or track.zones[track.depth - 1].token != token) {
+        traceProgrammerError("annotation zones must end once in strict LIFO order");
+        return;
+    }
+    const entry = &track.zones[track.depth - 1];
+    const session = active_observatory;
+    if (session) |recorder| {
+        const ended_ns = traceNowNs();
+        const durations = traceZoneDurations(entry.started_ns, entry.parked_ns, ended_ns);
+        _ = recorder.recordAnnotation(.{
+            .cycle = observatory_cycle,
+            .timestamp_ns = ended_ns,
+            .phase = @intFromEnum(active_phase),
+            .kind = .zone_end,
+            .name = entry.label[0..entry.label_len],
+            .integer = @bitCast(token),
+            .wall_ns = durations.wall,
+            .active_ns = durations.active,
+            .parked_ns = durations.parked,
+        });
+    }
+    track.depth -= 1;
+}
+
+fn validateTraceUnit(unit: u8) bool {
+    if (unit <= 5) return true;
+    traceProgrammerError("annotation sample unit is invalid");
+    return false;
+}
+
+fn hostedTraceSampleI64(label: abi.RocStr, value: i64, unit: u8) callconv(.c) void {
+    defer label.decref(activeHost());
+    enforcePhase("Trace.sample_i64!", diagnostic_anywhere);
+    if (!diagnostic_anywhere.contains(active_phase) or !validateTraceLabel(label) or !validateTraceUnit(unit)) return;
+    traceEmit(.sample_i64, label.asSlice(), value, 0, unit);
+}
+
+fn hostedTraceSampleF64(label: abi.RocStr, value: f64, unit: u8) callconv(.c) void {
+    defer label.decref(activeHost());
+    enforcePhase("Trace.sample_f64!", diagnostic_anywhere);
+    if (!diagnostic_anywhere.contains(active_phase) or !validateTraceLabel(label) or !std.math.isFinite(value) or !validateTraceUnit(unit)) {
+        if (!std.math.isFinite(value)) traceProgrammerError("floating-point annotation samples must be finite");
+        return;
+    }
+    traceEmit(.sample_f64, label.asSlice(), 0, value, unit);
+}
+
+test "Trace annotations validate labels units and every callback phase" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    last_trace_violation = null;
+
+    inline for (.{ Phase.startup, .update, .render, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        hostedTraceMark(abi.RocStr.fromSlice("mark", &roc_host));
+        hostedTraceSampleI64(abi.RocStr.fromSlice("count", &roc_host), -1, 1);
+        hostedTraceSampleF64(abi.RocStr.fromSlice("ratio", &roc_host), -0.5, 5);
+        const zone = hostedTraceBegin(abi.RocStr.fromSlice("zone", &roc_host));
+        try std.testing.expect(zone != 0);
+        hostedTraceEnd(zone);
+        scope.leave();
+        try std.testing.expect(last_trace_violation == null);
+    }
+
+    const update = PhaseScope.enter(.update);
+    hostedTraceSampleI64(abi.RocStr.fromSlice("bad-unit", &roc_host), 0, 6);
+    try std.testing.expectEqualStrings("annotation sample unit is invalid", last_trace_violation.?);
+    last_trace_violation = null;
+    hostedTraceSampleF64(abi.RocStr.fromSlice("nan", &roc_host), std.math.nan(f64), 0);
+    try std.testing.expectEqualStrings("floating-point annotation samples must be finite", last_trace_violation.?);
+    last_trace_violation = null;
+    var long_label: [TRACE_LABEL_MAX_BYTES + 1]u8 = @splat('x');
+    hostedTraceMark(abi.RocStr.fromSlice(&long_label, &roc_host));
+    try std.testing.expectEqualStrings("annotation labels must be at most 255 UTF-8 bytes", last_trace_violation.?);
+    update.leave();
+}
+
+test "disabled Trace zones and waits preserve structure without reading a clock" {
+    const Clock = struct {
+        var reads: usize = 0;
+        fn now() i96 {
+            reads += 1;
+            return 1;
+        }
+    };
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    const previous_clock = observatory_test_clock;
+    const previous_observatory = active_observatory;
+    defer {
+        active_roc_host = previous_host;
+        observatory_test_clock = previous_clock;
+        active_observatory = previous_observatory;
+    }
+    active_roc_host = &roc_host;
+    observatory_test_clock = Clock.now;
+    active_observatory = null;
+
+    const task = PhaseScope.enter(.task);
+    const zone = hostedTraceBegin(abi.RocStr.fromSlice("disabled", &roc_host));
+    const wait = WaitScope.enter();
+    wait.leave();
+    hostedTraceEnd(zone);
+    task.leave();
+    try std.testing.expectEqual(@as(usize, 0), Clock.reads);
+}
+
+test "Trace zones are owner scoped strict LIFO handles" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    last_trace_violation = null;
+
+    const update = PhaseScope.enter(.update);
+    const parent = hostedTraceBegin(abi.RocStr.fromSlice("parent", &roc_host));
+    const child = hostedTraceBegin(abi.RocStr.fromSlice("child", &roc_host));
+    hostedTraceEnd(parent);
+    try std.testing.expectEqualStrings("annotation zones must end once in strict LIFO order", last_trace_violation.?);
+    last_trace_violation = null;
+    hostedTraceEnd(child);
+    hostedTraceEnd(parent);
+    hostedTraceEnd(parent);
+    try std.testing.expectEqualStrings("annotation zones must end once in strict LIFO order", last_trace_violation.?);
+    last_trace_violation = null;
+    update.leave();
+
+    const render = PhaseScope.enter(.render);
+    hostedTraceEnd(parent);
+    try std.testing.expectEqualStrings("annotation zone belongs to another callback or task", last_trace_violation.?);
+    render.leave();
+}
+
+test "Trace accepts exactly 64 nested zones and rejects the 65th" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    last_trace_violation = null;
+    const task = PhaseScope.enter(.task);
+    var handles: [TRACE_ZONE_DEPTH]u64 = undefined;
+    for (&handles) |*handle| {
+        handle.* = hostedTraceBegin(abi.RocStr.fromSlice("depth", &roc_host));
+        try std.testing.expect(handle.* != 0);
+    }
+    try std.testing.expectEqual(@as(u64, 0), hostedTraceBegin(abi.RocStr.fromSlice("too deep", &roc_host)));
+    try std.testing.expectEqualStrings("annotation zones may nest at most 64 deep", last_trace_violation.?);
+    last_trace_violation = null;
+    var index = handles.len;
+    while (index != 0) {
+        index -= 1;
+        hostedTraceEnd(handles[index]);
+    }
+    task.leave();
+    try std.testing.expect(last_trace_violation == null);
+}
+
+test "Trace copied handles double ends expiry and callback escape are diagnosed" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    last_trace_violation = null;
+
+    const update = PhaseScope.enter(.update);
+    const handle = hostedTraceBegin(abi.RocStr.fromSlice("copied", &roc_host));
+    const copied = handle;
+    hostedTraceEnd(handle);
+    hostedTraceEnd(copied);
+    try std.testing.expectEqualStrings("annotation zones must end once in strict LIFO order", last_trace_violation.?);
+    last_trace_violation = null;
+    update.leave();
+
+    const render = PhaseScope.enter(.render);
+    hostedTraceEnd(copied);
+    try std.testing.expectEqualStrings("annotation zone belongs to another callback or task", last_trace_violation.?);
+    last_trace_violation = null;
+    _ = hostedTraceBegin(abi.RocStr.fromSlice("escape", &roc_host));
+    render.leave();
+    try std.testing.expectEqualStrings("an annotation zone escaped its callback or task body", last_trace_violation.?);
+}
+
+test "Trace end during cancellation acknowledges an already aborted zone" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    last_trace_violation = null;
+
+    const task = PhaseScope.enter(.task);
+    const handle = hostedTraceBegin(abi.RocStr.fromSlice("cancelled", &roc_host));
+    const track = traceTrack(active_trace_owner, false).?;
+    // `abortTaskTraceOwner` records and pops every zone before the coroutine
+    // is cancelled. Model that completed synchronous step without requiring a
+    // recorder, then exercise the Roc cleanup call made during stack unwind.
+    track.depth = 0;
+    track.cancelling = true;
+    hostedTraceEnd(handle);
+    try std.testing.expect(last_trace_violation == null);
+    task.leave();
+}
+
+test "nested Trace zones accumulate every wait and derive complete durations while disabled" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
+    const previous_observatory = active_observatory;
+    active_observatory = null;
+    defer active_observatory = previous_observatory;
+    last_trace_violation = null;
+
+    const task = PhaseScope.enter(.task);
+    const owner = active_trace_owner;
+    const parent = hostedTraceBegin(abi.RocStr.fromSlice("parent waits", &roc_host));
+    chargeTraceParked(owner, 5);
+    const child = hostedTraceBegin(abi.RocStr.fromSlice("child waits", &roc_host));
+    chargeTraceParked(owner, 7);
+    chargeTraceParked(owner, 11);
+    const track = traceTrack(owner, false).?;
+    try std.testing.expectEqual(@as(u64, 23), track.zones[0].parked_ns);
+    try std.testing.expectEqual(@as(u64, 18), track.zones[1].parked_ns);
+
+    const durations = traceZoneDurations(100, 18, 150);
+    try std.testing.expectEqual(@as(u64, 50), durations.wall);
+    try std.testing.expectEqual(@as(u64, 32), durations.active);
+    try std.testing.expectEqual(@as(u64, 18), durations.parked);
+    hostedTraceEnd(child);
+    hostedTraceEnd(parent);
+    task.leave();
+    try std.testing.expect(last_trace_violation == null);
+
+    const update = PhaseScope.enter(.update);
+    const update_zone = hostedTraceBegin(abi.RocStr.fromSlice("update", &roc_host));
+    const wait = WaitScope.enter();
+    wait.leave();
+    try std.testing.expectEqual(@as(u64, 0), traceTrack(active_trace_owner, false).?.zones[0].parked_ns);
+    hostedTraceEnd(update_zone);
+    update.leave();
 }
 
 /// Recording policy and state for this process. See `capture.zig`.
@@ -2380,6 +3834,20 @@ fn exportedRocDealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void {
 }
 
 fn exportedRocRealloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    if (observatory_full_detail) {
+        const storage = @max(alignment, @alignOf(usize));
+        allocation_realloc_old_pointer = @intFromPtr(ptr) - storage;
+        if (allocation_identities.get(allocation_realloc_old_pointer)) |identity| {
+            allocation_realloc_id = identity.id;
+            allocation_realloc_old_bytes = identity.bytes;
+        }
+    }
+    defer {
+        allocation_realloc_id = 0;
+        allocation_realloc_old_pointer = 0;
+        allocation_realloc_old_bytes = 0;
+        allocation_realloc_in_place = false;
+    }
     return abi.DefaultAllocators.rocRealloc(activeHost(), ptr, new_length, alignment);
 }
 
@@ -3987,6 +5455,8 @@ fn releaseStartupFontHandle(host: *RocHost) void {
 
 fn configuredStartupFont(host: *RocHost) abi.DrawHostLoad_font_bytesRetRecord {
     enforcePhase("App.Startup.default_font!", during_startup);
+    const effect = EffectScope.begin("App.Startup.default_font!", startup_font_config.path.len);
+    defer effect.end();
     if (startup_font_config.path.len == 0) return .{ .font = defaultFontHandle(), .err = RESOURCE_ERR_NONE };
     if (!isSafeStoreRelativePath(startup_font_config.path)) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH };
     if (startup_font_config.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
@@ -4267,8 +5737,8 @@ fn openStoreDirectoryBlocking(allocator: std.mem.Allocator, location_kind: u8, r
 fn openStoreDirectoryWaiting(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) StoreDirOpen {
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("store open", 0);
-    defer AppTasks.traceResume("store open");
+    const park = AppTasks.observePark("store open", 0);
+    defer AppTasks.observeResume(park, "store open");
     const rt = AppTasks.currentRuntime() orelse return openStoreDirectoryBlocking(allocator, location_kind, root);
     var blocking = rt.spawnBlocking(openStoreDirectoryBlocking, .{ allocator, location_kind, root }) catch
         return openStoreDirectoryBlocking(allocator, location_kind, root);
@@ -4285,8 +5755,8 @@ fn readDirFileBlocking(allocator: std.mem.Allocator, dir: std.Io.Dir, path: []co
 fn readDirFileWaiting(allocator: std.mem.Allocator, dir: std.Io.Dir, path: []const u8, limit: usize) StoreDirRead {
     const scope = WaitScope.enter();
     defer scope.leave();
-    AppTasks.tracePark("store read", 0);
-    defer AppTasks.traceResume("store read");
+    const park = AppTasks.observePark("store read", 0);
+    defer AppTasks.observeResume(park, "store read");
     const rt = AppTasks.currentRuntime() orelse return readDirFileBlocking(allocator, dir, path, limit);
     var blocking = rt.spawnBlocking(readDirFileBlocking, .{ allocator, dir, path, limit }) catch
         return readDirFileBlocking(allocator, dir, path, limit);
@@ -4645,6 +6115,8 @@ test "embedded texture and font bytes are consumed exactly once" {
 /// is pure and runs on the frame thread once the read has come back.
 fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) callconv(.c) abi.AssetsHostOpen_storeRetRecord {
     enforcePhase("Assets.Store.open!", during_wait);
+    const effect = EffectScope.begin("Assets.Store.open!", 0);
+    defer effect.end();
     defer args.root.decref(host);
     defer args.asset_set.decref(host);
     defer args.content_hash.decref(host);
@@ -4707,6 +6179,8 @@ fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []c
 /// in hand.
 fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.AssetsHostLoad_store_textureArgs) callconv(.c) abi.AssetsHostLoad_store_textureRetRecord {
     enforcePhase("Assets.load_texture!", during_wait);
+    const effect = EffectScope.begin("Assets.load_texture!", 0);
+    defer effect.end();
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     const store = store_heap.get(args.store.*) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ };
@@ -4748,6 +6222,8 @@ fn exportedAssetsLoadStoreTextureRaw(args: abi.AssetsHostLoad_store_textureArgs)
 
 fn hostedAssetsLoadTextureBytesRaw(host: *RocHost, args: abi.AssetsHostLoad_texture_bytesArgs) callconv(.c) abi.AssetsHostLoad_texture_bytesRetRecord {
     enforcePhase("Assets.texture_from_bytes!", during_load);
+    const effect = EffectScope.begin("Assets.texture_from_bytes!", args.bytes.items().len);
+    defer effect.end();
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
     if (bytes.len == 0 or imageFileType(args.format) == null) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
@@ -4768,6 +6244,8 @@ fn exportedAssetsLoadTextureBytesRaw(args: abi.AssetsHostLoad_texture_bytesArgs)
 
 fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textureArgs) callconv(.c) abi.AssetsHostGenerate_color_textureRetRecord {
     enforcePhase("Assets.generate_color_texture!", during_load);
+    const effect = EffectScope.begin("Assets.generate_color_texture!", 0);
+    defer effect.end();
     if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
@@ -4782,6 +6260,8 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textur
 
 fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_textureArgs) callconv(.c) abi.AssetsHostGenerate_checked_textureRetRecord {
     enforcePhase("Assets.generate_checked_texture!", during_load);
+    const effect = EffectScope.begin("Assets.generate_checked_texture!", 0);
+    defer effect.end();
     if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (active_headless) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
@@ -4796,6 +6276,8 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_te
 
 fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
     enforcePhase("Assets.update_texture!", during_update);
+    var effect = EffectScope.begin("Assets.update_texture!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
+    defer effect.end();
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
     const token = args.texture.handle.*;
@@ -4806,6 +6288,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
         .native => |texture| texturePixelCount(texture.width, texture.height) orelse return TEXTURE_UPDATE_PIXEL_COUNT,
     };
     if (args.pixels.len() != expected) return TEXTURE_UPDATE_PIXEL_COUNT;
+    effect.setDrawMetrics(@intCast(args.pixels.len()), drawByteCount(abi.ColorRgba, args.pixels.items().len));
     switch (resource.*) {
         .headless => {},
         .native => |texture| if (!builtin.is_test) raylib.updateTexture(texture, args.pixels.items()),
@@ -4821,6 +6304,8 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
 /// silently refused for transient host capacity.
 fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
     enforcePhase("Assets.update_texture_region!", during_update);
+    var effect = EffectScope.begin("Assets.update_texture_region!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
+    defer effect.end();
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
 
@@ -4842,6 +6327,7 @@ fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate
     const covered = texturePixelCount(args.width, args.height) orelse
         return TEXTURE_UPDATE_PIXEL_COUNT;
     if (args.pixels.len() != covered) return TEXTURE_UPDATE_PIXEL_COUNT;
+    effect.setDrawMetrics(@intCast(covered), drawByteCount(abi.ColorRgba, args.pixels.items().len));
     switch (resource.*) {
         .headless => {},
         .native => |texture| if (!builtin.is_test) raylib.updateTextureRegion(
@@ -4863,6 +6349,8 @@ fn exportedAssetsUpdateTextureRegionRaw(args: abi.AssetsHostUpdate_texture_regio
 
 fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
     enforcePhase("Assets.set_texture_filter!", during_update);
+    const effect = EffectScope.begin("Assets.set_texture_filter!", 0);
+    defer effect.end();
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
@@ -4871,6 +6359,8 @@ fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callcon
 
 fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
     enforcePhase("Assets.set_texture_wrap!", during_update);
+    const effect = EffectScope.begin("Assets.set_texture_wrap!", 0);
+    defer effect.end();
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
@@ -4895,6 +6385,8 @@ fn storeShader(resource: ShaderResource) ?*u64 {
 
 fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) abi.DrawHostLoad_render_textureRetRecord {
     enforcePhase("Draw.RenderTexture.load!", during_load);
+    const effect = EffectScope.begin("Draw.RenderTexture.load!", 0);
+    defer effect.end();
     if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const target = storeRenderTexture(.headless) orelse
@@ -4910,6 +6402,8 @@ fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) cal
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
     enforcePhase("Draw.Shader.from_source!", during_load);
+    const effect = EffectScope.begin("Draw.Shader.from_source!", args.fragment_source.asSlice().len);
+    defer effect.end();
     defer args.vertex_source.decref(host);
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
@@ -4942,6 +6436,8 @@ fn exportedDrawLoadShaderSourceRaw(args: abi.DrawHostLoad_shader_sourceArgs) cal
 /// compile runs on the frame thread once both reads have answered.
 fn hostedDrawLoadStoreShaderRaw(host: *RocHost, args: abi.DrawHostLoad_store_shaderArgs) callconv(.c) abi.DrawHostLoad_store_shaderRetRecord {
     enforcePhase("Draw.Shader.from_store!", during_wait);
+    const effect = EffectScope.begin("Draw.Shader.from_store!", 0);
+    defer effect.end();
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     defer releaseResourceBox(host, args.store);
@@ -5006,6 +6502,8 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
 
 fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_render_texture!", during_render);
+    const effect = EffectScope.begin("Draw.with_render_texture!", 0);
+    defer effect.end();
     const host = activeHost();
     const owner = args.handle;
     if (render_texture_lease_count == SCOPE_STACK_LIMIT) {
@@ -5028,6 +6526,8 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     enforcePhase("Draw.with_render_texture!", during_render);
+    const effect = EffectScope.begin("Draw.with_render_texture!", 0);
+    defer effect.end();
     if (render_texture_lease_count == 0) return;
     if (headlessMode()) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
     render_texture_lease_count -= 1;
@@ -5052,6 +6552,8 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
 /// deliver.
 fn hostedDrawFrameSizeRaw() callconv(.c) abi.DrawHostFrame_size {
     enforcePhase("Draw.Frame.size!", during_render);
+    const effect = EffectScope.begin("Draw.Frame.size!", 0);
+    defer effect.end();
     if (render_texture_lease_count > 0) return render_target_sizes[render_texture_lease_count - 1];
     const window = windowState();
     return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
@@ -5059,6 +6561,8 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.DrawHostFrame_size {
 
 fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_shader!", during_render);
+    const effect = EffectScope.begin("Draw.with_shader!", 0);
+    defer effect.end();
     const host = activeHost();
     const owner = args.arg0;
     if (shader_lease_count == SCOPE_STACK_LIMIT) {
@@ -5080,6 +6584,8 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
     enforcePhase("Draw.with_shader!", during_render);
+    const effect = EffectScope.begin("Draw.with_shader!", 0);
+    defer effect.end();
     if (shader_lease_count == 0) return;
     if (headlessMode()) headless_shader_depth -|= 1 else raylib.endShaderMode();
     shader_lease_count -= 1;
@@ -5094,6 +6600,8 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
 
 fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_blend_mode!", during_render);
+    const effect = EffectScope.begin("Draw.with_blend_mode!", 0);
+    defer effect.end();
     if (blend_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (args.arg0 > 5) return SCOPE_UNAVAILABLE;
     if (!headlessMode()) raylib.beginBlendMode(args.arg0);
@@ -5104,6 +6612,8 @@ fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
     enforcePhase("Draw.with_blend_mode!", during_render);
+    const effect = EffectScope.begin("Draw.with_blend_mode!", 0);
+    defer effect.end();
     if (blend_scope_count == 0) return;
     if (!headlessMode()) raylib.endBlendMode();
     blend_scope_count -= 1;
@@ -5112,6 +6622,8 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
 
 fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
     enforcePhase("Draw.Shader.uniform_*!", during_load);
+    const effect = EffectScope.begin("Draw.Shader.uniform_*!", args.name.asSlice().len);
+    defer effect.end();
     defer args.name.decref(host);
     defer releaseResourceBox(host, args.shader);
     const resource = shader_heap.get(args.shader.*) orelse return -1;
@@ -5135,6 +6647,9 @@ fn exportedDrawShaderLocationRaw(args: abi.DrawHostShader_locationArgs) callconv
 
 fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(.c) void {
     enforcePhase("Draw.F32Uniform.set!", during_render);
+    var effect = EffectScope.begin("Draw.F32Uniform.set!", 0);
+    defer effect.end();
+    effect.setDrawMetrics(1, @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -5144,6 +6659,9 @@ fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(
 
 fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) void {
     enforcePhase("Draw.I32Uniform.set!", during_render);
+    var effect = EffectScope.begin("Draw.I32Uniform.set!", 0);
+    defer effect.end();
+    effect.setDrawMetrics(1, @sizeOf(i32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -5153,6 +6671,9 @@ fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) 
 
 fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c) void {
     enforcePhase("Draw.Vec2Uniform.set!", during_render);
+    var effect = EffectScope.begin("Draw.Vec2Uniform.set!", 0);
+    defer effect.end();
+    effect.setDrawMetrics(1, 2 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -5162,6 +6683,9 @@ fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c
 
 fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c) void {
     enforcePhase("Draw.Vec3Uniform.set!", during_render);
+    var effect = EffectScope.begin("Draw.Vec3Uniform.set!", 0);
+    defer effect.end();
+    effect.setDrawMetrics(1, 3 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -5171,6 +6695,9 @@ fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c
 
 fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c) void {
     enforcePhase("Draw.Vec4Uniform.set!", during_render);
+    var effect = EffectScope.begin("Draw.Vec4Uniform.set!", 0);
+    defer effect.end();
+    effect.setDrawMetrics(1, 4 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -5180,6 +6707,8 @@ fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c
 
 fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callconv(.c) void {
     enforcePhase("Draw.TextureUniform.set!", during_render);
+    const effect = EffectScope.begin("Draw.TextureUniform.set!", 0);
+    defer effect.end();
     defer args.uniform.decref(activeHost());
     defer args.texture.decref(activeHost());
     if (builtin.is_test) return;
@@ -5192,6 +6721,8 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
 /// Forward Roc scissor bounds to the raylib backend.
 fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_scissor!", during_render);
+    const effect = EffectScope.begin("Draw.with_scissor!", 0);
+    defer effect.end();
     if (scissor_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginScissor(args.x, args.y, args.width, args.height);
     scissor_scopes[scissor_scope_count] = args;
@@ -5202,6 +6733,8 @@ fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u
 /// End the scissor region opened by the Roc renderer.
 fn hostedDrawEndScissorRaw() callconv(.c) void {
     enforcePhase("Draw.with_scissor!", during_render);
+    const effect = EffectScope.begin("Draw.with_scissor!", 0);
+    defer effect.end();
     if (scissor_scope_count == 0) return;
     if (!headlessMode()) raylib.endScissor();
     scissor_scope_count -= 1;
@@ -5213,6 +6746,8 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
 
 fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_camera!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera!", 0);
+    defer effect.end();
     if (camera_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginMode2D(args);
     camera_scopes[camera_scope_count] = args;
@@ -5222,30 +6757,40 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
 
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
     enforcePhase("Draw.circle!", during_render);
+    const effect = EffectScope.begin("Draw.circle!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawCircle(args);
 }
 
 fn hostedDrawCircleGradient(args: abi.DrawHostCircle_gradientArgs) callconv(.c) void {
     enforcePhase("Draw.circle_gradient!", during_render);
+    const effect = EffectScope.begin("Draw.circle_gradient!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawCircleGradient(args);
 }
 
 fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) void {
     enforcePhase("Draw.circle_lines!", during_render);
+    const effect = EffectScope.begin("Draw.circle_lines!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawCircleLines(args);
 }
 
 fn hostedDrawClear(color: Color) callconv(.c) void {
     enforcePhase("Draw.clear!", during_render);
+    const effect = EffectScope.begin("Draw.clear!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.clearBackground(color);
 }
 
 fn hostedDrawEndCamera() callconv(.c) void {
     enforcePhase("Draw.with_camera!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera!", 0);
+    defer effect.end();
     if (camera_scope_count == 0) return;
     if (!headlessMode()) raylib.endMode2D();
     camera_scope_count -= 1;
@@ -5254,18 +6799,24 @@ fn hostedDrawEndCamera() callconv(.c) void {
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
     enforcePhase("Draw.fps!", during_render);
+    const effect = EffectScope.begin("Draw.fps!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawFps(args);
 }
 
 fn hostedDrawLineRaw(args: abi.DrawHostLineArgs) callconv(.c) void {
     enforcePhase("Draw.line!", during_render);
+    const effect = EffectScope.begin("Draw.line!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawLine(args);
 }
 
 fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawHostPolygonArgs) callconv(.c) void {
     enforcePhase("Draw.polygon!", during_render);
+    const effect = EffectScope.begin("Draw.polygon!", 0);
+    defer effect.end();
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygon(args.points.items(), args.color);
@@ -5277,6 +6828,8 @@ fn exportedDrawPolygonRaw(args: abi.DrawHostPolygonArgs) callconv(.c) void {
 
 fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawHostPolygon_linesArgs) callconv(.c) void {
     enforcePhase("Draw.polygon_lines!", during_render);
+    const effect = EffectScope.begin("Draw.polygon_lines!", 0);
+    defer effect.end();
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
@@ -5288,54 +6841,72 @@ fn exportedDrawPolygonLinesRaw(args: abi.DrawHostPolygon_linesArgs) callconv(.c)
 
 fn hostedDrawRectangleRaw(args: abi.DrawHostRectangleArgs) callconv(.c) void {
     enforcePhase("Draw.rectangle!", during_render);
+    const effect = EffectScope.begin("Draw.rectangle!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRectangle(args);
 }
 
 fn hostedDrawRectangleLinesRaw(args: abi.DrawHostRectangle_linesArgs) callconv(.c) void {
     enforcePhase("Draw.rectangle_lines!", during_render);
+    const effect = EffectScope.begin("Draw.rectangle_lines!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRectangleLines(args);
 }
 
 fn hostedDrawRectangleGradientH(args: abi.DrawHostRectangle_gradient_hArgs) callconv(.c) void {
     enforcePhase("Draw.rectangle_gradient_h!", during_render);
+    const effect = EffectScope.begin("Draw.rectangle_gradient_h!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRectangleGradientH(args);
 }
 
 fn hostedDrawRectangleGradientV(args: abi.DrawHostRectangle_gradient_vArgs) callconv(.c) void {
     enforcePhase("Draw.rectangle_gradient_v!", during_render);
+    const effect = EffectScope.begin("Draw.rectangle_gradient_v!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRectangleGradientV(args);
 }
 
 fn hostedDrawRoundedRectangleRaw(args: abi.DrawHostRounded_rectangleArgs) callconv(.c) void {
     enforcePhase("Draw.rounded_rectangle!", during_render);
+    const effect = EffectScope.begin("Draw.rounded_rectangle!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRoundedRectangle(args);
 }
 
 fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawHostRounded_rectangle_linesArgs) callconv(.c) void {
     enforcePhase("Draw.rounded_rectangle_lines!", during_render);
+    const effect = EffectScope.begin("Draw.rounded_rectangle_lines!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawRoundedRectangleLines(args);
 }
 
 fn hostedDrawTriangleRaw(args: abi.DrawHostTriangleArgs) callconv(.c) void {
     enforcePhase("Draw.triangle!", during_render);
+    const effect = EffectScope.begin("Draw.triangle!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawTriangle(args);
 }
 
 fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c) void {
     enforcePhase("Draw.triangle_lines!", during_render);
+    const effect = EffectScope.begin("Draw.triangle_lines!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.drawTriangleLines(args);
 }
 
 fn hostedDrawLoadFontBytesRaw(host: *RocHost, args: abi.DrawHostLoad_font_bytesArgs) callconv(.c) abi.DrawHostLoad_font_bytesRetRecord {
     enforcePhase("Draw.font_from_bytes!", during_load);
+    const effect = EffectScope.begin("Draw.font_from_bytes!", args.bytes.items().len);
+    defer effect.end();
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
     const file_type = fontFileType(args.format) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
@@ -5359,6 +6930,8 @@ fn exportedDrawLoadFontBytesRaw(args: abi.DrawHostLoad_font_bytesArgs) callconv(
 /// happens on the frame thread with the bytes back in hand.
 fn hostedDrawLoadStoreFontRaw(host: *RocHost, args: abi.DrawHostLoad_store_fontArgs) callconv(.c) abi.DrawHostLoad_store_fontRetRecord {
     enforcePhase("Draw.load_store_font!", during_wait);
+    const effect = EffectScope.begin("Draw.load_store_font!", args.path.asSlice().len);
+    defer effect.end();
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     if (args.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
@@ -5482,6 +7055,8 @@ fn fontForHandle(handle: *u64) raylib.Font {
 
 fn hostedDrawDefaultFontRaw() callconv(.c) *u64 {
     enforcePhase("Draw.default_font!", during_load);
+    const effect = EffectScope.begin("Draw.default_font!", 0);
+    defer effect.end();
     return defaultFontHandle();
 }
 
@@ -5539,6 +7114,8 @@ fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.DrawHostFont
 
 fn hostedDrawFontMetricsRaw(host: *RocHost, font: *u64) callconv(.c) abi.DrawHostFont_metricsRetRecord {
     enforcePhase("Draw font metric snapshot", during_load);
+    const effect = EffectScope.begin("Draw font metric snapshot", 0);
+    defer effect.end();
     defer releaseResourceBox(host, font);
     if (headlessMode()) return headlessFontMetrics(host);
     return snapshotRaylibFontMetrics(host, fontForHandle(font));
@@ -5582,6 +7159,8 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
 
 fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
     enforcePhase("Text.prepare!", during_load);
+    const effect = EffectScope.begin("Text.prepare!", args.text.asSlice().len);
+    defer effect.end();
     defer args.text.decref(host);
     prepared_text_prepare_calls += 1;
 
@@ -5634,6 +7213,8 @@ fn exportedDrawPrepareTextRaw(args: abi.DrawHostPrepare_textArgs) callconv(.c) a
 
 fn hostedDrawPreparedTextRaw(host: *RocHost, args: abi.DrawHostDraw_prepared_textArgs) callconv(.c) void {
     enforcePhase("Text.Prepared.draw!", during_render);
+    const effect = EffectScope.begin("Text.Prepared.draw!", 0);
+    defer effect.end();
     defer releaseResourceBox(host, args.prepared);
     const resource = prepared_text_heap.get(args.prepared.*) orelse return;
     prepared_text_draw_calls += 1;
@@ -5655,6 +7236,8 @@ fn exportedDrawPreparedTextRaw(args: abi.DrawHostDraw_prepared_textArgs) callcon
 
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
     enforcePhase("Draw.text!", during_render);
+    const effect = EffectScope.begin("Draw.text!", 0);
+    defer effect.end();
     defer args.text.decref(host);
     defer releaseResourceBox(host, args.font);
     if (headlessMode()) return;
@@ -5680,6 +7263,8 @@ fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
 
 fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     enforcePhase("Draw.texture!", during_render);
+    const effect = EffectScope.begin("Draw.texture!", 0);
+    defer effect.end();
     defer args.texture.decref(activeHost());
     if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
@@ -5693,6 +7278,12 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
 /// list never reaches here, because Roc returns before crossing.
 fn hostedDrawTextureInstancesRaw(host: *RocHost, args: abi.DrawHostDraw_texture_instancesArgs) callconv(.c) void {
     enforcePhase("Draw.texture_instances!", during_render);
+    var effect = EffectScope.begin("Draw.texture_instances!", 0);
+    effect.setDrawMetrics(
+        @intCast(args.instances.len()),
+        drawByteCount(abi.DrawHostDraw_texture_instancesArg0Instances, args.instances.items().len),
+    );
+    defer effect.end();
     defer args.decref(host);
     if (headlessMode()) {
         // Headless still resolves the handle so a released texture is rejected
@@ -5715,6 +7306,8 @@ fn exportedDrawTextureInstancesRaw(args: abi.DrawHostDraw_texture_instancesArgs)
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
     enforcePhase("Draw.projective_texture!", during_render);
+    const effect = EffectScope.begin("Draw.projective_texture!", 0);
+    defer effect.end();
     defer args.texture.decref(activeHost());
     if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
@@ -5731,6 +7324,8 @@ var active_app_args: []const [*:0]u8 = &.{};
 
 fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
     enforcePhase("App.Startup.args!", during_load);
+    const effect = EffectScope.begin("App.Startup.args!", 0);
+    defer effect.end();
 
     const result = abi.RocList(abi.RocStr).allocate(active_app_args.len, roc_host);
     if (result.elements_ptr) |items| {
@@ -5755,6 +7350,8 @@ fn exportedArgs() callconv(.c) abi.RocList(abi.RocStr) {
 
 fn hostedReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     enforcePhase("Host.read_env!", during_startup);
+    const effect = EffectScope.begin("Host.read_env!", key_arg.asSlice().len);
+    defer effect.end();
     // Windows doesn't link libc, so env var reading is not yet supported
     var result: ReadEnvResult = undefined;
     result.tag = .Err;
@@ -5769,6 +7366,8 @@ fn exportedReadEnvWindows(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 
 fn hostedReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     enforcePhase("Host.read_env!", during_startup);
+    const effect = EffectScope.begin("Host.read_env!", key_arg.asSlice().len);
+    defer effect.end();
     var result: ReadEnvResult = undefined;
     const key = key_arg.asSlice();
     const value = hostGetEnv(key);
@@ -5792,6 +7391,8 @@ fn exportedReadEnvPosix(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 
 fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
     enforcePhase("Host.read_file!", during_startup);
+    const effect = EffectScope.begin("Host.read_file!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
@@ -5836,6 +7437,8 @@ fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []
 /// and the conversion into Roc values run on the frame thread between them.
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
     enforcePhase("Tilemap.load_tmx!", during_wait);
+    const effect = EffectScope.begin("Tilemap.load_tmx!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
@@ -5899,6 +7502,8 @@ fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
 
 fn hostedTilemapDrawRaw(host: *RocHost, args: abi.TilemapHostDrawArgs) callconv(.c) void {
     enforcePhase("Tilemap.draw_layers!", during_render);
+    const effect = EffectScope.begin("Tilemap.draw_layers!", 0);
+    defer effect.end();
     defer releaseTilemapDrawArgs(host, args);
     if (headlessMode()) headless_tilemap_draw_calls += 1;
     const submitted = tilemap_batch.draw(.{
@@ -5926,6 +7531,8 @@ fn exportedTilemapDrawRaw(args: abi.TilemapHostDrawArgs) callconv(.c) void {
 
 fn hostedExit(code: i32) callconv(.c) void {
     enforcePhase("App.Startup.exit!", during_update);
+    const effect = EffectScope.begin("App.Startup.exit!", 0);
+    defer effect.end();
     exit_requested = @as(i64, code);
 }
 
@@ -5937,6 +7544,8 @@ fn hostedExit(code: i32) callconv(.c) void {
 /// honors the hint deterministically.
 fn hostedSuggestWindowSize(args: abi.HostHostSuggest_window_sizeArgs) callconv(.c) u8 {
     enforcePhase("Window.suggest_size!", during_update);
+    const effect = EffectScope.begin("Window.suggest_size!", 0);
+    defer effect.end();
     // `headlessMode()` rather than `active_headless`: it folds to true at
     // comptime under `zig test`, which keeps the raylib call out of the test
     // binary's link so the phase guard here is testable at all.
@@ -5951,12 +7560,16 @@ fn hostedSuggestWindowSize(args: abi.HostHostSuggest_window_sizeArgs) callconv(.
 
 fn hostedSetTargetFps(fps: i32) callconv(.c) void {
     enforcePhase("Window.set_target_fps!", during_update);
+    const effect = EffectScope.begin("Window.set_target_fps!", 0);
+    defer effect.end();
     if (headlessMode()) return;
     raylib.setTargetFps(fps);
 }
 
 fn hostedSuggestWindowMinSize(args: abi.HostHostSuggest_window_min_sizeArgs) callconv(.c) void {
     enforcePhase("Window.suggest_min_size!", during_update);
+    const effect = EffectScope.begin("Window.suggest_min_size!", 0);
+    defer effect.end();
     if (headlessMode()) return;
     raylib.suggestWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
@@ -5968,6 +7581,8 @@ fn hostedSuggestWindowMinSize(args: abi.HostHostSuggest_window_min_sizeArgs) cal
 /// one -- and the window manager is the only thing that knows which are not.
 fn hostedSuggestWindowPosition(args: abi.HostHostSuggest_window_positionArgs) callconv(.c) void {
     enforcePhase("Window.suggest_position!", during_update);
+    const effect = EffectScope.begin("Window.suggest_position!", 0);
+    defer effect.end();
     if (headlessMode()) return;
     raylib.suggestWindowPosition(args.x, args.y);
 }
@@ -5980,6 +7595,8 @@ fn hostedSuggestWindowPosition(args: abi.HostHostSuggest_window_positionArgs) ca
 /// a fault it can act on.
 fn hostedSuggestWindowMonitor(monitor: i32) callconv(.c) void {
     enforcePhase("Window.suggest_monitor!", during_update);
+    const effect = EffectScope.begin("Window.suggest_monitor!", 0);
+    defer effect.end();
     if (headlessMode()) return;
     raylib.suggestWindowMonitor(monitor);
 }
@@ -6017,6 +7634,8 @@ fn monitorCoordinate(value: f32) i32 {
 /// shader or a capture wants the pixel resolution of the surface it is on.
 fn hostedWindowScaleDpi() callconv(.c) abi.HostHostWindow_scale_dpiRetRecord {
     enforcePhase("Window.scale!", constant_time_anywhere);
+    const effect = EffectScope.begin("Window.scale!", 0);
+    defer effect.end();
     if (headlessMode()) return .{ .x = DEFAULT_WINDOW_SCALE, .y = DEFAULT_WINDOW_SCALE };
     const scale = raylib.getWindowScaleDpi();
     return .{ .x = usableScaleFactor(scale.x), .y = usableScaleFactor(scale.y) };
@@ -6073,6 +7692,8 @@ fn nativeMonitor(roc_host: *RocHost, index: i32) abi.HostHostMonitors {
 /// effect rather than a `render!` query.
 fn hostedMonitors(roc_host: *RocHost) callconv(.c) abi.RocList(abi.HostHostMonitors) {
     enforcePhase("Window.monitors!", during_update);
+    const effect = EffectScope.begin("Window.monitors!", 0);
+    defer effect.end();
 
     const count: usize = if (headlessMode()) 1 else @intCast(@max(raylib.getMonitorCount(), 0));
     if (count == 0) return abi.RocList(abi.HostHostMonitors).empty();
@@ -6095,6 +7716,8 @@ fn exportedMonitors() callconv(.c) abi.RocList(abi.HostHostMonitors) {
 
 fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     enforcePhase("Keys.set_exit_key!", during_update);
+    const effect = EffectScope.begin("Keys.set_exit_key!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.setExitKey(nonNegativeCInt(key_code));
 }
@@ -6168,6 +7791,8 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
 /// code preserves the hosted ABI and supports direct tests.
 fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
     enforcePhase("Capture.start!", during_update);
+    const effect = EffectScope.begin("Capture.start!", 0);
+    defer effect.end();
     defer args.path.decref(roc_host);
     const result = startCaptureRecording(.{
         .path = args.path.asSlice(),
@@ -6360,6 +7985,8 @@ fn currentRenderHeight() i32 {
 
 fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) callconv(.c) void {
     enforcePhase("Mouse.set_source!", during_update);
+    const effect = EffectScope.begin("Mouse.set_source!", 0);
+    defer effect.end();
     if (!args.active) {
         virtual_mouse_active = false;
         virtual_mouse_has_last = false;
@@ -6457,6 +8084,8 @@ fn resetVirtualInput() void {
 
 fn hostedCaptureSetVirtualKeys(host: *RocHost, args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
     enforcePhase("Keys.set_source!", during_update);
+    const effect = EffectScope.begin("Keys.set_source!", args.keys.items().len * @sizeOf(u64));
+    defer effect.end();
     defer args.keys.decref(host);
     applyVirtualKeys(args.active, args.keys.items());
 }
@@ -6467,6 +8096,8 @@ fn exportedCaptureSetVirtualKeys(args: abi.CaptureHostSet_virtual_keysArgs) call
 
 fn hostedCaptureSetVirtualText(host: *RocHost, text: abi.RocListWith(u32, false)) callconv(.c) void {
     enforcePhase("Keys.set_text!", during_update);
+    const effect = EffectScope.begin("Keys.set_text!", text.items().len * @sizeOf(u32));
+    defer effect.end();
     defer text.decref(host);
     applyVirtualText(text.items());
 }
@@ -6477,6 +8108,8 @@ fn exportedCaptureSetVirtualText(text: abi.RocListWith(u32, false)) callconv(.c)
 
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
     enforcePhase("Capture.stop!", during_update);
+    const effect = EffectScope.begin("Capture.stop!", 0);
+    defer effect.end();
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
     if (stop_result == capture.err_not_recording) {
@@ -6510,6 +8143,8 @@ fn captureStateForStep() CaptureFromHost {
 
 fn hostedGetClipboardText(roc_host: *RocHost) callconv(.c) ClipboardTextResult {
     enforcePhase("App.Startup.get_clipboard_text!", during_startup);
+    const effect = EffectScope.begin("App.Startup.get_clipboard_text!", 0);
+    defer effect.end();
     var result: ClipboardTextResult = undefined;
 
     if (headlessMode()) {
@@ -6551,6 +8186,8 @@ fn exportedGetClipboardText() callconv(.c) ClipboardTextResult {
 /// reason.
 fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostHostRead_clipboardRetRecord {
     enforcePhase("Window.read_clipboard!", during_update);
+    const effect = EffectScope.begin("Window.read_clipboard!", 0);
+    defer effect.end();
 
     if (headlessMode()) {
         if (!headless_clipboard_set) return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
@@ -6578,6 +8215,8 @@ fn exportedReadClipboard() callconv(.c) abi.HostHostRead_clipboardRetRecord {
 
 fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
     enforcePhase("Window.set_clipboard_text!", during_update);
+    const effect = EffectScope.begin("Window.set_clipboard_text!", text_arg.asSlice().len);
+    defer effect.end();
     // Roc transfers ownership of refcounted args to the hosted fn; release it
     // on every path, including the early returns below.
     defer text_arg.decref(roc_host);
@@ -6618,6 +8257,8 @@ fn cursorModeFromCode(code: u8) CursorMode {
 
 fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
     enforcePhase("Mouse.set_cursor_mode!", during_update);
+    const effect = EffectScope.begin("Mouse.set_cursor_mode!", 0);
+    defer effect.end();
     if (active_headless) return;
     switch (cursorModeFromCode(mode_code)) {
         .visible => raylib.enableCursor(),
@@ -6636,6 +8277,8 @@ fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
 
 fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
     enforcePhase("Mouse.set_cursor!", during_update);
+    const effect = EffectScope.begin("Mouse.set_cursor!", 0);
+    defer effect.end();
     if (active_headless) return;
     const next = mouseCursorFromCode(cursor);
     const next_code: u8 = @intCast(@intFromEnum(next));
@@ -6706,6 +8349,8 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 /// machinery a waiting effect has.
 fn hostedEntropy() callconv(.c) u64 {
     enforcePhase("App.Startup.entropy!", during_startup);
+    const effect = EffectScope.begin("App.Startup.entropy!", 0);
+    defer effect.end();
     var bytes: [8]u8 = undefined;
     std.Io.random(waitingIo(), &bytes);
     return std.mem.readInt(u64, &bytes, .little);
@@ -6713,6 +8358,8 @@ fn hostedEntropy() callconv(.c) u64 {
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     enforcePhase("App.Startup.random_i32!", during_startup);
+    const effect = EffectScope.begin("App.Startup.random_i32!", 0);
+    defer effect.end();
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
 }
@@ -6739,6 +8386,8 @@ fn storeMusic(resource: MusicResource) ?*u64 {
 
 fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHostGen_toneRetRecord {
     enforcePhase("Audio.gen_tone!", during_load);
+    const effect = EffectScope.begin("Audio.gen_tone!", 0);
+    defer effect.end();
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -6750,6 +8399,8 @@ fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHos
 
 fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioHostGen_soundRetRecord {
     enforcePhase("Audio.gen_sound!", during_load);
+    const effect = EffectScope.begin("Audio.gen_sound!", 0);
+    defer effect.end();
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -6787,6 +8438,8 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
 /// file survives the call: `LoadSoundFromWave` copies the samples it needs.
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_soundRetRecord {
     enforcePhase("Audio.load_sound!", during_wait);
+    const effect = EffectScope.begin("Audio.load_sound!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -6820,6 +8473,8 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_s
 /// only once the stream has been unloaded.
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
     enforcePhase("Audio.load_music!", during_wait);
+    const effect = EffectScope.begin("Audio.load_music!", path_arg.asSlice().len);
+    defer effect.end();
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -6927,6 +8582,8 @@ test "an extension raylib cannot decode is refused, and module music is music on
 // the `orelse return` and still release the reference it was handed.
 fn hostedAudioPlay(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Sound.play!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.play!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6937,6 +8594,8 @@ fn hostedAudioPlay(handle: *u64) callconv(.c) void {
 
 fn hostedAudioStop(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Sound.stop!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.stop!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6947,6 +8606,8 @@ fn hostedAudioStop(handle: *u64) callconv(.c) void {
 
 fn hostedAudioPause(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Sound.pause!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.pause!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6957,6 +8618,8 @@ fn hostedAudioPause(handle: *u64) callconv(.c) void {
 
 fn hostedAudioResume(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Sound.resume!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.resume!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6967,6 +8630,8 @@ fn hostedAudioResume(handle: *u64) callconv(.c) void {
 
 fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
     enforcePhase("Audio.Sound.is_playing!", constant_time_anywhere);
+    const effect = EffectScope.begin("Audio.Sound.is_playing!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -6977,6 +8642,8 @@ fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
 
 fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
     enforcePhase("Audio.Sound.set_volume!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.set_volume!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6987,6 +8654,8 @@ fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
 
 fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
     enforcePhase("Audio.Sound.set_pitch!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.set_pitch!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -6997,6 +8666,8 @@ fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
 
 fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
     enforcePhase("Audio.Sound.set_pan!", during_update);
+    const effect = EffectScope.begin("Audio.Sound.set_pan!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7007,6 +8678,8 @@ fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
 
 fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Music.play!", during_update);
+    const effect = EffectScope.begin("Audio.Music.play!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7017,6 +8690,8 @@ fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
 
 fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Music.stop!", during_update);
+    const effect = EffectScope.begin("Audio.Music.stop!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7027,6 +8702,8 @@ fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
 
 fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Music.pause!", during_update);
+    const effect = EffectScope.begin("Audio.Music.pause!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7037,6 +8714,8 @@ fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
 
 fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Music.resume!", during_update);
+    const effect = EffectScope.begin("Audio.Music.resume!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7047,6 +8726,8 @@ fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
 
 fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
     enforcePhase("Audio.Music.set_volume!", during_update);
+    const effect = EffectScope.begin("Audio.Music.set_volume!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7057,6 +8738,8 @@ fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
 
 fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
     enforcePhase("Audio.Music.set_pitch!", during_update);
+    const effect = EffectScope.begin("Audio.Music.set_pitch!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7067,6 +8750,8 @@ fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
 
 fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
     enforcePhase("Audio.Music.set_pan!", during_update);
+    const effect = EffectScope.begin("Audio.Music.set_pan!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7077,6 +8762,8 @@ fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
 
 fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
     enforcePhase("Audio.Music.set_looping!", during_update);
+    const effect = EffectScope.begin("Audio.Music.set_looping!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7087,6 +8774,8 @@ fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
 
 fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
     enforcePhase("Audio.Music.is_playing!", constant_time_anywhere);
+    const effect = EffectScope.begin("Audio.Music.is_playing!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -7097,6 +8786,8 @@ fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
 
 fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
     enforcePhase("Audio.Music.seek!", during_update);
+    const effect = EffectScope.begin("Audio.Music.seek!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -7107,6 +8798,8 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
 
 fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
     enforcePhase("Audio.Music.length!", constant_time_anywhere);
+    const effect = EffectScope.begin("Audio.Music.length!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
@@ -7117,6 +8810,8 @@ fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
 
 fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
     enforcePhase("Audio.Music.time_played!", constant_time_anywhere);
+    const effect = EffectScope.begin("Audio.Music.time_played!", 0);
+    defer effect.end();
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
@@ -7127,6 +8822,8 @@ fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
 
 fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
     enforcePhase("Audio.set_master_volume!", during_update);
+    const effect = EffectScope.begin("Audio.set_master_volume!", 0);
+    defer effect.end();
     if (active_headless) return;
     raylib.setMasterVolume(volume);
 }
@@ -7213,6 +8910,11 @@ comptime {
         @export(&hostedSqliteRunStmt, .{ .name = "roc_sqlite_run_stmt" });
         @export(&hostedSqliteRunOnce, .{ .name = "roc_sqlite_run_once" });
         @export(&hostedSqliteExecScript, .{ .name = "roc_sqlite_exec_script" });
+        @export(&hostedTraceMark, .{ .name = "roc_trace_mark" });
+        @export(&hostedTraceBegin, .{ .name = "roc_trace_begin" });
+        @export(&hostedTraceEnd, .{ .name = "roc_trace_end" });
+        @export(&hostedTraceSampleI64, .{ .name = "roc_trace_sample_i64" });
+        @export(&hostedTraceSampleF64, .{ .name = "roc_trace_sample_f64" });
 
         @export(&exportedAssetsOpenStoreRaw, .{ .name = "roc_assets_open_store_raw" });
         @export(&exportedAssetsLoadStoreTextureRaw, .{ .name = "roc_assets_load_store_texture_raw" });
@@ -7347,6 +9049,8 @@ comptime {
 }
 
 const RuntimeOptions = struct {
+    const StatsDetail = enum { summary, standard, full };
+
     headless: bool = false,
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
     /// Cycles a windowed run is allowed before it exits by itself, or null for
@@ -7363,6 +9067,11 @@ const RuntimeOptions = struct {
     /// Scripted typed text, in the `--host-text` syntax below.
     text_script: ?[]const u8 = null,
     debug_allocator: bool = false,
+    record_stats: bool = false,
+    stats_output: ?[]const u8 = null,
+    stats_detail: StatsDetail = .standard,
+    stats_buffer_mib: u64 = DEFAULT_STATS_BUFFER_MIB,
+    stats_max_mib: u64 = DEFAULT_STATS_MAX_MIB,
     help: bool = false,
     app_args: []const [*:0]u8 = &.{},
     app_args_allocation: ?[][*:0]u8 = null,
@@ -7730,7 +9439,11 @@ fn printUsage() void {
     std.debug.print(
         \\usage: app [--host-headless] [--host-headless-frames=N] [--host-frames=N]
         \\           [--host-hidden] [--host-keys=SCRIPT] [--host-text=SCRIPT]
-        \\           [--host-debug-allocator] [app arguments...]
+        \\           [--host-debug-allocator] [--host-stats-record]
+        \\           [--host-stats-output=PATH]
+        \\           [--host-stats-detail=summary|standard|full]
+        \\           [--host-stats-buffer-mib=N] [--host-stats-max-mib=N]
+        \\           [app arguments...]
         \\
         \\  --host-frames=N   exit after N cycles of a real windowed run
         \\  --host-hidden     open the real window hidden (needs a display server)
@@ -7738,8 +9451,39 @@ fn printUsage() void {
         \\                      a ~ suffix taps the key inside that cycle instead
         \\                      of holding it, e.g. "3:ESCAPE~"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
+        \\  --host-stats-record  record host statistics to an .rrstats database
+        \\  --host-stats-output=PATH  choose the recording path (also enables recording)
+        \\  --host-stats-detail=LEVEL  summary, standard (default), or full
+        \\  --host-stats-buffer-mib=N  bounded recorder memory (default 32 MiB)
+        \\  --host-stats-max-mib=N  maximum recording size (default 4096 MiB)
         \\
     , .{});
+}
+
+const DEFAULT_STATS_BUFFER_MIB: u64 = 32;
+const DEFAULT_STATS_MAX_MIB: u64 = 4096;
+/// Keep launch configuration from reserving an operator-sized address space by
+/// mistake. The recorder will allocate this pool in full before `init!`.
+const MAX_STATS_BUFFER_MIB: u64 = 4096;
+
+fn parsePositiveMib(flag: []const u8, value: []const u8, maximum: ?u64) !u64 {
+    const mib = std.fmt.parseUnsigned(u64, value, 10) catch {
+        std.debug.print("invalid {s} value: {s}\n", .{ flag, value });
+        return error.InvalidArgument;
+    };
+    if (mib == 0 or (maximum != null and mib > maximum.?)) {
+        if (maximum) |limit| {
+            std.debug.print("{s} must be between 1 and {d}\n", .{ flag, limit });
+        } else {
+            std.debug.print("{s} must be greater than zero\n", .{flag});
+        }
+        return error.InvalidArgument;
+    }
+    _ = std.math.mul(u64, mib, 1024 * 1024) catch {
+        std.debug.print("{s} is too large\n", .{flag});
+        return error.InvalidArgument;
+    };
+    return mib;
 }
 
 /// The most keys one scripted cycle may hold down at once.
@@ -8025,6 +9769,40 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
             options.text_script = value;
         } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
+        } else if (std.mem.eql(u8, arg, "--host-stats-record")) {
+            options.record_stats = true;
+        } else if (std.mem.startsWith(u8, arg, "--host-stats-output=")) {
+            const value = arg["--host-stats-output=".len..];
+            if (value.len == 0) {
+                std.debug.print("--host-stats-output requires a path\n", .{});
+                return error.InvalidArgument;
+            }
+            options.stats_output = value;
+            options.record_stats = true;
+        } else if (std.mem.startsWith(u8, arg, "--host-stats-detail=")) {
+            const value = arg["--host-stats-detail=".len..];
+            options.stats_detail = if (std.mem.eql(u8, value, "summary"))
+                .summary
+            else if (std.mem.eql(u8, value, "standard"))
+                .standard
+            else if (std.mem.eql(u8, value, "full"))
+                .full
+            else {
+                std.debug.print("invalid --host-stats-detail value: {s}\n", .{value});
+                return error.InvalidArgument;
+            };
+        } else if (std.mem.startsWith(u8, arg, "--host-stats-buffer-mib=")) {
+            options.stats_buffer_mib = try parsePositiveMib(
+                "--host-stats-buffer-mib",
+                arg["--host-stats-buffer-mib=".len..],
+                MAX_STATS_BUFFER_MIB,
+            );
+        } else if (std.mem.startsWith(u8, arg, "--host-stats-max-mib=")) {
+            options.stats_max_mib = try parsePositiveMib(
+                "--host-stats-max-mib",
+                arg["--host-stats-max-mib=".len..],
+                null,
+            );
         } else if (std.mem.eql(u8, arg, "--host-help")) {
             options.help = true;
         } else if (std.mem.startsWith(u8, arg, "--host-")) {
@@ -8076,6 +9854,49 @@ test "runtime options carry the windowed sweep switches" {
     try std.testing.expectEqualStrings("3:S", options.key_script.?);
     try std.testing.expectEqualStrings("4:ab", options.text_script.?);
     try std.testing.expectEqual(@as(usize, 1), options.app_args.len);
+}
+
+test "runtime options parse Observatory flags and defaults" {
+    var defaults_argv = [_][*:0]u8{ @constCast("app"), @constCast("--host-stats-record") };
+    const defaults = try parseRuntimeOptions(std.testing.allocator, defaults_argv.len, &defaults_argv);
+    defer defaults.deinit(std.testing.allocator);
+    try std.testing.expect(defaults.record_stats);
+    try std.testing.expect(defaults.stats_output == null);
+    try std.testing.expectEqual(RuntimeOptions.StatsDetail.standard, defaults.stats_detail);
+    try std.testing.expectEqual(DEFAULT_STATS_BUFFER_MIB, defaults.stats_buffer_mib);
+    try std.testing.expectEqual(DEFAULT_STATS_MAX_MIB, defaults.stats_max_mib);
+
+    var argv = [_][*:0]u8{
+        @constCast("app"),
+        @constCast("--host-stats-output=captures/run.rrstats"),
+        @constCast("--host-stats-detail=full"),
+        @constCast("--host-stats-buffer-mib=64"),
+        @constCast("--host-stats-max-mib=512"),
+        @constCast("app-argument"),
+    };
+    const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
+    defer options.deinit(std.testing.allocator);
+    try std.testing.expect(options.record_stats);
+    try std.testing.expectEqualStrings("captures/run.rrstats", options.stats_output.?);
+    try std.testing.expectEqual(RuntimeOptions.StatsDetail.full, options.stats_detail);
+    try std.testing.expectEqual(@as(u64, 64), options.stats_buffer_mib);
+    try std.testing.expectEqual(@as(u64, 512), options.stats_max_mib);
+    try std.testing.expectEqual(@as(usize, 2), options.app_args.len);
+    try std.testing.expectEqualStrings("app-argument", std.mem.span(options.app_args[1]));
+}
+
+test "runtime options reject invalid Observatory configuration" {
+    inline for (.{
+        "--host-stats-output=",
+        "--host-stats-detail=verbose",
+        "--host-stats-buffer-mib=0",
+        "--host-stats-buffer-mib=4097",
+        "--host-stats-max-mib=0",
+        "--host-stats-max-mib=nope",
+    }) |bad_arg| {
+        var argv = [_][*:0]u8{ @constCast("app"), @constCast(bad_arg) };
+        try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, argv.len, &argv));
+    }
 }
 
 test "runtime options reject malformed reserved host switches" {
@@ -8538,30 +10359,45 @@ fn callRender(boxed_model: RocBox) RocResult {
     return render_for_host(boxed_model);
 }
 
+const BackendFrameTiming = struct {
+    render_callback_started_ns: i96 = 0,
+    render_callback_ns: u64 = 0,
+    begin_drawing_ns: u64 = 0,
+    host_submission_ns: u64 = 0,
+    end_drawing_ns: u64 = 0,
+};
+
+var observatory_backend_timing: BackendFrameTiming = .{};
+
 /// Run one Roc render call inside the host-owned raylib frame scope.
 /// `defer` closes the frame for both `Ok` and `Err` results.
 fn renderFrame(boxed_model: RocBox) RocResult {
-    if (active_headless) return callRender(boxed_model);
+    observatory_backend_timing = .{};
+    if (active_headless) {
+        const callback_start = observatoryMeasurementStart();
+        observatory_backend_timing.render_callback_started_ns = callback_start;
+        const result = callRender(boxed_model);
+        observatory_backend_timing.render_callback_ns = observatoryMeasurementElapsed(callback_start);
+        return result;
+    }
 
-    const NativeRender = struct {
-        model: RocBox,
-
-        fn begin(_: *@This()) void {
-            raylib.beginDrawing();
-        }
-
-        fn render(self: *@This()) RocResult {
-            return callRender(self.model);
-        }
-
-        fn end(_: *@This()) void {
-            serviceCaptureRequests();
-            raylib.endDrawing();
-        }
-    };
-
-    var call = NativeRender{ .model = boxed_model };
-    return withDrawingScope(&call, NativeRender.begin, NativeRender.render, NativeRender.end);
+    var started = observatoryMeasurementStart();
+    raylib.beginDrawing();
+    observatory_backend_timing.begin_drawing_ns = observatoryMeasurementElapsed(started);
+    started = observatoryMeasurementStart();
+    observatory_backend_timing.render_callback_started_ns = started;
+    const result = callRender(boxed_model);
+    observatory_backend_timing.render_callback_ns = observatoryMeasurementElapsed(started);
+    started = observatoryMeasurementStart();
+    serviceCaptureRequests();
+    observatory_backend_timing.host_submission_ns = observatoryMeasurementElapsed(started);
+    started = observatoryMeasurementStart();
+    // raylib's EndDrawing performs submission, buffer swap, and any configured
+    // frame wait as one opaque call. Timing it is honest; splitting it into
+    // presentation and pacing would not be.
+    raylib.endDrawing();
+    observatory_backend_timing.end_drawing_ns = observatoryMeasurementElapsed(started);
+    return result;
 }
 
 fn withDrawingScope(
@@ -8826,6 +10662,26 @@ test "finished task messages become one Roc list, and an idle input allocates no
     staging.release(&roc_host);
 }
 
+test "task message staging pressure uses scalar occupancy and no platform cap" {
+    const previous_cycle = observatory_cycle;
+    defer observatory_cycle = previous_cycle;
+    observatory_cycle = 19;
+    const reserved = taskStagingQueueEvent(.reserve, 1, 4, 7, 100, 145);
+    try std.testing.expectEqual(@as(u64, 19), reserved.cycle);
+    try std.testing.expectEqual(@as(u8, 0), reserved.kind);
+    try std.testing.expectEqual(@as(u64, 7), reserved.subject_id);
+    try std.testing.expectEqual(@as(u64, 0), reserved.parent_id);
+    try std.testing.expectEqual(@as(u64, 45), reserved.duration_ns);
+    try std.testing.expectEqual(@as(u64, 4), reserved.value_a);
+    try std.testing.expectEqual(@as(u64, 1), reserved.value_b);
+    try std.testing.expectEqualStrings("task staged messages", reserved.name);
+
+    const released = taskStagingQueueEvent(.release, 4, 0, 7, 100, 160);
+    try std.testing.expectEqual(@as(u8, 1), released.kind);
+    try std.testing.expectEqual(@as(u64, 4), released.value_b);
+    try std.testing.expectEqual(@as(u64, 60), released.duration_ns);
+}
+
 test "a task message staged but never delivered is released at shutdown" {
     // The app exited on the frame a task finished on. Nothing carried the
     // message to Roc, so staging owns the only reference and has to drop it.
@@ -8884,10 +10740,10 @@ fn testTaskReceive(body: *TestTaskBody) void {
 
 /// The task registry with the Roc entry points replaced by `TestTaskBody`.
 const TestTaskHooks = struct {
-    pub fn enterTaskPhase() void {
+    pub fn enterTaskPhase(_: u64) void {
         active_phase = .task;
     }
-    pub fn leaveTaskPhase() void {
+    pub fn leaveTaskPhase(_: u64) void {
         active_phase = .idle;
     }
     pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
@@ -10043,6 +11899,15 @@ const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
 /// Environment variable that logs every task's spawn, park, resume, and finish.
 const TRACE_TASKS_ENV: []const u8 = "ROC_RAY_TRACE_TASKS";
 
+/// Private performance-harness seam for exercising recorder backpressure.
+const OBSERVATORY_BENCH_WRITER_DELAY_ENV: []const u8 = "ROC_RAY_OBSERVATORY_BENCH_WRITER_DELAY_MS";
+
+fn observatoryBenchmarkWriterDelayMs(value: ?[]const u8) u32 {
+    const text = value orelse return 0;
+    const parsed = std.fmt.parseInt(u32, text, 10) catch return 0;
+    return @min(parsed, 10_000);
+}
+
 /// Per-frame Roc allocator traffic, reported when `ROC_RAY_ALLOC_STATS=1`.
 ///
 /// A frame that mutates a uniquely referenced collection in the model pays
@@ -10074,6 +11939,8 @@ const AllocMeter = struct {
     free_calls: u64 = 0,
     update_bytes: u64 = 0,
     update_calls: u64 = 0,
+    live_bytes: u64 = 0,
+    peak_live_bytes: u64 = 0,
 
     /// Counter snapshot used to attribute one call's allocations to a phase.
     const Mark = struct { bytes: u64, calls: u64 };
@@ -10091,6 +11958,9 @@ const AllocMeter = struct {
         if (result != null) {
             self.alloc_bytes += len;
             self.alloc_calls += 1;
+            self.live_bytes +|= len;
+            self.peak_live_bytes = @max(self.peak_live_bytes, self.live_bytes);
+            allocationAllocated(@intFromPtr(result.?), len);
         }
         return result;
     }
@@ -10109,6 +11979,8 @@ const AllocMeter = struct {
         const self: *AllocMeter = @ptrCast(@alignCast(context));
         self.free_bytes += memory.len;
         self.free_calls += 1;
+        self.live_bytes -|= memory.len;
+        allocationFreed(@intFromPtr(memory.ptr), memory.len);
         self.inner.rawFree(memory, alignment, ret_addr);
     }
 
@@ -10123,6 +11995,7 @@ const AllocMeter = struct {
         self.free_calls = 0;
         self.update_bytes = 0;
         self.update_calls = 0;
+        self.peak_live_bytes = self.live_bytes;
     }
 };
 
@@ -10130,14 +12003,24 @@ const AllocMeter = struct {
 var alloc_meter: AllocMeter = .{ .inner = undefined };
 /// Whether `ROC_RAY_ALLOC_STATS` asked for metering on this run.
 var alloc_meter_enabled: bool = false;
+/// Whether allocation counters should also be printed to stderr.
+///
+/// Observatory needs the meter for its cycle summaries, but recording must
+/// not silently turn on a high-volume diagnostic stream or perturb an
+/// application's ordinary stderr behavior.
+var alloc_meter_reporting_enabled: bool = false;
 
 /// Wrap `inner` in the meter when the environment asks for it, else pass it
 /// through untouched so an unmetered run keeps its original allocator vtable.
-fn meteredAllocator(inner: std.mem.Allocator) std.mem.Allocator {
-    const requested = hostGetEnv(ALLOC_STATS_ENV) orelse return inner;
-    if (requested.len == 0 or std.mem.eql(u8, requested, "0")) return inner;
+fn meteredAllocator(inner: std.mem.Allocator, record_stats: bool) std.mem.Allocator {
+    const requested = hostGetEnv(ALLOC_STATS_ENV);
+    const reporting = requested != null and requested.?.len != 0 and !std.mem.eql(u8, requested.?, "0");
+    alloc_meter_enabled = false;
+    alloc_meter_reporting_enabled = false;
+    if (!record_stats and !reporting) return inner;
     alloc_meter = .{ .inner = inner };
     alloc_meter_enabled = true;
+    alloc_meter_reporting_enabled = reporting;
     return alloc_meter.allocator();
 }
 
@@ -10158,29 +12041,438 @@ fn allocMeterRecordUpdate(since: AllocMeter.Mark) void {
 /// per-frame lines are not polluted by config and `init!`.
 fn reportStartupAllocStats() void {
     if (!alloc_meter_enabled) return;
-    std.debug.print(
-        "[roc-ray-alloc] startup alloc_bytes={d} allocs={d} frees={d} free_bytes={d}\n",
-        .{ alloc_meter.alloc_bytes, alloc_meter.alloc_calls, alloc_meter.free_calls, alloc_meter.free_bytes },
-    );
+    if (alloc_meter_reporting_enabled) {
+        std.debug.print(
+            "[roc-ray-alloc] startup alloc_bytes={d} allocs={d} frees={d} free_bytes={d}\n",
+            .{ alloc_meter.alloc_bytes, alloc_meter.alloc_calls, alloc_meter.free_calls, alloc_meter.free_bytes },
+        );
+    }
     alloc_meter.clearFrame();
 }
 
 /// Report and clear one host cycle's metered traffic.
 fn reportCycleAllocStats(cycle_index: u64) void {
     if (!alloc_meter_enabled) return;
-    std.debug.print(
-        "[roc-ray-alloc] cycle={d} alloc_bytes={d} allocs={d} frees={d} free_bytes={d} update_bytes={d} update_allocs={d}\n",
-        .{
-            cycle_index,
-            alloc_meter.alloc_bytes,
-            alloc_meter.alloc_calls,
-            alloc_meter.free_calls,
-            alloc_meter.free_bytes,
-            alloc_meter.update_bytes,
-            alloc_meter.update_calls,
-        },
-    );
+    if (alloc_meter_reporting_enabled) {
+        std.debug.print(
+            "[roc-ray-alloc] cycle={d} alloc_bytes={d} allocs={d} frees={d} free_bytes={d} update_bytes={d} update_allocs={d}\n",
+            .{
+                cycle_index,
+                alloc_meter.alloc_bytes,
+                alloc_meter.alloc_calls,
+                alloc_meter.free_calls,
+                alloc_meter.free_bytes,
+                alloc_meter.update_bytes,
+                alloc_meter.update_calls,
+            },
+        );
+    }
     alloc_meter.clearFrame();
+}
+
+fn formatObservatoryDefaultPath(allocator: std.mem.Allocator, raw_name: []const u8, seconds: u64, collision: u32) ![]u8 {
+    const epoch = std.time.epoch.EpochSeconds{ .secs = seconds };
+    const year_day = epoch.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+    const day_time = epoch.getDaySeconds();
+    var sanitized: [128]u8 = undefined;
+    var name_len: usize = 0;
+    for (raw_name) |byte| {
+        if (name_len == sanitized.len) break;
+        const portable = std.ascii.isAlphanumeric(byte) or byte == '_' or byte == '-';
+        const replacement: u8 = if (portable) byte else '-';
+        if (replacement == '-' and name_len != 0 and sanitized[name_len - 1] == '-') continue;
+        sanitized[name_len] = replacement;
+        name_len += 1;
+    }
+    if (name_len == 0) {
+        @memcpy(sanitized[0..3], "app");
+        name_len = 3;
+    }
+
+    const suffix = if (collision <= 1) "" else try std.fmt.allocPrint(allocator, "-{d}", .{collision});
+    defer if (collision > 1) allocator.free(suffix);
+    return std.fmt.allocPrint(
+        allocator,
+        "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z-{s}{s}.rrstats",
+        .{ year_day.year, month_day.month.numeric(), month_day.day_index + 1, day_time.getHoursIntoDay(), day_time.getMinutesIntoHour(), day_time.getSecondsIntoMinute(), sanitized[0..name_len], suffix },
+    );
+}
+
+fn reserveObservatoryPath(allocator: std.mem.Allocator, options: RuntimeOptions) ![]u8 {
+    const io = mainThreadIo();
+    if (options.stats_output) |explicit| return allocator.dupe(u8, explicit);
+    const wall_nanos = std.Io.Clock.real.now(mainThreadIo()).nanoseconds;
+    const seconds: u64 = @intCast(@max(@divFloor(wall_nanos, std.time.ns_per_s), 0));
+    const raw_name = if (options.app_args.len == 0) "app" else portableAppName(std.mem.span(options.app_args[0]));
+    var collision: u32 = 1;
+    while (true) : (collision += 1) {
+        const path = try formatObservatoryDefaultPath(allocator, raw_name, seconds, collision);
+        std.Io.Dir.cwd().access(io, path, .{}) catch |err| switch (err) {
+            error.FileNotFound => return path,
+            else => {
+                allocator.free(path);
+                return err;
+            },
+        };
+        allocator.free(path);
+        continue;
+    }
+}
+
+test "observatory default paths use UTC sanitation fallback and collision suffixes" {
+    const allocator = std.testing.allocator;
+    const first = try formatObservatoryDefaultPath(allocator, "my app?!", 0, 1);
+    defer allocator.free(first);
+    try std.testing.expectEqualStrings("19700101T000000Z-my-app-.rrstats", first);
+    const fallback = try formatObservatoryDefaultPath(allocator, "", 0, 1);
+    defer allocator.free(fallback);
+    try std.testing.expectEqualStrings("19700101T000000Z-app.rrstats", fallback);
+    const second = try formatObservatoryDefaultPath(allocator, "app", 0, 2);
+    defer allocator.free(second);
+    try std.testing.expectEqualStrings("19700101T000000Z-app-2.rrstats", second);
+    const third = try formatObservatoryDefaultPath(allocator, "app", 0, 3);
+    defer allocator.free(third);
+    try std.testing.expectEqualStrings("19700101T000000Z-app-3.rrstats", third);
+}
+
+const ObservatoryRecording = struct { session: observatory.Session, path: []u8 };
+
+fn portableBaseName(path: []const u8) []const u8 {
+    var start: usize = 0;
+    for (path, 0..) |byte, index| {
+        if (byte == '/' or byte == '\\') start = index + 1;
+    }
+    return if (start == path.len) "unavailable" else path[start..];
+}
+
+fn portableAppName(path: []const u8) []const u8 {
+    const executable = portableBaseName(path);
+    const generic = std.mem.eql(u8, executable, "main") or
+        std.mem.eql(u8, executable, "main.exe") or
+        std.mem.eql(u8, executable, "main.roc");
+    if (!generic) return executable;
+
+    const executable_start = path.len - executable.len;
+    if (executable_start == 0) return executable;
+    const parent = path[0 .. executable_start - 1];
+    const parent_name = portableBaseName(parent);
+    return if (std.mem.eql(u8, parent_name, "unavailable")) executable else parent_name;
+}
+
+fn startObservatory(allocator: std.mem.Allocator, options: RuntimeOptions) !ObservatoryRecording {
+    const buffer_bytes = std.math.mul(u64, options.stats_buffer_mib, 1024 * 1024) catch return error.InvalidArgument;
+    // Each retained chunk also has one free-list and one ready-queue index.
+    // Count those arrays inside the operator-selected recorder memory bound.
+    const retained_bytes_per_chunk = @sizeOf(observatory.Chunk) + 2 * @sizeOf(usize);
+    const chunks: usize = @intCast(buffer_bytes / retained_bytes_per_chunk);
+    const max_output_bytes = std.math.mul(u64, options.stats_max_mib, 1024 * 1024) catch return error.InvalidArgument;
+    const executable_argument = if (options.app_args.len == 0) "unavailable" else std.mem.span(options.app_args[0]);
+    const executable_name = portableBaseName(executable_argument);
+    const io = mainThreadIo();
+    const clock_resolution = std.Io.Clock.awake.resolution(io) catch std.Io.Duration{ .nanoseconds = 0 };
+    const utc_origin = std.Io.Clock.real.now(io).nanoseconds;
+    while (true) {
+        const path = try reserveObservatoryPath(allocator, options);
+        const session = observatory.Session.start(allocator, .{
+            .path = path,
+            .chunk_count = chunks,
+            .summary_reserve = @min(chunks, 8),
+            .max_output_bytes = max_output_bytes,
+            .detail = switch (options.stats_detail) {
+                .summary => .summary,
+                .standard => .standard,
+                .full => .full,
+            },
+            .rocray_version = rocray_build_version,
+            .roc_compiler_pin = if (roc_compiler_pin.len == 0) "unavailable" else roc_compiler_pin,
+            .target_profile = observatoryTargetProfile(options.headless),
+            .backend = observatoryBackendName(options.headless),
+            .executable_name = executable_name,
+            .app_name = portableAppName(executable_argument),
+            .clock_resolution_ns = @intCast(@max(clock_resolution.nanoseconds, 0)),
+            .utc_origin_unix_ns = @intCast(@max(utc_origin, 0)),
+            .benchmark_writer_delay_ms = observatoryBenchmarkWriterDelayMs(
+                hostGetEnv(OBSERVATORY_BENCH_WRITER_DELAY_ENV),
+            ),
+        }) catch |err| {
+            allocator.free(path);
+            // Generated names promise collision suffixing even when another
+            // process wins between our access check and exclusive creation.
+            switch (err) {
+                error.AlreadyExists => if (options.stats_output == null) continue else return err,
+                else => return err,
+            }
+        };
+        return .{ .session = session, .path = path };
+    }
+}
+
+fn startObservatoryIfEnabled(allocator: std.mem.Allocator, options: RuntimeOptions) !?ObservatoryRecording {
+    if (!options.record_stats) return null;
+    return try startObservatory(allocator, options);
+}
+
+test "observatory executable metadata basename is portable" {
+    try std.testing.expectEqualStrings("app", portableBaseName("/opt/games/app"));
+    try std.testing.expectEqualStrings("app.exe", portableBaseName("C:\\games\\app.exe"));
+    try std.testing.expectEqualStrings("app", portableBaseName("app"));
+    try std.testing.expectEqualStrings("unavailable", portableBaseName("/"));
+    try std.testing.expectEqualStrings("particles", portableAppName("/tmp/examples/particles/main.roc"));
+    try std.testing.expectEqualStrings("particles", portableAppName("C:\\examples\\particles\\main.exe"));
+    try std.testing.expectEqualStrings("particles", portableAppName("/opt/games/particles"));
+    try std.testing.expectEqualStrings("main.roc", portableAppName("main.roc"));
+    try std.testing.expectEqualStrings("nightly-2026-08-23-fb208ba", roc_compiler_pin);
+}
+
+test "disabled observatory path performs no recorder startup work" {
+    var options = RuntimeOptions{};
+    options.stats_output = "must-not-exist-disabled.rrstats";
+    var allocations = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    const before = active_observatory;
+    try std.testing.expect(try startObservatoryIfEnabled(allocations.allocator(), options) == null);
+    try std.testing.expectEqual(@as(usize, 0), allocations.allocations);
+    try std.testing.expect(!allocations.has_induced_failure);
+    try std.testing.expect(active_observatory == before);
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(std.testing.io, options.stats_output.?, .{}));
+}
+
+test "Observatory benchmark writer delay is bounded and opt in" {
+    try std.testing.expectEqual(@as(u32, 0), observatoryBenchmarkWriterDelayMs(null));
+    try std.testing.expectEqual(@as(u32, 0), observatoryBenchmarkWriterDelayMs("invalid"));
+    try std.testing.expectEqual(@as(u32, 7), observatoryBenchmarkWriterDelayMs("7"));
+    try std.testing.expectEqual(@as(u32, 10_000), observatoryBenchmarkWriterDelayMs("99999"));
+}
+
+fn recordObservatoryCycle(cycle: u64, started_ns: i96, update_ns: u64, render_ns: u64, task_ns: u64) void {
+    const session = active_observatory orelse return;
+    const duration_ns: u64 = @intCast(@max(observatoryAwakeNs() - started_ns, 0));
+    const measured_ns = update_ns +| render_ns +| task_ns;
+    _ = session.recordCycle(.{
+        .cycle = cycle,
+        .start_ns = @intCast(@max(started_ns - observatory_origin_ns, 0)),
+        .duration_ns = duration_ns,
+        .update_ns = update_ns,
+        .render_callback_ns = render_ns,
+        .task_executor_ns = task_ns,
+        .host_other_ns = duration_ns -| measured_ns,
+        .alloc_bytes = alloc_meter.alloc_bytes,
+        .alloc_calls = alloc_meter.alloc_calls,
+        .free_bytes = alloc_meter.free_bytes,
+        .free_calls = alloc_meter.free_calls,
+        .live_bytes = alloc_meter.live_bytes,
+        .peak_live_bytes = alloc_meter.peak_live_bytes,
+        .update_alloc_bytes = alloc_meter.update_bytes,
+        .update_alloc_calls = alloc_meter.update_calls,
+        .task_events = observatory_cycle_counts.task,
+        .effect_calls = observatory_cycle_counts.effect,
+        .draw_calls = observatory_draw_calls,
+        .resource_events = observatory_cycle_counts.resource,
+        .queue_events = observatory_cycle_counts.queue,
+    });
+    _ = session.flushGaps(cycle, traceNowNs());
+    if (session.failed() and !observatory_failure_reported) {
+        observatory_failure_reported = true;
+        std.log.err("RocRay Observatory writer failed; recording stopped and the application will continue", .{});
+    } else if (session.outputLimited() and !observatory_failure_reported) {
+        observatory_failure_reported = true;
+        std.log.err("RocRay Observatory reached its output limit; the application will continue", .{});
+    }
+}
+
+/// Records automatic application callback time separately from hosted-effect
+/// time. Cycles already summarize update!, render!, and task-pump duration;
+/// init! has no enclosing host cycle, so it always receives its own row.
+fn recordObservatoryCallback(
+    phase: observatory.CallbackPhase,
+    cycle: u64,
+    started_ns: i96,
+    duration_ns: u64,
+    outcome: observatory.CallbackOutcome,
+    name: []const u8,
+) void {
+    const session = active_observatory orelse return;
+    _ = session.recordCallback(.{
+        .cycle = cycle,
+        .timestamp_ns = @intCast(@max(started_ns - observatory_origin_ns, 0)),
+        .kind = @intFromEnum(phase),
+        .duration_ns = duration_ns,
+        .value_a = @intFromEnum(outcome),
+        .name = name,
+    });
+}
+
+fn recordObservatoryDrawSummary(presented: bool, render_ns: u64) void {
+    const session = active_observatory orelse return;
+    _ = session.recordDraw(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .kind = 0,
+        .duration_ns = render_ns,
+        .value_a = observatory_draw_calls,
+        .value_b = @intFromBool(presented),
+        .name = "public_draw_effects",
+    });
+    _ = session.recordGpu(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .kind = 1,
+        // Host callback time only. This is deliberately not called GPU time.
+        .duration_ns = render_ns,
+        .value_a = @intFromBool(presented),
+        .name = if (presented) "presentation_completed" else "presentation_not_completed",
+    });
+}
+
+const BackendTimingFact = struct { kind: u8, duration: u64, name: []const u8 };
+
+fn backendTimingFacts(timing: BackendFrameTiming, headless: bool) [4]BackendTimingFact {
+    return if (headless)
+        [_]BackendTimingFact{
+            .{ .kind = 4, .duration = timing.render_callback_ns, .name = "render_callback" },
+            .{ .kind = 5, .duration = 0, .name = "begin_drawing_unavailable_headless" },
+            .{ .kind = 6, .duration = 0, .name = "host_draw_submission_omitted_headless" },
+            .{ .kind = 7, .duration = 0, .name = "presentation_and_pacing_unavailable_headless" },
+        }
+    else
+        [_]BackendTimingFact{
+            .{ .kind = 4, .duration = timing.render_callback_ns, .name = "render_callback" },
+            .{ .kind = 5, .duration = timing.begin_drawing_ns, .name = "begin_drawing" },
+            .{ .kind = 6, .duration = timing.host_submission_ns, .name = "host_draw_submission" },
+            .{ .kind = 7, .duration = timing.end_drawing_ns, .name = "end_drawing_including_presentation_and_pacing" },
+        };
+}
+
+fn recordObservatoryBackendTiming(timing: BackendFrameTiming, headless: bool) void {
+    const session = active_observatory orelse return;
+    const facts = backendTimingFacts(timing, headless);
+    for (facts) |fact| _ = session.recordGpu(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .kind = fact.kind,
+        .duration_ns = fact.duration,
+        .name = fact.name,
+    });
+}
+
+test "backend phase facts never split opaque presentation from pacing" {
+    const timing = BackendFrameTiming{ .render_callback_ns = 1, .begin_drawing_ns = 2, .host_submission_ns = 3, .end_drawing_ns = 4 };
+    const native = backendTimingFacts(timing, false);
+    try std.testing.expectEqual(@as(u64, 1), native[0].duration);
+    try std.testing.expectEqual(@as(u64, 4), native[3].duration);
+    try std.testing.expectEqualStrings("end_drawing_including_presentation_and_pacing", native[3].name);
+    const headless = backendTimingFacts(timing, true);
+    try std.testing.expectEqual(@as(u64, 1), headless[0].duration);
+    try std.testing.expectEqual(@as(u64, 0), headless[1].duration);
+    try std.testing.expectEqual(@as(u64, 0), headless[2].duration);
+    try std.testing.expectEqual(@as(u64, 0), headless[3].duration);
+    try std.testing.expectEqualStrings("presentation_and_pacing_unavailable_headless", headless[3].name);
+}
+
+fn observatoryBackendName(headless: bool) []const u8 {
+    return if (headless) "headless_stub" else "raylib_native";
+}
+
+fn observatoryTargetProfile(headless: bool) []const u8 {
+    return if (headless) "native-headless" else "native-graphical";
+}
+
+fn observatoryPacingName(vsync: bool, target_fps: i32) []const u8 {
+    if (vsync) return "vsync_requested";
+    if (target_fps > 0) return "host_fps_cap";
+    return "uncapped";
+}
+
+fn recordObservatoryBackendFacts(app_config: AppConfig, headless: bool) void {
+    const session = active_observatory orelse return;
+    _ = session.recordGpu(.{
+        .cycle = 0,
+        .timestamp_ns = traceNowNs(),
+        .kind = 0,
+        .value_a = @intFromBool(headless),
+        .name = observatoryBackendName(headless),
+    });
+    _ = session.recordGpu(.{
+        .cycle = 0,
+        .timestamp_ns = traceNowNs(),
+        .kind = 2,
+        .value_a = @intFromBool(app_config.vsync),
+        .value_b = @intCast(@max(app_config.target_fps, 0)),
+        .name = observatoryPacingName(app_config.vsync, app_config.target_fps),
+    });
+    _ = session.recordGpu(.{
+        .cycle = 0,
+        .timestamp_ns = traceNowNs(),
+        .kind = 3,
+        .name = if (headless) "gpu_timing_unavailable_headless" else "gpu_timing_unavailable_raylib_no_nonstalling_query",
+    });
+}
+
+test "backend facts distinguish native headless and honest pacing profiles" {
+    try std.testing.expectEqualStrings("native-graphical", observatoryTargetProfile(false));
+    try std.testing.expectEqualStrings("native-headless", observatoryTargetProfile(true));
+    try std.testing.expectEqualStrings("raylib_native", observatoryBackendName(false));
+    try std.testing.expectEqualStrings("headless_stub", observatoryBackendName(true));
+    try std.testing.expectEqualStrings("vsync_requested", observatoryPacingName(true, 60));
+    try std.testing.expectEqualStrings("host_fps_cap", observatoryPacingName(false, 60));
+    try std.testing.expectEqualStrings("uncapped", observatoryPacingName(false, 0));
+}
+
+fn recordStructuralLatency(kind: u8, subject_id: u64, parent_id: u64, started_ns: u64, name: []const u8) void {
+    const session = active_observatory orelse return;
+    if (!observatory_task_detail) return;
+    const now = traceNowNs();
+    _ = session.recordLatency(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = now,
+        .kind = kind,
+        .subject_id = subject_id,
+        .parent_id = parent_id,
+        .duration_ns = now -| started_ns,
+        .name = name,
+    });
+}
+
+fn recordAllocationEvent(kind: u8, id: u64, bytes: usize, prior_bytes: usize) void {
+    const session = active_observatory orelse return;
+    if (!observatory_full_detail) return;
+    _ = session.recordAllocation(.{
+        .cycle = observatory_cycle,
+        .timestamp_ns = traceNowNs(),
+        .kind = kind | (@as(u8, @intFromEnum(active_phase)) << 4),
+        .subject_id = id,
+        .parent_id = AppTasks.executingTaskId(),
+        .duration_ns = activeTraceZoneToken(),
+        .value_a = bytes,
+        .value_b = prior_bytes,
+        .name = switch (kind) {
+            0 => "alloc",
+            1 => "free",
+            2 => "realloc_move",
+            else => "realloc_in_place",
+        },
+    });
+}
+
+fn allocationAllocated(pointer: usize, bytes: usize) void {
+    if (!observatory_full_detail) return;
+    const moving = allocation_realloc_id != 0;
+    const id = if (moving) allocation_realloc_id else observatory_next_allocation_id;
+    if (!moving) observatory_next_allocation_id +|= 1;
+    allocation_realloc_in_place = moving and pointer == allocation_realloc_old_pointer;
+    if (!allocation_identities.put(pointer, id, bytes)) {
+        if (active_observatory) |session| session.noteLoss(.allocation_lifecycle, 1);
+        return;
+    }
+    recordAllocationEvent(if (!moving) 0 else if (allocation_realloc_in_place) 3 else 2, id, bytes, if (moving) allocation_realloc_old_bytes else 0);
+}
+
+fn allocationFreed(pointer: usize, bytes: usize) void {
+    if (!observatory_full_detail) return;
+    if (allocation_realloc_in_place and allocation_realloc_old_pointer == pointer) return;
+    const identity = allocation_identities.take(pointer) orelse return;
+    if (allocation_realloc_id == identity.id and allocation_realloc_old_pointer == pointer) return;
+    recordAllocationEvent(1, identity.id, bytes, identity.bytes);
 }
 
 fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: AppConfig, options: RuntimeOptions) c_int {
@@ -10254,6 +12546,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         return 1;
     };
     defer app_tasks.deinit();
+    if (active_observatory) |session| {
+        app_tasks.setObserver(taskObserver(session));
+    }
     // Registered after the registry's own teardown, so LIFO runs it first:
     // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
     // waiting on, so every child is ended before the runtime tries to join
@@ -10267,7 +12562,17 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
     defer http_effect.deactivate();
 
+    const init_started_ns = observatoryMeasurementStart();
     const init_result = initModel();
+    const init_duration_ns = observatoryMeasurementElapsed(init_started_ns);
+    recordObservatoryCallback(
+        .init,
+        0,
+        init_started_ns,
+        init_duration_ns,
+        if (init_result.isErr()) .application_error else .success,
+        "init!",
+    );
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
         if (TRACE_HOST) std.log.debug("[HOST] init returned Err({d})", .{err_code});
@@ -10285,7 +12590,19 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
+        observatory_cycle = cycle_count;
+        observatory_draw_calls = 0;
+        observatory_cycle_counts = .{};
+        const structural_input_id = observatory_next_input_id;
+        observatory_current_input_id = structural_input_id;
+        observatory_next_input_id +|= 1;
+        const structural_input_ns = traceNowNs();
+        const stats_cycle_start = observatoryMeasurementStart();
+        var stats_task_ns: u64 = 0;
+        var stats_update_ns: u64 = 0;
+        var stats_render_ns: u64 = 0;
         app_tasks.pump(cycle_count, .yield);
+        stats_task_ns +|= app_tasks.last_pump_ns;
         stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
@@ -10335,11 +12652,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             mouse_wheel,
             text_input,
         );
+        if (input_snapshot.text_input_overflow and !raylib.recordedTextPressureAvailable()) recordInputOverflow("text input overflow", input_snapshot.text_input.len());
         // raylib owns the dropped paths only until they are released, so they
         // are copied into Roc strings first and handed back immediately. The
         // pointer position is this cycle's, which is where the drop landed.
         const dropped_paths = raylib.takeDroppedFiles();
         const dropped = droppedFilesSnapshot(roc_host, dropped_paths, .{ .x = mouse_pos.x, .y = mouse_pos.y });
+        if (dropped.overflowed) recordInputOverflow("dropped files overflow", dropped.files.len());
         raylib.releaseDroppedFiles();
 
         last_frame_nanos = now_ns;
@@ -10347,6 +12666,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // One call, before the drawing scope opens. `update!` changes host
         // state directly and spawns tasks while it runs; drawing is refused by
         // the phase guard.
+        const stats_update_start = observatoryMeasurementStart();
+        recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
             .window = windowState(),
@@ -10361,29 +12682,56 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             .dropped = dropped.files,
             .dropped_overflow = dropped.overflowed,
         });
+        stats_update_ns = observatoryMeasurementElapsed(stats_update_start);
+        recordObservatoryCallback(
+            .update,
+            cycle_count,
+            stats_update_start,
+            stats_update_ns,
+            if (update_result.tag == .Err) .application_error else .success,
+            "update!",
+        );
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+            recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
+            recordObservatoryDrawSummary(false, 0);
             break;
         }
         boxed_model = update_result.payload_ok();
         // Newly spawned tasks run to their first park before the frame is
         // drawn, so their waiting overlaps rendering.
         app_tasks.pump(cycle_count, .yield);
+        stats_task_ns +|= app_tasks.last_pump_ns;
 
         // This graphical backend schedules one optional presentation for every
         // cycle. A backend that omits it still calls update once for the fresh
         // input above; presentation is not another transition.
         if (callbacks.presentations == 1) {
             const render_result = renderFrame(takeModelForRender(&boxed_model));
+            stats_render_ns = observatory_backend_timing.render_callback_ns;
+            recordObservatoryCallback(
+                .render,
+                cycle_count,
+                observatory_backend_timing.render_callback_started_ns,
+                stats_render_ns,
+                if (render_result.isErr()) .application_error else .success,
+                "render!",
+            );
+            recordObservatoryBackendTiming(observatory_backend_timing, false);
             if (render_result.isErr()) {
                 exit_code = @intCast(render_result.getErr());
                 if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+                recordObservatoryDrawSummary(false, stats_render_ns);
+                recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
                 break;
             }
             boxed_model = render_result.getOk();
+            recordStructuralLatency(1, structural_input_id, 0, structural_input_ns, "input_to_end_drawing_including_pacing");
         }
         drainRetiredResources();
+        recordObservatoryDrawSummary(callbacks.presentations == 1, stats_render_ns);
+        recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
         reportCycleAllocStats(cycle_count);
         cycle_count += 1;
 
@@ -10419,6 +12767,9 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         return 1;
     };
     defer app_tasks.deinit();
+    if (active_observatory) |session| {
+        app_tasks.setObserver(taskObserver(session));
+    }
     // Registered after the registry's own teardown, so LIFO runs it first:
     // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
     // waiting on, so every child is ended before the runtime tries to join
@@ -10432,7 +12783,17 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
     defer http_effect.deactivate();
 
+    const init_started_ns = observatoryMeasurementStart();
     const init_result = initModel();
+    const init_duration_ns = observatoryMeasurementElapsed(init_started_ns);
+    recordObservatoryCallback(
+        .init,
+        0,
+        init_started_ns,
+        init_duration_ns,
+        if (init_result.isErr()) .application_error else .success,
+        "init!",
+    );
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
         if (TRACE_HOST) std.log.debug("[HOST] init returned Err({d})", .{err_code});
@@ -10450,10 +12811,22 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     reportStartupAllocStats();
     while (cycle_count < frames) : (cycle_count += 1) {
+        observatory_cycle = cycle_count;
+        observatory_draw_calls = 0;
+        observatory_cycle_counts = .{};
+        const structural_input_id = observatory_next_input_id;
+        observatory_current_input_id = structural_input_id;
+        observatory_next_input_id +|= 1;
+        const structural_input_ns = traceNowNs();
+        const stats_cycle_start = observatoryMeasurementStart();
+        var stats_task_ns: u64 = 0;
+        var stats_update_ns: u64 = 0;
+        var stats_render_ns: u64 = 0;
         // A headless run has no frame pacing and no real clock, but task
         // timers are real time. While a task is live, pace the cycle to the
         // simulated 60 Hz so "18 cycles later" means what it means windowed.
         app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
+        stats_task_ns +|= app_tasks.last_pump_ns;
         stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
@@ -10483,6 +12856,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             mouse_wheel,
             text_input,
         );
+        if (input_snapshot.text_input_overflow) recordInputOverflow("text input overflow", input_snapshot.text_input.len());
 
         last_frame_nanos = timestamp_nanos;
         // A headless run has no real clock to expose: it exists to produce the
@@ -10492,6 +12866,8 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // One call, before the drawing scope opens. `update!` changes host
         // state directly and spawns tasks while it runs; drawing is refused by
         // the phase guard.
+        const stats_update_start = observatoryMeasurementStart();
+        recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
             .window = windowState(),
@@ -10508,26 +12884,54 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             .dropped = abi.RocList(DroppedFile).empty(),
             .dropped_overflow = false,
         });
+        stats_update_ns = observatoryMeasurementElapsed(stats_update_start);
+        recordObservatoryCallback(
+            .update,
+            cycle_count,
+            stats_update_start,
+            stats_update_ns,
+            if (update_result.tag == .Err) .application_error else .success,
+            "update!",
+        );
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+            recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
+            recordObservatoryDrawSummary(false, 0);
             break;
         }
         boxed_model = update_result.payload_ok();
         app_tasks.pump(cycle_count, .yield);
+        stats_task_ns +|= app_tasks.last_pump_ns;
 
-        // Headless examples schedule semantic presentation to cover render and
-        // resource paths. The host-cycle contract itself permits omission.
+        // Headless examples run render! to cover semantic render and resource
+        // paths, but the stub has no presentation surface.
         if (callbacks.presentations == 1) {
             const render_result = renderFrame(takeModelForRender(&boxed_model));
+            stats_render_ns = observatory_backend_timing.render_callback_ns;
+            recordObservatoryCallback(
+                .render,
+                cycle_count,
+                observatory_backend_timing.render_callback_started_ns,
+                stats_render_ns,
+                if (render_result.isErr()) .application_error else .success,
+                "render!",
+            );
+            recordObservatoryBackendTiming(observatory_backend_timing, true);
             if (render_result.isErr()) {
                 exit_code = @intCast(render_result.getErr());
                 if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+                recordObservatoryDrawSummary(false, stats_render_ns);
+                recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
                 break;
             }
             boxed_model = render_result.getOk();
+            // Headless render has no presentation boundary. The per-cycle GPU
+            // facts above disclose that omission explicitly.
         }
         drainRetiredResources();
+        recordObservatoryDrawSummary(false, stats_render_ns);
+        recordObservatoryCycle(cycle_count, stats_cycle_start, stats_update_ns, stats_render_ns, stats_task_ns);
         reportCycleAllocStats(cycle_count);
         if (exit_requested) |code| {
             exit_code = @intCast(code);
@@ -10586,7 +12990,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Roc allocates runs on the frame thread, tasks included, so what is
     // counted here is all of it.
     var roc_env = abi.RocEnv{
-        .allocator = meteredAllocator(allocator),
+        .allocator = meteredAllocator(allocator, options.record_stats),
         .roc_io = abi.RocIo.freestanding(),
     };
 
@@ -10639,13 +13043,74 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     defer startup_font_config = .{};
     // The config's Roc strings stay borrowed by startup configuration until
     // the selected host lifetime finishes; `decref` then releases all of them.
-    defer app_config.decref(&roc_host);
+    var app_config_released = false;
+    defer if (!app_config_released) app_config.decref(&roc_host);
 
-    if (options.headless) {
-        return runHeadlessApp(&roc_host, app_config, options.headless_frames);
+    var stats_recording = startObservatoryIfEnabled(allocator, options) catch |err| {
+        std.log.err("Could not start RocRay Observatory recording: {s}", .{@errorName(err)});
+        return 1;
+    };
+    if (stats_recording != null) {
+        active_observatory = &stats_recording.?.session;
+        observatory_origin_ns = observatoryAwakeNs();
+        observatory_failure_reported = false;
+        observatory_task_detail = options.stats_detail != .summary;
+        observatory_full_detail = options.stats_detail == .full;
+        observatory_next_input_id = 1;
+        observatory_next_effect_id = 1;
+        observatory_current_input_id = 0;
+        task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+        observatory_next_allocation_id = 1;
+        allocation_identities.reset();
+        recordObservatoryBackendFacts(app_config, options.headless);
     }
+    host_resource.setObserver(if (active_observatory != null) observeHostResource else null);
+    defer host_resource.setObserver(null);
+    cmd_effect.setQueueObserver(if (active_observatory != null) observeCommandQueue else null);
+    defer cmd_effect.setQueueObserver(null);
+    still_budget.setObserver(if (active_observatory != null) observeCaptureQueue else null);
+    defer still_budget.setObserver(null);
+    stdio_effect.setObserver(if (active_observatory != null) observeStdioQueue else null);
+    defer stdio_effect.setObserver(null);
+    raylib.setInputQueueObserver(if (active_observatory != null) observeInputQueue else null);
+    defer raylib.setInputQueueObserver(null);
+    const app_exit_code = if (options.headless)
+        runHeadlessApp(&roc_host, app_config, options.headless_frames)
+    else
+        runNormalApp(&roc_host, allocator, app_config, options);
 
-    return runNormalApp(&roc_host, allocator, app_config, options);
+    // Observatory remains active through host-owned teardown. This captures
+    // the final Roc releases, deferred native destruction, and stdio queue
+    // drain before end-of-stream instead of making an orderly recording look
+    // as though those resources remained live at shutdown.
+    app_config.decref(&roc_host);
+    app_config_released = true;
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    stdio_effect.shutdown();
+
+    if (stats_recording) |*recording| {
+        active_observatory = null;
+        var outcome_buffer: [32]u8 = undefined;
+        const outcome = std.fmt.bufPrint(&outcome_buffer, "exit_code:{d}", .{app_exit_code}) catch "exit_code:unknown";
+        recording.session.setApplicationOutcome(outcome);
+        const report = recording.session.stop();
+        if (report.failed) {
+            std.log.err("RocRay Observatory writer failed during final drain; partial recording: {s}", .{recording.path});
+        }
+        std.debug.print("RocRay Observatory recording: {s} ({s}, drain {d} ns, {d} omitted)\n", .{
+            recording.path,
+            if (report.complete) "complete" else if (report.output_limited) "output limit" else "incomplete",
+            report.drain_duration_ns,
+            report.omitted_events,
+        });
+        allocator.free(recording.path);
+        observatory_origin_ns = 0;
+        observatory_failure_reported = false;
+        observatory_task_detail = false;
+        observatory_full_detail = false;
+        allocation_identities.reset();
+    }
+    return app_exit_code;
 }
 
 /// Decode one entry of an encoded listing, returning its kind, its name, and

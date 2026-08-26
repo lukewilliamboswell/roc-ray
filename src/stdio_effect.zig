@@ -83,6 +83,8 @@ pub fn Streams(comptime capacity: usize) type {
             /// dead ring is emptied and refuses everything after, rather than
             /// accumulating output nothing will ever read.
             dead: bool = false,
+            high_water: usize = 0,
+            oldest_at_ns: u64 = 0,
 
             fn push(self: *Ring, payload: []const u8) void {
                 var offset: usize = 0;
@@ -133,6 +135,32 @@ pub fn Streams(comptime capacity: usize) type {
         /// Whether writes are being accepted. Read before the lock is taken,
         /// because `io` is only valid once `arm` has run.
         accepting: std.atomic.Value(bool) = .init(false),
+        observer: ?*const fn (Self.QueueObservation) void = null,
+
+        /// Byte-unit pressure event for one standard-stream ring.
+        pub const QueueObservation = struct {
+            operation: enum(u8) { reserve, release, saturation },
+            stream: u8,
+            timestamp_ns: u64,
+            amount: usize,
+            current: usize,
+            high_water: usize,
+            capacity_bytes: usize,
+            oldest_at_ns: u64,
+        };
+
+        /// Install an observer for the active host run.
+        pub fn setObserver(self: *Self, next: ?*const fn (Self.QueueObservation) void) void {
+            self.observer = next;
+        }
+
+        fn nowNs(self: *Self) u64 {
+            return @intCast(@max(std.Io.Clock.awake.now(self.io).nanoseconds, 0));
+        }
+
+        fn observe(self: *Self, event: Self.QueueObservation) void {
+            if (self.observer) |callback| callback(event);
+        }
 
         /// Take the two destination files and begin accepting writes, without
         /// starting a drainer.
@@ -146,6 +174,8 @@ pub fn Streams(comptime capacity: usize) type {
             for (&self.rings) |*ring| {
                 ring.clear();
                 ring.dead = false;
+                ring.high_water = 0;
+                ring.oldest_at_ns = 0;
             }
             self.next = 0;
             self.stopping = false;
@@ -209,9 +239,18 @@ pub fn Streams(comptime capacity: usize) type {
             if (!self.accepting.load(.monotonic)) return ERR_UNAVAILABLE;
             const ring = &self.rings[stream];
             if (ring.dead) return ERR_UNAVAILABLE;
-            if (capacity - ring.len < total) return ERR_BUFFER_FULL;
+            if (capacity - ring.len < total) {
+                const now = self.nowNs();
+                self.observe(.{ .operation = .saturation, .stream = stream, .timestamp_ns = now, .amount = total, .current = ring.len, .high_water = ring.high_water, .capacity_bytes = capacity, .oldest_at_ns = ring.oldest_at_ns });
+                return ERR_BUFFER_FULL;
+            }
+            const was_empty = ring.len == 0;
             ring.push(head);
             ring.push(tail);
+            const now = self.nowNs();
+            ring.high_water = @max(ring.high_water, ring.len);
+            if (was_empty) ring.oldest_at_ns = now;
+            self.observe(.{ .operation = .reserve, .stream = stream, .timestamp_ns = now, .amount = total, .current = ring.len, .high_water = ring.high_water, .capacity_bytes = capacity, .oldest_at_ns = ring.oldest_at_ns });
             self.wake.signal(self.io);
             return OK;
         }
@@ -273,6 +312,10 @@ pub fn Streams(comptime capacity: usize) type {
                         self.wake.waitUncancelable(self.io, &self.mutex);
                     }
                     taken = self.rings[stream].take(&scratch);
+                    const ring = &self.rings[stream];
+                    const now = self.nowNs();
+                    self.observe(.{ .operation = .release, .stream = stream, .timestamp_ns = now, .amount = taken, .current = ring.len, .high_water = ring.high_water, .capacity_bytes = capacity, .oldest_at_ns = ring.oldest_at_ns });
+                    if (ring.len == 0) ring.oldest_at_ns = 0;
                     file = self.files[stream];
                 }
 
@@ -307,8 +350,15 @@ pub fn Streams(comptime capacity: usize) type {
 /// The process's own two streams. One instance, because there is one standard
 /// output and one standard error.
 pub const HostStreams = Streams(ring_capacity);
+/// Pressure event emitted by the process stream rings.
+pub const QueueObservation = HostStreams.QueueObservation;
 
 var process_streams: HostStreams = .{};
+
+/// Install or remove process-stream pressure observation.
+pub fn setObserver(next: ?*const fn (QueueObservation) void) void {
+    process_streams.setObserver(next);
+}
 
 /// Start draining the process's standard streams.
 ///
@@ -417,6 +467,29 @@ test "saturation is reported, and the ring is left exactly as it was" {
     // The other stream has a ring of its own and is unaffected.
     try testing.expectEqual(OK, streams.queue(stderr_index, "!", &.{}));
     try testing.expectEqual(@as(usize, 1), streams.pending(stderr_index));
+}
+
+test "stream observer reports byte reserve saturation and high water" {
+    const Probe = struct {
+        var events: [2]TestStreams.QueueObservation = undefined;
+        var count: usize = 0;
+        fn callback(event: TestStreams.QueueObservation) void {
+            events[count] = event;
+            count += 1;
+        }
+    };
+    var streams: TestStreams = .{};
+    streams.arm(testing.io, .stdout(), .stderr());
+    streams.setObserver(Probe.callback);
+    Probe.count = 0;
+    try testing.expectEqual(OK, streams.queue(stdout_index, "0123456789abcdef0123456789abcdef", &.{}));
+    try testing.expectEqual(ERR_BUFFER_FULL, streams.queue(stdout_index, "!", &.{}));
+    try testing.expectEqual(@as(usize, 2), Probe.count);
+    try testing.expectEqual(.reserve, Probe.events[0].operation);
+    try testing.expectEqual(@as(usize, 32), Probe.events[0].high_water);
+    try testing.expectEqual(.saturation, Probe.events[1].operation);
+    try testing.expectEqual(@as(usize, 32), Probe.events[1].current);
+    try testing.expect(Probe.events[1].oldest_at_ns != 0);
 }
 
 test "a payload that wraps the ring comes out in order" {

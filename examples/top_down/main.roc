@@ -1210,14 +1210,14 @@ draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
 	draw_hazard_lanes!(frame, level, world.phase)
-	draw_props!(frame, level, tiles)
+	draw_props!(frame, level, tiles, viewport)
 	frame.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
 	draw_spawn!(frame, level, font)
 	draw_exit!(frame, level, world, font)
-	draw_obstacles!(frame, level, tiles)
-	draw_sparks!(frame, tiles, world.sparks, world.phase)
-	draw_hazards!(frame, level, characters, world.phase)
+	draw_obstacles!(frame, level, tiles, viewport)
+	draw_sparks!(frame, tiles, world.sparks, world.phase, viewport)
+	draw_hazards!(frame, level, characters, world.phase, viewport)
 	draw_burst!(frame, world)
 	draw_player!(frame, characters, world.player)
 }
@@ -1295,17 +1295,23 @@ draw_obstacle! = |frame, tiles, obstacle| {
 	draw_tile_centered!(frame, tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
 }
 
-draw_obstacles! : Draw.Frame, Level, Draw.Texture => {}
-draw_obstacles! = |frame, level, tiles| {
+draw_obstacles! : Draw.Frame, Level, Draw.Texture, Math.Rect => {}
+draw_obstacles! = |frame, level, tiles, viewport| {
 	for obstacle in level.obstacles {
-		draw_obstacle!(frame, tiles, obstacle)
+		rect = obstacle.rect
+		visual_bounds = Math.rect(rect.x - 48, rect.y - 48, rect.width + 96, rect.height + 96)
+		if Math.overlaps(visual_bounds, viewport) {
+			draw_obstacle!(frame, tiles, obstacle)
+		}
 	}
 }
 
-draw_props! : Draw.Frame, Level, Draw.Texture => {}
-draw_props! = |frame, level, tiles| {
+draw_props! : Draw.Frame, Level, Draw.Texture, Math.Rect => {}
+draw_props! = |frame, level, tiles, viewport| {
 	for decoration in level.decorations {
-		draw_tile_centered!(frame, tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
+		if Math.circle_rect({ center: decoration.pos, radius: 48 * decoration.scale }, viewport) {
+			draw_tile_centered!(frame, tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
+		}
 	}
 }
 
@@ -1319,10 +1325,12 @@ draw_spark! = |frame, tiles, spark, phase| {
 	draw_tile_centered!(frame, tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
-draw_sparks! : Draw.Frame, Draw.Texture, List(World.Spark), F32 => {}
-draw_sparks! = |frame, tiles, sparks, phase| {
+draw_sparks! : Draw.Frame, Draw.Texture, List(World.Spark), F32, Math.Rect => {}
+draw_sparks! = |frame, tiles, sparks, phase, viewport| {
 	for spark in sparks {
-		draw_spark!(frame, tiles, spark, phase)
+		if Math.circle_rect({ center: spark.pos, radius: spark_radius * 2.2 }, viewport) {
+			draw_spark!(frame, tiles, spark, phase)
+		}
 	}
 }
 
@@ -1357,10 +1365,13 @@ draw_hazard! = |frame, characters, hazard, phase| {
 	frame.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
-draw_hazards! : Draw.Frame, Level, Draw.Texture, F32 => {}
-draw_hazards! = |frame, level, characters, phase| {
+draw_hazards! : Draw.Frame, Level, Draw.Texture, F32, Math.Rect => {}
+draw_hazards! = |frame, level, characters, phase, viewport| {
 	for hazard in level.hazards {
-		draw_hazard!(frame, characters, hazard, phase)
+		pos = hazard.pos(phase)
+		if Math.circle_rect({ center: pos, radius: F32.max(hazard.radius + 3, 34) }, viewport) {
+			draw_hazard!(frame, characters, hazard, phase)
+		}
 	}
 }
 

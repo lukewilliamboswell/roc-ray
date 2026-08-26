@@ -17,7 +17,6 @@ import rr.Text
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
-	font : Text.Font,
 	layout : Layout,
 	pointer : { x : F32, y : F32 },
 	accent_on : Bool,
@@ -46,7 +45,6 @@ init! = App.init(
 		Ok({
 			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
 			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
-			font,
 			layout: solve_layout(font),
 			pointer: { x: 400, y: 300 },
 			accent_on: Bool.False,
@@ -66,12 +64,8 @@ update! = |model, program_input| {
 	if input.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {
-		# Solve once for the next model. `render!` consumes this retained layout and
-		# the following update can use it for hit testing without any host calls.
-		layout = solve_layout(model.font)
 		Ok({
 			..model,
-			layout,
 			pointer: input.mouse.position(),
 			accent_on: input.mouse.button_down(Left),
 			elapsed: model.elapsed + program_input.time.elapsed_seconds,

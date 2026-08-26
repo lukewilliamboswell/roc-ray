@@ -95,6 +95,8 @@ const RAYLIB_CHAR_QUEUE_CAPACITY: usize = 16;
 var text_input: [TEXT_INPUT_CAPACITY]u32 = [_]u32{0} ** TEXT_INPUT_CAPACITY;
 var text_input_len: usize = 0;
 var text_input_overflowed: bool = false;
+var text_input_high_water: usize = 0;
+var text_input_oldest_at: u64 = 0;
 
 /// Wheel movement summed since the interval began.
 var hardware_wheel: Vec2 = .{ .x = 0, .y = 0 };
@@ -181,6 +183,31 @@ test "an edge accumulator coalesces repeats and empties when taken" {
 /// tail going missing.
 pub const INPUT_EVENT_CAPACITY: usize = 256;
 
+/// Scalar-only observation of the host's bounded interval-input buffers.
+/// Payloads and key/codepoint values never cross this diagnostic hook.
+pub const InputQueueObservation = struct {
+    operation: enum(u8) { reserve = 0, release = 1, saturation = 2, overflow = 3 },
+    buffer: enum(u8) { hardware_events, virtual_events, text_codepoints },
+    amount: usize,
+    current: usize,
+    high_water: usize,
+    capacity: usize,
+    oldest_at: u64,
+};
+
+/// Returns the observation timestamp used as the oldest-item origin.
+pub const InputQueueObserver = *const fn (InputQueueObservation) u64;
+var input_queue_observer: ?InputQueueObserver = null;
+
+/// Install or remove input-buffer pressure observation for the active host run.
+pub fn setInputQueueObserver(next: ?InputQueueObserver) void {
+    input_queue_observer = next;
+}
+
+fn observeInputQueue(event: InputQueueObservation) u64 {
+    return if (input_queue_observer) |observer| observer(event) else 0;
+}
+
 /// What one recorded event was. The numbering is the wire contract with
 /// `Devices.events_from_raw` in the types package.
 pub const InputEventKind = enum(u8) {
@@ -220,30 +247,40 @@ var input_event_seq: u64 = 0;
 
 /// One source's events for the interval, in delivery order.
 const EventLog = struct {
+    buffer: @TypeOf(@as(InputQueueObservation, undefined).buffer),
     entries: [INPUT_EVENT_CAPACITY]LoggedEvent = undefined,
     len: usize = 0,
     overflowed: bool = false,
+    high_water: usize = 0,
+    oldest_at: u64 = 0,
 
     fn append(self: *@This(), class: InputClass, record: InputEventRecord) void {
         if (self.len == self.entries.len) {
             self.overflowed = true;
+            _ = observeInputQueue(.{ .operation = .overflow, .buffer = self.buffer, .amount = 1, .current = self.len, .high_water = self.high_water, .capacity = self.entries.len, .oldest_at = self.oldest_at });
             return;
         }
+        const was_empty = self.len == 0;
         self.entries[self.len] = .{ .seq = input_event_seq, .class = class, .record = record };
         input_event_seq += 1;
         self.len += 1;
+        self.high_water = @max(self.high_water, self.len);
+        const observed_at = observeInputQueue(.{ .operation = .reserve, .buffer = self.buffer, .amount = 1, .current = self.len, .high_water = self.high_water, .capacity = self.entries.len, .oldest_at = self.oldest_at });
+        if (was_empty) self.oldest_at = observed_at;
     }
 
     fn clear(self: *@This()) void {
+        if (self.len != 0) _ = observeInputQueue(.{ .operation = .release, .buffer = self.buffer, .amount = self.len, .current = 0, .high_water = self.high_water, .capacity = self.entries.len, .oldest_at = self.oldest_at });
         self.len = 0;
         self.overflowed = false;
+        self.oldest_at = 0;
     }
 };
 
 /// Events the window system delivered, recorded by the chained callbacks.
-var hardware_events: EventLog = .{};
+var hardware_events: EventLog = .{ .buffer = .hardware_events };
 /// Events a script produced: taps, held-set transitions, typed text.
-var virtual_events: EventLog = .{};
+var virtual_events: EventLog = .{ .buffer = .virtual_events };
 
 /// Which source each device class takes its events from this cycle.
 pub const EventSources = struct {
@@ -336,6 +373,59 @@ pub fn takeInputEvents(sources: EventSources) InputEvents {
 pub fn clearInputEvents() void {
     hardware_events.clear();
     virtual_events.clear();
+}
+
+test "input queue observer reports item reserve release overflow and oldest age" {
+    const Probe = struct {
+        var events: [INPUT_EVENT_CAPACITY + 8]InputQueueObservation = undefined;
+        var len: usize = 0;
+        var now: u64 = 100;
+
+        fn observe(event: InputQueueObservation) u64 {
+            events[len] = event;
+            len += 1;
+            now += 1;
+            return now;
+        }
+    };
+
+    clearInputEvents();
+    releaseRecordedText();
+    virtual_events.high_water = 0;
+    text_input_high_water = 0;
+    Probe.len = 0;
+    Probe.now = 100;
+    setInputQueueObserver(Probe.observe);
+    defer setInputQueueObserver(null);
+    defer clearInputEvents();
+    defer releaseRecordedText();
+
+    recordVirtualText('a');
+    recordVirtualText('b');
+    _ = takeInputEvents(all_virtual);
+    try std.testing.expectEqual(@as(usize, 3), Probe.len);
+    try std.testing.expectEqual(.reserve, Probe.events[0].operation);
+    try std.testing.expectEqual(.virtual_events, Probe.events[0].buffer);
+    try std.testing.expectEqual(@as(usize, 1), Probe.events[0].current);
+    try std.testing.expectEqual(@as(u64, 101), Probe.events[1].oldest_at);
+    try std.testing.expectEqual(.release, Probe.events[2].operation);
+    try std.testing.expectEqual(@as(usize, 2), Probe.events[2].amount);
+    try std.testing.expectEqual(@as(usize, 0), Probe.events[2].current);
+
+    Probe.len = 0;
+    for (0..INPUT_EVENT_CAPACITY + 1) |_| recordVirtualText('x');
+    try std.testing.expectEqual(.overflow, Probe.events[INPUT_EVENT_CAPACITY].operation);
+    try std.testing.expectEqual(@as(usize, INPUT_EVENT_CAPACITY), Probe.events[INPUT_EVENT_CAPACITY].current);
+    try std.testing.expectEqual(@as(usize, INPUT_EVENT_CAPACITY), Probe.events[INPUT_EVENT_CAPACITY].capacity);
+
+    clearInputEvents();
+    Probe.len = 0;
+    recordCodepoint('z');
+    _ = takeRecordedText();
+    try std.testing.expectEqual(.text_codepoints, Probe.events[0].buffer);
+    try std.testing.expectEqual(.reserve, Probe.events[0].operation);
+    try std.testing.expectEqual(.release, Probe.events[2].operation);
+    try std.testing.expectEqual(.text_codepoints, Probe.events[2].buffer);
 }
 
 const all_hardware = EventSources{ .keyboard = .hardware, .mouse = .hardware, .text = .hardware };
@@ -789,10 +879,15 @@ pub fn recordScroll(x_offset: f64, y_offset: f64) void {
 /// the log records it either way, up to its own capacity.
 pub fn recordCodepoint(codepoint: u32) void {
     if (text_input_len < text_input.len) {
+        const was_empty = text_input_len == 0;
         text_input[text_input_len] = codepoint;
         text_input_len += 1;
+        text_input_high_water = @max(text_input_high_water, text_input_len);
+        const observed_at = observeInputQueue(.{ .operation = .reserve, .buffer = .text_codepoints, .amount = 1, .current = text_input_len, .high_water = text_input_high_water, .capacity = text_input.len, .oldest_at = text_input_oldest_at });
+        if (was_empty) text_input_oldest_at = observed_at;
     } else {
         text_input_overflowed = true;
+        _ = observeInputQueue(.{ .operation = .overflow, .buffer = .text_codepoints, .amount = 1, .current = text_input_len, .high_water = text_input_high_water, .capacity = text_input.len, .oldest_at = text_input_oldest_at });
     }
     hardware_events.append(.text, textRecord(codepoint));
 }
@@ -835,8 +930,14 @@ fn clearRecordedHardwareInput() void {
     hardware_mouse_button_edges.clear();
     hardware_events.clear();
     hardware_wheel = .{ .x = 0, .y = 0 };
-    text_input_len = 0;
+    releaseRecordedText();
     text_input_overflowed = false;
+}
+
+fn releaseRecordedText() void {
+    if (text_input_len != 0) _ = observeInputQueue(.{ .operation = .release, .buffer = .text_codepoints, .amount = text_input_len, .current = 0, .high_water = text_input_high_water, .capacity = text_input.len, .oldest_at = text_input_oldest_at });
+    text_input_len = 0;
+    text_input_oldest_at = 0;
 }
 
 test "GLFW key actions become edges, except repeats and unknown keys" {
@@ -1305,10 +1406,17 @@ pub fn takeTextInput() TextInput {
     return takeRecordedText();
 }
 
+/// Whether typed-text overflow was observed at this host buffer's exact
+/// admission point. The raylib fallback can disclose only possible loss when
+/// its opaque queue was full, so its interval overflow remains a later fact.
+pub fn recordedTextPressureAvailable() bool {
+    return input_callbacks_installed;
+}
+
 fn takeRecordedText() TextInput {
     const delivered = text_input[0..text_input_len];
     const overflowed = text_input_overflowed;
-    text_input_len = 0;
+    releaseRecordedText();
     text_input_overflowed = false;
     return .{ .codepoints = delivered, .overflowed = overflowed };
 }

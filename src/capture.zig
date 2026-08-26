@@ -138,13 +138,40 @@ pub fn stillCaptureBytes(width: u32, height: u32) ?u64 {
 pub const StillBudget = struct {
     in_flight: u64 = 0,
     limit: u64 = still_budget_bytes,
+    high_water: u64 = 0,
+    oldest_at: u64 = 0,
+    observer: ?*const fn (QueueObservation) u64 = null,
+
+    /// Scalar-only pressure observation for the bounded still/readback bytes.
+    pub const QueueObservation = struct {
+        operation: enum(u8) { reserve, release, saturation },
+        amount: u64,
+        current: u64,
+        high_water: u64,
+        capacity: u64,
+        oldest_at: u64,
+    };
+
+    /// Install an observer for the active host run.
+    pub fn setObserver(self: *StillBudget, next: ?*const fn (QueueObservation) u64) void {
+        self.observer = next;
+    }
+
+    fn observe(self: *StillBudget, event: QueueObservation) u64 {
+        return if (self.observer) |callback| callback(event) else 0;
+    }
 
     /// Reserve room for one export, writing what was reserved into `reserved`.
     pub fn admit(self: *StillBudget, width: u32, height: u32, reserved: *u64) u8 {
         const bytes = stillCaptureBytes(width, height) orelse return err_target_unavailable;
-        if (bytes > self.limit) return err_budget_exceeded;
-        if (bytes > self.limit - self.in_flight) return err_busy;
+        if (bytes > self.limit or bytes > self.limit - self.in_flight) {
+            _ = self.observe(.{ .operation = .saturation, .amount = bytes, .current = self.in_flight, .high_water = self.high_water, .capacity = self.limit, .oldest_at = self.oldest_at });
+            return if (bytes > self.limit) err_budget_exceeded else err_busy;
+        }
         self.in_flight += bytes;
+        self.high_water = @max(self.high_water, self.in_flight);
+        const now = self.observe(.{ .operation = .reserve, .amount = bytes, .current = self.in_flight, .high_water = self.high_water, .capacity = self.limit, .oldest_at = self.oldest_at });
+        if (self.in_flight == bytes) self.oldest_at = now;
         reserved.* = bytes;
         return err_none;
     }
@@ -152,11 +179,15 @@ pub const StillBudget = struct {
     /// Give back what one admitted export reserved.
     pub fn release(self: *StillBudget, bytes: u64) void {
         self.in_flight -|= bytes;
+        _ = self.observe(.{ .operation = .release, .amount = bytes, .current = self.in_flight, .high_water = self.high_water, .capacity = self.limit, .oldest_at = self.oldest_at });
+        if (self.in_flight == 0) self.oldest_at = 0;
     }
 
     /// Forget every reservation, for a host starting a fresh app lifetime.
     pub fn reset(self: *StillBudget) void {
         self.in_flight = 0;
+        self.high_water = 0;
+        self.oldest_at = 0;
     }
 };
 
@@ -901,6 +932,29 @@ test "a buffering format would be refused once it exceeds the budget" {
     request.max_frames = 10_000;
     try std.testing.expect(!formatBuffers(request.format));
     try std.testing.expectEqual(err_none, session.start(request, 1920, 1080));
+}
+
+test "still budget observer reports reserve saturation release and oldest stamp" {
+    const Probe = struct {
+        var events: [3]StillBudget.QueueObservation = undefined;
+        var count: usize = 0;
+        fn callback(event: StillBudget.QueueObservation) u64 {
+            events[count] = event;
+            count += 1;
+            return 91;
+        }
+    };
+    var budget = StillBudget{ .limit = 64 };
+    budget.setObserver(Probe.callback);
+    var reserved: u64 = 0;
+    try std.testing.expectEqual(err_none, budget.admit(2, 2, &reserved));
+    try std.testing.expectEqual(err_busy, budget.admit(4, 4, &reserved));
+    budget.release(16);
+    try std.testing.expectEqual(.reserve, Probe.events[0].operation);
+    try std.testing.expectEqual(@as(u64, 16), Probe.events[0].high_water);
+    try std.testing.expectEqual(.saturation, Probe.events[1].operation);
+    try std.testing.expectEqual(@as(u64, 91), Probe.events[1].oldest_at);
+    try std.testing.expectEqual(.release, Probe.events[2].operation);
 }
 
 test "scaling shrinks the recorded frame size" {

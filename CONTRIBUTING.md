@@ -19,6 +19,7 @@ Install:
 - The exact Roc nightly named in [`.roc-version`](.roc-version), available as
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
+- SQLite's `sqlite3` command-line tool for inspecting Observatory captures
 
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
 come first on it. A local debug build of the compiler is not a substitute: it
@@ -88,6 +89,16 @@ Run the main test suite:
 ```bash
 zig build test
 ```
+
+Generate the optional, threshold-free Observatory overhead report with:
+
+```bash
+zig build -Doptimize=ReleaseFast observatory-bench
+```
+
+The JSON and Markdown reports are written under `zig-out/`. Timing is not a CI
+pass/fail threshold; deterministic recorder invariants remain in the ordinary
+test suite. See [the Observatory methodology](docs/observatory.md#regression-and-microbenchmark-methodology).
 
 This covers lints, Zig tests, platform privacy checks, and Roc checks/tests over
 the examples. The lower-level example driver is also useful while iterating:

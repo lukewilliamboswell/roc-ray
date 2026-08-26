@@ -12,11 +12,10 @@ import rr.Draw
 import rr.Math
 import rr.Text
 
-## State kept between updates: the font, offscreen drawing target, shader, and
-## its prepared time setting, plus the elapsed time that animates the scene.
+## State kept between updates: the offscreen drawing target, shader, prepared
+## labels, and prepared time setting, plus the elapsed animation time.
 ## These resources are created once and reused for every frame.
 Model : {
-	font : Text.Font,
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
 
@@ -25,6 +24,8 @@ Model : {
 	## happens in `render!` because a uniform is a statement about the draws
 	## that follow it, and only `render!` knows where those are.
 	time_uniform : Draw.F32Uniform,
+	title : Text.Prepared,
+	hint : Text.Prepared,
 	seconds : F32,
 }
 
@@ -42,7 +43,9 @@ init! = App.init(
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
 		time_uniform = shader.uniform_f32!("time")?
-		Ok({ font, target, shader, time_uniform, seconds: 0 })
+		title = Text.from("offscreen + shader", font).size(48).prepare!()?
+		hint = Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", font).size(18).prepare!()?
+		Ok({ target, shader, time_uniform, title, hint, seconds: 0 })
 	},
 )
 
@@ -71,12 +74,8 @@ render! = |model, frame| {
 			offscreen = target_frame.size!()
 			center = { x: offscreen.width * 0.5, y: offscreen.height * 0.62 }
 			target_frame.rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
-			Text.from("offscreen + shader", model.font)
-				.size(48)
-				.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: (Middle, Center) })
-			Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", model.font)
-				.size(18)
-				.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: (Middle, Center) })
+			model.title.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: (Middle, Center) })
+			model.hint.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: (Middle, Center) })
 			target_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {

@@ -56,6 +56,34 @@ pub const DeallocRoute = enum {
     corrupt,
 };
 
+/// Scalar-only lifecycle observation below the Roc boundary.
+pub const Observation = struct {
+    operation: enum(u8) { create, saturation, retire, destroy, use, reuse },
+    kind: Kind,
+    subject_id: u64,
+    active: usize,
+    high_water: usize,
+    /// Timestamp returned by the observer when this resource was retired.
+    /// It is zero for every other operation.
+    retired_at: u64 = 0,
+};
+
+/// Optional host hook. Its return value is retained as the retirement time and
+/// returned with destruction, allowing the host to calculate delay without a
+/// clock dependency in this generic heap.
+pub const Observer = *const fn (Observation) u64;
+
+var observer: ?Observer = null;
+
+/// Install or remove resource lifecycle observation for the active host run.
+pub fn setObserver(next: ?Observer) void {
+    observer = next;
+}
+
+fn observe(event: Observation) u64 {
+    return if (observer) |callback| callback(event) else 0;
+}
+
 /// This heap is intentionally unsynchronized: roc-ray invokes Roc and all
 /// resource effects on the window thread. A live Roc reference pins its slot.
 pub fn HostResourceHeap(
@@ -91,6 +119,7 @@ pub fn HostResourceHeap(
         /// still alive. They stay `live` so the slot cannot be handed out
         /// again before the resource behind it has been destroyed.
         retired: [capacity]bool = [_]bool{false} ** capacity,
+        retired_at: [capacity]u64 = [_]u64{0} ** capacity,
         retired_count: usize = 0,
         active_count: usize = 0,
         high_water_count: usize = 0,
@@ -128,8 +157,29 @@ pub fn HostResourceHeap(
                 is_live.* = true;
                 self.active_count += 1;
                 self.high_water_count = @max(self.high_water_count, self.active_count);
+                _ = observe(.{
+                    .operation = .create,
+                    .kind = kind,
+                    .subject_id = encodeToken(index, generation, kind),
+                    .active = self.active_count,
+                    .high_water = self.high_water_count,
+                });
+                if (generation > 1) _ = observe(.{
+                    .operation = .reuse,
+                    .kind = kind,
+                    .subject_id = encodeToken(index, generation, kind),
+                    .active = self.active_count,
+                    .high_water = self.high_water_count,
+                });
                 return &self.slots[index].payload;
             }
+            _ = observe(.{
+                .operation = .saturation,
+                .kind = kind,
+                .subject_id = 0,
+                .active = self.active_count,
+                .high_water = self.high_water_count,
+            });
             return null;
         }
 
@@ -141,6 +191,13 @@ pub fn HostResourceHeap(
             if (decoded.kind != kind or index >= capacity or !self.live[index]) return null;
             if (self.generations[index] != decoded.generation) return null;
             if (read_token(&self.slots[index].payload) != token or self.slots[index].refcount <= 0) return null;
+            _ = observe(.{
+                .operation = .use,
+                .kind = kind,
+                .subject_id = token,
+                .active = self.active_count,
+                .high_water = self.high_water_count,
+            });
             return &self.slots[index].resource;
         }
 
@@ -166,6 +223,13 @@ pub fn HostResourceHeap(
             // resource behind it outlives this call.
             self.retired[index] = true;
             self.retired_count += 1;
+            self.retired_at[index] = observe(.{
+                .operation = .retire,
+                .kind = kind,
+                .subject_id = read_token(&slot.payload),
+                .active = self.active_count,
+                .high_water = self.high_water_count,
+            });
             return .deallocated;
         }
 
@@ -181,10 +245,19 @@ pub fn HostResourceHeap(
                 if (destroyed == budget) break;
                 if (!is_retired.*) continue;
                 destroy(&self.slots[index].resource);
+                self.active_count -= 1;
+                _ = observe(.{
+                    .operation = .destroy,
+                    .kind = kind,
+                    .subject_id = read_token(&self.slots[index].payload),
+                    .active = self.active_count,
+                    .high_water = self.high_water_count,
+                    .retired_at = self.retired_at[index],
+                });
                 is_retired.* = false;
+                self.retired_at[index] = 0;
                 self.live[index] = false;
                 self.retired_count -= 1;
-                self.active_count -= 1;
                 destroyed += 1;
             }
             return destroyed;
@@ -202,8 +275,18 @@ pub fn HostResourceHeap(
             for (&self.live, 0..) |*is_live, index| {
                 if (!is_live.*) continue;
                 destroy(&self.slots[index].resource);
+                self.active_count -= 1;
+                _ = observe(.{
+                    .operation = .destroy,
+                    .kind = kind,
+                    .subject_id = read_token(&self.slots[index].payload),
+                    .active = self.active_count,
+                    .high_water = self.high_water_count,
+                    .retired_at = self.retired_at[index],
+                });
                 is_live.* = false;
                 self.retired[index] = false;
+                self.retired_at[index] = 0;
             }
             self.active_count = 0;
             self.retired_count = 0;
@@ -305,6 +388,83 @@ test "resource heaps never emit or resolve zero, including after slot reuse" {
     try std.testing.expect(replacement.* != 0);
     try std.testing.expect(replacement.* != first_token);
     try std.testing.expect(heap.get(0) == null);
+    heap.deinitAll();
+}
+
+test "resource observer sees creation saturation retirement and destruction delay stamp" {
+    const Probe = struct {
+        var events: [4]Observation = undefined;
+        var count: usize = 0;
+
+        fn callback(event: Observation) u64 {
+            events[count] = event;
+            count += 1;
+            return if (event.operation == .retire) 1234 else 0;
+        }
+
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+        fn destroy(_: *u8) void {}
+    };
+    const Heap = HostResourceHeap(u64, u8, 1, .texture, Probe.write, Probe.read, Probe.destroy);
+    var heap: Heap = .{};
+    Probe.count = 0;
+    setObserver(Probe.callback);
+    defer setObserver(null);
+
+    const payload = heap.insert(0, 1).?;
+    try std.testing.expect(heap.insert(0, 2) == null);
+    const base: *isize = @ptrFromInt(@intFromPtr(payload) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    try std.testing.expectEqual(@as(usize, 1), heap.drainRetired(1));
+
+    try std.testing.expectEqual(@as(usize, 4), Probe.count);
+    try std.testing.expectEqual(.create, Probe.events[0].operation);
+    try std.testing.expectEqual(.saturation, Probe.events[1].operation);
+    try std.testing.expectEqual(.retire, Probe.events[2].operation);
+    try std.testing.expectEqual(.destroy, Probe.events[3].operation);
+    try std.testing.expectEqual(@as(u64, 1234), Probe.events[3].retired_at);
+    try std.testing.expectEqual(@as(usize, 0), Probe.events[3].active);
+    try std.testing.expectEqual(Probe.events[0].subject_id, Probe.events[3].subject_id);
+}
+
+test "resource observer distinguishes use and generation-safe slot reuse" {
+    const Probe = struct {
+        var operations: [8]u8 = undefined;
+        var count: usize = 0;
+        fn callback(event: Observation) u64 {
+            operations[count] = @intFromEnum(event.operation);
+            count += 1;
+            return 0;
+        }
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+        fn destroy(_: *u8) void {}
+    };
+    const Heap = HostResourceHeap(u64, u8, 1, .texture, Probe.write, Probe.read, Probe.destroy);
+    var heap: Heap = .{};
+    Probe.count = 0;
+    setObserver(Probe.callback);
+    defer setObserver(null);
+
+    const first = heap.insert(0, 1).?;
+    try std.testing.expect(heap.get(first.*) != null);
+    const base: *isize = @ptrFromInt(@intFromPtr(first) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    _ = heap.drainRetired(1);
+    _ = heap.insert(0, 2).?;
+
+    try std.testing.expectEqualSlices(u8, &.{ 0, 4, 2, 3, 0, 5 }, Probe.operations[0..Probe.count]);
     heap.deinitAll();
 }
 

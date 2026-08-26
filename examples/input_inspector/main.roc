@@ -25,6 +25,7 @@ import rr.Stdout
 ## font is retained for drawing each new snapshot.
 Model : {
 	font : Text.Font,
+	chips : Box(ChipLabels),
 
 	## Text typed since the last clear, and what the clipboard last did with it.
 	typed : Str,
@@ -46,6 +47,24 @@ Model : {
 	events_line : Str,
 }
 
+ChipLabels : {
+	w : Text.Prepared,
+	a : Text.Prepared,
+	s : Text.Prepared,
+	d : Text.Prepared,
+	up : Text.Prepared,
+	left : Text.Prepared,
+	down : Text.Prepared,
+	right : Text.Prepared,
+	one : Text.Prepared,
+	shift : Text.Prepared,
+	ctrl : Text.Prepared,
+	escape : Text.Prepared,
+	space : Text.Prepared,
+	mouse_down : Text.Prepared,
+	mouse_up : Text.Prepared,
+}
+
 ## What one screen readback under the pointer came back with.
 ##
 ## `Unavailable` is the ordinary state on the first cycle: `update!` runs
@@ -62,7 +81,7 @@ Msg : []
 ## What a clipboard read can come back with.
 Paste : Try(Str, [Unavailable, TooLarge, Busy])
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("RocRay Input Inspector")
@@ -72,7 +91,34 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty, picked: Err(Unavailable), events_line: "events: none yet" }),
+	|_startup| {
+		font = Draw.default_font!()
+		Ok({
+			font,
+			chips: Box.box({
+				w: Text.from("W", font).size(17).prepare!()?,
+				a: Text.from("A", font).size(17).prepare!()?,
+				s: Text.from("S", font).size(17).prepare!()?,
+				d: Text.from("D", font).size(17).prepare!()?,
+				up: Text.from("^", font).size(17).prepare!()?,
+				left: Text.from("<", font).size(17).prepare!()?,
+				down: Text.from("v", font).size(17).prepare!()?,
+				right: Text.from(">", font).size(17).prepare!()?,
+				one: Text.from("1", font).size(17).prepare!()?,
+				shift: Text.from("Shift", font).size(17).prepare!()?,
+				ctrl: Text.from("Ctrl", font).size(17).prepare!()?,
+				escape: Text.from("Esc", font).size(17).prepare!()?,
+				space: Text.from("Space", font).size(17).prepare!()?,
+				mouse_down: Text.from("Mouse down", font).size(17).prepare!()?,
+				mouse_up: Text.from("Mouse up", font).size(17).prepare!()?,
+			}),
+			typed: "",
+			clipboard_status: "clipboard idle",
+			input: Devices.empty,
+			picked: Err(Unavailable),
+			events_line: "events: none yet",
+		})
+	},
 )
 
 title : Str
@@ -170,7 +216,7 @@ update! = |model, program_input| {
 	if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
-		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked, events_line: events_line })
+		Ok({ font: model.font, chips: model.chips, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked, events_line: events_line })
 	}
 }
 
@@ -298,15 +344,13 @@ panel! = |frame, font, cfg| {
 }
 
 ## One indicator chip, lit while the snapshot says its input is active.
-chip! : Draw.Frame, Text.Font, { x : F32, y : F32, width : F32, label : Str, on : Bool } => {}
-chip! = |frame, font, cfg| {
+chip! : Draw.Frame, Text.Prepared, { x : F32, y : F32, width : F32, on : Bool } => {}
+chip! = |frame, label, cfg| {
 	fill = if cfg.on theme.active else theme.idle
 	edge = if cfg.on theme.active else theme.edge
 	ink = if cfg.on theme.active_ink else theme.idle_ink
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
-	Text.from(cfg.label, font)
-		.size(17)
-		.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: (Middle, Center) })
+	label.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: (Middle, Center) })
 }
 
 ## A small square light next to a label, for the signals that are on or off
@@ -327,6 +371,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	input = model.input
 	font = model.font
+	chips = Box.unbox(model.chips)
 
 	w_down = input.key_down(KeyW)
 	a_down = input.key_down(KeyA)
@@ -363,21 +408,21 @@ render! = |model, frame| {
 	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live; the bits as chips, the event record as a line", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
 
 	panel!(frame, font, { x: 20, y: 84, width: 780, height: 258, label: "KEYS AND BUTTONS" })
-	chip!(frame, font, { x: 70, y: 126, width: 30, label: "W", on: w_down })
-	chip!(frame, font, { x: 30, y: 161, width: 30, label: "A", on: a_down })
-	chip!(frame, font, { x: 70, y: 161, width: 30, label: "S", on: s_down })
-	chip!(frame, font, { x: 110, y: 161, width: 30, label: "D", on: d_down })
-	chip!(frame, font, { x: 250, y: 126, width: 30, label: "^", on: up_down })
-	chip!(frame, font, { x: 210, y: 161, width: 30, label: "<", on: left_down })
-	chip!(frame, font, { x: 250, y: 161, width: 30, label: "v", on: down_down })
-	chip!(frame, font, { x: 290, y: 161, width: 30, label: ">", on: right_down })
-	chip!(frame, font, { x: 30, y: 246, width: 50, label: "1", on: one_down })
-	chip!(frame, font, { x: 90, y: 246, width: 80, label: "Shift", on: shift_down })
-	chip!(frame, font, { x: 180, y: 246, width: 70, label: "Ctrl", on: ctrl_down })
-	chip!(frame, font, { x: 260, y: 246, width: 80, label: "Esc", on: escape_pressed })
-	chip!(frame, font, { x: 350, y: 246, width: 90, label: "Space", on: space_released })
-	chip!(frame, font, { x: 30, y: 296, width: 130, label: "Mouse down", on: mouse_left_pressed })
-	chip!(frame, font, { x: 170, y: 296, width: 110, label: "Mouse up", on: mouse_left_released })
+	chip!(frame, chips.w, { x: 70, y: 126, width: 30, on: w_down })
+	chip!(frame, chips.a, { x: 30, y: 161, width: 30, on: a_down })
+	chip!(frame, chips.s, { x: 70, y: 161, width: 30, on: s_down })
+	chip!(frame, chips.d, { x: 110, y: 161, width: 30, on: d_down })
+	chip!(frame, chips.up, { x: 250, y: 126, width: 30, on: up_down })
+	chip!(frame, chips.left, { x: 210, y: 161, width: 30, on: left_down })
+	chip!(frame, chips.down, { x: 250, y: 161, width: 30, on: down_down })
+	chip!(frame, chips.right, { x: 290, y: 161, width: 30, on: right_down })
+	chip!(frame, chips.one, { x: 30, y: 246, width: 50, on: one_down })
+	chip!(frame, chips.shift, { x: 90, y: 246, width: 80, on: shift_down })
+	chip!(frame, chips.ctrl, { x: 180, y: 246, width: 70, on: ctrl_down })
+	chip!(frame, chips.escape, { x: 260, y: 246, width: 80, on: escape_pressed })
+	chip!(frame, chips.space, { x: 350, y: 246, width: 90, on: space_released })
+	chip!(frame, chips.mouse_down, { x: 30, y: 296, width: 130, on: mouse_left_pressed })
+	chip!(frame, chips.mouse_up, { x: 170, y: 296, width: 110, on: mouse_left_released })
 
 	panel!(frame, font, { x: 20, y: 356, width: 780, height: 108, label: "SIGNALS" })
 	light!(frame, font, { x: 30, y: 388, label: "Typed Unicode", on: text_entered })

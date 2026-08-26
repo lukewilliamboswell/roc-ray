@@ -13,6 +13,7 @@ app [Model, program] {
 
 import rr.App
 import rr.Files
+import rr.Trace
 import "assets/fonts/LiberationSans-Regular.ttf" as liberation_sans : List(U8)
 import rr.Camera
 import rr.Capture
@@ -166,6 +167,11 @@ Model : {
 
 	## Reads and lines per unit time, for the masthead's two graphs.
 	rates : Rates,
+
+	## Permanent summaries maintained as lanes change, so the masthead does not
+	## fold the entire lane list every presentation frame.
+	files_parsed : U64,
+	lines_parsed : U64,
 
 	## Pan and zoom. A camera is a plain value, so the view costs the plot
 	## nothing: the instances never move when it changes.
@@ -970,6 +976,22 @@ open_scan = |model, arrival| {
 			Lane(index) => index
 		}
 
+	previous =
+		match arrival.replaces {
+			New => { files: 0, lines: 0 }
+			Lane(index) =>
+				match List.get(model.lanes, index) {
+					Err(_) => { files: 0, lines: 0 }
+					Ok(lane) => {
+						files: match lane.progress {
+							Ready => 1
+							_ => 0
+						},
+						lines: lane.lines,
+					}
+				}
+			}
+
 	fresh = {
 		path: arrival.path,
 		tint: tint,
@@ -996,6 +1018,8 @@ open_scan = |model, arrival| {
 		..model,
 		arrivals: List.drop_first(model.arrivals, 1),
 		lanes: lanes,
+		files_parsed: model.files_parsed - previous.files,
+		lines_parsed: model.lines_parsed - previous.lines,
 		runs: List.append(model.runs, { lane: slot, count: 0 }),
 		refetching: match arrival.replaces {
 			New => model.refetching
@@ -1053,6 +1077,7 @@ scan_once = |model, scan| {
 		peak: retain_peak(model.peak, scan, result.best, lane_path(model, scan.lane)),
 		lanes: add_lines(add_columns(model.lanes, scan.lane, cols), scan.lane, List.len(dots)),
 		rates: model.rates.add_lines(List.len(dots)),
+		lines_parsed: model.lines_parsed + List.len(dots),
 	}
 
 	if done {
@@ -1064,7 +1089,7 @@ scan_once = |model, scan| {
 		# this is the moment the estimate it was drawn under is corrected --
 		# one pass over the batch, once per file, and the lane snaps to its
 		# final width.
-		relayout({ ..grown, parsing: Idle, lanes: set_progress(grown.lanes, scan.lane, Ready) })
+		relayout({ ..grown, parsing: Idle, lanes: set_progress(grown.lanes, scan.lane, Ready), files_parsed: grown.files_parsed + 1 })
 	} else {
 		{ ..grown, parsing: Parsing({ ..scan, cursor: cursor, col: result.col, line: scan.line + result.lines }) }
 	}
@@ -1173,20 +1198,6 @@ hist_peak = |hist| List.fold(hist, 1, U64.max)
 ## outrun the parser and falls back to zero as the parser catches up.
 held_bytes : List(Arrival) -> U64
 held_bytes = |arrivals| List.fold(arrivals, 0, |total, arrival| total + List.len(arrival.bytes))
-
-ready_count : List(Lane) -> U64
-ready_count = |lanes|
-	List.count_if(
-		lanes,
-		|lane|
-			match lane.progress {
-				Ready => Bool.True
-				_ => Bool.False
-			},
-	)
-
-total_lines : List(Lane) -> U64
-total_lines = |lanes| List.fold(lanes, 0, |sum, lane| sum + lane.lines)
 
 # ---------------------------------------------------------------------------
 # Throughput
@@ -1626,6 +1637,8 @@ init! = App.init_for_args(
 			refetching: Nothing,
 			peak: { path: "", columns: 0, text: "" },
 			rates: Rates.new(),
+			files_parsed: 0,
+			lines_parsed: 0,
 			camera: Camera.default,
 			following: Bool.True,
 			# The configured size, replaced by the sampled one on the first
@@ -1653,6 +1666,7 @@ sprite_of = |model| Draw.render_texture(model.glow)
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
+	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
 	#    deal more work while it is at it.
@@ -1685,11 +1699,15 @@ update! = |model, program_input| {
 	# 3. One bounded window of parsing, whatever else happened, and then the
 	#    retention budget. Eviction is here rather than in `render!` because it
 	#    is a fact about the model, not about how it is drawn.
+	parse_zone = Trace.begin!("parse and evict")
 	parsed = evict(advance(primed))
+	Trace.end!(parse_zone)
 
 	# 4. The view is pure state too, so a headless run scrolls the same way an
 	#    interactive one does.
+	view_zone = Trace.begin!("update plot view")
 	viewed = look(parsed, program_input)
+	Trace.end!(view_zone)
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
 	#    were dropped. At most one of these is outstanding.
@@ -1729,10 +1747,12 @@ update! = |model, program_input| {
 			Ok({})
 		}
 
-	match exit {
+	result = match exit {
 		Err(code) => Err(code)
 		Ok({}) => Ok({ ..refetched, queue: ready.queue })
 	}
+	Trace.end!(update_zone)
+	result
 }
 
 ## Fold one completion into the model.
@@ -1980,15 +2000,23 @@ accent = Color.from_hex_rgb(0xe0a458)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
+	render_zone = Trace.begin!("draw live plot")
 	# The sprite first, because everything else samples it. It is one scope and
 	# two gradients whatever is on screen.
+	glow_zone = Trace.begin!("paint point sprite")
 	paint_glow!(frame, model)?
+	Trace.end!(glow_zone)
 
 	draw_page!(frame, model)
+	plot_zone = Trace.begin!("draw plot body")
 	draw_plot!(frame, model)?
+	Trace.end!(plot_zone)
+	hud_zone = Trace.begin!("draw plot HUD")
 	draw_masthead!(frame, model)
 	draw_gutter!(frame, model)?
 	draw_footer!(frame, model)
+	Trace.end!(hud_zone)
+	Trace.end!(render_zone)
 	Ok({})
 }
 
@@ -2425,10 +2453,10 @@ draw_figures! = |frame, model, fade| {
 	figures = [
 		{
 			label: "FILES PARSED",
-			value: Str.concat(commas(ready_count(model.lanes)), Str.concat(" of ", commas(model.walk.files_found))),
+			value: Str.concat(commas(model.files_parsed), Str.concat(" of ", commas(model.walk.files_found))),
 			note: Str.concat("SKIPPED ", commas(model.walk.files_skipped)),
 		},
-		{ label: "LINES", value: commas(total_lines(model.lanes)), note: Str.concat("READ ", size_str(model.walk.bytes_read)) },
+		{ label: "LINES", value: commas(model.lines_parsed), note: Str.concat("READ ", size_str(model.walk.bytes_read)) },
 		{
 			label: "DIRECTORIES",
 			value: Str.concat(commas(model.walk.dirs_listed), Str.concat(" of ", commas(model.walk.dirs_found))),

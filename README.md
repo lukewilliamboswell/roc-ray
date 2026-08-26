@@ -37,6 +37,10 @@ suggests a learning path.
 The capture examples also produce deterministic media directly, including this
 [WebM plot recording](examples/gallery/capture_plot.webm).
 
+For performance investigation, [RocRay Observatory](docs/observatory.md)
+records host-cycle summaries and opt-in application annotations to a bounded,
+queryable SQLite `.rrstats` capture.
+
 ## Try it
 
 Install the Roc version named in [`.roc-version`](.roc-version), then run the

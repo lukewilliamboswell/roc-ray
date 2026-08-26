@@ -102,12 +102,13 @@ render! = |model, frame| {
 	camera = Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom }).with_rotation(model.rotation)
 	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
+	view = camera_world_bounds(camera)
 
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: Color.from_hex_rgb(0x101a24), color_bottom: Color.from_hex_rgb(0x060a0f) })
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, model.player, mouse_world)
+			draw_world!(world_frame, model.player, mouse_world, view)
 			Ok({})
 		},
 	)?
@@ -121,11 +122,24 @@ render! = |model, frame| {
 	Ok({})
 }
 
-draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}
-draw_world! = |frame, player, mouse_world| {
+camera_world_bounds : Camera.Camera2D -> Math.Rect
+camera_world_bounds = |camera| {
+	top_left = camera.screen_to_world({ x: 0, y: 0 })
+	top_right = camera.screen_to_world({ x: screen_w, y: 0 })
+	bottom_left = camera.screen_to_world({ x: 0, y: screen_h })
+	bottom_right = camera.screen_to_world({ x: screen_w, y: screen_h })
+	left = F32.min(F32.min(top_left.x, top_right.x), F32.min(bottom_left.x, bottom_right.x))
+	right = F32.max(F32.max(top_left.x, top_right.x), F32.max(bottom_left.x, bottom_right.x))
+	top = F32.min(F32.min(top_left.y, top_right.y), F32.min(bottom_left.y, bottom_right.y))
+	bottom = F32.max(F32.max(top_left.y, top_right.y), F32.max(bottom_left.y, bottom_right.y))
+	Math.rect(left, top, right - left, bottom - top)
+}
+
+draw_world! : Draw.Frame, Math.Vec2, Math.Vec2, Math.Rect => {}
+draw_world! = |frame, player, mouse_world, view| {
 	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x16222b), Color.with_alpha(Color.from_hex_rgb(0x5fa8d3), 90), 3) })
-	draw_grid_x!(frame, world_left)
-	draw_grid_y!(frame, world_top)
+	draw_grid_x!(frame, world_left, view)
+	draw_grid_y!(frame, world_top, view)
 
 	landmark!(frame, { x: -320, y: -160, width: 360, height: 260 }, Color.from_hex_rgb(0x3b6f8f))
 	landmark!(frame, { x: 280, y: 120, width: 520, height: 340 }, Color.from_hex_rgb(0x4c8f5f))
@@ -151,23 +165,27 @@ landmark! = |frame, rect, color| {
 	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: 10, style: Draw.filled(Color.with_alpha(Color.white, 45)) })
 }
 
-draw_grid_x! : Draw.Frame, F32 => {}
-draw_grid_x! = |frame, x| {
+draw_grid_x! : Draw.Frame, F32, Math.Rect => {}
+draw_grid_x! = |frame, x, view| {
 	if x > world_right {
 		{}
 	} else {
-		frame.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
-		draw_grid_x!(frame, x + 80)
+		if x >= view.x and x <= view.x + view.width {
+			frame.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+		}
+		draw_grid_x!(frame, x + 80, view)
 	}
 }
 
-draw_grid_y! : Draw.Frame, F32 => {}
-draw_grid_y! = |frame, y| {
+draw_grid_y! : Draw.Frame, F32, Math.Rect => {}
+draw_grid_y! = |frame, y, view| {
 	if y > world_bottom {
 		{}
 	} else {
-		frame.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
-		draw_grid_y!(frame, y + 80)
+		if y >= view.y and y <= view.y + view.height {
+			frame.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+		}
+		draw_grid_y!(frame, y + 80, view)
 	}
 }
 

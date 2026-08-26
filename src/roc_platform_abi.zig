@@ -11841,6 +11841,45 @@ comptime {
     }
 }
 
+/// Arguments for TraceHost.mark!
+/// Roc signature: Str => {}
+/// Refcounted fields are owned by the hosted function.
+pub const TraceHostMarkArgs = extern struct {
+    arg0: RocStr,
+};
+
+/// Arguments for TraceHost.begin!
+/// Roc signature: Str => U64
+/// Refcounted fields are owned by the hosted function.
+pub const TraceHostBeginArgs = extern struct {
+    arg0: RocStr,
+};
+
+/// Arguments for TraceHost.end!
+/// Roc signature: U64 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const TraceHostEndArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for TraceHost.sample_i64!
+/// Roc signature: Str, I64, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const TraceHostSample_i64Args = extern struct {
+    arg0: RocStr,
+    arg1: i64,
+    arg2: u8,
+};
+
+/// Arguments for TraceHost.sample_f64!
+/// Roc signature: Str, F64, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const TraceHostSample_f64Args = extern struct {
+    arg0: RocStr,
+    arg1: f64,
+    arg2: u8,
+};
+
 // Platform Type Aliases
 
 pub const AssetsHostOpen_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
@@ -13918,6 +13957,38 @@ pub extern fn roc_sqlite_exec_script(arg0: *u64, arg1: RocStr) callconv(.c) __An
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_cmd_run(arg0: CmdHostRunArgs) callconv(.c) __AnonStruct_fa110e8829dc221b;
+
+/// Hosted symbol for TraceHost.mark!
+/// Roc signature: Str => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_trace_mark(arg0: RocStr) callconv(.c) void;
+
+/// Hosted symbol for TraceHost.begin!
+/// Roc signature: Str => U64
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_trace_begin(arg0: RocStr) callconv(.c) u64;
+
+/// Hosted symbol for TraceHost.end!
+/// Roc signature: U64 => {}
+pub extern fn roc_trace_end(arg0: u64) callconv(.c) void;
+
+/// Hosted symbol for TraceHost.sample_i64!
+/// Roc signature: Str, I64, U8 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_trace_sample_i64(arg0: RocStr, arg1: i64, arg2: u8) callconv(.c) void;
+
+/// Hosted symbol for TraceHost.sample_f64!
+/// Roc signature: Str, F64, U8 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_trace_sample_f64(arg0: RocStr, arg1: f64, arg2: u8) callconv(.c) void;
 
 /// Default memory management functions for Roc platforms.
 ///

@@ -842,6 +842,13 @@ def run_observatory_probe(
                 )
             if task_zone is None or task_zone[0] != task_zone[1] + task_zone[2] or task_zone[2] <= 0:
                 failures.append(f"Observatory task wait zone timing is invalid: {task_zone!r}")
+            unnamed_zone_ids = db.execute(
+                "SELECT count(*) FROM annotations WHERE kind IN (1,2,5) AND integer_value IS NULL"
+            ).fetchone()[0]
+            if unnamed_zone_ids != 0:
+                failures.append(
+                    f"Observatory omitted {unnamed_zone_ids} Trace zone correlation ID(s)"
+                )
             sleep_effect = db.execute(
                 "SELECT duration_ns,external_ns,validation_ns,conversion_ns,worker_ns "
                 "FROM hosted_effects WHERE name='Task.sleep!' ORDER BY id LIMIT 1"

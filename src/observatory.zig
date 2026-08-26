@@ -1290,7 +1290,11 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
             if (30 + name_len + 32 != bytes.len) return false;
             if (rocray_sqlite_bind_text(annotation_stmt, 5, bytes[30 .. 30 + name_len].ptr, name_len) != SQLITE_OK) return false;
             const annotation_kind: AnnotationKind = @enumFromInt(bytes[18]);
-            if (annotation_kind == .sample_i64) {
+            if (annotation_kind == .sample_i64 or
+                annotation_kind == .zone_begin or
+                annotation_kind == .zone_end or
+                annotation_kind == .zone_abort)
+            {
                 if (rocray_sqlite_bind_int64(annotation_stmt, 6, std.mem.readInt(i64, bytes[20..28], .little)) != SQLITE_OK) return false;
             } else {
                 if (rocray_sqlite_bind_null(annotation_stmt, 6) != SQLITE_OK) return false;
@@ -1596,6 +1600,7 @@ test "session writer creates and finalizes a queryable stage one database" {
         .phase = 4,
         .kind = .zone_end,
         .name = "load",
+        .integer = 99,
         .wall_ns = 30,
         .active_ns = 11,
         .parked_ns = 19,
@@ -1632,6 +1637,7 @@ test "session writer creates and finalizes a queryable stage one database" {
     try std.testing.expectEqual(@as(i64, 30), queryI64(db, "SELECT wall_ns FROM annotations WHERE kind=2").?);
     try std.testing.expectEqual(@as(i64, 11), queryI64(db, "SELECT active_ns FROM annotations WHERE kind=2").?);
     try std.testing.expectEqual(@as(i64, 19), queryI64(db, "SELECT parked_ns FROM annotations WHERE kind=2").?);
+    try std.testing.expectEqual(@as(i64, 99), queryI64(db, "SELECT integer_value FROM annotations WHERE kind=2").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM task_events").?);
     try std.testing.expectEqual(@as(i64, 4), queryI64(db, "SELECT subject_id FROM task_events").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM hosted_effects").?);

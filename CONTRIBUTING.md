@@ -47,9 +47,14 @@ The host reserves a few `--host-` switches for unattended runs. `--host-frames=N
 ends a real windowed run after N cycles, `--host-hidden` opens that window
 hidden, and `--host-keys=3:S,4:LEFT+X` / `--host-text=5:hi` script the keyboard
 and typed text on the cycles they name (a key is a character, one of a few names
-such as `LEFT` or `SPACE`, or a raw key code). They are what the windowed sweep
-below drives the examples with; `--host-headless` and `--host-headless-frames=N`
-select the stub backend instead, which draws nothing.
+such as `LEFT` or `SPACE`, or a raw key code; a `~` suffix, as in `3:ESCAPE~`,
+taps the key inside that cycle -- pressed and released in one input, never
+held -- which is what a hardware key that went down and up between two polls
+looks like. `~` because it is inert unquoted in cmd, PowerShell, bash and zsh
+alike; `^` is cmd's escape character and vanished on Windows). They are what
+the windowed sweep below drives the examples with;
+`--host-headless` and `--host-headless-frames=N` select the stub backend
+instead, which draws nothing.
 
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
@@ -337,6 +342,18 @@ adding a hosted effect, an exposed module, a package dependency -- must be made
 to both. `zig build lint` enforces this and points at the first line that
 drifted; without it a missing entry only surfaces when someone links against the
 Wayland bundle.
+
+A value that crosses the host boundary is flat: scalars, `List` of scalars, or
+`List` of a record of scalars. Unions and boxed lists do not cross. The input
+event record is the worked example -- the host fills
+`List({ kind : U8, code : U32, x : F32, y : F32 })` and
+`Devices.events_from_raw` in the types package decodes it into the typed
+`Devices.Event`; the `kind` numbering is stated on both sides
+(`InputEventKind` in `src/backend_raylib.zig`, `event_from_raw` in
+`types/Devices.roc`) so neither can drift alone. A new field on
+`Devices.Snapshot` touches `InputFromHost` and `input_from_raw` in both
+platform headers, `Devices.none` and `Devices.empty`, and the ABI regeneration
+below.
 
 Every hosted effect carries a phase set in `src/host_native.zig` --
 `enforcePhase(name, during_update)` and friends -- that says which app

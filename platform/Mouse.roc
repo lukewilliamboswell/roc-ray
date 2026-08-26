@@ -117,23 +117,39 @@ Mouse := [].{
 	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
 	delta = RrtMouse.delta
 
-	## Horizontal and vertical wheel movement retained for this input interval.
+	## Horizontal and vertical wheel movement since the previous input: every
+	## scroll event in the interval summed, so notches turned between two
+	## cycles are all counted rather than only the last. Each notch is also a
+	## `Wheel` entry in `input.devices.events`, in order with the clicks and
+	## keys around it.
 	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
 	wheel_delta = RrtMouse.wheel_delta
 
-	## Check if a mouse button is currently held down.
+	## Check if a mouse button is held down at this cycle's boundary. A state
+	## sample.
 	button_down : { buttons : List(U8), ..state }, Button -> Bool
 	button_down = RrtMouse.button_down
 
-	## Check if a mouse button is currently up.
+	## Check if a mouse button is up at this cycle's boundary.
 	button_up : { buttons : List(U8), ..state }, Button -> Bool
 	button_up = RrtMouse.button_up
 
-	## Check if a mouse button was pressed during this input interval.
+	## Check if a mouse button was pressed at least once since the previous
+	## input.
+	##
+	## An interval event recorded from the window system, so a click that
+	## began and ended between two cycles is still pressed (and released) in
+	## the next input. This is the coalesced view: presses of one button
+	## inside one interval answer once, and `position` is where the pointer
+	## was at the cycle boundary. For a drag that ended and began again inside
+	## one frame, a double click, or the exact spot each click landed at,
+	## walk `input.devices.events`: every `ButtonPressed` and `ButtonReleased`
+	## is there in order, each with its own position.
 	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
 	button_pressed = RrtMouse.button_pressed
 
-	## Check if a mouse button was released during this input interval.
+	## Check if a mouse button was released at least once since the previous
+	## input, with the same guarantee as `button_pressed`.
 	button_released : { buttons : List(U8), ..state }, Button -> Bool
 	button_released = RrtMouse.button_released
 }

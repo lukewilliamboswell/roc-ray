@@ -37,19 +37,31 @@ Keys := [].{
 	key_code : Key -> U64
 	key_code = RrtKeys.key_code
 
-	## Check if a specific key is currently held down. Pass `input.devices` directly.
+	## Check if a specific key is held down at this cycle's boundary. A state
+	## sample. Pass `input.devices` directly.
 	key_down : { keys : List(U8), ..state }, Key -> Bool
 	key_down = RrtKeys.key_down
 
-	## Check if a specific key is currently not pressed (up). Pass `input.devices` directly.
+	## Check if a specific key is up at this cycle's boundary. Pass
+	## `input.devices` directly.
 	key_up : { keys : List(U8), ..state }, Key -> Bool
 	key_up = RrtKeys.key_up
 
-	## Check if a key was pressed during this input interval. Pass `input.devices` directly.
+	## Check if a key was pressed at least once since the previous input.
+	##
+	## An interval event recorded from the window system, so a key that went
+	## down and up between two cycles is still pressed (and released) in the
+	## next input, never lost to frame timing. This is the coalesced view:
+	## presses of one key inside one interval answer once. When the count or
+	## the order matters -- a double tap, a chord, a keystroke between two
+	## typed characters -- walk `input.devices.events`, which holds every
+	## `KeyPressed` and `KeyReleased` in delivery order. Pass `input.devices`
+	## directly.
 	key_pressed : { keys : List(U8), ..state }, Key -> Bool
 	key_pressed = RrtKeys.key_pressed
 
-	## Check if a key was released during this input interval. Pass `input.devices` directly.
+	## Check if a key was released at least once since the previous input, with
+	## the same guarantee as `key_pressed`. Pass `input.devices` directly.
 	key_released : { keys : List(U8), ..state }, Key -> Bool
 	key_released = RrtKeys.key_released
 
@@ -67,9 +79,10 @@ Keys := [].{
 	## Where keyboard state comes from: the hardware, or a script.
 	##
 	## `Virtual` names the keys held down on the next frame, and only those.
-	## The host runs the same edge detector over a scripted source that it runs
+	## The host runs the same derivation over a scripted source that it runs
 	## over hardware, so a key that appears in one frame's list and not the
-	## previous one is pressed, and one that disappears is released.
+	## previous one is pressed, and one that disappears is released. Hardware
+	## edges are shut out entirely while a script is the source.
 	Source : [Hardware, Virtual(List(Key))]
 
 	## A scripted source holding exactly these keys down.
@@ -131,7 +144,8 @@ Keys := [].{
 	## The codepoints arrive on the next cycle's `input.devices.text_input` and
 	## are gone the cycle after, the way a real keyboard's characters arrive on
 	## one frame and not the next. At most 32 codepoints are delivered per
-	## frame and the excess is discarded, exactly as for hardware input.
+	## input; a longer script has the excess discarded and
+	## `text_input_overflow` set, exactly as for hardware input.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	##

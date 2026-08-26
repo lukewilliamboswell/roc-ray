@@ -7,7 +7,7 @@
     "Every examples/<name> directory must appear exactly once, and each app has",
     "one or more named cases. Case fields, all optional except name:",
     "  frames           cycles to run before the host exits by itself",
-    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys)",
+    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys; a ~ suffix taps the key inside the cycle)",
     "  text             --host-text script, e.g. \"5:hi\" (cycle:typed text)",
     "  args             extra application arguments",
     "  contains         substrings the combined output must contain",
@@ -151,6 +151,18 @@
           "keys": "3:A,4:A,8:Q",
           "text": "5:hi",
           "timeout_seconds": 30
+        },
+        {
+          "name": "events-in-order",
+          "frames": 1000000,
+          "keys": "3:A~+B~,4:Q",
+          "text": "3:hi",
+          "timeout_seconds": 30,
+          "contains": [
+            "events: KeyPressed(65) KeyReleased(65) KeyPressed(66) KeyReleased(66) Text(104) Text(105)",
+            "events: KeyPressed(81)"
+          ],
+          "_note": "Two taps and two characters inside cycle 3 must reach the app as six ordered events -- the bits alone would show one press per key -- and the held Q on cycle 4 as a press event that also quits"
         }
       ]
     },
@@ -184,6 +196,13 @@
           "frames": 1000000,
           "keys": "3:W,4:W,5:S,8:SPACE,12:ESCAPE",
           "timeout_seconds": 30
+        },
+        {
+          "name": "tapped-quit",
+          "frames": 1000000,
+          "keys": "3:W,6:ESCAPE~",
+          "timeout_seconds": 30,
+          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
         }
       ]
     },

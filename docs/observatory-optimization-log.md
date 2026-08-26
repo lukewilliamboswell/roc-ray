@@ -12,28 +12,28 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 
 | Example | Median cycle | Allocation | Draw calls | Status / evidence |
 | --- | ---: | ---: | ---: | --- |
-| async_read | 100.0 us | 3,791 B / 5.1 calls | 27.0 | Baseline captured; analysis pending |
+| async_read | 100.0 us | 3,791 B / 5.1 calls | 27.0 | Audited; bounded three-task workload retained |
 | breakout | 339.1 us | 280 B / 1.0 calls | 114.0 | Audited; visible brick-and-glow workload retained |
 | camera | 124.1 us | 56 B / 1.0 calls | 83.0 | Optimized; see result below |
-| capture_plot | 131.8 us | 168 B / 3.0 calls | 46.0 | Baseline captured; analysis pending |
-| capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Exits after 6 cycles headlessly; workload-specific capture still needed |
-| capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Baseline captured; analysis pending |
+| capture_plot | 131.8 us | 168 B / 3.0 calls | 46.0 | Audited; visible animated plot workload retained |
+| capture_screenshot | 80.1 us | 366 B / 2.3 calls | 10.8 | Audited with scripted save through orderly exit |
+| capture_ui_demo | 91.0 us | 296 B / 3.2 calls | 15.2 | Audited; static-text candidate rejected |
 | cave_climb | 251.1 us | 816 B / 1.0 calls | 69.0 | Optimized; see result below |
 | drop_viewer | 106.5 us | 11,219 B / 92.0 calls | 8.0 | Optimized; see result below |
-| generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Baseline captured; analysis pending |
+| generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Audited; static-text candidate rejected |
 | hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
-| http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Baseline captured; task workload needs separate interpretation |
+| http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Audited; parked HTTP work is separated from frame work |
 | input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Optimized; see result below |
 | live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Optimized; parsing remains the dominant cost |
 | particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Audited; bounded batch construction is already efficient |
 | pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Audited; visible trail-and-glow workload retained |
 | post_process | 180.9 us | 21,091 B / 171.0 calls | 17.0 | Optimized; see result below |
-| postcard_studio | 58.6 us | 102 B / 1.0 calls | 16.0 | Baseline captured; analysis pending |
-| projective_texture | 51.5 us | 144 B / 1.0 calls | 14.0 | Baseline captured; analysis pending |
-| responsive_ui | 120.9 us | 420 B / 6.0 calls | 21.0 | Baseline captured; analysis pending |
-| snake | 157.1 us | 2,386 B / 20.1 calls | 64.6 | Baseline captured; analysis pending |
-| sqlite_scores | 62.5 us | 264 B / 2.0 calls | 13.0 | Baseline captured; database workload needs scripted capture |
-| task_sleep | 16,798.3 us | 193 B / 2.1 calls | 59.0 | Expected pacing/waiting example; task query separates parked from active work |
+| postcard_studio | 58.6 us | 102 B / 1.0 calls | 16.0 | Audited; bounded render-texture workload retained |
+| projective_texture | 51.5 us | 144 B / 1.0 calls | 14.0 | Audited; already minimal for its visible workload |
+| responsive_ui | 120.9 us | 420 B / 6.0 calls | 21.0 | Audited; dynamic layout/readouts retained |
+| snake | 157.1 us | 2,386 B / 20.1 calls | 64.6 | Audited; two optimization probes rejected |
+| sqlite_scores | 62.5 us | 264 B / 2.0 calls | 13.0 | Audited; idle and isolated database startup captured |
+| task_sleep | 16,798.3 us | 193 B / 2.1 calls | 59.0 | Audited; 1.2 s parked wait is distinct from active work |
 | top_down | 321.5 us | 5,024 B / 37.0 calls | 106.0 | Optimized; see result below |
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Optimized; loopback timing remains nondeterministic |
 
@@ -154,6 +154,47 @@ review accounts for the draw submissions as visible bricks and their sheen in
 in `pong`. They use prepared invariant text and bounded on-screen collections;
 there is no off-camera population or invariant per-frame layout to remove
 without simplifying the intended examples.
+
+### capture examples: retain bounded demonstration work
+
+`capture_plot` uses 46 visible submissions for its animated bars, caps, points,
+grid, and recording UI while allocating 168 B in three calls per cycle.
+`capture_screenshot` was rerun with a scripted `S` press: the screenshot task
+completed, the app exited on cycle six, and Observatory measured the hosted
+screenshot call at about 2 us with zero omissions. `capture_ui_demo` already
+prepares every reachable counter and field value. Preparing its two remaining
+static captions reduced allocation events but regressed median cycle time from
+91 us to 114 us and increased both update and render totals, so that candidate
+was reverted.
+
+### asynchronous I/O examples: retain the work being demonstrated
+
+`async_read` starts exactly three bounded file tasks; Observatory separated
+their parked intervals from sub-millisecond active work and showed 100 us
+median cycles. `http_fetch` likewise attributed 286.7 ms to its one HTTP task
+while the frame loop remained at a 105.9 us median. `task_sleep` attributed
+1,200.0 ms to the intentional parked sleep, with an 11 us active task turn.
+Treating any of those waits as callback work would have pointed at the wrong
+code; no application-side optimization is warranted.
+
+### low-cost graphics and UI examples: retain visible or dynamic work
+
+`postcard_studio` (58.6 us median, 102 B in one call) and
+`projective_texture` (51.5 us, 144 B in one call) are already allocation-light
+and their submissions are visible composition. `responsive_ui` prepares its
+invariant copy; its remaining strings describe the live window, framebuffer,
+monitor, or selected panel. `generated_assets` and `snake` were also audited,
+but their rejected experiments are recorded below because lower allocation did
+not produce lower callback or cycle time.
+
+### sqlite_scores: retain bounded database and row presentation work
+
+An isolated empty-directory run captured database creation, schema setup,
+statement preparation, and the initial query without touching repository data.
+The one-time SQLite effects are individually visible, recurring allocation is
+264 B in two calls, and idle median cycles are 62.5 us. Row formatting is
+dynamic database content and the displayed row set is bounded; there is no
+invariant layout or unbounded rendering population to remove.
 
 ## Observatory friction and issues
 

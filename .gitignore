@@ -34,6 +34,16 @@ app
 !README.md
 !CONTRIBUTING.md
 !AGENTS.md
+!RR_OBSERVATORY_PROPOSAL.md
+!THIRD-PARTY-LICENCES.md
+# Never ignore a third-party licence or attribution notice. Retaining
+# these is a redistribution condition for several vendored components,
+# and upstream projects do name them `LICENSE.md` / `COPYING.md`.
+!**/LICENCE*.md
+!**/LICENSE*.md
+!**/COPYING*.md
+!**/NOTICE*.md
+!**/CREDITS*.md
 # `zig build lint` reads this one, so losing it breaks the build rather than
 # quietly dropping a note.
 !docs/action-coverage.md
@@ -133,7 +143,7 @@ __pycache__/
 
 # Output written by the capture examples
 captures/
-examples/doom/evidence/*.webm
+examples/roc-doom-e1m1/evidence/*.webm
 shots/
 postcards/
 
@@ -142,7 +152,7 @@ sqlite_scores_out/
 probe_out/
 
 # Doom fuzz targets: keep sources and the findings backlog, not binaries or corpora
-examples/doom/fuzz_*
-!examples/doom/fuzz_*.roc
-!examples/doom/FUZZ_FINDINGS.md
-examples/doom/.roc-fuzz/
+examples/roc-doom-e1m1/fuzz_*
+!examples/roc-doom-e1m1/fuzz_*.roc
+!examples/roc-doom-e1m1/FUZZ_FINDINGS.md
+examples/roc-doom-e1m1/.roc-fuzz/

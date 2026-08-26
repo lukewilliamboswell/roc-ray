@@ -23,7 +23,7 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | generated_assets | 124.1 us | 1,852 B / 18.0 calls | 21.0 | Baseline captured; analysis pending |
 | hello_world | 85.8 us | 4,778 B / 39.0 calls | 10.0 | Optimized; see result below |
 | http_fetch | 105.9 us | 8,443 B / 4.1 calls | 35.4 | Baseline captured; task workload needs separate interpretation |
-| input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Baseline captured; analysis pending |
+| input_inspector | 389.4 us | 14,368 B / 125.0 calls | 87.0 | Optimized; see result below |
 | live_plot | 1,538.6 us | 3,507,271 B / 291.9 calls | 438.1 | Highest-priority baseline; file workload and update folding need separation |
 | particles | 58.9 us | 192,703 B / 3.0 calls | 2.0 | Trace attributes recurring list construction; analysis pending |
 | pong | 140.0 us | 479 B / 3.0 calls | 37.5 | Baseline captured; analysis pending |
@@ -38,6 +38,17 @@ artifact, not committed). Allocation and draw figures below are per host cycle.
 | udp_cursor | 143.5 us | 771 B / 8.0 calls | 84.0 | Baseline captured; network workload needs scripted capture |
 
 ## Accepted optimizations
+
+### input_inspector: retain invariant key-chip labels
+
+Fifteen key and mouse chip labels were rebuilt and laid out every render. A
+single boxed set of prepared labels reduced recurring allocation from 14,368 B
+and 125 calls to 898 B and four calls, and accepted draw calls from 87 to 72.
+The larger retained UI set increased average update time from 7.8 us to 20.8
+us, but average render time fell from 373.0 us to 335.8 us; median cycle time
+improved from 389.4 us to 367.7 us and p95 from 430.2 us to 413.5 us. The
+scripted real-window event-order and quit path still produced the expected
+events.
 
 ### cave_climb: cull off-camera actors
 

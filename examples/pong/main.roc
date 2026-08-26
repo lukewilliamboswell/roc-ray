@@ -3,7 +3,7 @@
 ## Use W and S to move, Space to serve or start a new match, and Escape to quit.
 ## This example shows frame-rate-independent movement, separating game rules
 ## from sound effects, and seeded random serves that can be reproduced.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-26-b29bef3" }
 
 import rr.Draw
 import rr.Color

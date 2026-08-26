@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-26-b29bef3" }
 
 # `App.Input` is a pure value declared in the `roc-ray-types` package, so it has
 # no effectful receivers. `Task.spawn!(input, || ...)` is the only way to start

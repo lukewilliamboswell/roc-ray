@@ -1,6 +1,6 @@
 ## Native evidence that Doom controls travel through RocRay's sampled virtual
 ## keyboard and mouse sources with the same edge/down semantics as hardware.
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-26-b29bef3" }
 
 import rr.App
 import rr.Keys

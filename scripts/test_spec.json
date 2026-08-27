@@ -112,6 +112,16 @@
       ]
     },
     {
+      "path": "examples/roc-doom-e1m1",
+      "cases": [
+        {
+          "name": "walks-fires-and-uses",
+          "frames": 20,
+          "keys": "3:W,5:SPACE,7:E"
+        }
+      ]
+    },
+    {
       "path": "examples/generated_assets",
       "cases": [
         {

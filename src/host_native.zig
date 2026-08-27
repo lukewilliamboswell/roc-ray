@@ -623,6 +623,20 @@ test "allocation identity registry refuses saturation without overwriting live e
     try std.testing.expect(!identities.put(0xFFFF_FFF0, 99_999, 1));
     try std.testing.expectEqual(@as(u64, 1), identities.get(0x1000).?.id);
 }
+var active_cursor_focus = CursorFocusState{};
+
+const AudioNativeWorkCounters = struct {
+    device_init: usize = 0,
+    file_read: usize = 0,
+    decode: usize = 0,
+    stream_update: usize = 0,
+};
+
+// Kept deliberately small and synchronous: audio effects and stream upkeep
+// all run on the frame thread. Besides making the headless boundary testable,
+// these counters make every place that can cross into raylib/file decoding
+// explicit. They are diagnostic only and do not participate in app semantics.
+var audio_native_work = AudioNativeWorkCounters{};
 
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
@@ -3436,6 +3450,10 @@ var blend_scopes: [SCOPE_STACK_LIMIT]u8 = undefined;
 var blend_scope_count: usize = 0;
 var camera_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_cameraArgs = undefined;
 var camera_scope_count: usize = 0;
+var camera_3d_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_camera_3dArgs = undefined;
+var camera_3d_scope_count: usize = 0;
+var headless_textured_triangle_batches: usize = 0;
+var headless_textured_triangles: usize = 0;
 var scissor_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_scissorArgs = undefined;
 var scissor_scope_count: usize = 0;
 
@@ -4155,6 +4173,9 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     shader_lease_count = 0;
     blend_scope_count = 0;
     camera_scope_count = 0;
+    camera_3d_scope_count = 0;
+    headless_textured_triangle_batches = 0;
+    headless_textured_triangles = 0;
     scissor_scope_count = 0;
     prepared_text_prepare_calls = 0;
     prepared_text_draw_calls = 0;
@@ -6755,6 +6776,17 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
     return SCOPE_OK;
 }
 
+fn hostedDrawBeginCamera3D(args: abi.DrawHostBegin_camera_3dArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_camera_3d!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera_3d!", 0);
+    defer effect.end();
+    if (camera_3d_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
+    if (!headlessMode()) raylib.beginMode3D(args);
+    camera_3d_scopes[camera_3d_scope_count] = args;
+    camera_3d_scope_count += 1;
+    return SCOPE_OK;
+}
+
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
     enforcePhase("Draw.circle!", during_render);
     const effect = EffectScope.begin("Draw.circle!", 0);
@@ -6795,6 +6827,16 @@ fn hostedDrawEndCamera() callconv(.c) void {
     if (!headlessMode()) raylib.endMode2D();
     camera_scope_count -= 1;
     if (!headlessMode() and camera_scope_count > 0) raylib.beginMode2D(camera_scopes[camera_scope_count - 1]);
+}
+
+fn hostedDrawEndCamera3D() callconv(.c) void {
+    enforcePhase("Draw.with_camera_3d!", during_render);
+    const effect = EffectScope.begin("Draw.with_camera_3d!", 0);
+    defer effect.end();
+    if (camera_3d_scope_count == 0) return;
+    if (!headlessMode()) raylib.endMode3D();
+    camera_3d_scope_count -= 1;
+    if (!headlessMode() and camera_3d_scope_count > 0) raylib.beginMode3D(camera_3d_scopes[camera_3d_scope_count - 1]);
 }
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
@@ -7302,6 +7344,47 @@ fn hostedDrawTextureInstancesRaw(host: *RocHost, args: abi.DrawHostDraw_texture_
 
 fn exportedDrawTextureInstancesRaw(args: abi.DrawHostDraw_texture_instancesArgs) callconv(.c) void {
     hostedDrawTextureInstancesRaw(activeHost(), args);
+}
+
+fn texturedTriangleIndicesValid(vertex_count: usize, indices: []const u32) bool {
+    if (indices.len % 3 != 0) return false;
+    for (indices) |index| if (index >= vertex_count) return false;
+    return true;
+}
+
+test "textured triangle indices require complete in-range triples" {
+    try std.testing.expect(texturedTriangleIndicesValid(4, &.{ 0, 1, 2, 0, 2, 3 }));
+    try std.testing.expect(!texturedTriangleIndicesValid(4, &.{ 0, 1 }));
+    try std.testing.expect(!texturedTriangleIndicesValid(4, &.{ 0, 1, 4 }));
+}
+
+fn hostedDrawTexturedTriangles3DRaw(host: *RocHost, args: abi.DrawHostDraw_textured_triangles_3dArgs) callconv(.c) void {
+    enforcePhase("Draw.textured_triangles_3d!", during_render);
+    defer args.decref(host);
+    const vertices = args.vertices.items();
+    const indices = args.indices.items();
+    const effect = EffectScope.begin(
+        "Draw.textured_triangles_3d!",
+        vertices.len *| @sizeOf(@typeInfo(@TypeOf(vertices)).pointer.child) +|
+            indices.len *| @sizeOf(@typeInfo(@TypeOf(indices)).pointer.child),
+    );
+    defer effect.end();
+    if (!texturedTriangleIndicesValid(vertices.len, indices)) {
+        @panic("roc-ray: Draw.textured_triangles_3d! requires an index count divisible by three and every index in range");
+    }
+    if (headlessMode()) {
+        if (texture_heap.get(args.texture.handle.*) != null or render_texture_heap.get(args.texture.handle.*) != null) {
+            headless_textured_triangle_batches += 1;
+            headless_textured_triangles += indices.len / 3;
+        }
+        return;
+    }
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
+    raylib.drawTexturedTriangles3D(texture, vertices, indices);
+}
+
+fn exportedDrawTexturedTriangles3DRaw(args: abi.DrawHostDraw_textured_triangles_3dArgs) callconv(.c) void {
+    hostedDrawTexturedTriangles3DRaw(activeHost(), args);
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
@@ -8247,6 +8330,44 @@ const CursorMode = enum {
     locked,
 };
 
+const CursorFocusState = struct {
+    desired: CursorMode = .visible,
+    was_focused: bool = false,
+};
+
+const CursorFocusTransition = struct {
+    state: CursorFocusState,
+    reassert_lock: bool,
+};
+
+fn cursorFocusTransition(state: CursorFocusState, focused: bool, cursor_hidden: bool) CursorFocusTransition {
+    return .{
+        .state = .{ .desired = state.desired, .was_focused = focused },
+        // A focus round trip that completes between two polls is invisible to
+        // `was_focused`, and a window manager can drop the grab without any
+        // focus change at all, so an authorized lock that is no longer in
+        // effect is reasserted on whatever frame notices it.
+        .reassert_lock = state.desired == .locked and focused and (!state.was_focused or !cursor_hidden),
+    };
+}
+
+fn applyCursorMode(mode: CursorMode) void {
+    switch (mode) {
+        .visible => raylib.enableCursor(),
+        .hidden => {
+            raylib.enableCursor();
+            raylib.hideCursor();
+        },
+        .locked => raylib.disableCursor(),
+    }
+}
+
+fn serviceCursorFocus(focused: bool) void {
+    const transition = cursorFocusTransition(active_cursor_focus, focused, raylib.isCursorHidden());
+    active_cursor_focus = transition.state;
+    if (transition.reassert_lock) applyCursorMode(.locked);
+}
+
 fn cursorModeFromCode(code: u8) CursorMode {
     return switch (code) {
         1 => .hidden,
@@ -8260,14 +8381,9 @@ fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
     const effect = EffectScope.begin("Mouse.set_cursor_mode!", 0);
     defer effect.end();
     if (active_headless) return;
-    switch (cursorModeFromCode(mode_code)) {
-        .visible => raylib.enableCursor(),
-        .hidden => {
-            raylib.enableCursor();
-            raylib.hideCursor();
-        },
-        .locked => raylib.disableCursor(),
-    }
+    const mode = cursorModeFromCode(mode_code);
+    active_cursor_focus.desired = mode;
+    applyCursorMode(mode);
 }
 
 fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
@@ -8297,6 +8413,40 @@ test "cursor mode codes map invalid values to visible" {
     try std.testing.expectEqual(CursorMode.hidden, cursorModeFromCode(1));
     try std.testing.expectEqual(CursorMode.locked, cursorModeFromCode(2));
     try std.testing.expectEqual(CursorMode.visible, cursorModeFromCode(255));
+}
+
+test "locked cursor reasserts on first focus and every focus regain only" {
+    var state = CursorFocusState{ .desired = .locked };
+    var transition = cursorFocusTransition(state, false, false);
+    try std.testing.expect(!transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, true, false);
+    try std.testing.expect(transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, true, true);
+    try std.testing.expect(!transition.reassert_lock);
+    state = transition.state;
+    transition = cursorFocusTransition(state, false, true);
+    try std.testing.expect(!transition.reassert_lock);
+    transition = cursorFocusTransition(transition.state, true, true);
+    try std.testing.expect(transition.reassert_lock);
+}
+
+test "locked cursor reasserts when the grab is lost without a focus change" {
+    // The window never reports losing focus, but the cursor came unhidden:
+    // the lock is gone and has to be retaken rather than waiting for a focus
+    // transition that will never arrive.
+    const state = CursorFocusState{ .desired = .locked, .was_focused = true };
+    try std.testing.expect(cursorFocusTransition(state, true, false).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(state, true, true).reassert_lock);
+    // An unfocused window is left alone; taking the grab back there would
+    // steal the pointer from whatever the user switched to.
+    try std.testing.expect(!cursorFocusTransition(state, false, false).reassert_lock);
+}
+
+test "visible and hidden cursor modes never request focus reassertion" {
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .visible }, true, false).reassert_lock);
+    try std.testing.expect(!cursorFocusTransition(.{ .desired = .hidden }, true, false).reassert_lock);
 }
 
 test "window minimums and exit keys clamp negatives to the no-op zero" {
@@ -8442,20 +8592,25 @@ fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.A
     defer effect.end();
     defer path_arg.decref(host);
 
-    const path_slice = path_arg.asSlice();
-    const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer allocator.free(bytes);
-
+    // Headless audio is an inert, bounded host resource. Select it before even
+    // inspecting the path so unattended validation neither depends on assets
+    // being installed nor performs hidden filesystem/decoder work.
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
     }
 
+    const path_slice = path_arg.asSlice();
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    audio_native_work.file_read += 1;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    defer allocator.free(bytes);
+
     const file_type = audioFileTypeFromPath(path_slice, false) orelse
         return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    audio_native_work.decode += 1;
     const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
     const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
     return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
@@ -8477,21 +8632,23 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.A
     defer effect.end();
     defer path_arg.decref(host);
 
-    const path_slice = path_arg.asSlice();
-    const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    var bytes_transferred = false;
-    defer if (!bytes_transferred) allocator.free(bytes);
-
     if (headlessMode()) {
         const music = storeMusic(.headless) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .music = music, .err = RESOURCE_ERR_NONE };
     }
 
+    const path_slice = path_arg.asSlice();
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    audio_native_work.file_read += 1;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    var bytes_transferred = false;
+    defer if (!bytes_transferred) allocator.free(bytes);
+
     const file_type = audioFileTypeFromPath(path_slice, true) orelse
         return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    audio_native_work.decode += 1;
     const music = raylib.loadMusicFromMemory(file_type, bytes) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
     const stored = storeMusic(.{ .native = .{ .stream = music, .encoded = bytes, .allocator = allocator } }) orelse {
         raylib.unloadMusic(music);
@@ -8505,14 +8662,16 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
     return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
-test "the audio file loaders wait rather than load" {
-    // A sound and a music stream both start with a file read, which is what
-    // moved: `update!` can no longer reach one, and the decode that follows is
-    // still frame-thread work on bytes already in hand.
+test "headless audio loaders preserve phases without native work" {
+    // The effects retain their waiting phase even though a headless run can
+    // answer immediately with an inert resource.
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
+    active_headless = true;
+    audio_native_work = .{};
     defer {
+        active_headless = false;
         last_phase_violation = null;
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         sound_heap.deinitAll();
@@ -8542,7 +8701,7 @@ test "the audio file loaders wait rather than load" {
         try std.testing.expect(music_violation.allowed.eql(during_wait));
     }
 
-    // `init!` blocks for the read and a task parks for it; both answer.
+    // Startup and task phases both answer with the same typed resource.
     const startup = PhaseScope.enter(.startup);
     last_phase_violation = null;
     const sound = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
@@ -8555,12 +8714,19 @@ test "the audio file loaders wait rather than load" {
     try std.testing.expectEqual(RESOURCE_ERR_NONE, music.err);
     try std.testing.expect(last_phase_violation == null);
 
-    // A path with nothing behind it is a load failure rather than a resource.
+    // Headless loaders never touch the path: they return bounded inert
+    // resources even when no asset is installed.
     const missing = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-sound.wav", &roc_host));
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, missing.err);
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, missing.err);
+    const missing_music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-music.ogg", &roc_host));
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, missing_music.err);
+    updateMusicStreams();
+    try std.testing.expectEqualDeep(AudioNativeWorkCounters{}, audio_native_work);
 
     releaseResourceBox(&roc_host, sound.sound);
     releaseResourceBox(&roc_host, music.music);
+    releaseResourceBox(&roc_host, missing.sound);
+    releaseResourceBox(&roc_host, missing_music.music);
 }
 
 test "an extension raylib cannot decode is refused, and module music is music only" {
@@ -8831,11 +8997,17 @@ fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
 fn updateMusicResource(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |*music| raylib.updateMusicStream(&music.stream),
+        .native => |*music| {
+            if (!builtin.is_test) {
+                audio_native_work.stream_update += 1;
+                raylib.updateMusicStream(&music.stream);
+            }
+        },
     }
 }
 
 fn updateMusicStreams() void {
+    if (active_headless) return;
     music_heap.forEach(updateMusicResource);
 }
 
@@ -8861,6 +9033,7 @@ fn deinitResources() void {
     std.debug.assert(shader_lease_count == 0);
     std.debug.assert(blend_scope_count == 0);
     std.debug.assert(camera_scope_count == 0);
+    std.debug.assert(camera_3d_scope_count == 0);
     std.debug.assert(scissor_scope_count == 0);
     // App shutdown clears delivery promises, through `clearAfterWorkStops`,
     // before resource teardown. A non-zero value here would make the next app
@@ -8951,6 +9124,7 @@ comptime {
         @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
         @export(&hostedAudioStop, .{ .name = "roc_audio_stop_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
+        @export(&hostedDrawBeginCamera3D, .{ .name = "roc_draw_begin_camera_3d" });
         @export(&hostedDrawBeginBlendRaw, .{ .name = "roc_draw_begin_blend_raw" });
         @export(&hostedDrawBeginRenderTextureRaw, .{ .name = "roc_draw_begin_render_texture_raw" });
         @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });
@@ -8962,8 +9136,10 @@ comptime {
         @export(&exportedDrawPreparedTextRaw, .{ .name = "roc_draw_draw_prepared_text_raw" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&exportedDrawTextureInstancesRaw, .{ .name = "roc_draw_draw_texture_instances_raw" });
+        @export(&exportedDrawTexturedTriangles3DRaw, .{ .name = "roc_draw_draw_textured_triangles_3d_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
+        @export(&hostedDrawEndCamera3D, .{ .name = "roc_draw_end_camera_3d" });
         @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });
         @export(&hostedDrawEndRenderTextureRaw, .{ .name = "roc_draw_end_render_texture_raw" });
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
@@ -12515,7 +12691,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     );
     raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
-    if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
+    const configured_cursor_mode = cursorModeFromCode(app_config.cursor_mode);
+    active_cursor_focus = .{ .desired = configured_cursor_mode, .was_focused = false };
+    applyCursorMode(configured_cursor_mode);
     active_mouse_cursor_code = 255;
 
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
@@ -12524,6 +12702,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     raylib.setRandomSeed(@truncate(@intFromPtr(roc_host)));
 
     // Audio device must be ready before init! generates/plays any sounds.
+    // `runHeadlessApp` is a separate lifecycle and never reaches this point.
+    audio_native_work.device_init += 1;
     raylib.initAudioDevice();
     defer raylib.closeAudioDevice();
     defer deinitResources();
@@ -12616,6 +12796,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const frame_time: f32 = if (cycle_count == 0) 0 else (fixed_step orelse raylib.getFrameTime());
         const now_ns: u64 = captureAdjustedClock(real_ns, fixed_step);
         updateMusicStreams();
+        const window = windowState();
 
         applyInputScripts(options, cycle_count);
         // Text is taken first, and either way: a scripted frame that left the
@@ -12634,6 +12815,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // Taken either way: notches turned while the pointer was scripted
         // would otherwise land on the cycle the app hands it back.
         const hardware_wheel = raylib.takeMouseWheelMove();
+        // Preserve the delta raylib already sampled for this focus cycle, then
+        // reassert an authorized lock. DisableCursor can warp the native cursor;
+        // doing it after sampling avoids replacing real motion with that warp.
+        serviceCursorFocus(window.focused);
         const mouse_wheel = if (virtual_mouse_active)
             raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel }
         else
@@ -12670,7 +12855,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = window,
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = now_ns,

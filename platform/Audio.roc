@@ -244,6 +244,9 @@ Audio := [].{
 	## `SoundLoadFailed` covers both a path with nothing behind it and bytes
 	## raylib would not decode; the format is taken from the extension, and
 	## `.wav`, `.ogg`, `.mp3`, `.qoa` and `.flac` are the ones it reads.
+	## A headless host returns a bounded inert `Sound` without reading or
+	## decoding the path; playback and queries keep their ordinary no-output
+	## resource semantics.
 	load_sound! : Str => Try(Sound, [SoundLoadFailed, ResourceLimit, ..])
 	load_sound! = |path| loaded_sound_from_resource(AudioHost.load_sound!(path))
 
@@ -257,6 +260,8 @@ Audio := [].{
 	## raylib would not decode; the format is taken from the extension, and
 	## `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm` and `.mod` are the ones it
 	## reads.
+	## A headless host returns a bounded inert `Music` without reading or
+	## decoding the path or creating/updating a native stream.
 	load_music! : Str => Try(Music, [MusicLoadFailed, ResourceLimit, ..])
 	load_music! = |path| music_from_resource(AudioHost.load_music!(path))
 

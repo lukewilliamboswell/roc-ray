@@ -99,6 +99,15 @@ snapshot, so `font.measure(...)` is pure.
 - [Latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
 - [Architecture](design.md)
 - [Contributing](CONTRIBUTING.md)
+- [Third-party licences](THIRD-PARTY-LICENCES.md)
+
+## Licence
+
+RocRay is released under the Universal Permissive License v1.0; see
+[`LICENSE`](LICENSE). That grant covers this project's own code and data.
+Vendored libraries and example asset packs keep their own licences and
+copyright holders, all indexed in
+[`THIRD-PARTY-LICENCES.md`](THIRD-PARTY-LICENCES.md).
 
 RocRay follows Roc's new compiler closely, and its APIs may still change as the
 language evolves. Bug reports, documentation improvements, approachable APIs,

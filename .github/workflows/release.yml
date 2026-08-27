@@ -81,6 +81,12 @@ jobs:
           # platform, which is the shape they will be released in; bundle mode
           # is mandatory here rather than falling back to the platform sources.
           scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test --platform-mode=bundle
+          # Keep the largest 3D consumer honest through native linking and the
+          # headless host too. This catches a generated re-export or hosted
+          # symbol omitted from the publishable package.
+          scripts/all_tests.py --only roc-doom-e1m1 --skip-platform-build --skip-roc-test \
+            --skip-bundle-test --skip-interop-test --skip-integration-probes \
+            --platform-mode=bundle --skip-windowed --headless-frames=3
           python3 scripts/build_docs.py --check
 
       - name: Verify release hosts

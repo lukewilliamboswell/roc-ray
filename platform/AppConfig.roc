@@ -23,7 +23,7 @@ AppHostConfig : {
 	resizable : Bool,
 	fullscreen : Bool,
 	vsync : Bool,
-	cursor_visible : Bool,
+	cursor_mode : U8,
 	exit_key_code : I32,
 	visible : Bool,
 	output_dir : Str,
@@ -65,7 +65,7 @@ AppConfig := [].{
 			resizable: cfg.resizable(),
 			fullscreen: cfg.fullscreen(),
 			vsync: pacing.vsync,
-			cursor_visible: Mouse.cursor_mode_code(cfg.cursor_mode()) == 0,
+			cursor_mode: Mouse.cursor_mode_code(cfg.cursor_mode()),
 			exit_key_code: Keys.exit_key_code(cfg.exit_key()),
 			visible: cfg.visible(),
 			output_dir: cfg.output_dir(),
@@ -147,8 +147,9 @@ host_pacing = |value|
 expect {
 	cfg = App.default.with_title("Test").with_size({ width: 320, height: 240 })
 	host = AppConfig.to_host({}, cfg)
-	host.title == "Test" and host.width == 320 and host.height == 240 and host.target_fps == 240 and !(host.vsync) and host.cursor_visible
+	host.title == "Test" and host.width == 320 and host.height == 240 and host.target_fps == 240 and !(host.vsync) and host.cursor_mode == 0
 }
+expect AppConfig.to_host({}, App.default.with_cursor_mode(Locked)).cursor_mode == 2
 expect AppConfig.to_host({}, App.default.with_frame_pacing(Capped(120))) == { ..AppConfig.to_host({}, App.default), target_fps: 120 }
 expect {
 	host = AppConfig.to_host({}, App.default.with_resizable(Bool.True).with_fullscreen(Bool.True))

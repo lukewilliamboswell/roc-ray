@@ -1619,6 +1619,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--skip-integration-probes",
+        action="store_true",
+        help=(
+            "Skip the repository-wide CLI/task/files/network/allocation probes. "
+            "Useful with --only for a focused packaged-example check/build/smoke."
+        ),
+    )
+    parser.add_argument(
         "--platform-mode",
         choices=["auto", "bundle", "source"],
         default="auto",
@@ -1893,7 +1901,9 @@ def _run_example_stages(
         )
         failed.extend(run_graphical_observatory_probe(root, built, args.verbose))
 
-    if not (args.skip_runtime or args.skip_roc_build):
+    if args.skip_integration_probes:
+        print("\nSkipping repository integration probes (--skip-integration-probes)")
+    elif not (args.skip_runtime or args.skip_roc_build):
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_observatory_probe(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))

@@ -26,6 +26,45 @@ Camera := [].{
 		zoom : F32,
 	}
 
+	## Eye, focus, up direction, and vertical field of view for a perspective camera.
+	PerspectiveSettings : {
+		position : Math.Vec3,
+		target : Math.Vec3,
+		up : Math.Vec3,
+		fovy : F32,
+	}
+
+	## Validated pure perspective camera accepted by `Draw.with_camera_3d!`.
+	## Non-finite vector components become zero. A field of view outside the open
+	## interval 0 to 180 degrees becomes 60 degrees.
+	Camera3D :: {
+		position : Math.Vec3,
+		target : Math.Vec3,
+		up : Math.Vec3,
+		fovy : F32,
+	}.{
+		position : Camera3D -> Math.Vec3
+		position = |camera| camera.position
+
+		target : Camera3D -> Math.Vec3
+		target = |camera| camera.target
+
+		up : Camera3D -> Math.Vec3
+		up = |camera| camera.up
+
+		fovy : Camera3D -> F32
+		fovy = |camera| camera.fovy
+	}
+
+	## Construct a validated perspective camera.
+	perspective : PerspectiveSettings -> Camera3D
+	perspective = |settings| {
+		position: sane_vec3(settings.position),
+		target: sane_vec3(settings.target),
+		up: sane_vec3(settings.up),
+		fovy: sane_fovy(settings.fovy),
+	}
+
 	## Immutable camera value accepted by drawing and coordinate transforms.
 	## `Camera.Camera2D` and `Draw.CameraMode` on the platform are this same
 	## type, re-exported.
@@ -197,6 +236,12 @@ sane_scalar = |value| if F32.is_finite(value) value else 0
 ## Sanitizing is per component, so one bad axis does not discard the good one.
 sane_vec : Math.Vec2 -> Math.Vec2
 sane_vec = |vec| { x: sane_scalar(vec.x), y: sane_scalar(vec.y) }
+
+sane_vec3 : Math.Vec3 -> Math.Vec3
+sane_vec3 = |vec| { x: sane_scalar(vec.x), y: sane_scalar(vec.y), z: sane_scalar(vec.z) }
+
+sane_fovy : F32 -> F32
+sane_fovy = |value| if F32.is_finite(value) and value > 0 and value < 180 value else 60
 
 ## Zero has no inverse and a non-finite zoom has no meaning, so both become the
 ## fallback. The sign is kept, so `-inf` still comes back mirrored; NaN has no

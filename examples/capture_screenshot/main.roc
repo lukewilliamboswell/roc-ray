@@ -2,7 +2,7 @@
 ## to save, E to try a refused `..` path, or Escape to quit. Without input it
 ## saves on the third frame and exits for automated runs. This example shows
 ## screenshot tasks, result messages, and output-directory confinement.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-26-b29bef3" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
 import rr.Capture

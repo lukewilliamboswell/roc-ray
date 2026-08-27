@@ -2,7 +2,7 @@
 ## This deliberately executes RocDoomRuntime and RocDoomLevel in ordinary Roc app
 ## code. It is not a completion fixture: until it reports Exited, its summary,
 ## visited sectors and RLE stream are navigation diagnostics only.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-26-b29bef3" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
 import rr.Draw

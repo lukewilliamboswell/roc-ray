@@ -2,7 +2,7 @@
 ## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
 ## This example shows startup database setup, prepared statements, and Tasks:
 ## work that may wait runs separately and returns rows as a later Message.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-26-b29bef3" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
 import rr.Color

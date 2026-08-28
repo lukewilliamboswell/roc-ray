@@ -299,7 +299,7 @@ InputFromHostCycle(msg) : {
 	window : Window.Snapshot,
 	time : Time.Cycle,
 	task_results : List(Host.TaskFinishedTask(msg)),
-	capture : Host.AppRawCaptureStatus,
+	capture : AppTransport.AppRawCaptureStatus,
 	dropped : List(App.Dropped),
 	dropped_overflow : Bool,
 }
@@ -328,7 +328,7 @@ input_from_raw = |raw| {
 }
 
 ## Rebuild a public `App.Input` after unwrapping this cycle's task messages.
-app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, Host.AppRawCaptureStatus, List(msg), List(App.Dropped), Bool -> App.Input(msg)
+app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppTransport.AppRawCaptureStatus, List(msg), List(App.Dropped), Bool -> App.Input(msg)
 app_input_from_raw = |devices, window, time, capture, messages, dropped, dropped_overflow| {
 	devices: input_from_raw(devices),
 	window,

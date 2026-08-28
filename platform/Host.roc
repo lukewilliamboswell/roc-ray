@@ -25,7 +25,6 @@
 ## > `Shader` resource: loading, uniform lookup, and uniform updates.
 ## > `Store` resource: confined asset directories.
 ## > `Mouse`: cursor shape, visibility, and capture effects.
-## > `Input`: raw per-cycle observations decoded into `App.Input`.
 ## > `Audio`: host-owned sounds and music plus playback effects.
 ## > `Random`: operating-system entropy and the backend's ranged generator.
 ## > `Keys`: host keyboard policy such as the configured exit key.
@@ -293,16 +292,6 @@ Host := [].{
 	## Set the flattened native cursor shape.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	mouse_set_cursor! : U8 => {}
-
-	## Input interface
-	## Flat capture status sampled for one `App.Input`.
-	AppRawCaptureStatus : {
-		status : U8,
-		err : U8,
-		frames : U64,
-		dropped : U64,
-		bytes : U64,
-	}
 
 	## Trace interface
 	## Record one instantaneous annotation.

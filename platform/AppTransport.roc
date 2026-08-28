@@ -1,12 +1,20 @@
 ## Private decoding of the flat records the host reports each cycle.
 ## This module is intentionally absent from the package exposes list.
-import Host
 import Capture
 
 AppTransport := [].{
 
+	## Flat capture status sampled for one `App.Input`.
+	AppRawCaptureStatus : {
+		status : U8,
+		err : U8,
+		frames : U64,
+		dropped : U64,
+		bytes : U64,
+	}
+
 	## Turn the host's flat recording record into the public union.
-	capture_status : Host.AppRawCaptureStatus -> Capture.Status
+	capture_status : AppRawCaptureStatus -> Capture.Status
 	capture_status = |raw|
 		if raw.status == capture_status_active {
 			Active({ frames: raw.frames, dropped: raw.dropped })

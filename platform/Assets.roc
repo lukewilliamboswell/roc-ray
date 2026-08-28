@@ -55,7 +55,7 @@ Assets := [].{
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
-	Store :: HostABI.AssetsStore.{
+	Store :: HostABI.Store.{
 
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
@@ -88,7 +88,7 @@ Assets := [].{
 		## stays constant-time in the number of assets.
 		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
 		open! = |cfg| {
-			result = HostABI.assets_open_store!(store_open_config(cfg))
+			result = HostABI.store_open!(store_open_config(cfg))
 			match result.err {
 				0 => Ok(Store.(result.store))
 				1 => Err(RootNotFound)
@@ -122,7 +122,7 @@ Assets := [].{
 		stub = Store.(Box.box(U64.highest))
 
 		## Internal bridge for platform operations that also use an asset store.
-		for_host : Store -> HostABI.AssetsStore
+		for_host : Store -> HostABI.Store
 		for_host = |Store.(store)| store
 	}
 
@@ -330,7 +330,7 @@ Assets := [].{
 	expect wrap_code(MirrorClamp) == 3
 }
 
-store_open_config : Assets.StoreConfig -> HostABI.AssetsStoreOpen
+store_open_config : Assets.StoreConfig -> HostABI.StoreOpen
 store_open_config = |cfg| {
 	location = match cfg.root {
 		BesideExecutable(path) => { kind: 0, path }

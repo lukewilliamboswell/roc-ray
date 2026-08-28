@@ -73,7 +73,7 @@ platform ""
 		"run_task_for_host": run_task_for_host!,
 	}
 	hosted {
-		"roc_assets_open_store_raw": HostABI.assets_open_store!,
+		"roc_store_open_raw": HostABI.store_open!,
 		"roc_texture_load_store_raw": HostABI.texture_load_store!,
 		"roc_texture_load_bytes_raw": HostABI.texture_load_bytes!,
 		"roc_texture_generate_color_raw": HostABI.texture_generate_color!,

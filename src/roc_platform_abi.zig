@@ -7116,9 +7116,9 @@ comptime {
     }
 }
 
-/// Return type record for HostABI.assets_open_store!
+/// Return type record for HostABI.store_open!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIAssets_open_storeRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABIStore_openRetRecord = if (@sizeOf(usize) == 4) extern struct {
     store: *u64,
     err: u8,
 } else extern struct {
@@ -7128,12 +7128,12 @@ pub const HostABIAssets_open_storeRetRecord = if (@sizeOf(usize) == 4) extern st
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_open_storeRetRecord) != 16) @compileError("HostABIAssets_open_storeRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_open_storeRetRecord) != 8) @compileError("HostABIAssets_open_storeRetRecord alignment mismatch");
+        if (@sizeOf(HostABIStore_openRetRecord) != 16) @compileError("HostABIStore_openRetRecord size mismatch");
+        if (@alignOf(HostABIStore_openRetRecord) != 8) @compileError("HostABIStore_openRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_open_storeRetRecord) != 8) @compileError("HostABIAssets_open_storeRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_open_storeRetRecord) != 4) @compileError("HostABIAssets_open_storeRetRecord alignment mismatch");
+        if (@sizeOf(HostABIStore_openRetRecord) != 8) @compileError("HostABIStore_openRetRecord size mismatch");
+        if (@alignOf(HostABIStore_openRetRecord) != 4) @compileError("HostABIStore_openRetRecord alignment mismatch");
     }
 }
 
@@ -8030,10 +8030,10 @@ comptime {
     }
 }
 
-/// Arguments for HostABI.assets_open_store!
+/// Arguments for HostABI.store_open!
 /// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => { err : U8, store : Box(U64) }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_open_storeArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABIStore_openArgs = if (@sizeOf(usize) == 4) extern struct {
     asset_set: RocStr,
     content_hash: RocStr,
     root: RocStr,
@@ -8085,12 +8085,12 @@ pub const HostABIAssets_open_storeArgs = if (@sizeOf(usize) == 4) extern struct 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_open_storeArgs) != 88) @compileError("HostABIAssets_open_storeArgs size mismatch");
-        if (@alignOf(HostABIAssets_open_storeArgs) != 8) @compileError("HostABIAssets_open_storeArgs alignment mismatch");
+        if (@sizeOf(HostABIStore_openArgs) != 88) @compileError("HostABIStore_openArgs size mismatch");
+        if (@alignOf(HostABIStore_openArgs) != 8) @compileError("HostABIStore_openArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_open_storeArgs) != 48) @compileError("HostABIAssets_open_storeArgs size mismatch");
-        if (@alignOf(HostABIAssets_open_storeArgs) != 4) @compileError("HostABIAssets_open_storeArgs alignment mismatch");
+        if (@sizeOf(HostABIStore_openArgs) != 48) @compileError("HostABIStore_openArgs size mismatch");
+        if (@alignOf(HostABIStore_openArgs) != 4) @compileError("HostABIStore_openArgs alignment mismatch");
     }
 }
 
@@ -11735,8 +11735,8 @@ pub const HostABITrace_sample_f64Args = extern struct {
 
 // Platform Type Aliases
 
-pub const HostABIAssets_open_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
-pub const HostABIAssets_open_store = __AnonStruct_e6ed6936affe2edb;
+pub const HostABIStore_openArg0 = __AnonStruct_8f4b2816fd84fce2;
+pub const HostABIStore_open = __AnonStruct_e6ed6936affe2edb;
 pub const HostABITexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
 pub const HostABITexture_load_store = __AnonStruct_4954456148c33ae5;
 pub const HostABITexture_load_bytesArg0 = __AnonStruct_ff17f03b4409100d;
@@ -12934,13 +12934,13 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // The platform host must export these symbols with the exact direct C ABI signatures.
 // Refcounted arguments are owned by the hosted function.
 
-/// Hosted symbol for HostABI.assets_open_store!
+/// Hosted symbol for HostABI.store_open!
 /// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => { err : U8, store : Box(U64) }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_assets_open_store_raw(arg0: HostABIAssets_open_storeArgs) callconv(.c) __AnonStruct_e6ed6936affe2edb;
+pub extern fn roc_store_open_raw(arg0: HostABIStore_openArgs) callconv(.c) __AnonStruct_e6ed6936affe2edb;
 
 /// Hosted symbol for HostABI.texture_load_store!
 /// Roc signature: { path : Str, store : Box(U64) } => { err : U8, texture : Texture }

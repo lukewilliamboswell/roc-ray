@@ -25,7 +25,7 @@
 ## - `Mouse`: cursor shape, visibility, and capture effects.
 ## - `Input`: raw per-cycle observations decoded into `App.Input`.
 ## - `Audio`: host-owned sounds and music plus playback effects.
-## - `Assets`: confined asset stores.
+## - `Store`: confined asset directories.
 ## - `Texture`: loading, generation, updates, configuration, and render targets.
 ## - `Random`: operating-system entropy and the backend's ranged generator.
 ## - `Keys`: host keyboard policy such as the configured exit key.
@@ -229,12 +229,12 @@ HostABI := [].{
 	## Set master volume; `1` is full volume.
 	audio_set_master_volume! : F32 => {}
 
-	## Assets interface
+	## Store interface
 	## Opaque ARC-owned directory store; copies keep it open.
-	AssetsStore : Box(U64)
+	Store : Box(U64)
 
 	## Parameters for opening a confined asset store.
-	AssetsStoreOpen : {
+	StoreOpen : {
 		location_kind : U8,
 		root : Str,
 		manifest_required : Bool,
@@ -246,14 +246,14 @@ HostABI := [].{
 	}
 
 	## Open asset store or error.
-	AssetsStoreOpenResult : { store : AssetsStore, err : U8 }
+	StoreOpenResult : { store : Store, err : U8 }
 
 	## Open a confined asset store.
-	assets_open_store! : AssetsStoreOpen => AssetsStoreOpenResult
+	store_open! : StoreOpen => StoreOpenResult
 
 	## Texture interface
 	## Store-relative texture path.
-	TextureLoadStore : { store : AssetsStore, path : Str }
+	TextureLoadStore : { store : Store, path : Str }
 
 	## Loaded texture or error.
 	TextureResult : { texture : Texture, err : U8 }
@@ -800,7 +800,7 @@ HostABI := [].{
 	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
 
 	## Store-relative font path and pixel size.
-	TextLoadStoreFont : { store : AssetsStore, path : Str, size : I32 }
+	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
 
 	## Loaded font or error.
 	TextFontResult : { font : Font.Handle, err : U8 }
@@ -834,7 +834,7 @@ HostABI := [].{
 	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
 
 	## Store-relative vertex and fragment shader paths.
-	ShaderLoadStore : { store : AssetsStore, vertex_path : Str, fragment_path : Str }
+	ShaderLoadStore : { store : Store, vertex_path : Str, fragment_path : Str }
 
 	## Shader-uniform lookup parameters.
 	ShaderLocation : { shader : Shader, name : Str }

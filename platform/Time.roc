@@ -8,7 +8,7 @@
 ##
 ## `Cycle` and its pure helpers are re-exported from `roc-ray-types`.
 import rrt.Time as RrtTime
-import TimeHost
+import HostABI
 
 Time := [].{
 
@@ -168,7 +168,7 @@ Time := [].{
 	## nondeterministic, it is not what a capture paces, and it is not what
 	## animation should move on.
 	now! : () => Timestamp
-	now! = || Timestamp.(TimeHost.now!())
+	now! = || Timestamp.(HostABI.time_now!())
 }
 
 ## The one second every conversion here is written in terms of.

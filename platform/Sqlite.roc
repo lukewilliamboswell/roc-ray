@@ -16,7 +16,7 @@
 ## At most eight connections and sixty-four statements may be open. Queries
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
-import SqliteHost
+import HostABI
 
 Sqlite := [].{
 
@@ -172,7 +172,7 @@ Sqlite := [].{
 	## The host owns the connection; this is a reference-counted handle to it.
 	## Keep it in the model, copy it freely, and let the last reference close
 	## it.
-	Db :: SqliteHost.Db.{
+	Db :: HostABI.SqliteDb.{
 
 		## Open or create a database under `default_config`.
 		##
@@ -194,7 +194,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		open_with! : Str, Config => Try(Db, OpenErr)
 		open_with! = |path, config| {
-			result = SqliteHost.open!(
+			result = HostABI.sqlite_open!(
 				path,
 				mode_code(config.mode),
 				config.busy_timeout_ms,
@@ -225,7 +225,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		close! : Db => Try({}, [SqliteErr(ErrCode, Str)])
 		close! = |Db.(db)| {
-			result = SqliteHost.close!(db)
+			result = HostABI.sqlite_close!(db)
 			if result.err == 0 {
 				Ok({})
 			} else {
@@ -241,7 +241,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(SqliteHost.Db.stub)
+		stub = Db.(Box.box(U64.highest))
 	}
 
 	## One row of a result, with its column names.
@@ -390,7 +390,7 @@ Sqlite := [].{
 	## what a per-frame or per-record write wants. The host owns the compiled
 	## statement; the last handle released finalizes it, and the connection it
 	## came from stays open at least that long.
-	Stmt :: SqliteHost.Stmt.{
+	Stmt :: HostABI.SqliteStmt.{
 
 		## Run this statement, which must not return rows.
 		##
@@ -398,7 +398,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		execute! : Stmt, List(Binding) => Try(Outcome, ExecuteErr)
 		execute! = |Stmt.(stmt), bindings|
-			executed(SqliteHost.run_stmt!(stmt, List.map(bindings, binding_wire)))
+			executed(HostABI.sqlite_run_stmt!(stmt, List.map(bindings, binding_wire)))
 
 		## Run this statement and decode every row it returns.
 		##
@@ -406,7 +406,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		query! : Stmt, List(Binding) => Try(List(Row), QueryErr)
 		query! = |Stmt.(stmt), bindings|
-			queried(SqliteHost.run_stmt!(stmt, List.map(bindings, binding_wire)))
+			queried(HostABI.sqlite_run_stmt!(stmt, List.map(bindings, binding_wire)))
 
 		## Run this statement, which must return exactly one row.
 		##
@@ -414,11 +414,11 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		query_exactly_one! : Stmt, List(Binding) => Try(Row, ExactlyOneErr)
 		query_exactly_one! = |Stmt.(stmt), bindings|
-			exactly_one(SqliteHost.run_stmt!(stmt, List.map(bindings, binding_wire)))
+			exactly_one(HostABI.sqlite_run_stmt!(stmt, List.map(bindings, binding_wire)))
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(SqliteHost.Stmt.stub)
+		stub = Stmt.(Box.box(U64.highest))
 	}
 
 	## Compile one statement for repeated use.
@@ -430,7 +430,7 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	prepare! : Db, Str => Try(Stmt, PrepareErr)
 	prepare! = |Db.(db), query| {
-		result = SqliteHost.prepare!(db, query)
+		result = HostABI.sqlite_prepare!(db, query)
 		if result.err == 0 {
 			Ok(Stmt.(result.stmt))
 		} else if result.err == err_too_many_statements {
@@ -452,7 +452,7 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	execute! : { db : Db, query : Str, bindings : List(Binding) } => Try(Outcome, ExecuteErr)
 	execute! = |{ db: Db.(db), query, bindings }|
-		executed(SqliteHost.run_once!(db, query, List.map(bindings, binding_wire)))
+		executed(HostABI.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
 
 	## Run one query and decode every row it returns.
 	##
@@ -460,7 +460,7 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	query! : { db : Db, query : Str, bindings : List(Binding) } => Try(List(Row), QueryErr)
 	query! = |{ db: Db.(db), query, bindings }|
-		queried(SqliteHost.run_once!(db, query, List.map(bindings, binding_wire)))
+		queried(HostABI.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
 
 	## Run one query that must return exactly one row.
 	##
@@ -468,7 +468,7 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	query_exactly_one! : { db : Db, query : Str, bindings : List(Binding) } => Try(Row, ExactlyOneErr)
 	query_exactly_one! = |{ db: Db.(db), query, bindings }|
-		exactly_one(SqliteHost.run_once!(db, query, List.map(bindings, binding_wire)))
+		exactly_one(HostABI.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
 
 	## Run every statement in a script, for schema setup and migrations.
 	##
@@ -480,7 +480,7 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
 	exec_script! = |Db.(db), script| {
-		result = SqliteHost.exec_script!(db, script)
+		result = HostABI.sqlite_exec_script!(db, script)
 		if result.err == 0 {
 			Ok({})
 		} else {
@@ -652,7 +652,7 @@ expect sqlite_err(5, "busy") == SqliteErr(Busy, "busy")
 
 ## Flatten one binding for the host. Only the field `kind` names is read, so
 ## the others carry whatever is cheapest to write down.
-binding_wire : Sqlite.Binding -> SqliteHost.BindingWire
+binding_wire : Sqlite.Binding -> HostABI.SqliteBindingWire
 binding_wire = |{ name, value }|
 	match value {
 		Null => { name, kind: cell_null, integer: 0, real: 0, text: "", blob: [] }
@@ -668,7 +668,7 @@ expect binding_wire({ name: ":a", value: Null }).kind == cell_null
 expect binding_wire({ name: ":a", value: String("hi") }).text == "hi"
 
 ## Turn a finished query into rows, or into the reason there are none.
-queried : SqliteHost.QueryResult -> Try(List(Sqlite.Row), Sqlite.QueryErr)
+queried : HostABI.SqliteQueryResult -> Try(List(Sqlite.Row), Sqlite.QueryErr)
 queried = |result|
 	if result.err == 0 {
 		Ok(decode_rows(result))
@@ -685,7 +685,7 @@ queried = |result|
 ## A statement that produced rows is refused rather than reported as a
 ## successful write: `execute!` has nowhere to put them, and silently dropping
 ## a `SELECT`'s output would hide the mistake.
-executed : SqliteHost.QueryResult -> Try(Sqlite.Outcome, Sqlite.ExecuteErr)
+executed : HostABI.SqliteQueryResult -> Try(Sqlite.Outcome, Sqlite.ExecuteErr)
 executed = |result|
 	if result.err == 0 {
 		if result.row_count > 0 {
@@ -702,7 +702,7 @@ executed = |result|
 	}
 
 ## Turn a finished query into its single row.
-exactly_one : SqliteHost.QueryResult -> Try(Sqlite.Row, Sqlite.ExactlyOneErr)
+exactly_one : HostABI.SqliteQueryResult -> Try(Sqlite.Row, Sqlite.ExactlyOneErr)
 exactly_one = |result|
 	if result.err == 0 {
 		if result.row_count == 0 {
@@ -730,13 +730,13 @@ exactly_one = |result|
 ## that names, text and blobs all point into. Nothing here can fail: a cell the
 ## host did not write is not reachable, and a short buffer ends the decode
 ## rather than being guessed at.
-decode_rows : SqliteHost.QueryResult -> List(Sqlite.Row)
+decode_rows : HostABI.SqliteQueryResult -> List(Sqlite.Row)
 decode_rows = |result| {
 	names = decode_names(result.names, 0, [])
 	decode_row_at(result, names, 0, [])
 }
 
-decode_row_at : SqliteHost.QueryResult, List(Str), U64, List(Sqlite.Row) -> List(Sqlite.Row)
+decode_row_at : HostABI.SqliteQueryResult, List(Str), U64, List(Sqlite.Row) -> List(Sqlite.Row)
 decode_row_at = |result, names, row, found|
 	if row >= result.row_count {
 		found
@@ -749,7 +749,7 @@ decode_row_at = |result, names, row, found|
 		)
 	}
 
-decode_cells : SqliteHost.QueryResult, U64, U64, List(Sqlite.Value) -> List(Sqlite.Value)
+decode_cells : HostABI.SqliteQueryResult, U64, U64, List(Sqlite.Value) -> List(Sqlite.Value)
 decode_cells = |result, at, remaining, found|
 	if remaining == 0 {
 		found
@@ -761,7 +761,7 @@ decode_cells = |result, at, remaining, found|
 			}
 	}
 
-decode_cell : SqliteHost.Cell, List(U8) -> Sqlite.Value
+decode_cell : HostABI.SqliteCell, List(U8) -> Sqlite.Value
 decode_cell = |cell, payload|
 	if cell.kind == cell_integer {
 		Integer(cell.integer)

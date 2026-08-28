@@ -23,9 +23,48 @@
 ## This module re-exports them, so `Recording` here and in the package are the
 ## same nominal type.
 import rrt.Capture as RrtCapture
-import CaptureHost
+import HostABI
 import Color
 import Draw
+
+capture_format_code = |value|
+	match value {
+		Png => 0
+		Gif => 1
+		WebM => 2
+	}
+
+capture_timing_code = |value|
+	match value {
+		RealTime => 0
+		FixedStep => 1
+	}
+
+capture_cursor_code = |value|
+	match value {
+		NoCursor => 0
+		DrawCursor => 1
+	}
+
+capture_quality_code = |value|
+	match value {
+		Fast => 0
+		Balanced => 1
+		Best => 2
+	}
+
+capture_scale_ratio = |value|
+	match value {
+		Full => { numerator: 1, denominator: 1 }
+		Half => { numerator: 1, denominator: 2 }
+		Quarter => { numerator: 1, denominator: 4 }
+		Ratio(r) =>
+			if r.numerator == 0 or r.denominator == 0 {
+				{ numerator: 1, denominator: 1 }
+			} else {
+				{ numerator: r.numerator, denominator: r.denominator }
+			}
+		}
 
 Capture := [].{
 
@@ -109,7 +148,7 @@ Capture := [].{
 	## still waiting for its frame is `AlreadyPending`.
 	screenshot! : Str => Try({}, ScreenshotError)
 	screenshot! = |path| {
-		err = CaptureHost.screenshot!(path)
+		err = HostABI.capture_screenshot!(path)
 		if err == 0 {
 			Ok({})
 		} else {
@@ -163,7 +202,7 @@ Capture := [].{
 	## ```
 	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
 	screenshot_texture! = |target, path| {
-		err = CaptureHost.screenshot_texture!({ target, path })
+		err = HostABI.capture_screenshot_texture!({ target: target.for_host(), path })
 		if err == 0 {
 			Ok({})
 		} else {
@@ -235,7 +274,7 @@ Capture := [].{
 	## run under `--host-headless`.
 	pixel_at! : Source, { x : I32, y : I32 } => Try(Color.Rgba, PixelReadError)
 	pixel_at! = |source, point| {
-		result = CaptureHost.pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
+		result = HostABI.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
 		if result.err == 0 {
 			Ok(Color.rgba(result.r, result.g, result.b, result.a))
 		} else {
@@ -268,7 +307,7 @@ Capture := [].{
 	## not a per-frame operation on a whole window.
 	read_region! : Source, Region => Try(List(U8), PixelReadError)
 	read_region! = |source, region| {
-		result = CaptureHost.read_region!({
+		result = HostABI.capture_read_region!({
 			source: pixel_source(source),
 			x: region.x,
 			y: region.y,
@@ -308,18 +347,18 @@ Capture := [].{
 	## the same way whichever phase started it.
 	start! : Recording => {}
 	start! = |recording| {
-		ratio = CaptureHost.scale_ratio(recording.scale())
-		_refusal = CaptureHost.start_recording!({
+		ratio = capture_scale_ratio(recording.scale())
+		_refusal = HostABI.capture_start_recording!({
 			path: recording.path(),
-			format: CaptureHost.format_code(recording.format()),
+			format: capture_format_code(recording.format()),
 			fps: recording.fps(),
 			max_frames: recording.max_frames(),
 			scale_numerator: ratio.numerator,
 			scale_denominator: ratio.denominator,
 			every_nth: recording.every_nth(),
-			timing: CaptureHost.timing_code(recording.timing()),
-			cursor: CaptureHost.cursor_code(recording.cursor()),
-			quality: CaptureHost.quality_code(recording.quality()),
+			timing: capture_timing_code(recording.timing()),
+			cursor: capture_cursor_code(recording.cursor()),
+			quality: capture_quality_code(recording.quality()),
 		})
 		{}
 	}
@@ -333,7 +372,7 @@ Capture := [].{
 	## and file size as `Finished`.
 	stop! : () => {}
 	stop! = || {
-		_finished = CaptureHost.stop_recording!()
+		_finished = HostABI.capture_stop_recording!()
 		{}
 	}
 
@@ -432,11 +471,11 @@ expect texture_export_error(99) == WriteFailed
 ## The unread half is `Draw.RenderTexture.stub`, a resource-free value the host
 ## never resolves, so the record always has a target to carry and the host
 ## never has to read a field that means nothing.
-pixel_source : Capture.Source -> CaptureHost.PixelSource
+pixel_source : Capture.Source -> HostABI.CapturePixelSource
 pixel_source = |source|
 	match source {
-		Screen => { target: Draw.RenderTexture.stub, screen: Bool.True }
-		Target(target) => { target, screen: Bool.False }
+		Screen => { target: Draw.RenderTexture.stub.for_host(), screen: Bool.True }
+		Target(target) => { target: target.for_host(), screen: Bool.False }
 	}
 
 ## Decode the host's capture-error code for a pixel readback.
@@ -463,3 +502,20 @@ expect pixel_read_error(13) == TargetUnavailable
 expect pixel_read_error(14) == RegionOutOfBounds
 expect pixel_read_error(0) == ReadbackFailed
 expect pixel_read_error(99) == ReadbackFailed
+
+expect capture_format_code(Png) == 0
+expect capture_format_code(Gif) == 1
+expect capture_format_code(WebM) == 2
+expect capture_timing_code(RealTime) == 0
+expect capture_timing_code(FixedStep) == 1
+expect capture_cursor_code(NoCursor) == 0
+expect capture_cursor_code(DrawCursor) == 1
+expect capture_quality_code(Fast) == 0
+expect capture_quality_code(Balanced) == 1
+expect capture_quality_code(Best) == 2
+expect capture_scale_ratio(Full) == { numerator: 1, denominator: 1 }
+expect capture_scale_ratio(Half) == { numerator: 1, denominator: 2 }
+expect capture_scale_ratio(Quarter) == { numerator: 1, denominator: 4 }
+expect capture_scale_ratio(Ratio({ numerator: 2, denominator: 3 })) == { numerator: 2, denominator: 3 }
+expect capture_scale_ratio(Ratio({ numerator: 1, denominator: 0 })) == { numerator: 1, denominator: 1 }
+expect capture_scale_ratio(Ratio({ numerator: 0, denominator: 4 })) == { numerator: 1, denominator: 1 }

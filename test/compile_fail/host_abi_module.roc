@@ -2,7 +2,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Draw
-import rr.TaskHost
+import rr.HostABI
 
 Model : {}
 

@@ -68,7 +68,7 @@ scripts/run-example.py examples/cave_climb -- --host-debug-allocator
 
 | Path | Purpose |
 | --- | --- |
-| `platform/` | Public Roc API, platform entry points, and hosted declarations |
+| `platform/` | Public Roc API, platform entry points, and private `HostABI` declarations |
 | `src/` | Zig host, raylib backend, ABI types, resources, and native tests |
 | `examples/` | Complete apps and focused, reusable patterns |
 | `scripts/` | Local development, profiling, ABI, bundle, and release helpers |
@@ -416,14 +416,15 @@ the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
 Roc-side decoder and `src/host_native.zig` in step; each constant says where
 its counterpart lives.
 
-A new private `<X>Host.roc` needs its own privacy fixture. The module is kept
-out of `exposes` so an app cannot import it, and nothing but a test proves that
-stayed true: add `test/compile_fail/<x>_host_module.roc` importing it, and
-register the file in `scripts/test_app_transport_privacy.py` as a `CASES` entry
-pairing that path with the diagnostic strings the compiler must produce -- the
-title `package module is private` and the module's own name -- so `zig build
-test` compiles it and requires that failure. Without the registration the
-fixture is never built and the privacy is unchecked.
+Every standalone native hosted function is declared in the private
+`platform/HostABI.roc` module with a domain-prefixed name. Add its structural
+wire aliases there, call it from the public module that owns validation and
+typed decoding, and register the unchanged native symbol in both platform
+headers. Do not add a domain-specific `*Host.roc` or `*ABI.roc` module.
+
+`test/compile_fail/host_abi_module.roc` and its registered case in
+`scripts/test_app_transport_privacy.py` prove the consolidated module remains
+outside `exposes`. Keep that single fixture rather than adding one per domain.
 
 `roc test` cannot reach a new effect through `update!`: an `expect` cannot call
 an effectful function, and the phase guard would refuse the effects inside one
@@ -443,7 +444,7 @@ an input it never reads:
 
 ```roc
 spawn! : App.Input(msg), (() => msg) => {}
-spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
+spawn! = |_input, task!| HostABI.task_spawn!(Box.box(task!))
 ```
 
 Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else
@@ -651,8 +652,8 @@ Before opening a PR:
 - Keep the change focused and explain the app-author problem it solves.
 - Add or update tests for behavior and failure paths.
 - Run `zig build lint` and `zig build test`.
-- For a new private `<X>Host.roc`, add `test/compile_fail/<x>_host_module.roc`
-  and register it in `scripts/test_app_transport_privacy.py`.
+- Put every new standalone hosted declaration in private `HostABI.roc`, and
+  keep its one registered privacy fixture passing.
 - Run the graphical smoke test when pixels or drawing state can change.
 - Update examples and docs when public behavior changes.
 - Check `git status --short`, `git diff`, and `git diff --cached` for untracked

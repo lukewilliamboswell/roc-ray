@@ -32,7 +32,8 @@ PLATFORM_ENTRY = ROOT / "platform" / "main.roc"
 PACKAGE_ENTRY = ROOT / "types" / "main.roc"
 TYPES_SUBDIR = "types"
 PRIVATE_ENTRIES = {
-    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host"),
+    "Assets": ("Store.for_host",),
+    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host", "RenderTexture.for_host"),
     "Keys": ("exit_key_code",),
     "Mouse": ("cursor_code", "cursor_mode_code"),
     # `integer` is what every width-checked integer decoder is built from. It

@@ -867,7 +867,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || font_from_host!(HostABI.draw_default_font!())
+	default_font! = || font_from_host!(HostABI.text_default_font!())
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -1018,7 +1018,7 @@ Draw := [].{
 	## `update!`, use `font_from_bytes!` with bytes the app already holds.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
-		result = HostABI.draw_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size })
+		result = HostABI.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size })
 		if result.err == 1 {
 			Err(PathInvalid)
 		} else if result.err == 2 {
@@ -1041,7 +1041,7 @@ Draw := [].{
 	## tasks; refused in `render!`.
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
-		result = HostABI.draw_load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
+		result = HostABI.text_load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(result.font))
 	}
 
@@ -1330,7 +1330,7 @@ Draw := [].{
 ## Private, because minting a live `Font` is the host's business.
 font_from_host! : Font.Handle => Font
 font_from_host! = |handle| {
-	metrics = HostABI.draw_font_metrics!(handle)
+	metrics = HostABI.text_font_metrics!(handle)
 	{ handle, metrics }
 }
 

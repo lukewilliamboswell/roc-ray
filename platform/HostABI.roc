@@ -30,7 +30,8 @@
 ## - `Keys`: host keyboard policy such as the configured exit key.
 ## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
 ## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
-## - `Draw`: frame authority, draw resources, scopes, and ordered draw calls.
+## - `Text`: font loading, glyph metrics, and text preparation.
+## - `Draw`: frame authority, render resources, scopes, and drawing primitives.
 ## - `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
 ## Host services:
@@ -764,12 +765,52 @@ HostABI := [].{
 	## Run a script without bindings or returned rows.
 	sqlite_exec_script! : SqliteDb, Str => SqliteStatusResult
 
+	## Text transport
+	## Opaque ARC-owned prepared text.
+	TextPrepared : Box(U64)
+
+	## One glyph's layout metrics.
+	TextGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
+
+	## Font metrics and glyph lookup data.
+	TextFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(TextGlyphMetric) }
+
+	## Text-preparation parameters.
+	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
+
+	## Prepared text, measured size, or error.
+	TextPrepareResult : { prepared : TextPrepared, width : F32, height : F32, err : U8 }
+
+	## Font bytes, format, and pixel size.
+	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
+
+	## Store-relative font path and pixel size.
+	TextLoadStoreFont : { store : AssetsStore, path : Str, size : I32 }
+
+	## Loaded font or error.
+	TextFontResult : { font : Font.Handle, err : U8 }
+
+	## Get the default font during rendering.
+	text_default_font! : () => Font.Handle
+
+	## Get the default font during startup.
+	text_startup_default_font! : () => TextFontResult
+
+	## Load a font from encoded bytes.
+	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
+
+	## Load a font from an asset store.
+	text_load_store_font! : TextLoadStoreFont => TextFontResult
+
+	## Get font and glyph metrics.
+	text_font_metrics! : Font.Handle => TextFontMetrics
+
+	## Shape and measure text for repeated drawing.
+	text_prepare! : TextPrepare => TextPrepareResult
+
 	## Draw transport
 	## Zero-sized frame authority minted by the adapter.
 	DrawFrame : {}
-
-	## Opaque ARC-owned prepared text.
-	DrawPreparedText : Box(U64)
 
 	## Texture used as a render target.
 	DrawRenderTexture : Texture
@@ -831,29 +872,11 @@ HostABI := [].{
 	## Text-drawing parameters.
 	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle }
 
-	## One glyph's layout metrics.
-	DrawGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
-
-	## Font metrics and glyph lookup data.
-	DrawFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(DrawGlyphMetric) }
+	## Prepared-text drawing parameters.
+	DrawPreparedTextDraw : { prepared : TextPrepared, pos : Math.Vec2, color : Color.Rgba }
 
 	## Current frame dimensions.
 	DrawFrameSize : { width : F32, height : F32 }
-
-	## Text-preparation parameters.
-	DrawPrepareText : { text : Str, size : F32, spacing : F32, font : Font.Handle }
-
-	## Prepared text, measured size, or error.
-	DrawPrepareTextResult : { prepared : DrawPreparedText, width : F32, height : F32, err : U8 }
-
-	## Prepared-text drawing parameters.
-	DrawPreparedTextDraw : { prepared : DrawPreparedText, pos : Math.Vec2, color : Color.Rgba }
-
-	## Font bytes, format, and pixel size.
-	DrawLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
-
-	## Store-relative font path and pixel size.
-	DrawLoadStoreFont : { store : AssetsStore, path : Str, size : I32 }
 
 	## Render-target dimensions.
 	DrawRenderTextureSize : { width : I32, height : I32 }
@@ -896,9 +919,6 @@ HostABI := [].{
 
 	## Texture uniform value.
 	DrawShaderTexture : { uniform : DrawUniform, texture : Texture }
-
-	## Loaded font or error.
-	DrawFontResult : { font : Font.Handle, err : U8 }
 
 	## Loaded render target or error.
 	DrawRenderTextureResult : { target : DrawRenderTexture, err : U8 }
@@ -954,17 +974,8 @@ HostABI := [].{
 	## Draw a line.
 	draw_line! : DrawLine => {}
 
-	## Get the default font during rendering.
-	draw_default_font! : () => Font.Handle
-
-	## Get the default font during startup.
-	draw_startup_default_font! : () => DrawFontResult
-
-	## Load a font from encoded bytes.
-	draw_load_font_bytes! : DrawLoadFontBytes => DrawFontResult
-
-	## Load a font from an asset store.
-	draw_load_store_font! : DrawLoadStoreFont => DrawFontResult
+	## Draw prepared text.
+	draw_draw_prepared_text! : DrawPreparedTextDraw => {}
 
 	## Load a render target.
 	draw_load_render_texture! : DrawRenderTextureSize => DrawRenderTextureResult
@@ -975,17 +986,8 @@ HostABI := [].{
 	## Load a shader from an asset store.
 	draw_load_store_shader! : DrawLoadStoreShader => DrawShaderResult
 
-	## Get font and glyph metrics.
-	draw_font_metrics! : Font.Handle => DrawFontMetrics
-
 	## Get the current frame dimensions.
 	draw_frame_size! : () => DrawFrameSize
-
-	## Shape and measure text for repeated drawing.
-	draw_prepare_text! : DrawPrepareText => DrawPrepareTextResult
-
-	## Draw prepared text.
-	draw_draw_prepared_text! : DrawPreparedTextDraw => {}
 
 	## Draw a filled polygon.
 	draw_polygon! : DrawPolygon => {}

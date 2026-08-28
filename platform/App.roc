@@ -428,7 +428,7 @@ App := [].{
 	## aliases of the same resource. Legal only in `init!`.
 	default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 	default_font! = |_startup| {
-		result = HostABI.draw_startup_default_font!()
+		result = HostABI.text_startup_default_font!()
 		if result.err == 1 {
 			Err(AssetPathInvalid)
 		} else if result.err == 2 {
@@ -440,7 +440,7 @@ App := [].{
 		} else if result.err != 0 {
 			Err(ResourceLimit)
 		} else {
-			metrics = HostABI.draw_font_metrics!(result.font)
+			metrics = HostABI.text_font_metrics!(result.font)
 			Ok({ handle: result.font, metrics })
 		}
 	}

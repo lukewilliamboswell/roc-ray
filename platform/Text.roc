@@ -123,7 +123,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : HostABI.DrawPreparedText,
+		resource : HostABI.TextPrepared,
 		measured : Size,
 	}.{
 
@@ -196,7 +196,7 @@ Text := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
 	prepare_builder! = |builder| {
-		result = HostABI.draw_prepare_text!({
+		result = HostABI.text_prepare!({
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,

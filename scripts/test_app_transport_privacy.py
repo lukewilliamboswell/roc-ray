@@ -44,10 +44,6 @@ CASES = (
         ("package module is private", "`rr.File`"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "host_abi_module.roc",
-        ("package module is private", "`rr.HostABI`"),
-    ),
-    (
         ROOT / "test" / "compile_fail" / "sqlite_db_manufacture.roc",
         ("cannot use opaque nominal type", "instance of Sqlite.Db"),
     ),

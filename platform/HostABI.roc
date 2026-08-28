@@ -4,8 +4,8 @@
 ## This module is the single catalogue of native hosted functions and the wire
 ## values they exchange. It is deliberately not an application API: public
 ## modules own application-facing types, validation, decoding, error tags, and
-## phase documentation. `HostABI` is intentionally absent from the platform's
-## `exposes` list.
+## phase documentation. `HostABI` is exposed as `rr.HostABI` for direct structural
+## interface access.
 ##
 ## Declarations are grouped into interfaces. An interface is the private
 ## boundary vocabulary for one facility, not necessarily a public Roc module

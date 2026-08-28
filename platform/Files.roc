@@ -16,7 +16,7 @@
 ## Paths are used as the app gives them, resolved against the process working
 ## directory. Filesystem access is not sandboxed; `Capture` confines only its
 ## own outputs.
-import HostABI
+import Host
 import Time
 
 Files := [].{
@@ -104,7 +104,7 @@ Files := [].{
 	## the task; refused in `update!` and `render!`.
 	read_text! : Str => Try(Str, ReadTextError)
 	read_text! = |path| {
-		result = HostABI.files_read_text!(path)
+		result = Host.files_read_text!(path)
 		if result.err == 0 {
 			Ok(result.contents)
 		} else {
@@ -129,7 +129,7 @@ Files := [].{
 	## the task; refused in `update!` and `render!`.
 	read_bytes! : Str => Try(List(U8), ReadBytesError)
 	read_bytes! = |path| {
-		result = HostABI.files_read_bytes!(path)
+		result = Host.files_read_bytes!(path)
 		if result.err == 0 {
 			Ok(result.bytes)
 		} else {
@@ -153,7 +153,7 @@ Files := [].{
 	## the task; refused in `update!` and `render!`.
 	list! : Str => Try(List(Entry), ListError)
 	list! = |path| {
-		result = HostABI.files_list!(path)
+		result = Host.files_list!(path)
 		if result.err == 0 {
 			Ok(decode_listing(result.bytes))
 		} else {
@@ -209,7 +209,7 @@ Files := [].{
 	## the task; refused in `update!` and `render!`.
 	metadata! : Str => Try(Metadata, MetadataError)
 	metadata! = |path| {
-		result = HostABI.files_metadata!(path)
+		result = Host.files_metadata!(path)
 		if result.err == 0 {
 			# The host normalizes the instant before it crosses, so the only
 			# way this fails is a host that is wrong about its own contract.
@@ -257,7 +257,7 @@ Files := [].{
 	## }
 	## ```
 	write_text! : Str, Str => Try({}, WriteError)
-	write_text! = |path, contents| write_result(HostABI.files_write_text!(path, contents))
+	write_text! = |path, contents| write_result(Host.files_write_text!(path, contents))
 
 	## Replace a file's contents with ordinary Roc bytes.
 	##
@@ -269,7 +269,7 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	write_bytes! : Str, List(U8) => Try({}, WriteError)
-	write_bytes! = |path, bytes| write_result(HostABI.files_write_bytes!(path, bytes))
+	write_bytes! = |path, bytes| write_result(Host.files_write_bytes!(path, bytes))
 
 }
 

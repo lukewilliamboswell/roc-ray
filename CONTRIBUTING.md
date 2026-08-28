@@ -68,7 +68,7 @@ scripts/run-example.py examples/cave_climb -- --host-debug-allocator
 
 | Path | Purpose |
 | --- | --- |
-| `platform/` | Public Roc API, platform entry points, and private `HostABI` declarations |
+| `platform/` | Public Roc API, platform entry points, and private `Host` declarations |
 | `src/` | Zig host, raylib backend, ABI types, resources, and native tests |
 | `examples/` | Complete apps and focused, reusable patterns |
 | `scripts/` | Local development, profiling, ABI, bundle, and release helpers |
@@ -417,12 +417,12 @@ Roc-side decoder and `src/host_native.zig` in step; each constant says where
 its counterpart lives.
 
 Every standalone native hosted function is declared in the private
-`platform/HostABI.roc` module with a domain-prefixed name. Add its structural
+`platform/Host.roc` module with a domain-prefixed name. Add its structural
 wire aliases there, call it from the public module that owns validation and
 typed decoding, and register the unchanged native symbol in both platform
 headers. Do not add a domain-specific `*Host.roc` or `*ABI.roc` module.
 
-`test/compile_fail/host_abi_module.roc` and its registered case in
+`test/compile_fail/host_module.roc` and its registered case in
 `scripts/test_app_transport_privacy.py` prove the consolidated module remains
 outside `exposes`. Keep that single fixture rather than adding one per domain.
 
@@ -444,7 +444,7 @@ an input it never reads:
 
 ```roc
 spawn! : App.Input(msg), (() => msg) => {}
-spawn! = |_input, task!| HostABI.task_spawn!(Box.box(task!))
+spawn! = |_input, task!| Host.task_spawn!(Box.box(task!))
 ```
 
 Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else
@@ -652,7 +652,7 @@ Before opening a PR:
 - Keep the change focused and explain the app-author problem it solves.
 - Add or update tests for behavior and failure paths.
 - Run `zig build lint` and `zig build test`.
-- Put every new standalone hosted declaration in private `HostABI.roc`, and
+- Put every new standalone hosted declaration in private `Host.roc`, and
   keep its one registered privacy fixture passing.
 - Run the graphical smoke test when pixels or drawing state can change.
 - Update examples and docs when public behavior changes.

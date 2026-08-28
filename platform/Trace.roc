@@ -11,7 +11,7 @@
 ## Zones are nested per application-code owner and must be ended in strict
 ## last-in, first-out order. An invalid, expired, cross-owner, double-ended, or
 ## out-of-order zone is a programmer error, including when recording is off.
-import HostABI
+import Host
 
 ## Keep the ABI numbering private. The public contract is `Trace.Unit`, not
 ## these transport codes.
@@ -42,7 +42,7 @@ Trace := [].{
 	## label must be valid UTF-8 no longer than 255 encoded bytes.
 	## Legal in `init!`, `update!`, `render!`, and tasks.
 	mark! : Str => {}
-	mark! = |label| HostABI.trace_mark!(label)
+	mark! = |label| Host.trace_mark!(label)
 
 	## Begin a nested diagnostic zone. The label must be valid UTF-8 no longer
 	## than 255 encoded bytes. At most 64 zones may be active for one owner.
@@ -51,21 +51,21 @@ Trace := [].{
 	## callback or task owner, in strict last-in, first-out order.
 	## Legal in `init!`, `update!`, `render!`, and tasks.
 	begin! : Str => Zone
-	begin! = |label| Zone.(HostABI.trace_begin!(label))
+	begin! = |label| Zone.(Host.trace_begin!(label))
 
 	## End the most recently begun active zone for this callback or task.
 	## Legal in `init!`, `update!`, `render!`, and tasks.
 	end! : Zone => {}
-	end! = |Zone.(token)| HostABI.trace_end!(token)
+	end! = |Zone.(token)| Host.trace_end!(token)
 
 	## Record one signed integer sample. Its label has the same 255-byte bound.
 	## Legal in `init!`, `update!`, `render!`, and tasks.
 	sample_i64! : Str, I64, Unit => {}
-	sample_i64! = |label, value, unit| HostABI.trace_sample_i64!(label, value, trace_unit_code(unit))
+	sample_i64! = |label, value, unit| Host.trace_sample_i64!(label, value, trace_unit_code(unit))
 
 	## Record one finite floating-point sample. Negative finite values are valid;
 	## NaN and infinities are programmer errors. Its label has the same bound.
 	## Legal in `init!`, `update!`, `render!`, and tasks.
 	sample_f64! : Str, F64, Unit => {}
-	sample_f64! = |label, value, unit| HostABI.trace_sample_f64!(label, value, trace_unit_code(unit))
+	sample_f64! = |label, value, unit| Host.trace_sample_f64!(label, value, trace_unit_code(unit))
 }

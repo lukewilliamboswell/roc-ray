@@ -26,7 +26,7 @@ list, so it cannot generate that shim -- `platform/App.roc` is hand-written and
 What may *not* move is a wire encoding. `Capture`'s `format_code`,
 `timing_code`, `cursor_code`, `quality_code`, and `scale_ratio` map a tag onto a
 number `src/capture.zig` reads; they live in the private
-the platform's private `HostABI.roc` so that a types release cannot freeze the host's
+the platform's private `Host.roc` so that a types release cannot freeze the host's
 numbering.
 
 `Color` needed reshaping first. A module file must declare a nominal matching
@@ -87,7 +87,7 @@ roc check test/package_interop/app.roc
 roc build test/package_interop/app.roc && ./app --host-headless
 ```
 
-`Math` and `Camera` cross the host boundary via `HostABI`, so moving them was
+`Math` and `Camera` cross the host boundary via `Host`, so moving them was
 the real test of `roc glue` with package-owned nominals. The generated ABI is
 unchanged by the move.
 

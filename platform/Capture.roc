@@ -23,7 +23,7 @@
 ## This module re-exports them, so `Recording` here and in the package are the
 ## same nominal type.
 import rrt.Capture as RrtCapture
-import HostABI
+import Host
 import Color
 import Draw
 
@@ -148,7 +148,7 @@ Capture := [].{
 	## still waiting for its frame is `AlreadyPending`.
 	screenshot! : Str => Try({}, ScreenshotError)
 	screenshot! = |path| {
-		err = HostABI.capture_screenshot!(path)
+		err = Host.capture_screenshot!(path)
 		if err == 0 {
 			Ok({})
 		} else {
@@ -202,7 +202,7 @@ Capture := [].{
 	## ```
 	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
 	screenshot_texture! = |target, path| {
-		err = HostABI.capture_screenshot_texture!({ target: target.for_host(), path })
+		err = Host.capture_screenshot_texture!({ target: target.for_host(), path })
 		if err == 0 {
 			Ok({})
 		} else {
@@ -274,7 +274,7 @@ Capture := [].{
 	## run under `--host-headless`.
 	pixel_at! : Source, { x : I32, y : I32 } => Try(Color.Rgba, PixelReadError)
 	pixel_at! = |source, point| {
-		result = HostABI.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
+		result = Host.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
 		if result.err == 0 {
 			Ok(Color.rgba(result.r, result.g, result.b, result.a))
 		} else {
@@ -307,7 +307,7 @@ Capture := [].{
 	## not a per-frame operation on a whole window.
 	read_region! : Source, Region => Try(List(U8), PixelReadError)
 	read_region! = |source, region| {
-		result = HostABI.capture_read_region!({
+		result = Host.capture_read_region!({
 			source: pixel_source(source),
 			x: region.x,
 			y: region.y,
@@ -348,7 +348,7 @@ Capture := [].{
 	start! : Recording => {}
 	start! = |recording| {
 		ratio = capture_scale_ratio(recording.scale())
-		_refusal = HostABI.capture_start_recording!({
+		_refusal = Host.capture_start_recording!({
 			path: recording.path(),
 			format: capture_format_code(recording.format()),
 			fps: recording.fps(),
@@ -372,7 +372,7 @@ Capture := [].{
 	## and file size as `Finished`.
 	stop! : () => {}
 	stop! = || {
-		_finished = HostABI.capture_stop_recording!()
+		_finished = Host.capture_stop_recording!()
 		{}
 	}
 
@@ -471,7 +471,7 @@ expect texture_export_error(99) == WriteFailed
 ## The unread half is `Draw.RenderTexture.stub`, a resource-free value the host
 ## never resolves, so the record always has a target to carry and the host
 ## never has to read a field that means nothing.
-pixel_source : Capture.Source -> HostABI.CapturePixelSource
+pixel_source : Capture.Source -> Host.CapturePixelSource
 pixel_source = |source|
 	match source {
 		Screen => { target: Draw.RenderTexture.stub.for_host(), screen: Bool.True }

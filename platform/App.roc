@@ -36,7 +36,7 @@
 ## For pure tests, build input with `App.Input.for_tests({})` and its `with_*`
 ## receivers. Host resource types provide inert `stub` values for constructing
 ## models; stubs cannot test loading or resource lifetime.
-import HostABI
+import Host
 import Keys
 import Mouse
 import rrt.App as RrtApp
@@ -250,14 +250,14 @@ App := [].{
 	## the first `App.Input` supplies the first sampled values. After
 	## initialization, change host state by calling effects from `update!`, and
 	## ask for work that waits with `Task.spawn!`.
-	Startup :: HostABI.AppStartup.{
+	Startup :: Host.AppStartup.{
 
 		## Return the configured startup font. Legal only in `init!`.
 		default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 		default_font! = |startup| App.default_font!(startup)
 
 		## Construct the public startup capability at the private host boundary.
-		for_host : HostABI.AppStartup -> Startup
+		for_host : Host.AppStartup -> Startup
 		for_host = |startup| Startup.(startup)
 	}
 
@@ -266,7 +266,7 @@ App := [].{
 	## The exit happens after startup completes, so `init!` finishes and the
 	## host shuts down in the ordinary way. Legal only in `init!`.
 	exit! : Startup, I32 => {}
-	exit! = |_startup, code| HostABI.app_exit!(code)
+	exit! = |_startup, code| Host.app_exit!(code)
 
 	## Return the complete process argument list supplied by the launcher.
 	##
@@ -277,7 +277,7 @@ App := [].{
 	## Legal only in `init!`. `App.init_for_args` is the other way to read
 	## argv, before the window exists.
 	args! : Startup => List(Str)
-	args! = |_startup| HostABI.app_args!()
+	args! = |_startup| Host.app_args!()
 
 	## Read an environment variable by key.
 	##
@@ -285,7 +285,7 @@ App := [].{
 	## `init!`.
 	read_env! : Startup, Str => Try(Str, [NotFound, ..])
 	read_env! = |_startup, key|
-		match HostABI.app_read_env!(key) {
+		match Host.app_read_env!(key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
 		}
@@ -297,7 +297,7 @@ App := [].{
 	## for the fuller error report.
 	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
 	read_file! = |_startup, path| {
-		result = HostABI.app_read_file!(path)
+		result = Host.app_read_file!(path)
 		if result.ok {
 			Ok(result.contents)
 		} else if result.err == 1 {
@@ -329,7 +329,7 @@ App := [].{
 	##
 	## Legal only in `init!`.
 	entropy! : Startup => U64
-	entropy! = |_startup| HostABI.random_entropy!()
+	entropy! = |_startup| Host.random_entropy!()
 
 	## Get a varying startup number in the inclusive range `[min, max]`.
 	##
@@ -339,7 +339,7 @@ App := [].{
 	## in a range, such as a jittered start position that nothing else depends
 	## on.
 	random_i32! : Startup, I32, I32 => I32
-	random_i32! = |_startup, min, max| HostABI.random_i32!(min, max)
+	random_i32! = |_startup, min, max| Host.random_i32!(min, max)
 
 	## Suggest positive initial window dimensions to the window manager.
 	##
@@ -352,7 +352,7 @@ App := [].{
 		if size.width <= 0 or size.height <= 0 {
 			Err(InvalidSize)
 		} else {
-			match HostABI.window_suggest_size!(size) {
+			match Host.window_suggest_size!(size) {
 				Ok({}) => Ok({})
 				Err(NotSupported) => Err(NotSupported)
 			}
@@ -366,7 +366,7 @@ App := [].{
 	## `App.suggest_window_min_size!(startup, size)`. Legal only in `init!`.
 	suggest_window_min_size! : Startup, { width : I32, height : I32 } => {}
 	suggest_window_min_size! = |_startup, size|
-		HostABI.window_suggest_min_size!({
+		Host.window_suggest_min_size!({
 			width: if size.width > 0 size.width else 0,
 			height: if size.height > 0 size.height else 0,
 		})
@@ -378,7 +378,7 @@ App := [].{
 	## Legal only in `init!`. A running app changes the cap with
 	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
-	set_target_fps! = |_startup, fps| HostABI.window_set_target_fps!(fps)
+	set_target_fps! = |_startup, fps| Host.window_set_target_fps!(fps)
 
 	## Set which key closes the window, or `NoExitKey` to stop any key from
 	## closing it.
@@ -388,7 +388,7 @@ App := [].{
 	## handle shutdown itself by returning `Err(Exit(code))`. Call as
 	## `App.set_exit_key!(startup, NoExitKey)`. Legal only in `init!`.
 	set_exit_key! : Startup, ExitKey => {}
-	set_exit_key! = |_startup, key| HostABI.keys_set_exit_key!(Keys.exit_key_code(key))
+	set_exit_key! = |_startup, key| Host.keys_set_exit_key!(Keys.exit_key_code(key))
 
 	## Read UTF-8 text from the system clipboard.
 	##
@@ -400,7 +400,7 @@ App := [].{
 	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
 	get_clipboard_text! = |_startup| {
-		result = HostABI.window_read_clipboard!()
+		result = Host.window_read_clipboard!()
 		if result.err == 0 Ok(result.contents) else Err(Unavailable)
 	}
 
@@ -409,18 +409,18 @@ App := [].{
 	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`.
 	## A running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
-	set_clipboard_text! = |_startup, text| HostABI.window_set_clipboard_text!(text)
+	set_clipboard_text! = |_startup, text| Host.window_set_clipboard_text!(text)
 
 	## Apply cursor visibility and capture atomically through one tagged
 	## operation. Legal only in `init!`. `Mouse.set_cursor_mode!` is the same
 	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
-	set_cursor_mode! = |_startup, mode| HostABI.mouse_set_cursor_mode!(Mouse.cursor_mode_code(mode))
+	set_cursor_mode! = |_startup, mode| Host.mouse_set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
 	## Set the native operating-system cursor shape. Legal only in `init!`.
 	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
-	set_cursor! = |_startup, cursor| HostABI.mouse_set_cursor!(Mouse.cursor_code(cursor))
+	set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cursor))
 
 	## Return the configured startup font, or the backend's built-in font when
 	## none was configured. A configured path is resolved from the process
@@ -428,7 +428,7 @@ App := [].{
 	## aliases of the same resource. Legal only in `init!`.
 	default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 	default_font! = |_startup| {
-		result = HostABI.text_startup_default_font!()
+		result = Host.text_startup_default_font!()
 		if result.err == 1 {
 			Err(AssetPathInvalid)
 		} else if result.err == 2 {
@@ -440,7 +440,7 @@ App := [].{
 		} else if result.err != 0 {
 			Err(ResourceLimit)
 		} else {
-			metrics = HostABI.text_font_metrics!(result.font)
+			metrics = Host.text_font_metrics!(result.font)
 			Ok({ handle: result.font, metrics })
 		}
 	}

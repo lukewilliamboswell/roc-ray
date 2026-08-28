@@ -4,7 +4,7 @@
 ## This module is the single catalogue of native hosted functions and the wire
 ## values they exchange. It is deliberately not an application API: public
 ## modules own application-facing types, validation, decoding, error tags, and
-## phase documentation. `HostABI` is exposed as `rr.HostABI` for direct structural
+## phase documentation. `Host` is exposed as `rr.Host` for direct structural
 ## interface access.
 ##
 ## Declarations are grouped into interfaces. An interface is the private
@@ -58,7 +58,7 @@ import rrt.Font
 import rrt.Math
 import rrt.Texture
 
-HostABI := [].{
+Host := [].{
 
 	## Texture resource interface
 	## Store-relative texture path.

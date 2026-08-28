@@ -9,7 +9,7 @@
 ## This module re-exports them, so `Snapshot` here and in the package are the same
 ## nominal type and its receivers are available either way.
 import rrt.Mouse as RrtMouse
-import HostABI
+import Host
 
 Mouse := [].{
 
@@ -49,8 +49,8 @@ Mouse := [].{
 	set_source! : Source => {}
 	set_source! = |source|
 		match source {
-			Hardware => HostABI.capture_set_virtual_mouse!({ active: Bool.False, x: 0, y: 0, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
-			Virtual(state) => HostABI.capture_set_virtual_mouse!({ active: Bool.True, x: state.x, y: state.y, left: state.left, middle: state.middle, right: state.right, wheel: state.wheel })
+			Hardware => Host.capture_set_virtual_mouse!({ active: Bool.False, x: 0, y: 0, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
+			Virtual(state) => Host.capture_set_virtual_mouse!({ active: Bool.True, x: state.x, y: state.y, left: state.left, middle: state.middle, right: state.right, wheel: state.wheel })
 		}
 
 	## Cursor visibility and capture policy, applied atomically as one tagged
@@ -100,13 +100,13 @@ Mouse := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor! : Cursor => {}
-	set_cursor! = |cursor| HostABI.mouse_set_cursor!(cursor_code(cursor))
+	set_cursor! = |cursor| Host.mouse_set_cursor!(cursor_code(cursor))
 
 	## Set cursor visibility and capture, applied atomically as one operation.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor_mode! : CursorMode => {}
-	set_cursor_mode! = |mode| HostABI.mouse_set_cursor_mode!(cursor_mode_code(mode))
+	set_cursor_mode! = |mode| Host.mouse_set_cursor_mode!(cursor_mode_code(mode))
 
 	## Current cursor position in logical drawing coordinates.
 	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }

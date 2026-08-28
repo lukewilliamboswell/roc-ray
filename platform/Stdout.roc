@@ -8,7 +8,7 @@
 ## returns `BufferFull`. Nothing is partially queued. Accepted writes preserve
 ## order and are drained during orderly shutdown, but eventual delivery is not
 ## reported. Ordering against `dbg`, `expect`, and crash output is undefined.
-import HostABI
+import Host
 
 Stdout := [].{
 
@@ -33,13 +33,13 @@ Stdout := [].{
 	## most 256 kibibytes cross per call, counting the string's UTF-8 bytes and
 	## the newline; a longer string is `TooLarge` and nothing is queued.
 	line! : Str => Try({}, WriteError)
-	line! = |text| write_result(HostABI.stdio_write_line!(1, text))
+	line! = |text| write_result(Host.stdio_write_line!(1, text))
 
 	## Write a string with no newline after it. Bounded exactly as `line!` is.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	write! : Str => Try({}, WriteError)
-	write! = |text| write_result(HostABI.stdio_write_text!(1, text))
+	write! = |text| write_result(Host.stdio_write_text!(1, text))
 
 	## Write bytes that are not necessarily text.
 	##
@@ -49,7 +49,7 @@ Stdout := [].{
 	## newline, no translation. Bounded exactly as `line!` is, counting the length
 	## of the list.
 	write_bytes! : List(U8) => Try({}, WriteError)
-	write_bytes! = |bytes| write_result(HostABI.stdio_write_bytes!(1, bytes))
+	write_bytes! = |bytes| write_result(Host.stdio_write_bytes!(1, bytes))
 }
 
 write_result = |code|

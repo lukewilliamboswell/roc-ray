@@ -26,21 +26,21 @@ import Assets
 import Camera
 import Draw
 import Math
-import HostABI
+import Host
 
-TilemapRawProperty : HostABI.TilemapProperty
+TilemapRawProperty : Host.TilemapProperty
 
-TilemapRawTileset : HostABI.TilemapTileset
+TilemapRawTileset : Host.TilemapTileset
 
-TilemapRawTileProperties : HostABI.TilemapTileProperties
+TilemapRawTileProperties : Host.TilemapTileProperties
 
-TilemapRawLayer : HostABI.TilemapLayer
+TilemapRawLayer : Host.TilemapLayer
 
-TilemapRawPoint : HostABI.TilemapPoint
+TilemapRawPoint : Host.TilemapPoint
 
-TilemapRawObject : HostABI.TilemapObject
+TilemapRawObject : Host.TilemapObject
 
-TilemapRawMap : HostABI.TilemapMap
+TilemapRawMap : Host.TilemapMap
 
 TilemapTextureBinding : {
 	first_gid : U64,
@@ -177,8 +177,8 @@ Tilemap :: {
 	raw : TilemapRawMap,
 	object_roles : List(TilemapObjectRoleRule),
 	origin : Math.Vec2,
-	render_layers : List(HostABI.TilemapRenderLayer),
-	render_tilesets : List(HostABI.TilemapRenderTileset),
+	render_layers : List(Host.TilemapRenderLayer),
+	render_tilesets : List(Host.TilemapRenderTileset),
 }.{
 
 	## Parsed TMX data stored in flat lists to avoid a heap allocation per nested item.
@@ -273,7 +273,7 @@ Tilemap :: {
 	## several files parks once per file and parses in between.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
 	load_tmx! = |path| {
-		result = HostABI.tilemap_load_tmx!(path)
+		result = Host.tilemap_load_tmx!(path)
 		if result.ok {
 			Ok(result.map)
 		} else if result.err == err_not_found {
@@ -643,7 +643,7 @@ layer_role_from_code = |code| if code == 1 Solid else if code == 2 Hidden else D
 draw_role_code : TilemapDrawRole -> U64
 draw_role_code = |role| if role == Solid 1 else 0
 
-make_render_layers : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> List(HostABI.TilemapRenderLayer)
+make_render_layers : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> List(Host.TilemapRenderLayer)
 make_render_layers = |layers, rules|
 	List.map(
 		layers,
@@ -657,7 +657,7 @@ make_render_layers = |layers, rules|
 		},
 	)
 
-make_render_tilesets : List(TilemapResolvedTileset) -> List(HostABI.TilemapRenderTileset)
+make_render_tilesets : List(TilemapResolvedTileset) -> List(Host.TilemapRenderTileset)
 make_render_tilesets = |tilesets|
 	List.map(
 		tilesets,
@@ -1005,7 +1005,7 @@ selector_all = 2
 
 draw_selection! : Tilemap, Draw.Frame, U8, U64 => {}
 draw_selection! = |map, _frame, selector_kind, selector_value|
-	HostABI.tilemap_draw!({
+	Host.tilemap_draw!({
 		gids: map.raw.gids,
 		layers: map.render_layers,
 		tilesets: map.render_tilesets,
@@ -1024,7 +1024,7 @@ draw_selection! = |map, _frame, selector_kind, selector_value|
 
 draw_selection_in! : Tilemap, Draw.Frame, U8, U64, TilemapCellRange => {}
 draw_selection_in! = |map, _frame, selector_kind, selector_value, range|
-	HostABI.tilemap_draw!({
+	Host.tilemap_draw!({
 		gids: map.raw.gids,
 		layers: map.render_layers,
 		tilesets: map.render_tilesets,

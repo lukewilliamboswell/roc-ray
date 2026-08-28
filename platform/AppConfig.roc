@@ -8,7 +8,7 @@
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
-import HostABI
+import Host
 import Keys
 import Mouse
 import rrt.Capture as RrtCapture

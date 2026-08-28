@@ -727,7 +727,7 @@ pub fn main() !void {
     // drawn one at a time, so each instance below varies a different field:
     // source region, destination size, tint, and list order. Instance 3
     // overlaps instance 0 and must win, because the loop draws in list order.
-    const instances = [_]abi.HostABIDraw_draw_texture_instancesArg0Instances{
+    const instances = [_]abi.HostDraw_draw_texture_instancesArg0Instances{
         .{
             .source = .{ .x = 0, .y = 0, .width = 8, .height = 8 },
             .dest = .{ .x = 4, .y = 52, .width = 8, .height = 8 },

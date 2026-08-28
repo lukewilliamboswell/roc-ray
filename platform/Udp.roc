@@ -49,7 +49,7 @@
 ## it may bind, any host it may send to. Ports below 1024 usually need
 ## privileges, and report `PermissionDenied` when they are missing. Broadcast
 ## and multicast are not enabled.
-import HostABI
+import Host
 
 Udp := [].{
 
@@ -134,7 +134,7 @@ Udp := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	bind! : Address => Try(Socket, BindError)
 	bind! = |address| {
-		result = HostABI.udp_bind!({ ip: address.ip, port: address.port })
+		result = Host.udp_bind!({ ip: address.ip, port: address.port })
 		if result.err == 0 {
 			Ok(Socket.({ handle: result.handle, local: { ip: format_ip(result.ip), port: result.port } }))
 		} else {
@@ -147,7 +147,7 @@ Udp := [].{
 	## The handle is reference counted: copy it freely, and when the last copy
 	## goes -- out of the model, out of a task's captures, or at shutdown --
 	## the socket is closed. There is nothing to remember to close.
-	Socket := { handle : HostABI.UdpHandle, local : Address }.{
+	Socket := { handle : Host.UdpHandle, local : Address }.{
 
 		## The address this socket is actually bound to, including the port the
 		## operating system chose when `bind!` was given `0`.
@@ -168,7 +168,7 @@ Udp := [].{
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		send! : Socket, Address, List(U8) => Try({}, SendError)
 		send! = |Socket.(socket), to, bytes| {
-			err = HostABI.udp_send!({
+			err = Host.udp_send!({
 				socket: socket.handle,
 				ip: to.ip,
 				port: to.port,
@@ -195,7 +195,7 @@ Udp := [].{
 		## parks the task; refused in `update!` and `render!`.
 		receive! : Socket, ReceiveConfig => Try(List(Datagram), ReceiveError)
 		receive! = |Socket.(socket), config| {
-			result = HostABI.udp_receive!({
+			result = Host.udp_receive!({
 				socket: socket.handle,
 				timeout_ms: config.timeout_ms,
 				max_datagrams: config.max_datagrams,
@@ -221,7 +221,7 @@ Udp := [].{
 }
 
 ## Rebuild the datagrams from the flat batch the host delivered.
-decode_batch : List(HostABI.UdpDatagramSlice), List(U8) -> List(Udp.Datagram)
+decode_batch : List(Host.UdpDatagramSlice), List(U8) -> List(Udp.Datagram)
 decode_batch = |slices, payload|
 	List.map(
 		slices,

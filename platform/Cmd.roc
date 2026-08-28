@@ -38,7 +38,7 @@
 ##
 ## Orderly shutdown terminates children still managed by the host. Detached
 ## descendants and forced process termination are outside this guarantee.
-import HostABI
+import Host
 
 Cmd := {
 
@@ -248,7 +248,7 @@ Cmd := {
 	## ```
 	run! : Cmd => Try(Output, CmdErr)
 	run! = |cmd| {
-		result = HostABI.cmd_run!({
+		result = Host.cmd_run!({
 			program: cmd.program,
 			args: cmd.args,
 			envs: cmd.envs,

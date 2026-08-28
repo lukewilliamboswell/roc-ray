@@ -32,13 +32,13 @@ const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
 
 /// The flattened request `Http` hands the host, as `roc glue` generated it.
-pub const Request = abi.HostABIHttp_sendArgs;
+pub const Request = abi.HostHttp_sendArgs;
 
 /// The flattened response the host hands back.
-pub const Response = abi.HostABIHttp_send;
+pub const Response = abi.HostHttp_send;
 
 /// One header on the wire, in the order the peer sent or expects it.
-pub const HeaderPair = abi.HostABIHttp_sendHeaders;
+pub const HeaderPair = abi.HostHttp_sendHeaders;
 
 /// The exchange completed; `status`, `headers` and `body` are meaningful.
 pub const ERR_OK: u8 = 0;

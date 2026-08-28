@@ -21,7 +21,7 @@
 ## Retain repeatedly drawn `Prepared` values in the model.
 import Color
 import Draw
-import HostABI
+import Host
 import Math
 import rrt.Font as RrtFont
 
@@ -123,7 +123,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : HostABI.TextPrepared,
+		resource : Host.TextPrepared,
 		measured : Size,
 	}.{
 
@@ -196,7 +196,7 @@ Text := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
 	prepare_builder! = |builder| {
-		result = HostABI.text_prepare!({
+		result = Host.text_prepare!({
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
@@ -261,7 +261,7 @@ Text := [].{
 	draw_prepared! = |_frame, cfg| {
 		Prepared.(prepared) = cfg.text
 		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
-		HostABI.draw_draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
+		Host.draw_draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
 	}
 }
 

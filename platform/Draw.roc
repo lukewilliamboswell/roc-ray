@@ -588,14 +588,14 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: HostABI.DrawShader.{
+	Shader :: HostABI.Shader.{
 
 		## Compile shader stages from source strings.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
-			result = HostABI.draw_load_shader_source!(cfg)
+			result = HostABI.shader_load_source!(cfg)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
 		}
 
@@ -608,7 +608,7 @@ Draw := [].{
 		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
 		from_store! = |store, cfg| {
-			result = HostABI.draw_load_store_shader!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
+			result = HostABI.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
 			if result.err == 1 {
 				Err(PathInvalid)
 			} else if result.err == 2 {
@@ -714,72 +714,72 @@ Draw := [].{
 	## The typed uniform handles are zero-cost nominal wrappers over the cached
 	## host location plus its owning shader. Their distinct types prevent using
 	## the wrong setter without adding a tag, allocation, or host lookup.
-	F32Uniform :: HostABI.DrawUniform.{
+	F32Uniform :: HostABI.ShaderUniform.{
 
 		## Send a scalar float to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : F32Uniform, F32 => {}
-		set! = |F32Uniform.(uniform), value| HostABI.draw_set_shader_float!({ uniform, value })
+		set! = |F32Uniform.(uniform), value| HostABI.shader_set_float!({ uniform, value })
 	}
 
 	## A resolved `I32` uniform location, from `Shader.uniform_i32!`.
-	I32Uniform :: HostABI.DrawUniform.{
+	I32Uniform :: HostABI.ShaderUniform.{
 
 		## Send a scalar integer to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : I32Uniform, I32 => {}
-		set! = |I32Uniform.(uniform), value| HostABI.draw_set_shader_int!({ uniform, value })
+		set! = |I32Uniform.(uniform), value| HostABI.shader_set_int!({ uniform, value })
 	}
 
 	## A resolved two-component uniform location, from `Shader.uniform_vec2!`.
-	Vec2Uniform :: HostABI.DrawUniform.{
+	Vec2Uniform :: HostABI.ShaderUniform.{
 
 		## Send a two-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec2Uniform, Vector2 => {}
-		set! = |Vec2Uniform.(uniform), value| HostABI.draw_set_shader_vec2!({ uniform, value })
+		set! = |Vec2Uniform.(uniform), value| HostABI.shader_set_vec2!({ uniform, value })
 	}
 
 	## A resolved `Vec3` uniform location, from `Shader.uniform_vec3!`.
-	Vec3Uniform :: HostABI.DrawUniform.{
+	Vec3Uniform :: HostABI.ShaderUniform.{
 
 		## Send a three-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec3Uniform, Vec3 => {}
-		set! = |Vec3Uniform.(uniform), value| HostABI.draw_set_shader_vec3!({ uniform, value })
+		set! = |Vec3Uniform.(uniform), value| HostABI.shader_set_vec3!({ uniform, value })
 	}
 
 	## A resolved `Vec4` uniform location, from `Shader.uniform_vec4!`.
-	Vec4Uniform :: HostABI.DrawUniform.{
+	Vec4Uniform :: HostABI.ShaderUniform.{
 
 		## Send a four-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec4Uniform, Vec4 => {}
-		set! = |Vec4Uniform.(uniform), value| HostABI.draw_set_shader_vec4!({ uniform, value })
+		set! = |Vec4Uniform.(uniform), value| HostABI.shader_set_vec4!({ uniform, value })
 	}
 
 	## A resolved color uniform location, from `Shader.uniform_color!`. GLSL has
 	## no color type, so this is a `vec4` whose components the setter normalizes
 	## from the 0-to-255 bytes of an `Rgba` to the 0-to-1 floats a shader reads.
-	ColorUniform :: HostABI.DrawUniform.{
+	ColorUniform :: HostABI.ShaderUniform.{
 
 		## Send a color to this uniform for the draws that follow, normalized to
 		## the 0-to-1 range GLSL uses.
 		##
 		## Legal in `render!` only.
 		set! : ColorUniform, Color.Rgba => {}
-		set! = |ColorUniform.(uniform), color| HostABI.draw_set_shader_vec4!({
+		set! = |ColorUniform.(uniform), color| HostABI.shader_set_vec4!({
 			uniform,
 			value: normalized_color(color),
 		})
 	}
 
-	TextureUniform :: HostABI.DrawUniform.{
+	TextureUniform :: HostABI.ShaderUniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
 		##
@@ -789,7 +789,7 @@ Draw := [].{
 		## for the ordinary case, and exists only because binding a plain
 		## texture is what most shaders want and `set!` does not say so.
 		set! : TextureUniform, Texture => {}
-		set! = |TextureUniform.(uniform), texture| HostABI.draw_set_shader_texture!({
+		set! = |TextureUniform.(uniform), texture| HostABI.shader_set_texture!({
 			uniform,
 			texture,
 		})
@@ -1358,9 +1358,9 @@ scope_ok = 0
 scope_limit : U8
 scope_limit = 2
 
-uniform_host! : HostABI.DrawShader, Str => Try(HostABI.DrawUniform, [UniformNotFound, ..])
+uniform_host! : HostABI.Shader, Str => Try(HostABI.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
-	location = HostABI.draw_shader_location!({ shader, name })
+	location = HostABI.shader_location!({ shader, name })
 	if location < 0 {
 		Err(UniformNotFound)
 	} else {

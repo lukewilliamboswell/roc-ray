@@ -4718,13 +4718,13 @@ test "last resource references remain live through owning host operations" {
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
     const shader = storeShader(.headless).?;
-    hostedDrawSetShaderFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
+    hostedShaderSetFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
     const sampler_shader = storeShader(.headless).?;
     const sampler_texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
-    hostedDrawSetShaderTextureRaw(.{
+    hostedShaderSetTextureRaw(.{
         .texture = .{ .handle = sampler_texture, .height = 1, .width = 1 },
         .uniform = .{ .shader = sampler_shader, .location = 0 },
     });
@@ -4960,7 +4960,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 
         // A uniform cannot be resolved on a stub shader.
-        try std.testing.expectEqual(@as(i32, -1), hostedDrawShaderLocationRaw(&roc_host, .{
+        try std.testing.expectEqual(@as(i32, -1), hostedShaderLocationRaw(&roc_host, .{
             .shader = allocateTestResourceStub(&roc_host),
             .name = abi.RocStr.fromSlice("uTime", &roc_host),
         }));
@@ -4979,7 +4979,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         });
         try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_font.err);
 
-        const store_shader = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+        const store_shader = hostedShaderLoadStoreRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
@@ -5386,7 +5386,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var shaders: [32]*u64 = undefined;
     for (&shaders) |*shader| shader.* = storeShader(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawLoadShaderSourceRaw(&roc_host, .{
+    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedShaderLoadSourceRaw(&roc_host, .{
         .fragment_source = abi.RocStr.fromSlice("shader", &roc_host),
         .vertex_source = abi.RocStr.empty(),
     }).err);
@@ -6396,7 +6396,7 @@ fn hostedTextureLoadRenderTargetRaw(args: abi.HostABITexture_load_render_targetA
     return .{ .target = .{ .handle = stored, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
 }
 
-fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.HostABIDraw_load_shader_sourceArgs) callconv(.c) abi.HostABIDraw_load_shader_sourceRetRecord {
+fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostABIShader_load_sourceArgs) callconv(.c) abi.HostABIShader_load_sourceRetRecord {
     enforcePhase("Draw.Shader.from_source!", during_load);
     const effect = EffectScope.begin("Draw.Shader.from_source!", args.fragment_source.asSlice().len);
     defer effect.end();
@@ -6422,15 +6422,15 @@ fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.HostABIDraw_load_shad
     return .{ .shader = stored, .err = RESOURCE_ERR_NONE };
 }
 
-fn exportedDrawLoadShaderSourceRaw(args: abi.HostABIDraw_load_shader_sourceArgs) callconv(.c) abi.HostABIDraw_load_shader_sourceRetRecord {
-    return hostedDrawLoadShaderSourceRaw(activeHost(), args);
+fn exportedShaderLoadSourceRaw(args: abi.HostABIShader_load_sourceArgs) callconv(.c) abi.HostABIShader_load_sourceRetRecord {
+    return hostedShaderLoadSourceRaw(activeHost(), args);
 }
 
 /// `Draw.Shader.from_store!`: read one or two shader sources and compile them.
 ///
 /// Reading the sources waits -- it parks a task and blocks `init!` -- and the
 /// compile runs on the frame thread once both reads have answered.
-fn hostedDrawLoadStoreShaderRaw(host: *RocHost, args: abi.HostABIDraw_load_store_shaderArgs) callconv(.c) abi.HostABIDraw_load_store_shaderRetRecord {
+fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostABIShader_load_storeArgs) callconv(.c) abi.HostABIShader_load_storeRetRecord {
     enforcePhase("Draw.Shader.from_store!", during_wait);
     const effect = EffectScope.begin("Draw.Shader.from_store!", 0);
     defer effect.end();
@@ -6476,8 +6476,8 @@ fn hostedDrawLoadStoreShaderRaw(host: *RocHost, args: abi.HostABIDraw_load_store
     return .{ .shader = stored, .err = STORE_ERR_NONE };
 }
 
-fn exportedDrawLoadStoreShaderRaw(args: abi.HostABIDraw_load_store_shaderArgs) callconv(.c) abi.HostABIDraw_load_store_shaderRetRecord {
-    return hostedDrawLoadStoreShaderRaw(activeHost(), args);
+fn exportedShaderLoadStoreRaw(args: abi.HostABIShader_load_storeArgs) callconv(.c) abi.HostABIShader_load_storeRetRecord {
+    return hostedShaderLoadStoreRaw(activeHost(), args);
 }
 
 fn nativeTextureForToken(token: u64) ?raylib.Texture {
@@ -6616,7 +6616,7 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
     if (!headlessMode() and blend_scope_count > 0) raylib.beginBlendMode(blend_scopes[blend_scope_count - 1]);
 }
 
-fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.HostABIDraw_shader_locationArgs) callconv(.c) i32 {
+fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostABIShader_locationArgs) callconv(.c) i32 {
     enforcePhase("Draw.Shader.uniform_*!", during_load);
     const effect = EffectScope.begin("Draw.Shader.uniform_*!", args.name.asSlice().len);
     defer effect.end();
@@ -6637,11 +6637,11 @@ fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.HostABIDraw_shader_loca
     }
 }
 
-fn exportedDrawShaderLocationRaw(args: abi.HostABIDraw_shader_locationArgs) callconv(.c) i32 {
-    return hostedDrawShaderLocationRaw(activeHost(), args);
+fn exportedShaderLocationRaw(args: abi.HostABIShader_locationArgs) callconv(.c) i32 {
+    return hostedShaderLocationRaw(activeHost(), args);
 }
 
-fn hostedDrawSetShaderFloatRaw(args: abi.HostABIDraw_set_shader_floatArgs) callconv(.c) void {
+fn hostedShaderSetFloatRaw(args: abi.HostABIShader_set_floatArgs) callconv(.c) void {
     enforcePhase("Draw.F32Uniform.set!", during_render);
     var effect = EffectScope.begin("Draw.F32Uniform.set!", 0);
     defer effect.end();
@@ -6653,7 +6653,7 @@ fn hostedDrawSetShaderFloatRaw(args: abi.HostABIDraw_set_shader_floatArgs) callc
     raylib.setShaderFloat(resource.native, args.uniform.location, args.value);
 }
 
-fn hostedDrawSetShaderIntRaw(args: abi.HostABIDraw_set_shader_intArgs) callconv(.c) void {
+fn hostedShaderSetIntRaw(args: abi.HostABIShader_set_intArgs) callconv(.c) void {
     enforcePhase("Draw.I32Uniform.set!", during_render);
     var effect = EffectScope.begin("Draw.I32Uniform.set!", 0);
     defer effect.end();
@@ -6665,7 +6665,7 @@ fn hostedDrawSetShaderIntRaw(args: abi.HostABIDraw_set_shader_intArgs) callconv(
     raylib.setShaderInt(resource.native, args.uniform.location, args.value);
 }
 
-fn hostedDrawSetShaderVec2Raw(args: abi.HostABIDraw_set_shader_vec2Args) callconv(.c) void {
+fn hostedShaderSetVec2Raw(args: abi.HostABIShader_set_vec2Args) callconv(.c) void {
     enforcePhase("Draw.Vec2Uniform.set!", during_render);
     var effect = EffectScope.begin("Draw.Vec2Uniform.set!", 0);
     defer effect.end();
@@ -6677,7 +6677,7 @@ fn hostedDrawSetShaderVec2Raw(args: abi.HostABIDraw_set_shader_vec2Args) callcon
     raylib.setShaderVec2(resource.native, args.uniform.location, .{ args.value.x, args.value.y });
 }
 
-fn hostedDrawSetShaderVec3Raw(args: abi.HostABIDraw_set_shader_vec3Args) callconv(.c) void {
+fn hostedShaderSetVec3Raw(args: abi.HostABIShader_set_vec3Args) callconv(.c) void {
     enforcePhase("Draw.Vec3Uniform.set!", during_render);
     var effect = EffectScope.begin("Draw.Vec3Uniform.set!", 0);
     defer effect.end();
@@ -6689,7 +6689,7 @@ fn hostedDrawSetShaderVec3Raw(args: abi.HostABIDraw_set_shader_vec3Args) callcon
     raylib.setShaderVec3(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z });
 }
 
-fn hostedDrawSetShaderVec4Raw(args: abi.HostABIDraw_set_shader_vec4Args) callconv(.c) void {
+fn hostedShaderSetVec4Raw(args: abi.HostABIShader_set_vec4Args) callconv(.c) void {
     enforcePhase("Draw.Vec4Uniform.set!", during_render);
     var effect = EffectScope.begin("Draw.Vec4Uniform.set!", 0);
     defer effect.end();
@@ -6701,7 +6701,7 @@ fn hostedDrawSetShaderVec4Raw(args: abi.HostABIDraw_set_shader_vec4Args) callcon
     raylib.setShaderVec4(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
 }
 
-fn hostedDrawSetShaderTextureRaw(args: abi.HostABIDraw_set_shader_textureArgs) callconv(.c) void {
+fn hostedShaderSetTextureRaw(args: abi.HostABIShader_set_textureArgs) callconv(.c) void {
     enforcePhase("Draw.TextureUniform.set!", during_render);
     const effect = EffectScope.begin("Draw.TextureUniform.set!", 0);
     defer effect.end();
@@ -7005,7 +7005,7 @@ test "the store-backed font and shader loaders wait rather than load" {
         try std.testing.expectEqual(Phase.update, font_violation.actual);
 
         last_phase_violation = null;
-        _ = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+        _ = hostedShaderLoadStoreRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
@@ -7029,7 +7029,7 @@ test "the store-backed font and shader loaders wait rather than load" {
     try std.testing.expectEqual(STORE_ERR_NONE, font.err);
     releaseResourceBox(&roc_host, font.font);
 
-    const shader = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+    const shader = hostedShaderLoadStoreRaw(&roc_host, .{
         .store = opened.store,
         .vertex_path = abi.RocStr.empty(),
         .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
@@ -8941,18 +8941,18 @@ comptime {
         @export(&exportedTextLoadFontBytesRaw, .{ .name = "roc_text_load_font_bytes_raw" });
         @export(&exportedTextLoadStoreFontRaw, .{ .name = "roc_text_load_store_font_raw" });
         @export(&hostedTextureLoadRenderTargetRaw, .{ .name = "roc_texture_load_render_target_raw" });
-        @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
-        @export(&exportedDrawLoadStoreShaderRaw, .{ .name = "roc_draw_load_store_shader_raw" });
+        @export(&exportedShaderLoadSourceRaw, .{ .name = "roc_shader_load_source_raw" });
+        @export(&exportedShaderLoadStoreRaw, .{ .name = "roc_shader_load_store_raw" });
         @export(&exportedTextPrepareRaw, .{ .name = "roc_text_prepare_raw" });
         @export(&exportedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
         @export(&exportedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });
-        @export(&exportedDrawShaderLocationRaw, .{ .name = "roc_draw_shader_location_raw" });
-        @export(&hostedDrawSetShaderFloatRaw, .{ .name = "roc_draw_set_shader_float_raw" });
-        @export(&hostedDrawSetShaderIntRaw, .{ .name = "roc_draw_set_shader_int_raw" });
-        @export(&hostedDrawSetShaderTextureRaw, .{ .name = "roc_draw_set_shader_texture_raw" });
-        @export(&hostedDrawSetShaderVec2Raw, .{ .name = "roc_draw_set_shader_vec2_raw" });
-        @export(&hostedDrawSetShaderVec3Raw, .{ .name = "roc_draw_set_shader_vec3_raw" });
-        @export(&hostedDrawSetShaderVec4Raw, .{ .name = "roc_draw_set_shader_vec4_raw" });
+        @export(&exportedShaderLocationRaw, .{ .name = "roc_shader_location_raw" });
+        @export(&hostedShaderSetFloatRaw, .{ .name = "roc_shader_set_float_raw" });
+        @export(&hostedShaderSetIntRaw, .{ .name = "roc_shader_set_int_raw" });
+        @export(&hostedShaderSetTextureRaw, .{ .name = "roc_shader_set_texture_raw" });
+        @export(&hostedShaderSetVec2Raw, .{ .name = "roc_shader_set_vec2_raw" });
+        @export(&hostedShaderSetVec3Raw, .{ .name = "roc_shader_set_vec3_raw" });
+        @export(&hostedShaderSetVec4Raw, .{ .name = "roc_shader_set_vec4_raw" });
         @export(&hostedDrawRectangleGradientH, .{ .name = "roc_draw_rectangle_gradient_h" });
         @export(&hostedDrawRectangleGradientV, .{ .name = "roc_draw_rectangle_gradient_v" });
         @export(&hostedDrawRectangleLinesRaw, .{ .name = "roc_draw_rectangle_lines_raw" });

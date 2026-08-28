@@ -32,6 +32,7 @@
 ## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
 ## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
 ## - `Text`: font loading, glyph metrics, and text preparation.
+## - `Shader`: loading, uniform lookup, and uniform updates.
 ## - `Draw`: frame authority, render resources, scopes, and drawing primitives.
 ## - `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
@@ -822,15 +823,73 @@ HostABI := [].{
 	## Shape and measure text for repeated drawing.
 	text_prepare! : TextPrepare => TextPrepareResult
 
+	## Shader interface
+	## Opaque ARC-owned shader.
+	Shader : Box(U64)
+
+	## Located shader uniform.
+	ShaderUniform : { shader : Shader, location : I32 }
+
+	## Vertex and fragment shader sources.
+	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
+
+	## Store-relative vertex and fragment shader paths.
+	ShaderLoadStore : { store : AssetsStore, vertex_path : Str, fragment_path : Str }
+
+	## Shader-uniform lookup parameters.
+	ShaderLocation : { shader : Shader, name : Str }
+
+	## Scalar floating-point uniform value.
+	ShaderFloat : { uniform : ShaderUniform, value : F32 }
+
+	## Scalar integer uniform value.
+	ShaderInt : { uniform : ShaderUniform, value : I32 }
+
+	## Two-component vector uniform value.
+	ShaderVec2 : { uniform : ShaderUniform, value : Math.Vec2 }
+
+	## Three-component vector uniform value.
+	ShaderVec3 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32 } }
+
+	## Four-component vector uniform value.
+	ShaderVec4 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32, w : F32 } }
+
+	## Texture uniform value.
+	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
+
+	## Loaded shader or error.
+	ShaderResult : { shader : Shader, err : U8 }
+
+	## Load a shader from source strings.
+	shader_load_source! : ShaderLoadSource => ShaderResult
+
+	## Load a shader from an asset store.
+	shader_load_store! : ShaderLoadStore => ShaderResult
+
+	## Get a shader uniform location.
+	shader_location! : ShaderLocation => I32
+
+	## Set a floating-point shader uniform.
+	shader_set_float! : ShaderFloat => {}
+
+	## Set an integer shader uniform.
+	shader_set_int! : ShaderInt => {}
+
+	## Set a two-component shader uniform.
+	shader_set_vec2! : ShaderVec2 => {}
+
+	## Set a three-component shader uniform.
+	shader_set_vec3! : ShaderVec3 => {}
+
+	## Set a four-component shader uniform.
+	shader_set_vec4! : ShaderVec4 => {}
+
+	## Set a texture shader uniform.
+	shader_set_texture! : ShaderTexture => {}
+
 	## Draw interface
 	## Zero-sized frame authority minted by the adapter.
 	DrawFrame : {}
-
-	## Opaque ARC-owned shader.
-	DrawShader : Box(U64)
-
-	## Located shader uniform.
-	DrawUniform : { shader : DrawShader, location : I32 }
 
 	## Filled rectangle parameters.
 	DrawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color.Rgba }
@@ -889,12 +948,6 @@ HostABI := [].{
 	## Current frame dimensions.
 	DrawFrameSize : { width : F32, height : F32 }
 
-	## Vertex and fragment shader sources.
-	DrawLoadShaderSource : { vertex_source : Str, fragment_source : Str }
-
-	## Store-relative vertex and fragment shader paths.
-	DrawLoadStoreShader : { store : AssetsStore, vertex_path : Str, fragment_path : Str }
-
 	## Textured-rectangle parameters.
 	DrawTextureDraw : { texture : Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
 
@@ -906,30 +959,6 @@ HostABI := [].{
 
 	## Arbitrary textured-quad parameters.
 	DrawTextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
-
-	## Shader-uniform lookup parameters.
-	DrawShaderLocation : { shader : DrawShader, name : Str }
-
-	## Scalar floating-point uniform value.
-	DrawShaderFloat : { uniform : DrawUniform, value : F32 }
-
-	## Scalar integer uniform value.
-	DrawShaderInt : { uniform : DrawUniform, value : I32 }
-
-	## Two-component vector uniform value.
-	DrawShaderVec2 : { uniform : DrawUniform, value : Math.Vec2 }
-
-	## Three-component vector uniform value.
-	DrawShaderVec3 : { uniform : DrawUniform, value : { x : F32, y : F32, z : F32 } }
-
-	## Four-component vector uniform value.
-	DrawShaderVec4 : { uniform : DrawUniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-
-	## Texture uniform value.
-	DrawShaderTexture : { uniform : DrawUniform, texture : Texture }
-
-	## Loaded shader or error.
-	DrawShaderResult : { shader : DrawShader, err : U8 }
 
 	## Begin 2D drawing with a camera.
 	draw_begin_camera! : Camera.Camera2D => U8
@@ -956,7 +985,7 @@ HostABI := [].{
 	draw_end_scissor! : () => {}
 
 	## Begin custom-shader drawing.
-	draw_begin_shader! : DrawShader => U8
+	draw_begin_shader! : Shader => U8
 
 	## Restore the default shader.
 	draw_end_shader! : () => {}
@@ -981,12 +1010,6 @@ HostABI := [].{
 
 	## Draw prepared text.
 	draw_draw_prepared_text! : DrawPreparedTextDraw => {}
-
-	## Load a shader from source strings.
-	draw_load_shader_source! : DrawLoadShaderSource => DrawShaderResult
-
-	## Load a shader from an asset store.
-	draw_load_store_shader! : DrawLoadStoreShader => DrawShaderResult
 
 	## Get the current frame dimensions.
 	draw_frame_size! : () => DrawFrameSize
@@ -1032,27 +1055,6 @@ HostABI := [].{
 
 	## Draw a counter-clockwise triangle outline.
 	draw_triangle_lines! : DrawTriangleLines => {}
-
-	## Get a shader uniform location.
-	draw_shader_location! : DrawShaderLocation => I32
-
-	## Set a floating-point shader uniform.
-	draw_set_shader_float! : DrawShaderFloat => {}
-
-	## Set an integer shader uniform.
-	draw_set_shader_int! : DrawShaderInt => {}
-
-	## Set a two-component shader uniform.
-	draw_set_shader_vec2! : DrawShaderVec2 => {}
-
-	## Set a three-component shader uniform.
-	draw_set_shader_vec3! : DrawShaderVec3 => {}
-
-	## Set a four-component shader uniform.
-	draw_set_shader_vec4! : DrawShaderVec4 => {}
-
-	## Set a texture shader uniform.
-	draw_set_shader_texture! : DrawShaderTexture => {}
 
 	## Capture interface
 	## Flattened recording request.

@@ -73,7 +73,7 @@ Keys := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_exit_key! : ExitKey => {}
-	set_exit_key! = |key| HostABI.host_set_exit_key!(exit_key_code(key))
+	set_exit_key! = |key| HostABI.keys_set_exit_key!(exit_key_code(key))
 
 	## Where keyboard state comes from: the hardware, or a script.
 	##

@@ -1,8 +1,46 @@
-## Private structural transport for every native hosted function.
+## Private structural transport between Roc platform adapters and the native
+## host.
 ##
-## Public modules own application-facing types, validation, decoding, and phase
-## documentation. This module is intentionally absent from the platform's
+## This module is the single catalogue of native hosted functions and the wire
+## values they exchange. It is deliberately not an application API: public
+## modules own application-facing types, validation, decoding, error tags, and
+## phase documentation. `HostABI` is intentionally absent from the platform's
 ## `exposes` list.
+##
+## Declarations are grouped into transport domains. A transport domain is the
+## private boundary vocabulary for one facility, not necessarily a public Roc
+## module or a native backend subsystem. A domain contains, where applicable,
+## opaque resource handles, flat request and result records, and finally the
+## hosted function declarations that move those values. Records stay
+## structural and unions cross as scalar codes because `roc glue` generates the
+## corresponding native layouts from these declarations.
+##
+## Transport-domain glossary:
+##
+## - `Mouse`: cursor shape, visibility, and capture effects.
+## - `Input`: raw per-cycle observations decoded into `App.Input`.
+## - `Trace`: bounded diagnostic marks, zones, and numeric samples.
+## - `Time`: normalized wall-clock timestamps.
+## - `Task`: sleeping, spawning, and delivery of one finished message.
+## - `Audio`: host-owned sounds and music plus playback effects.
+## - `Assets`: confined asset stores and host-owned textures.
+## - `Files`: bounded text and byte I/O, metadata, and directory listings.
+## - `Http`: complete bounded requests and responses.
+## - `Cmd`: bounded child-process execution and captured output.
+## - `Stdio`: bounded queued writes to standard output and error.
+## - `Udp`: bound sockets and bounded datagram send/receive batches.
+## - `App`: startup authority, process inputs, startup file reads, and exit.
+## - `Random`: operating-system entropy and the backend's ranged generator.
+## - `Keys`: host keyboard policy such as the configured exit key.
+## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
+## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
+## - `Sqlite`: connection and statement handles plus flattened query results.
+## - `Draw`: frame authority, draw resources, scopes, and ordered draw calls.
+## - `Capture`: virtual input, recording, screenshots, and pixel readback.
+##
+## Native pointers, backend objects, public unions, and application policy do
+## not belong here. Opaque `Box(U64)` values are typed resource tokens resolved
+## and lifetime-checked by the host, never exposed native addresses.
 import rrt.Camera
 import rrt.Color
 import rrt.Font
@@ -19,7 +57,7 @@ HostABI := [].{
 	## Set the native cursor shape. `Mouse.cursor_code` flattens the tag.
 	mouse_set_cursor! : U8 => {}
 
-	## App transport
+	## Input transport
 	## One cycle's sampled recording state. Unions do not cross the host
 	## boundary, so this arrives flat and `AppTransport.capture_status` turns it
 	## into the public `Capture.Status`.
@@ -418,80 +456,79 @@ HostABI := [].{
 	## Wait for at least one datagram, then drain what is already buffered.
 	udp_receive! : UdpReceiveArgs => UdpReceiveResult
 
-	## Host transport
+	## App transport
 	## Zero-sized startup capability constructed only by the platform adapter.
-	HostStartup : {}
+	AppStartup : {}
 
 	## A finished startup file read. `contents` is the file when `ok` is true;
 	## `err` is `1` for a missing file and anything else for a failed read.
-	HostReadFileResult : {
+	AppReadFileResult : {
 		ok : Bool,
 		err : U8,
 		contents : Str,
 	}
 
 	## Ask the host to stop after `init!` returns.
-	host_exit! : I32 => {}
+	app_exit! : I32 => {}
 
 	## The launcher's argv, with the host's own `--host-*` switches removed.
-	host_args! : () => List(Str)
-
-	## The clipboard as text, without distinguishing why it was not available.
-	## `host_read_clipboard!` is the form that names the refusals.
-	host_get_clipboard_text! : () => Try(Str, [Unavailable])
-
-	## A clipboard read with the refusal codes `Window.ClipboardReadError`
-	## names. `contents` is the clipboard when `err` is `0`.
-	HostClipboardResult : {
-		err : U8,
-		contents : Str,
-	}
-
-	host_read_clipboard! : () => HostClipboardResult
+	app_args! : () => List(Str)
 
 	## An environment variable, or `NotFound` when it is not set.
-	host_read_env! : Str => Try(Str, [NotFound])
+	app_read_env! : Str => Try(Str, [NotFound])
 
 	## Read a whole UTF-8 file, blocking the caller.
-	host_read_file! : Str => HostReadFileResult
+	app_read_file! : Str => AppReadFileResult
 
+	## Random transport
 	## One draw from the operating system's entropy source.
 	##
 	## Never fails: the implementation falls back to a less secure mechanism
 	## rather than reporting that entropy is unavailable, because what this
 	## seeds is a game's generator rather than a key.
-	host_entropy! : () => U64
+	random_entropy! : () => U64
 
 	## A number in the inclusive range `[min, max]`, from the backend's own
 	## generator rather than from the operating system.
-	host_random_i32! : I32, I32 => I32
+	random_i32! : I32, I32 => I32
+
+	## Keys transport
+	## Set the raylib exit-key code; `0` disables the behaviour.
+	keys_set_exit_key! : I32 => {}
+
+	## Window transport
+	## A clipboard read with the refusal codes `Window.ClipboardReadError`
+	## names. `contents` is the clipboard when `err` is `0`.
+	WindowClipboardResult : {
+		err : U8,
+		contents : Str,
+	}
+
+	window_read_clipboard! : () => WindowClipboardResult
 
 	## Replace the clipboard with UTF-8 text.
-	host_set_clipboard_text! : Str => {}
-
-	## Set the raylib exit-key code; `0` disables the behaviour.
-	host_set_exit_key! : I32 => {}
+	window_set_clipboard_text! : Str => {}
 
 	## Ask the window manager for a logical window size. `NotSupported` is a
 	## target whose windows cannot be resized, not a refused request.
-	host_suggest_window_size! : { width : I32, height : I32 } => Try({}, [NotSupported])
+	window_suggest_size! : { width : I32, height : I32 } => Try({}, [NotSupported])
 
 	## Set raylib's CPU-side frame-rate cap; at or below zero is uncapped.
-	host_set_target_fps! : I32 => {}
+	window_set_target_fps! : I32 => {}
 
 	## Set the smallest window size the user can drag down to. `0` in an axis
 	## leaves it unconstrained.
-	host_suggest_window_min_size! : { width : I32, height : I32 } => {}
+	window_suggest_min_size! : { width : I32, height : I32 } => {}
 
 	## The window's framebuffer-to-logical scale, one factor per axis.
 	##
 	## Non-positive or non-finite factors are replaced by `1` before they
 	## cross, so the caller never has to defend against dividing by them.
-	host_window_scale_dpi! : () => { x : F32, y : F32 }
+	window_scale_dpi! : () => { x : F32, y : F32 }
 
 	## One connected display, flattened for the wire. `Window.Monitor` is the
 	## grouped shape an application sees; the nesting is done in Roc.
-	HostMonitorInfo : {
+	WindowMonitorInfo : {
 		index : I32,
 		name : Str,
 		width : I32,
@@ -502,15 +539,15 @@ HostABI := [].{
 	}
 
 	## Every display the windowing backend can currently see, in its own order.
-	host_monitors! : () => List(HostMonitorInfo)
+	window_monitors! : () => List(WindowMonitorInfo)
 
 	## Ask the window manager to move the window's top-left corner to a
 	## position in virtual-desktop coordinates.
-	host_suggest_window_position! : { x : I32, y : I32 } => {}
+	window_suggest_position! : { x : I32, y : I32 } => {}
 
 	## Ask the window manager to move the window to a monitor index. An index
 	## outside the connected set is ignored.
-	host_suggest_window_monitor! : I32 => {}
+	window_suggest_monitor! : I32 => {}
 
 	## Tilemap transport
 	TilemapProperty : {

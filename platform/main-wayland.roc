@@ -152,23 +152,22 @@ platform ""
 		"roc_capture_screenshot_texture": HostABI.capture_screenshot_texture!,
 		"roc_capture_pixel_at": HostABI.capture_pixel_at!,
 		"roc_capture_read_region": HostABI.capture_read_region!,
-		"roc_host_exit": HostABI.host_exit!,
-		"roc_host_args": HostABI.host_args!,
-		"roc_host_entropy": HostABI.host_entropy!,
-		"roc_host_get_clipboard_text": HostABI.host_get_clipboard_text!,
-		"roc_host_read_clipboard": HostABI.host_read_clipboard!,
-		"roc_host_random_i32": HostABI.host_random_i32!,
-		"roc_host_read_env": HostABI.host_read_env!,
-		"roc_host_read_file_raw": HostABI.host_read_file!,
-		"roc_host_set_clipboard_text": HostABI.host_set_clipboard_text!,
-		"roc_host_set_exit_key": HostABI.host_set_exit_key!,
-		"roc_host_suggest_window_size": HostABI.host_suggest_window_size!,
-		"roc_host_set_target_fps": HostABI.host_set_target_fps!,
-		"roc_host_suggest_window_min_size": HostABI.host_suggest_window_min_size!,
-		"roc_host_window_scale_dpi": HostABI.host_window_scale_dpi!,
-		"roc_host_monitors": HostABI.host_monitors!,
-		"roc_host_suggest_window_position": HostABI.host_suggest_window_position!,
-		"roc_host_suggest_window_monitor": HostABI.host_suggest_window_monitor!,
+		"roc_app_exit": HostABI.app_exit!,
+		"roc_app_args": HostABI.app_args!,
+		"roc_app_read_env": HostABI.app_read_env!,
+		"roc_app_read_file_raw": HostABI.app_read_file!,
+		"roc_random_entropy": HostABI.random_entropy!,
+		"roc_random_i32": HostABI.random_i32!,
+		"roc_keys_set_exit_key": HostABI.keys_set_exit_key!,
+		"roc_window_read_clipboard": HostABI.window_read_clipboard!,
+		"roc_window_set_clipboard_text": HostABI.window_set_clipboard_text!,
+		"roc_window_suggest_size": HostABI.window_suggest_size!,
+		"roc_window_set_target_fps": HostABI.window_set_target_fps!,
+		"roc_window_suggest_min_size": HostABI.window_suggest_min_size!,
+		"roc_window_scale_dpi": HostABI.window_scale_dpi!,
+		"roc_window_monitors": HostABI.window_monitors!,
+		"roc_window_suggest_position": HostABI.window_suggest_position!,
+		"roc_window_suggest_monitor": HostABI.window_suggest_monitor!,
 		"roc_mouse_set_cursor_mode_raw": HostABI.mouse_set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": HostABI.mouse_set_cursor!,
 		"roc_task_sleep": HostABI.task_sleep!,
@@ -306,7 +305,7 @@ InputFromHostCycle(msg) : {
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
-app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostABI.host_args!()))
+app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostABI.app_args!()))
 
 ## Reshape the flat sampled input into the public `Devices.Snapshot` record.
 ##

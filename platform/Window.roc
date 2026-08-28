@@ -35,7 +35,7 @@ Window := [].{
 	suggest_size! : { width : I32, height : I32 } => {}
 	suggest_size! = |size|
 		if size.width > 0 and size.height > 0 {
-			match HostABI.host_suggest_window_size!(size) {
+			match HostABI.window_suggest_size!(size) {
 				Ok({}) => {}
 				Err(NotSupported) => {}
 			}
@@ -53,7 +53,7 @@ Window := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_min_size! : { width : I32, height : I32 } => {}
 	suggest_min_size! = |size|
-		HostABI.host_suggest_window_min_size!({
+		HostABI.window_suggest_min_size!({
 			width: if size.width > 0 size.width else 0,
 			height: if size.height > 0 size.height else 0,
 		})
@@ -75,7 +75,7 @@ Window := [].{
 	## `Str`, is refused rather than truncated.
 	read_clipboard! : () => Try(Str, ClipboardReadError)
 	read_clipboard! = || {
-		result = HostABI.host_read_clipboard!()
+		result = HostABI.window_read_clipboard!()
 		if result.err == 0 {
 			Ok(result.contents)
 		} else {
@@ -90,7 +90,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_target_fps! : I32 => {}
-	set_target_fps! = |fps| HostABI.host_set_target_fps!(fps)
+	set_target_fps! = |fps| HostABI.window_set_target_fps!(fps)
 
 	## Replace the system clipboard contents.
 	##
@@ -98,7 +98,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_clipboard_text! : Str => {}
-	set_clipboard_text! = |text| HostABI.host_set_clipboard_text!(text)
+	set_clipboard_text! = |text| HostABI.window_set_clipboard_text!(text)
 
 	## How many framebuffer pixels one logical unit is, per axis.
 	##
@@ -109,7 +109,7 @@ Window := [].{
 	## differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to get the
 	## pixel resolution a `Capture` records at.
 	scale! : () => { x : F32, y : F32 }
-	scale! = || HostABI.host_window_scale_dpi!()
+	scale! = || HostABI.window_scale_dpi!()
 
 	## One display the windowing backend can currently see.
 	##
@@ -137,7 +137,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	monitors! : () => List(Monitor)
-	monitors! = || List.map(HostABI.host_monitors!(), monitor_from_host)
+	monitors! = || List.map(HostABI.window_monitors!(), monitor_from_host)
 
 	## Suggest where the window's top-left corner should sit, in
 	## virtual-desktop coordinates.
@@ -148,7 +148,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_position! : { x : I32, y : I32 } => {}
-	suggest_position! = |position| HostABI.host_suggest_window_position!(position)
+	suggest_position! = |position| HostABI.window_suggest_position!(position)
 
 	## Suggest which monitor the window should move to, by `Monitor.index`.
 	##
@@ -158,11 +158,11 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_monitor! : I32 => {}
-	suggest_monitor! = |index| HostABI.host_suggest_window_monitor!(index)
+	suggest_monitor! = |index| HostABI.window_suggest_monitor!(index)
 }
 
 ## Group the host's flat monitor record into the shape applications read.
-monitor_from_host : HostABI.HostMonitorInfo -> Window.Monitor
+monitor_from_host : HostABI.WindowMonitorInfo -> Window.Monitor
 monitor_from_host = |info| {
 	index: info.index,
 	name: info.name,

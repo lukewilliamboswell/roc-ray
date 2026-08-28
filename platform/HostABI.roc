@@ -20,26 +20,31 @@
 ##
 ## Transport-domain glossary:
 ##
+## Raylib-backed rendering and interaction:
+##
 ## - `Mouse`: cursor shape, visibility, and capture effects.
 ## - `Input`: raw per-cycle observations decoded into `App.Input`.
-## - `Trace`: bounded diagnostic marks, zones, and numeric samples.
-## - `Time`: normalized wall-clock timestamps.
-## - `Task`: sleeping, spawning, and delivery of one finished message.
 ## - `Audio`: host-owned sounds and music plus playback effects.
 ## - `Assets`: confined asset stores and host-owned textures.
+## - `Random`: operating-system entropy and the backend's ranged generator.
+## - `Keys`: host keyboard policy such as the configured exit key.
+## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
+## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
+## - `Draw`: frame authority, draw resources, scopes, and ordered draw calls.
+## - `Capture`: virtual input, recording, screenshots, and pixel readback.
+##
+## Host services:
+##
+## - `App`: startup authority, process inputs, startup file reads, and exit.
+## - `Task`: sleeping, spawning, and delivery of one finished message.
+## - `Time`: normalized wall-clock timestamps.
+## - `Trace`: bounded diagnostic marks, zones, and numeric samples.
 ## - `Files`: bounded text and byte I/O, metadata, and directory listings.
 ## - `Http`: complete bounded requests and responses.
 ## - `Cmd`: bounded child-process execution and captured output.
 ## - `Stdio`: bounded queued writes to standard output and error.
 ## - `Udp`: bound sockets and bounded datagram send/receive batches.
-## - `App`: startup authority, process inputs, startup file reads, and exit.
-## - `Random`: operating-system entropy and the backend's ranged generator.
-## - `Keys`: host keyboard policy such as the configured exit key.
-## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
-## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
 ## - `Sqlite`: connection and statement handles plus flattened query results.
-## - `Draw`: frame authority, draw resources, scopes, and ordered draw calls.
-## - `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
 ## Native pointers, backend objects, public unions, and application policy do
 ## not belong here. Opaque `Box(U64)` values are typed resource tokens resolved

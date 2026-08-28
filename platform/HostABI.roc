@@ -7,9 +7,9 @@
 ## phase documentation. `HostABI` is intentionally absent from the platform's
 ## `exposes` list.
 ##
-## Declarations are grouped into transport domains. A transport domain is the
-## private boundary vocabulary for one facility, not necessarily a public Roc
-## module or a native backend subsystem. A domain contains, where applicable:
+## Declarations are grouped into interfaces. An interface is the private
+## boundary vocabulary for one facility, not necessarily a public Roc module
+## or a native backend subsystem. An interface contains, where applicable:
 ##
 ## 1. Opaque resource handles.
 ## 2. Structural record aliases for hosted arguments and results.
@@ -18,9 +18,9 @@
 ## Records stay structural and unions cross as scalar codes because `roc glue`
 ## generates the corresponding native layouts from these declarations.
 ##
-## Transport-domain glossary:
+## Interface glossary:
 ##
-## Raylib-backed rendering and interaction:
+## Raylib-backed rendering and interaction interfaces:
 ##
 ## - `Mouse`: cursor shape, visibility, and capture effects.
 ## - `Input`: raw per-cycle observations decoded into `App.Input`.
@@ -34,7 +34,7 @@
 ## - `Draw`: frame authority, render resources, scopes, and drawing primitives.
 ## - `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
-## Host services:
+## Host-service interfaces:
 ##
 ## - `App`: startup authority, process inputs, startup file reads, and exit.
 ## - `Task`: sleeping, spawning, and delivery of one finished message.
@@ -58,14 +58,14 @@ import rrt.Texture
 
 HostABI := [].{
 
-	## Mouse transport
+	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
 	mouse_set_cursor_mode! : U8 => {}
 
 	## Set the flattened native cursor shape.
 	mouse_set_cursor! : U8 => {}
 
-	## Input transport
+	## Input interface
 	## Flat capture status sampled for one `App.Input`.
 	AppRawCaptureStatus : {
 		status : U8,
@@ -75,7 +75,7 @@ HostABI := [].{
 		bytes : U64,
 	}
 
-	## Trace transport
+	## Trace interface
 	## Record one instantaneous annotation.
 	trace_mark! : Str => {}
 
@@ -91,7 +91,7 @@ HostABI := [].{
 	## Record one floating-point sample with its private unit code.
 	trace_sample_f64! : Str, F64, U8 => {}
 
-	## Time transport
+	## Time interface
 	## Normalized Unix timestamp. `seconds` uses floor division and `nanosecond`
 	## is below 1,000,000,000, including before the epoch.
 	TimeRawTimestamp : {
@@ -102,7 +102,7 @@ HostABI := [].{
 	## Read the host's wall clock.
 	time_now! : () => TimeRawTimestamp
 
-	## Task transport
+	## Task interface
 	## Park for at least this many milliseconds; block only during `init!`.
 	task_sleep! : U64 => {}
 
@@ -126,7 +126,7 @@ HostABI := [].{
 		deliver : Box({} -> Box(msg)),
 	}
 
-	## Audio transport
+	## Audio interface
 	## Opaque ARC-owned sound.
 	AudioSound : Box(U64)
 
@@ -227,7 +227,7 @@ HostABI := [].{
 	## Set master volume; `1` is full volume.
 	audio_set_master_volume! : F32 => {}
 
-	## Assets transport
+	## Assets interface
 	## Opaque ARC-owned directory store; copies keep it open.
 	AssetsStore : Box(U64)
 
@@ -308,7 +308,7 @@ HostABI := [].{
 	## Set the texture wrapping mode.
 	assets_set_texture_wrap! : Texture, U8 => {}
 
-	## Files transport
+	## Files interface
 	## Text contents when `err` is `0`; otherwise empty.
 	FilesTextResult : {
 		err : U8,
@@ -352,7 +352,7 @@ HostABI := [].{
 	## Replace a file with bytes; use the same result codes as text writes.
 	files_write_bytes! : Str, List(U8) => U8
 
-	## Http transport
+	## Http interface
 	## One ordered HTTP header.
 	HttpHeaderPair : {
 		name : Str,
@@ -388,7 +388,7 @@ HostABI := [].{
 	## Send one request and wait for the whole response.
 	http_send! : HttpRequestToHost => HttpResponseFromHost
 
-	## Cmd transport
+	## Cmd interface
 	## One child-process environment variable.
 	CmdEnvPair : {
 		name : Str,
@@ -426,7 +426,7 @@ HostABI := [].{
 	## Start one child process and wait for it to finish.
 	cmd_run! : CmdRunArgs => CmdRunResult
 
-	## Stdio transport
+	## Stdio interface
 	## Queue UTF-8 atomically; return `0` or a stdio result code.
 	stdio_write_text! : U8, Str => U8
 
@@ -438,7 +438,7 @@ HostABI := [].{
 	## Queue bytes atomically; use the text-write result codes.
 	stdio_write_bytes! : U8, List(U8) => U8
 
-	## Udp transport
+	## Udp interface
 	## Opaque ARC-owned bound socket.
 	UdpHandle : Box(U64)
 
@@ -495,7 +495,7 @@ HostABI := [].{
 	## Wait for at least one datagram, then drain what is already buffered.
 	udp_receive! : UdpReceiveArgs => UdpReceiveResult
 
-	## App transport
+	## App interface
 	## Zero-sized startup authority minted by the adapter.
 	AppStartup : {}
 
@@ -518,7 +518,7 @@ HostABI := [].{
 	## Read a whole UTF-8 file during startup.
 	app_read_file! : Str => AppReadFileResult
 
-	## Random transport
+	## Random interface
 	## Draw from operating-system entropy.
 	##
 	## Falls back rather than failing; this seeds games, not cryptography.
@@ -527,11 +527,11 @@ HostABI := [].{
 	## Draw inclusively from `[min, max]` using the backend generator.
 	random_i32! : I32, I32 => I32
 
-	## Keys transport
+	## Keys interface
 	## Set the exit-key code; `0` disables it.
 	keys_set_exit_key! : I32 => {}
 
-	## Window transport
+	## Window interface
 	## Clipboard text when `err == 0`; otherwise empty.
 	WindowClipboardResult : {
 		err : U8,
@@ -576,7 +576,7 @@ HostABI := [].{
 	## Suggest a monitor; ignore a stale or invalid index.
 	window_suggest_monitor! : I32 => {}
 
-	## Tilemap transport
+	## Tilemap interface
 	TilemapProperty : {
 		name : Str,
 		kind : U8,
@@ -690,7 +690,7 @@ HostABI := [].{
 	tilemap_load_tmx! : Str => TilemapLoadResult
 	tilemap_draw! : TilemapRenderRequest => {}
 
-	## Sqlite transport
+	## Sqlite interface
 	## Opaque ARC-owned database connection.
 	SqliteDb : Box(U64)
 
@@ -765,7 +765,7 @@ HostABI := [].{
 	## Run a script without bindings or returned rows.
 	sqlite_exec_script! : SqliteDb, Str => SqliteStatusResult
 
-	## Text transport
+	## Text interface
 	## Opaque ARC-owned prepared text.
 	TextPrepared : Box(U64)
 
@@ -808,7 +808,7 @@ HostABI := [].{
 	## Shape and measure text for repeated drawing.
 	text_prepare! : TextPrepare => TextPrepareResult
 
-	## Draw transport
+	## Draw interface
 	## Zero-sized frame authority minted by the adapter.
 	DrawFrame : {}
 
@@ -1052,7 +1052,7 @@ HostABI := [].{
 	## Set a texture shader uniform.
 	draw_set_shader_texture! : DrawShaderTexture => {}
 
-	## Capture transport
+	## Capture interface
 	## Flattened recording request.
 	CaptureStartRecording : {
 		path : Str,

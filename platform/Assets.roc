@@ -246,7 +246,7 @@ Assets := [].{
 	## would not decode as an image.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit, ..])
 	load_texture! = |Store.(store), path| {
-		result = HostABI.assets_load_store_texture!({ store, path })
+		result = HostABI.texture_load_store!({ store, path })
 		if result.err == 1 {
 			Err(PathInvalid)
 		} else if result.err == 2 {
@@ -267,7 +267,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 	texture_from_bytes! = |cfg| {
-		result = HostABI.assets_load_texture_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
+		result = HostABI.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
 	}
 
@@ -277,7 +277,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
 	generate_color_texture! = |cfg| {
-		result = HostABI.assets_generate_color_texture!(cfg)
+		result = HostABI.texture_generate_color!(cfg)
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
 	}
 
@@ -286,7 +286,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
 	generate_checked_texture! = |cfg| {
-		result = HostABI.assets_generate_checked_texture!(cfg)
+		result = HostABI.texture_generate_checked!(cfg)
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
 	}
 
@@ -296,7 +296,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels|
-		whole_texture_result(HostABI.assets_update_texture!({ texture, pixels }))
+		whole_texture_result(HostABI.texture_update!({ texture, pixels }))
 
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	##
@@ -304,7 +304,7 @@ Assets := [].{
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
 		region_result(
-			HostABI.assets_update_texture_region!({
+			HostABI.texture_update_region!({
 				texture,
 				x: region.x,
 				y: region.y,
@@ -318,13 +318,13 @@ Assets := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_texture_filter! : Texture, TextureFilter => {}
-	set_texture_filter! = |texture, filter| HostABI.assets_set_texture_filter!(texture, filter_code(filter))
+	set_texture_filter! = |texture, filter| HostABI.texture_set_filter!(texture, filter_code(filter))
 
 	## Change how out-of-range texture coordinates are wrapped.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_texture_wrap! : Texture, TextureWrap => {}
-	set_texture_wrap! = |texture, wrap| HostABI.assets_set_texture_wrap!(texture, wrap_code(wrap))
+	set_texture_wrap! = |texture, wrap| HostABI.texture_set_wrap!(texture, wrap_code(wrap))
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

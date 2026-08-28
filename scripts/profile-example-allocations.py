@@ -6,10 +6,9 @@ runs each example for one frame and again for N frames, then subtracts the
 one-frame result so startup allocations do not pollute the per-frame numbers.
 
 This measures calls made through roc_alloc/roc_realloc/roc_dealloc plus hosted
-boundary symbols in the roc_app_/roc_assets_/roc_audio_/roc_draw_/roc_keys_/
-roc_mouse_/roc_random_/roc_window_/
-roc_tilemap_ namespaces. It does not include allocations made internally by
-raylib or Zig's allocator.
+boundary symbols for the app, assets, audio, draw, keys, mouse, random, text,
+texture, tilemap, and window interfaces. It does not include allocations made
+internally by raylib or Zig's allocator.
 """
 
 import argparse
@@ -63,6 +62,8 @@ def hosted_symbols(binary: Path) -> list[str]:
         "roc_app_",
         "roc_keys_",
         "roc_random_",
+        "roc_text_",
+        "roc_texture_",
         "roc_window_",
         "roc_mouse_",
         "roc_tilemap_",

@@ -4680,7 +4680,7 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     active_headless = true;
     defer active_headless = false;
     const before = render_texture_heap.active();
-    const target = hostedDrawLoadRenderTextureRaw(.{ .height = 0, .width = 160 });
+    const target = hostedTextureLoadRenderTargetRaw(.{ .height = 0, .width = 160 });
     try std.testing.expectEqual(RESOURCE_ERR_FAILED, target.err);
     try std.testing.expectEqual(INVALID_RESOURCE_TOKEN, target.target.handle.*);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -4713,7 +4713,7 @@ test "last resource references remain live through owning host operations" {
     try std.testing.expectEqual(@as(usize, 0), music_heap.active());
 
     const texture = storeTexture(.{ .headless = .{ .width = 2, .height = 2 } }).?;
-    hostedAssetsSetTextureFilterRaw(.{ .handle = texture, .height = 2, .width = 2 }, 1);
+    hostedTextureSetFilterRaw(.{ .handle = texture, .height = 2, .width = 2 }, 1);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
@@ -4854,16 +4854,16 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
         const scope = PhaseScope.enter(.update);
         defer scope.leave();
 
-        hostedAssetsSetTextureFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
-        hostedAssetsSetTextureWrapRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+        hostedTextureSetFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+        hostedTextureSetWrapRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
 
-        const whole_err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+        const whole_err = hostedTextureUpdateRaw(&roc_host, .{
             .pixels = abi.RocListWith(Color, false).empty(),
             .texture = allocateTestTextureStub(&roc_host, 16, 8),
         });
         try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, whole_err);
 
-        const region_err = hostedAssetsUpdateTextureRegionRaw(&roc_host, .{
+        const region_err = hostedTextureUpdateRegionRaw(&roc_host, .{
             .pixels = abi.RocListWith(Color, false).empty(),
             .texture = allocateTestTextureStub(&roc_host, 16, 8),
             .height = 1,
@@ -4966,7 +4966,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         }));
 
         // Every store-backed loader reports the read it could not make.
-        const store_texture = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+        const store_texture = hostedTextureLoadStoreRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("atlas.png", &roc_host),
         });
@@ -5336,7 +5336,7 @@ test "render target textures report not mutable and release ownership" {
     }
 
     const target = storeRenderTexture(.headless).?;
-    const err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+    const err = hostedTextureUpdateRaw(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).empty(),
         .texture = .{ .handle = target, .height = 4, .width = 4 },
     });
@@ -5372,7 +5372,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var textures: [128]*u64 = undefined;
     for (&textures) |*texture| texture.* = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAssetsGenerateColorTextureRaw(.{
+    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedTextureGenerateColorRaw(.{
         .height = 1,
         .width = 1,
         .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 },
@@ -5381,7 +5381,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var targets: [32]*u64 = undefined;
     for (&targets) |*target| target.* = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawLoadRenderTextureRaw(.{ .height = 1, .width = 1 }).err);
+    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedTextureLoadRenderTargetRaw(.{ .height = 1, .width = 1 }).err);
     for (targets) |target| releaseResourceBox(&roc_host, target);
 
     var shaders: [32]*u64 = undefined;
@@ -5569,7 +5569,7 @@ test "a structurally valid texture upload is not refused for host capacity" {
     defer std.testing.allocator.free(pixels);
     @memset(pixels, .{ .r = 1, .g = 2, .b = 3, .a = 255 });
     const handle = storeTexture(.{ .headless = .{ .width = width, .height = height } }).?;
-    const result = hostedAssetsUpdateTextureRaw(&roc_host, .{
+    const result = hostedTextureUpdateRaw(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(pixels, &roc_host),
         .texture = .{ .handle = handle, .height = @floatFromInt(height), .width = @floatFromInt(width) },
     });
@@ -5598,14 +5598,14 @@ test "texture updates validate native dimensions instead of public metadata" {
 
     const pixels = [_]Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }} ** 6;
     const whole_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
-    const whole_err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+    const whole_err = hostedTextureUpdateRaw(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(&pixels, &roc_host),
         .texture = .{ .handle = whole_handle, .height = 99, .width = 99 },
     });
     try std.testing.expectEqual(TEXTURE_UPDATE_OK, whole_err);
 
     const region_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
-    const region_err = hostedAssetsUpdateTextureRegionRaw(&roc_host, .{
+    const region_err = hostedTextureUpdateRegionRaw(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(pixels[0..2], &roc_host),
         .texture = .{ .handle = region_handle, .height = 99, .width = 99 },
         .height = 1,
@@ -6034,7 +6034,7 @@ test "opening a store and loading a texture from it wait rather than load" {
         const update = PhaseScope.enter(.update);
         defer update.leave();
         last_phase_violation = null;
-        _ = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+        _ = hostedTextureLoadStoreRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("logo.png", &roc_host),
         });
@@ -6045,7 +6045,7 @@ test "opening a store and loading a texture from it wait rather than load" {
     }
 
     last_phase_violation = null;
-    const loaded = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+    const loaded = hostedTextureLoadStoreRaw(&roc_host, .{
         .store = opened.store,
         .path = abi.RocStr.fromSlice("logo.png", &roc_host),
     });
@@ -6074,7 +6074,7 @@ test "embedded texture and font bytes are consumed exactly once" {
     texture_bytes.incref(1); // caller keeps one reference while host consumes one
     const texture_rc = byteListRefcount(texture_bytes);
     try std.testing.expectEqual(@as(isize, 2), texture_rc.*);
-    const texture = hostedAssetsLoadTextureBytesRaw(&roc_host, .{ .bytes = texture_bytes, .format = 0 });
+    const texture = hostedTextureLoadBytesRaw(&roc_host, .{ .bytes = texture_bytes, .format = 0 });
     try std.testing.expectEqual(RESOURCE_ERR_NONE, texture.err);
     try std.testing.expectEqual(@as(isize, 1), texture_rc.*);
     texture.texture.decref(&roc_host);
@@ -6083,7 +6083,7 @@ test "embedded texture and font bytes are consumed exactly once" {
     const bad_texture_bytes = abi.RocListWith(u8, false).fromSlice("bad format", &roc_host);
     bad_texture_bytes.incref(1);
     const bad_texture_rc = byteListRefcount(bad_texture_bytes);
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedAssetsLoadTextureBytesRaw(&roc_host, .{ .bytes = bad_texture_bytes, .format = 99 }).err);
+    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedTextureLoadBytesRaw(&roc_host, .{ .bytes = bad_texture_bytes, .format = 99 }).err);
     try std.testing.expectEqual(@as(isize, 1), bad_texture_rc.*);
     bad_texture_bytes.decref(&roc_host);
 
@@ -6173,7 +6173,7 @@ fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []c
 /// The read waits -- it parks a task and blocks `init!` -- and the decode and
 /// the GPU upload happen on the frame thread afterwards, with the bytes back
 /// in hand.
-fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.HostABIAssets_load_store_textureArgs) callconv(.c) abi.HostABIAssets_load_store_textureRetRecord {
+fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostABITexture_load_storeArgs) callconv(.c) abi.HostABITexture_load_storeRetRecord {
     enforcePhase("Assets.load_texture!", during_wait);
     const effect = EffectScope.begin("Assets.load_texture!", 0);
     defer effect.end();
@@ -6212,11 +6212,11 @@ fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
     return null;
 }
 
-fn exportedAssetsLoadStoreTextureRaw(args: abi.HostABIAssets_load_store_textureArgs) callconv(.c) abi.HostABIAssets_load_store_textureRetRecord {
-    return hostedAssetsLoadStoreTextureRaw(activeHost(), args);
+fn exportedTextureLoadStoreRaw(args: abi.HostABITexture_load_storeArgs) callconv(.c) abi.HostABITexture_load_storeRetRecord {
+    return hostedTextureLoadStoreRaw(activeHost(), args);
 }
 
-fn hostedAssetsLoadTextureBytesRaw(host: *RocHost, args: abi.HostABIAssets_load_texture_bytesArgs) callconv(.c) abi.HostABIAssets_load_texture_bytesRetRecord {
+fn hostedTextureLoadBytesRaw(host: *RocHost, args: abi.HostABITexture_load_bytesArgs) callconv(.c) abi.HostABITexture_load_bytesRetRecord {
     enforcePhase("Assets.texture_from_bytes!", during_load);
     const effect = EffectScope.begin("Assets.texture_from_bytes!", args.bytes.items().len);
     defer effect.end();
@@ -6234,11 +6234,11 @@ fn hostedAssetsLoadTextureBytesRaw(host: *RocHost, args: abi.HostABIAssets_load_
     return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
-fn exportedAssetsLoadTextureBytesRaw(args: abi.HostABIAssets_load_texture_bytesArgs) callconv(.c) abi.HostABIAssets_load_texture_bytesRetRecord {
-    return hostedAssetsLoadTextureBytesRaw(activeHost(), args);
+fn exportedTextureLoadBytesRaw(args: abi.HostABITexture_load_bytesArgs) callconv(.c) abi.HostABITexture_load_bytesRetRecord {
+    return hostedTextureLoadBytesRaw(activeHost(), args);
 }
 
-fn hostedAssetsGenerateColorTextureRaw(args: abi.HostABIAssets_generate_color_textureArgs) callconv(.c) abi.HostABIAssets_generate_color_textureRetRecord {
+fn hostedTextureGenerateColorRaw(args: abi.HostABITexture_generate_colorArgs) callconv(.c) abi.HostABITexture_generate_colorRetRecord {
     enforcePhase("Assets.generate_color_texture!", during_load);
     const effect = EffectScope.begin("Assets.generate_color_texture!", 0);
     defer effect.end();
@@ -6254,7 +6254,7 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.HostABIAssets_generate_color_te
     return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
-fn hostedAssetsGenerateCheckedTextureRaw(args: abi.HostABIAssets_generate_checked_textureArgs) callconv(.c) abi.HostABIAssets_generate_checked_textureRetRecord {
+fn hostedTextureGenerateCheckedRaw(args: abi.HostABITexture_generate_checkedArgs) callconv(.c) abi.HostABITexture_generate_checkedRetRecord {
     enforcePhase("Assets.generate_checked_texture!", during_load);
     const effect = EffectScope.begin("Assets.generate_checked_texture!", 0);
     defer effect.end();
@@ -6270,7 +6270,7 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.HostABIAssets_generate_checke
     return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
-fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.HostABIAssets_update_textureArgs) callconv(.c) u8 {
+fn hostedTextureUpdateRaw(host: *RocHost, args: abi.HostABITexture_updateArgs) callconv(.c) u8 {
     enforcePhase("Assets.update_texture!", during_update);
     var effect = EffectScope.begin("Assets.update_texture!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
     defer effect.end();
@@ -6298,7 +6298,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.HostABIAssets_update_t
 /// one pixel of an atlas means re-uploading the atlas. The call carries its
 /// complete payload, so a structurally valid upload is performed rather than
 /// silently refused for transient host capacity.
-fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.HostABIAssets_update_texture_regionArgs) callconv(.c) u8 {
+fn hostedTextureUpdateRegionRaw(host: *RocHost, args: abi.HostABITexture_update_regionArgs) callconv(.c) u8 {
     enforcePhase("Assets.update_texture_region!", during_update);
     var effect = EffectScope.begin("Assets.update_texture_region!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
     defer effect.end();
@@ -6335,15 +6335,15 @@ fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.HostABIAssets_up
     return TEXTURE_UPDATE_OK;
 }
 
-fn exportedAssetsUpdateTextureRaw(args: abi.HostABIAssets_update_textureArgs) callconv(.c) u8 {
-    return hostedAssetsUpdateTextureRaw(activeHost(), args);
+fn exportedTextureUpdateRaw(args: abi.HostABITexture_updateArgs) callconv(.c) u8 {
+    return hostedTextureUpdateRaw(activeHost(), args);
 }
 
-fn exportedAssetsUpdateTextureRegionRaw(args: abi.HostABIAssets_update_texture_regionArgs) callconv(.c) u8 {
-    return hostedAssetsUpdateTextureRegionRaw(activeHost(), args);
+fn exportedTextureUpdateRegionRaw(args: abi.HostABITexture_update_regionArgs) callconv(.c) u8 {
+    return hostedTextureUpdateRegionRaw(activeHost(), args);
 }
 
-fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
+fn hostedTextureSetFilterRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
     enforcePhase("Assets.set_texture_filter!", during_update);
     const effect = EffectScope.begin("Assets.set_texture_filter!", 0);
     defer effect.end();
@@ -6353,7 +6353,7 @@ fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callcon
     raylib.setTextureFilter(texture, code);
 }
 
-fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
+fn hostedTextureSetWrapRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
     enforcePhase("Assets.set_texture_wrap!", during_update);
     const effect = EffectScope.begin("Assets.set_texture_wrap!", 0);
     defer effect.end();
@@ -6379,7 +6379,7 @@ fn storeShader(resource: ShaderResource) ?*u64 {
     };
 }
 
-fn hostedDrawLoadRenderTextureRaw(args: abi.HostABIDraw_load_render_textureArgs) callconv(.c) abi.HostABIDraw_load_render_textureRetRecord {
+fn hostedTextureLoadRenderTargetRaw(args: abi.HostABITexture_load_render_targetArgs) callconv(.c) abi.HostABITexture_load_render_targetRetRecord {
     enforcePhase("Draw.RenderTexture.load!", during_load);
     const effect = EffectScope.begin("Draw.RenderTexture.load!", 0);
     defer effect.end();
@@ -8881,14 +8881,14 @@ comptime {
         @export(&hostedTraceSampleF64, .{ .name = "roc_trace_sample_f64" });
 
         @export(&exportedAssetsOpenStoreRaw, .{ .name = "roc_assets_open_store_raw" });
-        @export(&exportedAssetsLoadStoreTextureRaw, .{ .name = "roc_assets_load_store_texture_raw" });
-        @export(&exportedAssetsLoadTextureBytesRaw, .{ .name = "roc_assets_load_texture_bytes_raw" });
-        @export(&hostedAssetsGenerateColorTextureRaw, .{ .name = "roc_assets_generate_color_texture_raw" });
-        @export(&hostedAssetsGenerateCheckedTextureRaw, .{ .name = "roc_assets_generate_checked_texture_raw" });
-        @export(&exportedAssetsUpdateTextureRaw, .{ .name = "roc_assets_update_texture_raw" });
-        @export(&exportedAssetsUpdateTextureRegionRaw, .{ .name = "roc_assets_update_texture_region_raw" });
-        @export(&hostedAssetsSetTextureFilterRaw, .{ .name = "roc_assets_set_texture_filter_raw" });
-        @export(&hostedAssetsSetTextureWrapRaw, .{ .name = "roc_assets_set_texture_wrap_raw" });
+        @export(&exportedTextureLoadStoreRaw, .{ .name = "roc_texture_load_store_raw" });
+        @export(&exportedTextureLoadBytesRaw, .{ .name = "roc_texture_load_bytes_raw" });
+        @export(&hostedTextureGenerateColorRaw, .{ .name = "roc_texture_generate_color_raw" });
+        @export(&hostedTextureGenerateCheckedRaw, .{ .name = "roc_texture_generate_checked_raw" });
+        @export(&exportedTextureUpdateRaw, .{ .name = "roc_texture_update_raw" });
+        @export(&exportedTextureUpdateRegionRaw, .{ .name = "roc_texture_update_region_raw" });
+        @export(&hostedTextureSetFilterRaw, .{ .name = "roc_texture_set_filter_raw" });
+        @export(&hostedTextureSetWrapRaw, .{ .name = "roc_texture_set_wrap_raw" });
         @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
         @export(&exportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
@@ -8940,7 +8940,7 @@ comptime {
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedTextLoadFontBytesRaw, .{ .name = "roc_text_load_font_bytes_raw" });
         @export(&exportedTextLoadStoreFontRaw, .{ .name = "roc_text_load_store_font_raw" });
-        @export(&hostedDrawLoadRenderTextureRaw, .{ .name = "roc_draw_load_render_texture_raw" });
+        @export(&hostedTextureLoadRenderTargetRaw, .{ .name = "roc_texture_load_render_target_raw" });
         @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
         @export(&exportedDrawLoadStoreShaderRaw, .{ .name = "roc_draw_load_store_shader_raw" });
         @export(&exportedTextPrepareRaw, .{ .name = "roc_text_prepare_raw" });
@@ -11590,7 +11590,7 @@ test "allocating a render texture during a frame is rejected" {
     last_phase_violation = null;
     defer last_phase_violation = null;
 
-    _ = hostedDrawLoadRenderTextureRaw(.{ .width = 0, .height = 0 });
+    _ = hostedTextureLoadRenderTargetRaw(.{ .width = 0, .height = 0 });
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.RenderTexture.load!", violation.operation);

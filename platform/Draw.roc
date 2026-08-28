@@ -542,14 +542,14 @@ Draw := [].{
 	## Host-owned framebuffer. Its texture-shaped box has a distinct host kind;
 	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
-	RenderTexture :: HostABI.DrawRenderTexture.{
+	RenderTexture :: HostABI.TextureRenderTarget.{
 
 		## Allocate an offscreen framebuffer.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
 		load! = |size| {
-			result = HostABI.draw_load_render_texture!(size)
+			result = HostABI.texture_load_render_target!(size)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(RenderTexture.(result.target))
 		}
 
@@ -576,7 +576,7 @@ Draw := [].{
 		stub = RenderTexture.(Texture.stub)
 
 		## Internal bridge for capture operations that use a render target.
-		for_host : RenderTexture -> HostABI.DrawRenderTexture
+		for_host : RenderTexture -> HostABI.TextureRenderTarget
 		for_host = |RenderTexture.(target)| target
 	}
 

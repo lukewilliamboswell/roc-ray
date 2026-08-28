@@ -25,7 +25,8 @@
 ## - `Mouse`: cursor shape, visibility, and capture effects.
 ## - `Input`: raw per-cycle observations decoded into `App.Input`.
 ## - `Audio`: host-owned sounds and music plus playback effects.
-## - `Assets`: confined asset stores and host-owned textures.
+## - `Assets`: confined asset stores.
+## - `Texture`: loading, generation, updates, configuration, and render targets.
 ## - `Random`: operating-system entropy and the backend's ranged generator.
 ## - `Keys`: host keyboard policy such as the configured exit key.
 ## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
@@ -246,20 +247,24 @@ HostABI := [].{
 	## Open asset store or error.
 	AssetsStoreOpenResult : { store : AssetsStore, err : U8 }
 
-	## Store-relative asset path.
-	AssetsStoreLoad : { store : AssetsStore, path : Str }
+	## Open a confined asset store.
+	assets_open_store! : AssetsStoreOpen => AssetsStoreOpenResult
+
+	## Texture interface
+	## Store-relative texture path.
+	TextureLoadStore : { store : AssetsStore, path : Str }
 
 	## Loaded texture or error.
-	AssetsTextureResult : { texture : Texture, err : U8 }
+	TextureResult : { texture : Texture, err : U8 }
 
 	## Encoded texture bytes and format code.
-	AssetsTextureBytes : { format : U8, bytes : List(U8) }
+	TextureBytes : { format : U8, bytes : List(U8) }
 
 	## Solid-color texture parameters.
-	AssetsGenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
+	TextureGenerateColor : { width : I32, height : I32, color : Color.Rgba }
 
 	## Checkerboard texture parameters.
-	AssetsGenerateCheckedTexture : {
+	TextureGenerateChecked : {
 		width : I32,
 		height : I32,
 		checks_x : I32,
@@ -269,10 +274,10 @@ HostABI := [].{
 	}
 
 	## Full texture update.
-	AssetsUpdateTexture : { texture : Texture, pixels : List(Color.Rgba) }
+	TextureUpdate : { texture : Texture, pixels : List(Color.Rgba) }
 
 	## Rectangular texture update.
-	AssetsUpdateTextureRegion : {
+	TextureUpdateRegion : {
 		texture : Texture,
 		x : I32,
 		y : I32,
@@ -281,32 +286,41 @@ HostABI := [].{
 		pixels : List(Color.Rgba),
 	}
 
-	## Open a confined asset store.
-	assets_open_store! : AssetsStoreOpen => AssetsStoreOpenResult
-
 	## Load a texture from an asset store.
-	assets_load_store_texture! : AssetsStoreLoad => AssetsTextureResult
+	texture_load_store! : TextureLoadStore => TextureResult
 
 	## Load a texture from encoded bytes.
-	assets_load_texture_bytes! : AssetsTextureBytes => AssetsTextureResult
+	texture_load_bytes! : TextureBytes => TextureResult
 
 	## Generate a solid-color texture.
-	assets_generate_color_texture! : AssetsGenerateColorTexture => AssetsTextureResult
+	texture_generate_color! : TextureGenerateColor => TextureResult
 
 	## Generate a checkerboard texture.
-	assets_generate_checked_texture! : AssetsGenerateCheckedTexture => AssetsTextureResult
+	texture_generate_checked! : TextureGenerateChecked => TextureResult
 
 	## Replace all texture pixels.
-	assets_update_texture! : AssetsUpdateTexture => U8
+	texture_update! : TextureUpdate => U8
 
 	## Replace pixels within a texture rectangle.
-	assets_update_texture_region! : AssetsUpdateTextureRegion => U8
+	texture_update_region! : TextureUpdateRegion => U8
 
 	## Set the texture scaling filter.
-	assets_set_texture_filter! : Texture, U8 => {}
+	texture_set_filter! : Texture, U8 => {}
 
 	## Set the texture wrapping mode.
-	assets_set_texture_wrap! : Texture, U8 => {}
+	texture_set_wrap! : Texture, U8 => {}
+
+	## Texture used as a render target.
+	TextureRenderTarget : Texture
+
+	## Render-target dimensions.
+	TextureRenderTargetSize : { width : I32, height : I32 }
+
+	## Loaded render target or error.
+	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
+
+	## Load a render target.
+	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
 
 	## Files interface
 	## Text contents when `err` is `0`; otherwise empty.
@@ -812,9 +826,6 @@ HostABI := [].{
 	## Zero-sized frame authority minted by the adapter.
 	DrawFrame : {}
 
-	## Texture used as a render target.
-	DrawRenderTexture : Texture
-
 	## Opaque ARC-owned shader.
 	DrawShader : Box(U64)
 
@@ -878,9 +889,6 @@ HostABI := [].{
 	## Current frame dimensions.
 	DrawFrameSize : { width : F32, height : F32 }
 
-	## Render-target dimensions.
-	DrawRenderTextureSize : { width : I32, height : I32 }
-
 	## Vertex and fragment shader sources.
 	DrawLoadShaderSource : { vertex_source : Str, fragment_source : Str }
 
@@ -920,9 +928,6 @@ HostABI := [].{
 	## Texture uniform value.
 	DrawShaderTexture : { uniform : DrawUniform, texture : Texture }
 
-	## Loaded render target or error.
-	DrawRenderTextureResult : { target : DrawRenderTexture, err : U8 }
-
 	## Loaded shader or error.
 	DrawShaderResult : { shader : DrawShader, err : U8 }
 
@@ -939,7 +944,7 @@ HostABI := [].{
 	draw_end_blend! : () => {}
 
 	## Begin drawing to a render target.
-	draw_begin_render_texture! : DrawRenderTexture => U8
+	draw_begin_render_texture! : TextureRenderTarget => U8
 
 	## End render-target drawing.
 	draw_end_render_texture! : () => {}
@@ -976,9 +981,6 @@ HostABI := [].{
 
 	## Draw prepared text.
 	draw_draw_prepared_text! : DrawPreparedTextDraw => {}
-
-	## Load a render target.
-	draw_load_render_texture! : DrawRenderTextureSize => DrawRenderTextureResult
 
 	## Load a shader from source strings.
 	draw_load_shader_source! : DrawLoadShaderSource => DrawShaderResult
@@ -1111,7 +1113,7 @@ HostABI := [].{
 
 	## A render target and output path.
 	CaptureTextureShot : {
-		target : DrawRenderTexture,
+		target : TextureRenderTarget,
 		path : Str,
 	}
 
@@ -1122,7 +1124,7 @@ HostABI := [].{
 	##
 	## `screen` selects the last frame; otherwise `target` is used.
 	CapturePixelSource : {
-		target : DrawRenderTexture,
+		target : TextureRenderTarget,
 		screen : Bool,
 	}
 

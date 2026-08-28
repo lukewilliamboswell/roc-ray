@@ -1463,6 +1463,94 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_62cff3ac2b7521b9
+pub const __AnonStruct_62cff3ac2b7521b9 = if (@sizeOf(usize) == 4) extern struct {
+    target: Texture,
+    err: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.target.incref(amount);
+    }
+} else extern struct {
+    target: Texture,
+    err: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.target.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 24) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
+        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 8) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 16) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
+        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 4) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_bc8fa73ca49a5ac0
+pub const __AnonStruct_bc8fa73ca49a5ac0 = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_bc8fa73ca49a5ac0) != 8) @compileError("__AnonStruct_bc8fa73ca49a5ac0 size mismatch");
+        if (@alignOf(__AnonStruct_bc8fa73ca49a5ac0) != 4) @compileError("__AnonStruct_bc8fa73ca49a5ac0 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_bc8fa73ca49a5ac0) != 8) @compileError("__AnonStruct_bc8fa73ca49a5ac0 size mismatch");
+        if (@alignOf(__AnonStruct_bc8fa73ca49a5ac0) != 4) @compileError("__AnonStruct_bc8fa73ca49a5ac0 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_e98c7d72bcd7a610
 pub const __AnonStruct_e98c7d72bcd7a610 = if (@sizeOf(usize) == 4) extern struct {
     contents: RocStr,
@@ -2206,52 +2294,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_1504326a3d41a158) != 16) @compileError("__AnonStruct_1504326a3d41a158 size mismatch");
         if (@alignOf(__AnonStruct_1504326a3d41a158) != 4) @compileError("__AnonStruct_1504326a3d41a158 alignment mismatch");
-    }
-}
-
-/// Element type for __AnonStruct_bc8fa73ca49a5ac0
-pub const __AnonStruct_bc8fa73ca49a5ac0 = if (@sizeOf(usize) == 4) extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_bc8fa73ca49a5ac0) != 8) @compileError("__AnonStruct_bc8fa73ca49a5ac0 size mismatch");
-        if (@alignOf(__AnonStruct_bc8fa73ca49a5ac0) != 4) @compileError("__AnonStruct_bc8fa73ca49a5ac0 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_bc8fa73ca49a5ac0) != 8) @compileError("__AnonStruct_bc8fa73ca49a5ac0 size mismatch");
-        if (@alignOf(__AnonStruct_bc8fa73ca49a5ac0) != 4) @compileError("__AnonStruct_bc8fa73ca49a5ac0 alignment mismatch");
     }
 }
 
@@ -4092,48 +4134,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_6bff15fb6a4cb85a) != 16) @compileError("__AnonStruct_6bff15fb6a4cb85a size mismatch");
         if (@alignOf(__AnonStruct_6bff15fb6a4cb85a) != 4) @compileError("__AnonStruct_6bff15fb6a4cb85a alignment mismatch");
-    }
-}
-
-/// Element type for __AnonStruct_62cff3ac2b7521b9
-pub const __AnonStruct_62cff3ac2b7521b9 = if (@sizeOf(usize) == 4) extern struct {
-    target: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.target.incref(amount);
-    }
-} else extern struct {
-    target: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.target.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 24) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
-        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 8) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 16) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
-        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 4) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
     }
 }
 
@@ -7137,9 +7137,9 @@ comptime {
     }
 }
 
-/// Return type record for HostABI.assets_load_store_texture!
+/// Return type record for HostABI.texture_load_store!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIAssets_load_store_textureRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_storeRetRecord = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
     err: u8,
 } else extern struct {
@@ -7149,18 +7149,18 @@ pub const HostABIAssets_load_store_textureRetRecord = if (@sizeOf(usize) == 4) e
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_load_store_textureRetRecord) != 24) @compileError("HostABIAssets_load_store_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_load_store_textureRetRecord) != 8) @compileError("HostABIAssets_load_store_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_storeRetRecord) != 24) @compileError("HostABITexture_load_storeRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_storeRetRecord) != 8) @compileError("HostABITexture_load_storeRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_load_store_textureRetRecord) != 16) @compileError("HostABIAssets_load_store_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_load_store_textureRetRecord) != 4) @compileError("HostABIAssets_load_store_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_storeRetRecord) != 16) @compileError("HostABITexture_load_storeRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_storeRetRecord) != 4) @compileError("HostABITexture_load_storeRetRecord alignment mismatch");
     }
 }
 
-/// Return type record for HostABI.assets_load_texture_bytes!
+/// Return type record for HostABI.texture_load_bytes!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIAssets_load_texture_bytesRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_bytesRetRecord = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
     err: u8,
 } else extern struct {
@@ -7170,18 +7170,18 @@ pub const HostABIAssets_load_texture_bytesRetRecord = if (@sizeOf(usize) == 4) e
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_load_texture_bytesRetRecord) != 24) @compileError("HostABIAssets_load_texture_bytesRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_load_texture_bytesRetRecord) != 8) @compileError("HostABIAssets_load_texture_bytesRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_bytesRetRecord) != 24) @compileError("HostABITexture_load_bytesRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_bytesRetRecord) != 8) @compileError("HostABITexture_load_bytesRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_load_texture_bytesRetRecord) != 16) @compileError("HostABIAssets_load_texture_bytesRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_load_texture_bytesRetRecord) != 4) @compileError("HostABIAssets_load_texture_bytesRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_bytesRetRecord) != 16) @compileError("HostABITexture_load_bytesRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_bytesRetRecord) != 4) @compileError("HostABITexture_load_bytesRetRecord alignment mismatch");
     }
 }
 
-/// Return type record for HostABI.assets_generate_color_texture!
+/// Return type record for HostABI.texture_generate_color!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIAssets_generate_color_textureRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_generate_colorRetRecord = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
     err: u8,
 } else extern struct {
@@ -7191,18 +7191,18 @@ pub const HostABIAssets_generate_color_textureRetRecord = if (@sizeOf(usize) == 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_generate_color_textureRetRecord) != 24) @compileError("HostABIAssets_generate_color_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_generate_color_textureRetRecord) != 8) @compileError("HostABIAssets_generate_color_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_colorRetRecord) != 24) @compileError("HostABITexture_generate_colorRetRecord size mismatch");
+        if (@alignOf(HostABITexture_generate_colorRetRecord) != 8) @compileError("HostABITexture_generate_colorRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_generate_color_textureRetRecord) != 16) @compileError("HostABIAssets_generate_color_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_generate_color_textureRetRecord) != 4) @compileError("HostABIAssets_generate_color_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_colorRetRecord) != 16) @compileError("HostABITexture_generate_colorRetRecord size mismatch");
+        if (@alignOf(HostABITexture_generate_colorRetRecord) != 4) @compileError("HostABITexture_generate_colorRetRecord alignment mismatch");
     }
 }
 
-/// Return type record for HostABI.assets_generate_checked_texture!
+/// Return type record for HostABI.texture_generate_checked!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIAssets_generate_checked_textureRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_generate_checkedRetRecord = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
     err: u8,
 } else extern struct {
@@ -7212,12 +7212,12 @@ pub const HostABIAssets_generate_checked_textureRetRecord = if (@sizeOf(usize) =
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_generate_checked_textureRetRecord) != 24) @compileError("HostABIAssets_generate_checked_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_generate_checked_textureRetRecord) != 8) @compileError("HostABIAssets_generate_checked_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_checkedRetRecord) != 24) @compileError("HostABITexture_generate_checkedRetRecord size mismatch");
+        if (@alignOf(HostABITexture_generate_checkedRetRecord) != 8) @compileError("HostABITexture_generate_checkedRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_generate_checked_textureRetRecord) != 16) @compileError("HostABIAssets_generate_checked_textureRetRecord size mismatch");
-        if (@alignOf(HostABIAssets_generate_checked_textureRetRecord) != 4) @compileError("HostABIAssets_generate_checked_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_checkedRetRecord) != 16) @compileError("HostABITexture_generate_checkedRetRecord size mismatch");
+        if (@alignOf(HostABITexture_generate_checkedRetRecord) != 4) @compileError("HostABITexture_generate_checkedRetRecord alignment mismatch");
     }
 }
 
@@ -7688,9 +7688,9 @@ comptime {
     }
 }
 
-/// Return type record for HostABI.draw_load_render_texture!
+/// Return type record for HostABI.texture_load_render_target!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostABIDraw_load_render_textureRetRecord = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_render_targetRetRecord = if (@sizeOf(usize) == 4) extern struct {
     target: Texture,
     err: u8,
 } else extern struct {
@@ -7700,12 +7700,12 @@ pub const HostABIDraw_load_render_textureRetRecord = if (@sizeOf(usize) == 4) ex
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIDraw_load_render_textureRetRecord) != 24) @compileError("HostABIDraw_load_render_textureRetRecord size mismatch");
-        if (@alignOf(HostABIDraw_load_render_textureRetRecord) != 8) @compileError("HostABIDraw_load_render_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_render_targetRetRecord) != 24) @compileError("HostABITexture_load_render_targetRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_render_targetRetRecord) != 8) @compileError("HostABITexture_load_render_targetRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIDraw_load_render_textureRetRecord) != 16) @compileError("HostABIDraw_load_render_textureRetRecord size mismatch");
-        if (@alignOf(HostABIDraw_load_render_textureRetRecord) != 4) @compileError("HostABIDraw_load_render_textureRetRecord alignment mismatch");
+        if (@sizeOf(HostABITexture_load_render_targetRetRecord) != 16) @compileError("HostABITexture_load_render_targetRetRecord size mismatch");
+        if (@alignOf(HostABITexture_load_render_targetRetRecord) != 4) @compileError("HostABITexture_load_render_targetRetRecord alignment mismatch");
     }
 }
 
@@ -8094,10 +8094,10 @@ comptime {
     }
 }
 
-/// Arguments for HostABI.assets_load_store_texture!
+/// Arguments for HostABI.texture_load_store!
 /// Roc signature: { path : Str, store : Box(U64) } => { err : U8, texture : Texture }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_load_store_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
     store: *u64,
     /// Recursively decrement Roc-owned fields.
@@ -8133,19 +8133,19 @@ pub const HostABIAssets_load_store_textureArgs = if (@sizeOf(usize) == 4) extern
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_load_store_textureArgs) != 32) @compileError("HostABIAssets_load_store_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_load_store_textureArgs) != 8) @compileError("HostABIAssets_load_store_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_storeArgs) != 32) @compileError("HostABITexture_load_storeArgs size mismatch");
+        if (@alignOf(HostABITexture_load_storeArgs) != 8) @compileError("HostABITexture_load_storeArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_load_store_textureArgs) != 16) @compileError("HostABIAssets_load_store_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_load_store_textureArgs) != 4) @compileError("HostABIAssets_load_store_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_storeArgs) != 16) @compileError("HostABITexture_load_storeArgs size mismatch");
+        if (@alignOf(HostABITexture_load_storeArgs) != 4) @compileError("HostABITexture_load_storeArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_load_texture_bytes!
+/// Arguments for HostABI.texture_load_bytes!
 /// Roc signature: { bytes : List(U8), format : U8 } => { err : U8, texture : Texture }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_load_texture_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
     format: u8,
     /// Recursively decrement Roc-owned fields.
@@ -8177,19 +8177,19 @@ pub const HostABIAssets_load_texture_bytesArgs = if (@sizeOf(usize) == 4) extern
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_load_texture_bytesArgs) != 32) @compileError("HostABIAssets_load_texture_bytesArgs size mismatch");
-        if (@alignOf(HostABIAssets_load_texture_bytesArgs) != 8) @compileError("HostABIAssets_load_texture_bytesArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_bytesArgs) != 32) @compileError("HostABITexture_load_bytesArgs size mismatch");
+        if (@alignOf(HostABITexture_load_bytesArgs) != 8) @compileError("HostABITexture_load_bytesArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_load_texture_bytesArgs) != 16) @compileError("HostABIAssets_load_texture_bytesArgs size mismatch");
-        if (@alignOf(HostABIAssets_load_texture_bytesArgs) != 4) @compileError("HostABIAssets_load_texture_bytesArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_bytesArgs) != 16) @compileError("HostABITexture_load_bytesArgs size mismatch");
+        if (@alignOf(HostABITexture_load_bytesArgs) != 4) @compileError("HostABITexture_load_bytesArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_generate_color_texture!
+/// Arguments for HostABI.texture_generate_color!
 /// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_generate_color_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_generate_colorArgs = if (@sizeOf(usize) == 4) extern struct {
     height: i32,
     width: i32,
     color: ColorRgba,
@@ -8223,19 +8223,19 @@ pub const HostABIAssets_generate_color_textureArgs = if (@sizeOf(usize) == 4) ex
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_generate_color_textureArgs) != 12) @compileError("HostABIAssets_generate_color_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_generate_color_textureArgs) != 4) @compileError("HostABIAssets_generate_color_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_colorArgs) != 12) @compileError("HostABITexture_generate_colorArgs size mismatch");
+        if (@alignOf(HostABITexture_generate_colorArgs) != 4) @compileError("HostABITexture_generate_colorArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_generate_color_textureArgs) != 12) @compileError("HostABIAssets_generate_color_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_generate_color_textureArgs) != 4) @compileError("HostABIAssets_generate_color_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_colorArgs) != 12) @compileError("HostABITexture_generate_colorArgs size mismatch");
+        if (@alignOf(HostABITexture_generate_colorArgs) != 4) @compileError("HostABITexture_generate_colorArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_generate_checked_texture!
+/// Arguments for HostABI.texture_generate_checked!
 /// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_generate_checked_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_generate_checkedArgs = if (@sizeOf(usize) == 4) extern struct {
     checks_x: i32,
     checks_y: i32,
     height: i32,
@@ -8279,19 +8279,19 @@ pub const HostABIAssets_generate_checked_textureArgs = if (@sizeOf(usize) == 4) 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_generate_checked_textureArgs) != 24) @compileError("HostABIAssets_generate_checked_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_generate_checked_textureArgs) != 4) @compileError("HostABIAssets_generate_checked_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_checkedArgs) != 24) @compileError("HostABITexture_generate_checkedArgs size mismatch");
+        if (@alignOf(HostABITexture_generate_checkedArgs) != 4) @compileError("HostABITexture_generate_checkedArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_generate_checked_textureArgs) != 24) @compileError("HostABIAssets_generate_checked_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_generate_checked_textureArgs) != 4) @compileError("HostABIAssets_generate_checked_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_generate_checkedArgs) != 24) @compileError("HostABITexture_generate_checkedArgs size mismatch");
+        if (@alignOf(HostABITexture_generate_checkedArgs) != 4) @compileError("HostABITexture_generate_checkedArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_update_texture!
+/// Arguments for HostABI.texture_update!
 /// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => U8
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_update_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_updateArgs = if (@sizeOf(usize) == 4) extern struct {
     pixels: RocListWith(ColorRgba, false),
     texture: Texture,
     /// Recursively decrement Roc-owned fields.
@@ -8327,19 +8327,19 @@ pub const HostABIAssets_update_textureArgs = if (@sizeOf(usize) == 4) extern str
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_update_textureArgs) != 40) @compileError("HostABIAssets_update_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_update_textureArgs) != 8) @compileError("HostABIAssets_update_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_updateArgs) != 40) @compileError("HostABITexture_updateArgs size mismatch");
+        if (@alignOf(HostABITexture_updateArgs) != 8) @compileError("HostABITexture_updateArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_update_textureArgs) != 24) @compileError("HostABIAssets_update_textureArgs size mismatch");
-        if (@alignOf(HostABIAssets_update_textureArgs) != 4) @compileError("HostABIAssets_update_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_updateArgs) != 24) @compileError("HostABITexture_updateArgs size mismatch");
+        if (@alignOf(HostABITexture_updateArgs) != 4) @compileError("HostABITexture_updateArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_update_texture_region!
+/// Arguments for HostABI.texture_update_region!
 /// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => U8
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_update_texture_regionArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_update_regionArgs = if (@sizeOf(usize) == 4) extern struct {
     pixels: RocListWith(ColorRgba, false),
     texture: Texture,
     height: i32,
@@ -8383,27 +8383,27 @@ pub const HostABIAssets_update_texture_regionArgs = if (@sizeOf(usize) == 4) ext
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIAssets_update_texture_regionArgs) != 56) @compileError("HostABIAssets_update_texture_regionArgs size mismatch");
-        if (@alignOf(HostABIAssets_update_texture_regionArgs) != 8) @compileError("HostABIAssets_update_texture_regionArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_update_regionArgs) != 56) @compileError("HostABITexture_update_regionArgs size mismatch");
+        if (@alignOf(HostABITexture_update_regionArgs) != 8) @compileError("HostABITexture_update_regionArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIAssets_update_texture_regionArgs) != 40) @compileError("HostABIAssets_update_texture_regionArgs size mismatch");
-        if (@alignOf(HostABIAssets_update_texture_regionArgs) != 4) @compileError("HostABIAssets_update_texture_regionArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_update_regionArgs) != 40) @compileError("HostABITexture_update_regionArgs size mismatch");
+        if (@alignOf(HostABITexture_update_regionArgs) != 4) @compileError("HostABITexture_update_regionArgs alignment mismatch");
     }
 }
 
-/// Arguments for HostABI.assets_set_texture_filter!
+/// Arguments for HostABI.texture_set_filter!
 /// Roc signature: Texture, U8 => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_set_texture_filterArgs = extern struct {
+pub const HostABITexture_set_filterArgs = extern struct {
     arg0: Texture,
     arg1: u8,
 };
 
-/// Arguments for HostABI.assets_set_texture_wrap!
+/// Arguments for HostABI.texture_set_wrap!
 /// Roc signature: Texture, U8 => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIAssets_set_texture_wrapArgs = extern struct {
+pub const HostABITexture_set_wrapArgs = extern struct {
     arg0: Texture,
     arg1: u8,
 };
@@ -10862,10 +10862,10 @@ pub const HostABIDraw_begin_shaderArgs = extern struct {
     arg0: *u64,
 };
 
-/// Arguments for HostABI.draw_load_render_texture!
+/// Arguments for HostABI.texture_load_render_target!
 /// Roc signature: { height : I32, width : I32 } => { err : U8, target : Texture }
 /// Refcounted fields are owned by the hosted function.
-pub const HostABIDraw_load_render_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+pub const HostABITexture_load_render_targetArgs = if (@sizeOf(usize) == 4) extern struct {
     height: i32,
     width: i32,
     /// Recursively decrement Roc-owned fields.
@@ -10901,12 +10901,12 @@ pub const HostABIDraw_load_render_textureArgs = if (@sizeOf(usize) == 4) extern 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostABIDraw_load_render_textureArgs) != 8) @compileError("HostABIDraw_load_render_textureArgs size mismatch");
-        if (@alignOf(HostABIDraw_load_render_textureArgs) != 4) @compileError("HostABIDraw_load_render_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_render_targetArgs) != 8) @compileError("HostABITexture_load_render_targetArgs size mismatch");
+        if (@alignOf(HostABITexture_load_render_targetArgs) != 4) @compileError("HostABITexture_load_render_targetArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostABIDraw_load_render_textureArgs) != 8) @compileError("HostABIDraw_load_render_textureArgs size mismatch");
-        if (@alignOf(HostABIDraw_load_render_textureArgs) != 4) @compileError("HostABIDraw_load_render_textureArgs alignment mismatch");
+        if (@sizeOf(HostABITexture_load_render_targetArgs) != 8) @compileError("HostABITexture_load_render_targetArgs size mismatch");
+        if (@alignOf(HostABITexture_load_render_targetArgs) != 4) @compileError("HostABITexture_load_render_targetArgs alignment mismatch");
     }
 }
 
@@ -11737,18 +11737,18 @@ pub const HostABITrace_sample_f64Args = extern struct {
 
 pub const HostABIAssets_open_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
 pub const HostABIAssets_open_store = __AnonStruct_e6ed6936affe2edb;
-pub const HostABIAssets_load_store_textureArg0 = __AnonStruct_e6634fb4c190c214;
-pub const HostABIAssets_load_store_texture = __AnonStruct_4954456148c33ae5;
-pub const HostABIAssets_load_texture_bytesArg0 = __AnonStruct_ff17f03b4409100d;
-pub const HostABIAssets_load_texture_bytes = __AnonStruct_4954456148c33ae5;
-pub const HostABIAssets_generate_color_textureArg0 = __AnonStruct_261d7d093f4d74f0;
-pub const HostABIAssets_generate_color_texture = __AnonStruct_4954456148c33ae5;
-pub const HostABIAssets_generate_checked_textureArg0 = __AnonStruct_8ffafd56eb173f8d;
-pub const HostABIAssets_generate_checked_texture = __AnonStruct_4954456148c33ae5;
-pub const HostABIAssets_update_textureArg0 = __AnonStruct_8e0d47be14ad0be3;
-pub const HostABIAssets_update_textureArg0Pixels = ColorRgba;
-pub const HostABIAssets_update_texture_regionArg0 = __AnonStruct_307d51efe2380633;
-pub const HostABIAssets_update_texture_regionArg0Pixels = ColorRgba;
+pub const HostABITexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostABITexture_load_store = __AnonStruct_4954456148c33ae5;
+pub const HostABITexture_load_bytesArg0 = __AnonStruct_ff17f03b4409100d;
+pub const HostABITexture_load_bytes = __AnonStruct_4954456148c33ae5;
+pub const HostABITexture_generate_colorArg0 = __AnonStruct_261d7d093f4d74f0;
+pub const HostABITexture_generate_color = __AnonStruct_4954456148c33ae5;
+pub const HostABITexture_generate_checkedArg0 = __AnonStruct_8ffafd56eb173f8d;
+pub const HostABITexture_generate_checked = __AnonStruct_4954456148c33ae5;
+pub const HostABITexture_updateArg0 = __AnonStruct_8e0d47be14ad0be3;
+pub const HostABITexture_updateArg0Pixels = ColorRgba;
+pub const HostABITexture_update_regionArg0 = __AnonStruct_307d51efe2380633;
+pub const HostABITexture_update_regionArg0Pixels = ColorRgba;
 pub const HostABIAudio_gen_toneArg0 = __AnonStruct_74e1febaa758f087;
 pub const HostABIAudio_gen_tone = __AnonStruct_82ca12cef4f5714b;
 pub const HostABIAudio_gen_soundArg0 = __AnonStruct_37b6eb678c2c2ca2;
@@ -11822,8 +11822,8 @@ pub const HostABITilemap_load_tmxMapTilesets = __AnonStruct_756aabd194c61573;
 pub const HostABITilemap_drawArg0 = __AnonStruct_bcdb8f2e5f1946e1;
 pub const HostABITilemap_drawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
 pub const HostABITilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
-pub const HostABIDraw_load_render_textureArg0 = __AnonStruct_bc8fa73ca49a5ac0;
-pub const HostABIDraw_load_render_texture = __AnonStruct_62cff3ac2b7521b9;
+pub const HostABITexture_load_render_targetArg0 = __AnonStruct_bc8fa73ca49a5ac0;
+pub const HostABITexture_load_render_target = __AnonStruct_62cff3ac2b7521b9;
 pub const HostABIDraw_load_shader_sourceArg0 = __AnonStruct_c813cb81fdeac2dc;
 pub const HostABIDraw_load_shader_source = __AnonStruct_f2d5cefe489fb3f6;
 pub const HostABIDraw_load_store_shaderArg0 = __AnonStruct_3e85b4e878c74d96;
@@ -11978,6 +11978,18 @@ pub const __AnonStruct_307d51efe2380633Release = struct {
     }
 };
 
+pub const __AnonStruct_62cff3ac2b7521b9Release = struct {
+    pub fn release(value: __AnonStruct_62cff3ac2b7521b9, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_bc8fa73ca49a5ac0Release = struct {
+    pub fn release(value: __AnonStruct_bc8fa73ca49a5ac0, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
 pub const __AnonStruct_e98c7d72bcd7a610Release = struct {
     pub fn release(value: __AnonStruct_e98c7d72bcd7a610, roc_host: *RocHost) void {
         value.decref(roc_host);
@@ -12110,12 +12122,6 @@ fn increfHostABIWindow_suggest_sizeResult(value: HostABIWindow_suggest_sizeResul
 
 pub const HostABIWindow_suggest_sizeResultRelease = struct {
     pub fn release(value: HostABIWindow_suggest_sizeResult, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
-pub const __AnonStruct_bc8fa73ca49a5ac0Release = struct {
-    pub fn release(value: __AnonStruct_bc8fa73ca49a5ac0, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12326,12 +12332,6 @@ pub const __AnonStruct_a3fdb7fbf4ae00b8Release = struct {
 
 pub const __AnonStruct_6bff15fb6a4cb85aRelease = struct {
     pub fn release(value: __AnonStruct_6bff15fb6a4cb85a, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
-pub const __AnonStruct_62cff3ac2b7521b9Release = struct {
-    pub fn release(value: __AnonStruct_62cff3ac2b7521b9, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12824,6 +12824,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_8e0d47be14ad0be3) return __AnonStruct_8e0d47be14ad0be3Release;
     if (T == RocListWith(ColorRgba, false)) return RocListSpineRelease(RocListWith(ColorRgba, false));
     if (T == __AnonStruct_307d51efe2380633) return __AnonStruct_307d51efe2380633Release;
+    if (T == __AnonStruct_62cff3ac2b7521b9) return __AnonStruct_62cff3ac2b7521b9Release;
     if (T == __AnonStruct_e98c7d72bcd7a610) return __AnonStruct_e98c7d72bcd7a610Release;
     if (T == __AnonStruct_5b08b74ffdd2f118) return __AnonStruct_5b08b74ffdd2f118Release;
     if (T == __AnonStruct_da7cbd33c88fa20a) return __AnonStruct_da7cbd33c88fa20aRelease;
@@ -12875,7 +12876,6 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_2a39039201b5023d) return __AnonStruct_2a39039201b5023dRelease;
     if (T == __AnonStruct_7f4d6dac6c3eef5e) return __AnonStruct_7f4d6dac6c3eef5eRelease;
     if (T == __AnonStruct_6bff15fb6a4cb85a) return __AnonStruct_6bff15fb6a4cb85aRelease;
-    if (T == __AnonStruct_62cff3ac2b7521b9) return __AnonStruct_62cff3ac2b7521b9Release;
     if (T == __AnonStruct_f2d5cefe489fb3f6) return __AnonStruct_f2d5cefe489fb3f6Release;
     if (T == __AnonStruct_c813cb81fdeac2dc) return __AnonStruct_c813cb81fdeac2dcRelease;
     if (T == __AnonStruct_3e85b4e878c74d96) return __AnonStruct_3e85b4e878c74d96Release;
@@ -12942,59 +12942,59 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_assets_open_store_raw(arg0: HostABIAssets_open_storeArgs) callconv(.c) __AnonStruct_e6ed6936affe2edb;
 
-/// Hosted symbol for HostABI.assets_load_store_texture!
+/// Hosted symbol for HostABI.texture_load_store!
 /// Roc signature: { path : Str, store : Box(U64) } => { err : U8, texture : Texture }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_assets_load_store_texture_raw(arg0: HostABIAssets_load_store_textureArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_load_store_raw(arg0: HostABITexture_load_storeArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
 
-/// Hosted symbol for HostABI.assets_load_texture_bytes!
+/// Hosted symbol for HostABI.texture_load_bytes!
 /// Roc signature: { bytes : List(U8), format : U8 } => { err : U8, texture : Texture }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_assets_load_texture_bytes_raw(arg0: HostABIAssets_load_texture_bytesArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_load_bytes_raw(arg0: HostABITexture_load_bytesArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
 
-/// Hosted symbol for HostABI.assets_generate_color_texture!
+/// Hosted symbol for HostABI.texture_generate_color!
 /// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_assets_generate_color_texture_raw(arg0: HostABIAssets_generate_color_textureArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_generate_color_raw(arg0: HostABITexture_generate_colorArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
 
-/// Hosted symbol for HostABI.assets_generate_checked_texture!
+/// Hosted symbol for HostABI.texture_generate_checked!
 /// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_assets_generate_checked_texture_raw(arg0: HostABIAssets_generate_checked_textureArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_generate_checked_raw(arg0: HostABITexture_generate_checkedArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
 
-/// Hosted symbol for HostABI.assets_update_texture!
+/// Hosted symbol for HostABI.texture_update!
 /// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => U8
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_assets_update_texture_raw(arg0: HostABIAssets_update_textureArgs) callconv(.c) u8;
+pub extern fn roc_texture_update_raw(arg0: HostABITexture_updateArgs) callconv(.c) u8;
 
-/// Hosted symbol for HostABI.assets_update_texture_region!
+/// Hosted symbol for HostABI.texture_update_region!
 /// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => U8
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_assets_update_texture_region_raw(arg0: HostABIAssets_update_texture_regionArgs) callconv(.c) u8;
+pub extern fn roc_texture_update_region_raw(arg0: HostABITexture_update_regionArgs) callconv(.c) u8;
 
-/// Hosted symbol for HostABI.assets_set_texture_filter!
+/// Hosted symbol for HostABI.texture_set_filter!
 /// Roc signature: Texture, U8 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_assets_set_texture_filter_raw(arg0: Texture, arg1: u8) callconv(.c) void;
+pub extern fn roc_texture_set_filter_raw(arg0: Texture, arg1: u8) callconv(.c) void;
 
-/// Hosted symbol for HostABI.assets_set_texture_wrap!
+/// Hosted symbol for HostABI.texture_set_wrap!
 /// Roc signature: Texture, U8 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_assets_set_texture_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
+pub extern fn roc_texture_set_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
 
 /// Hosted symbol for HostABI.audio_gen_tone!
 /// Roc signature: { freq : F32, ms : I32 } => { err : U8, sound : Box(U64) }
@@ -13586,10 +13586,10 @@ pub extern fn roc_draw_end_render_texture_raw() callconv(.c) void;
 /// Roc signature: {} => {}
 pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
 
-/// Hosted symbol for HostABI.draw_load_render_texture!
+/// Hosted symbol for HostABI.texture_load_render_target!
 /// Roc signature: { height : I32, width : I32 } => { err : U8, target : Texture }
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_draw_load_render_texture_raw(arg0: HostABIDraw_load_render_textureArgs) callconv(.c) __AnonStruct_62cff3ac2b7521b9;
+pub extern fn roc_texture_load_render_target_raw(arg0: HostABITexture_load_render_targetArgs) callconv(.c) __AnonStruct_62cff3ac2b7521b9;
 
 /// Hosted symbol for HostABI.draw_load_shader_source!
 /// Roc signature: { fragment_source : Str, vertex_source : Str } => { err : U8, shader : Box(U64) }

@@ -485,9 +485,12 @@ def validate(version_root: Path) -> list[str]:
     problems += check_cross_links(version_root, version_root / TYPES_SUBDIR)
     problems += check_phase_sentences(version_root)
     problems += check_prose_renders(version_root)
-    app_page = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_source = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_blocks = [body for _, body in entries(app_source)]
+    app_blocks += [body for body in MODULE_DOC_PATTERN.findall(app_source)]
+    app_text = " ".join(app_blocks)
     for forbidden in (*APP_INTERNAL_TYPES, "AppTransport"):
-        if forbidden in app_page:
+        if forbidden in app_text:
             problems.append(f"App: private boundary term leaked into docs: {forbidden}")
     platform_pages = [version_root / "index.html"] + [
         page

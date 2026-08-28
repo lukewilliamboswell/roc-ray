@@ -7,9 +7,7 @@
 ## phase documentation. `Host` is exposed as `rr.Host` for direct structural
 ## interface access.
 ##
-## Declarations are grouped into interfaces. An interface is the private
-## boundary vocabulary for one facility, not necessarily a public Roc module
-## or a native backend subsystem. An interface contains, where applicable:
+## Declarations are grouped into interfaces which contain, where applicable:
 ##
 ## 1. Opaque resource handles.
 ## 2. Structural record aliases for hosted arguments and results.
@@ -22,36 +20,37 @@
 ##
 ## Raylib-backed rendering and interaction interfaces:
 ##
-## - `Texture` resource: loading, generation, updates, configuration, and render targets.
-## - `Text` resource: font loading, glyph metrics, and text preparation.
-## - `Shader` resource: loading, uniform lookup, and uniform updates.
-## - `Store` resource: confined asset directories.
-## - `Mouse`: cursor shape, visibility, and capture effects.
-## - `Input`: raw per-cycle observations decoded into `App.Input`.
-## - `Audio`: host-owned sounds and music plus playback effects.
-## - `Random`: operating-system entropy and the backend's ranged generator.
-## - `Keys`: host keyboard policy such as the configured exit key.
-## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
-## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
-## - `Draw`: frame authority, render resources, scopes, and drawing primitives.
-## - `Capture`: virtual input, recording, screenshots, and pixel readback.
+## > `Texture` resource: loading, generation, updates, configuration, and render targets.
+## > `Text` resource: font loading, glyph metrics, and text preparation.
+## > `Shader` resource: loading, uniform lookup, and uniform updates.
+## > `Store` resource: confined asset directories.
+## > `Mouse`: cursor shape, visibility, and capture effects.
+## > `Input`: raw per-cycle observations decoded into `App.Input`.
+## > `Audio`: host-owned sounds and music plus playback effects.
+## > `Random`: operating-system entropy and the backend's ranged generator.
+## > `Keys`: host keyboard policy such as the configured exit key.
+## > `Window`: clipboard, window geometry, DPI scale, and monitor operations.
+## > `Tilemap`: flattened TMX data and batched tile-layer drawing.
+## > `Draw`: frame authority, render resources, scopes, and drawing primitives.
+## > `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
 ## Host-service interfaces:
 ##
-## - `App`: startup authority, process inputs, startup file reads, and exit.
-## - `Task`: sleeping, spawning, and delivery of one finished message.
-## - `Time`: normalized wall-clock timestamps.
-## - `Trace`: bounded diagnostic marks, zones, and numeric samples.
-## - `Files`: bounded text and byte I/O, metadata, and directory listings.
-## - `Http`: complete bounded requests and responses.
-## - `Cmd`: bounded child-process execution and captured output.
-## - `Stdio`: bounded queued writes to standard output and error.
-## - `Udp`: bound sockets and bounded datagram send/receive batches.
-## - `Sqlite`: connection and statement handles plus flattened query results.
+## > `App`: startup authority, process inputs, startup file reads, and exit.
+## > `Task`: sleeping, spawning, and delivery of one finished message.
+## > `Time`: normalized wall-clock timestamps.
+## > `Trace`: bounded diagnostic marks, zones, and numeric samples.
+## > `Files`: bounded text and byte I/O, metadata, and directory listings.
+## > `Http`: complete bounded requests and responses.
+## > `Cmd`: bounded child-process execution and captured output.
+## > `Stdio`: bounded queued writes to standard output and error.
+## > `Udp`: bound sockets and bounded datagram send/receive batches.
+## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
+## Opaque `Box(U64)` values are typed resource tokens resolved
+## and lifetime-checked by the host, never exposing native addresses.
 ## Native pointers, backend objects, public unions, and application policy do
-## not belong here. Opaque `Box(U64)` values are typed resource tokens resolved
-## and lifetime-checked by the host, never exposed native addresses.
+## not belong here.
 import rrt.Camera
 import rrt.Color
 import rrt.Font
@@ -97,27 +96,35 @@ Host := [].{
 	}
 
 	## Load a texture from an asset store.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	texture_load_store! : TextureLoadStore => TextureResult
 
 	## Load a texture from encoded bytes.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_load_bytes! : TextureBytes => TextureResult
 
 	## Generate a solid-color texture.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_generate_color! : TextureGenerateColor => TextureResult
 
 	## Generate a checkerboard texture.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_generate_checked! : TextureGenerateChecked => TextureResult
 
 	## Replace all texture pixels.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_update! : TextureUpdate => U8
 
 	## Replace pixels within a texture rectangle.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_update_region! : TextureUpdateRegion => U8
 
 	## Set the texture scaling filter.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_set_filter! : Texture, U8 => {}
 
 	## Set the texture wrapping mode.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_set_wrap! : Texture, U8 => {}
 
 	## Texture used as a render target.
@@ -130,6 +137,7 @@ Host := [].{
 	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
 
 	## Load a render target.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
 
 	## Text resource interface
@@ -158,21 +166,27 @@ Host := [].{
 	TextFontResult : { font : Font.Handle, err : U8 }
 
 	## Get the default font during rendering.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_default_font! : () => Font.Handle
 
 	## Get the default font during startup.
+	## Legal only in `init!`.
 	text_startup_default_font! : () => TextFontResult
 
 	## Load a font from encoded bytes.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
 
 	## Load a font from an asset store.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	text_load_store_font! : TextLoadStoreFont => TextFontResult
 
 	## Get font and glyph metrics.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_font_metrics! : Font.Handle => TextFontMetrics
 
 	## Shape and measure text for repeated drawing.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_prepare! : TextPrepare => TextPrepareResult
 
 	## Shader resource interface
@@ -213,30 +227,39 @@ Host := [].{
 	ShaderResult : { shader : Shader, err : U8 }
 
 	## Load a shader from source strings.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	shader_load_source! : ShaderLoadSource => ShaderResult
 
 	## Load a shader from an asset store.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	shader_load_store! : ShaderLoadStore => ShaderResult
 
 	## Get a shader uniform location.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	shader_location! : ShaderLocation => I32
 
 	## Set a floating-point shader uniform.
+	## Legal in `render!` only.
 	shader_set_float! : ShaderFloat => {}
 
 	## Set an integer shader uniform.
+	## Legal in `render!` only.
 	shader_set_int! : ShaderInt => {}
 
 	## Set a two-component shader uniform.
+	## Legal in `render!` only.
 	shader_set_vec2! : ShaderVec2 => {}
 
 	## Set a three-component shader uniform.
+	## Legal in `render!` only.
 	shader_set_vec3! : ShaderVec3 => {}
 
 	## Set a four-component shader uniform.
+	## Legal in `render!` only.
 	shader_set_vec4! : ShaderVec4 => {}
 
 	## Set a texture shader uniform.
+	## Legal in `render!` only.
 	shader_set_texture! : ShaderTexture => {}
 
 	## Store resource interface
@@ -259,13 +282,16 @@ Host := [].{
 	StoreOpenResult : { store : Store, err : U8 }
 
 	## Open a confined asset store.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	store_open! : StoreOpen => StoreOpenResult
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	mouse_set_cursor_mode! : U8 => {}
 
 	## Set the flattened native cursor shape.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	mouse_set_cursor! : U8 => {}
 
 	## Input interface
@@ -280,18 +306,23 @@ Host := [].{
 
 	## Trace interface
 	## Record one instantaneous annotation.
+	## Legal in `init!`, `update!`, `render!`, and tasks.
 	trace_mark! : Str => {}
 
 	## Begin a nested zone and return its host-owned matching token.
+	## Legal in `init!`, `update!`, `render!`, and tasks.
 	trace_begin! : Str => U64
 
 	## End the zone named by a token returned from `trace_begin!`.
+	## Legal in `init!`, `update!`, `render!`, and tasks.
 	trace_end! : U64 => {}
 
 	## Record one signed integer sample with its private unit code.
+	## Legal in `init!`, `update!`, `render!`, and tasks.
 	trace_sample_i64! : Str, I64, U8 => {}
 
 	## Record one floating-point sample with its private unit code.
+	## Legal in `init!`, `update!`, `render!`, and tasks.
 	trace_sample_f64! : Str, F64, U8 => {}
 
 	## Time interface
@@ -303,13 +334,16 @@ Host := [].{
 	}
 
 	## Read the host's wall clock.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	time_now! : () => TimeRawTimestamp
 
 	## Task interface
 	## Park for at least this many milliseconds; block only during `init!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	task_sleep! : U64 => {}
 
 	## Run an erased task closure on its own coroutine.
+	## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 	task_spawn! : Box(() => msg) => {}
 
 	## One finished task message awaiting delivery to `update!`.
@@ -356,78 +390,103 @@ Host := [].{
 	}
 
 	## Generate a tone.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_gen_tone! : { freq : F32, ms : I32 } => AudioSoundResult
 
 	## Generate a sound.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_gen_sound! : AudioGenSound => AudioSoundResult
 
 	## Load a sound from a file.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	audio_load_sound! : Str => AudioSoundResult
 
 	## Load a music stream from a file.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	audio_load_music! : Str => AudioMusicResult
 
 	## Play a sound.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_play_sound! : AudioSound => {}
 
 	## Stop a sound.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_stop_sound! : AudioSound => {}
 
 	## Pause a sound.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_pause_sound! : AudioSound => {}
 
 	## Resume a paused sound.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_resume_sound! : AudioSound => {}
 
 	## Report whether a sound is playing.
+	## Legal in any callback, `render!` included.
 	audio_is_sound_playing! : AudioSound => Bool
 
 	## Set sound volume; `1` is full volume.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_sound_volume! : AudioSound, F32 => {}
 
 	## Set sound pitch; `1` is the original pitch.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_sound_pitch! : AudioSound, F32 => {}
 
 	## Set sound pan; `0.5` is centered.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_sound_pan! : AudioSound, F32 => {}
 
 	## Start a music stream.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_play_music! : AudioMusic => {}
 
 	## Stop a music stream.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_stop_music! : AudioMusic => {}
 
 	## Pause a music stream.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_pause_music! : AudioMusic => {}
 
 	## Resume a paused music stream.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_resume_music! : AudioMusic => {}
 
 	## Set music volume; `1` is full volume.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_music_volume! : AudioMusic, F32 => {}
 
 	## Set music pitch; `1` is the original pitch.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_music_pitch! : AudioMusic, F32 => {}
 
 	## Set music pan; `0.5` is centered.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_music_pan! : AudioMusic, F32 => {}
 
 	## Enable or disable music looping.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_music_looping! : AudioMusic, Bool => {}
 
 	## Report whether a music stream is playing.
+	## Legal in any callback, `render!` included.
 	audio_is_music_playing! : AudioMusic => Bool
 
 	## Seek to a position in seconds.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_seek_music! : AudioMusic, F32 => {}
 
 	## Get music length in seconds.
+	## Legal in any callback, `render!` included.
 	audio_music_length! : AudioMusic => F32
 
 	## Get elapsed music time in seconds.
+	## Legal in any callback, `render!` included.
 	audio_music_time_played! : AudioMusic => F32
 
 	## Set master volume; `1` is full volume.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_set_master_volume! : F32 => {}
 
 	## Files interface
@@ -457,21 +516,27 @@ Host := [].{
 	}
 
 	## Read bounded, validated UTF-8.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_read_text! : Str => FilesTextResult
 
 	## Stat one path, following symbolic links.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_metadata! : Str => FilesMetadataResult
 
 	## Read bounded bytes without copying the payload.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_read_bytes! : Str => FilesBytesResult
 
 	## List one directory into the encoded form `Files` decodes.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_list! : Str => FilesBytesResult
 
 	## Replace a file with UTF-8; return `0` or a `Files` write-error code.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_write_text! : Str, Str => U8
 
 	## Replace a file with bytes; use the same result codes as text writes.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_write_bytes! : Str, List(U8) => U8
 
 	## Http interface
@@ -508,6 +573,7 @@ Host := [].{
 	}
 
 	## Send one request and wait for the whole response.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	http_send! : HttpRequestToHost => HttpResponseFromHost
 
 	## Cmd interface
@@ -546,18 +612,22 @@ Host := [].{
 	}
 
 	## Start one child process and wait for it to finish.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	cmd_run! : CmdRunArgs => CmdRunResult
 
 	## Stdio interface
 	## Queue UTF-8 atomically; return `0` or a stdio result code.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	stdio_write_text! : U8, Str => U8
 
 	## Queue UTF-8 and a newline as one reservation.
 	##
 	## Host-side appending avoids a copy and prevents interleaved writes.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	stdio_write_line! : U8, Str => U8
 
 	## Queue bytes atomically; use the text-write result codes.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	stdio_write_bytes! : U8, List(U8) => U8
 
 	## Udp interface
@@ -609,12 +679,15 @@ Host := [].{
 	}
 
 	## Open and bind one IPv4 UDP socket.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	udp_bind! : UdpBindArgs => UdpBindResult
 
 	## Send one datagram; return `0` or a `Udp` error code.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	udp_send! : UdpSendArgs => U8
 
 	## Wait for at least one datagram, then drain what is already buffered.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	udp_receive! : UdpReceiveArgs => UdpReceiveResult
 
 	## App interface
@@ -629,28 +702,35 @@ Host := [].{
 	}
 
 	## Stop after `init!` returns.
+	## Legal only in `init!`.
 	app_exit! : I32 => {}
 
 	## Launcher arguments without reserved `--host-*` switches.
+	## Legal only in `init!`.
 	app_args! : () => List(Str)
 
 	## Read an environment variable.
+	## Legal only in `init!`.
 	app_read_env! : Str => Try(Str, [NotFound])
 
 	## Read a whole UTF-8 file during startup.
+	## Legal only in `init!`.
 	app_read_file! : Str => AppReadFileResult
 
 	## Random interface
 	## Draw from operating-system entropy.
 	##
 	## Falls back rather than failing; this seeds games, not cryptography.
+	## Legal only in `init!`.
 	random_entropy! : () => U64
 
 	## Draw inclusively from `[min, max]` using the backend generator.
+	## Legal only in `init!`.
 	random_i32! : I32, I32 => I32
 
 	## Keys interface
 	## Set the exit-key code; `0` disables it.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	keys_set_exit_key! : I32 => {}
 
 	## Window interface
@@ -661,21 +741,27 @@ Host := [].{
 	}
 
 	## Get clipboard text.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_read_clipboard! : () => WindowClipboardResult
 
 	## Replace the clipboard with UTF-8 text.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_set_clipboard_text! : Str => {}
 
 	## Suggest a logical size; `NotSupported` means a fixed-size target.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_suggest_size! : { width : I32, height : I32 } => Try({}, [NotSupported])
 
 	## Set the CPU-side frame cap; nonpositive means uncapped.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_set_target_fps! : I32 => {}
 
 	## Suggest a minimum size; zero leaves an axis unconstrained.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_suggest_min_size! : { width : I32, height : I32 } => {}
 
 	## Framebuffer-to-logical scale; invalid factors become `1`.
+	## Legal in any callback, `render!` included.
 	window_scale_dpi! : () => { x : F32, y : F32 }
 
 	## One connected display, flattened from `Window.Monitor`.
@@ -690,12 +776,15 @@ Host := [].{
 	}
 
 	## All currently connected displays in backend order.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_monitors! : () => List(WindowMonitorInfo)
 
 	## Suggest a top-left position in virtual-desktop coordinates.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_suggest_position! : { x : I32, y : I32 } => {}
 
 	## Suggest a monitor; ignore a stale or invalid index.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	window_suggest_monitor! : I32 => {}
 
 	## Tilemap interface
@@ -809,7 +898,10 @@ Host := [].{
 		max_row : U64,
 	}
 
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	tilemap_load_tmx! : Str => TilemapLoadResult
+
+	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}
 
 	## Sqlite interface
@@ -870,21 +962,27 @@ Host := [].{
 
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_open! : Str, U8, U64, U64 => SqliteOpenResult
 
 	## Close early; final handle release remains the fallback.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_close! : SqliteDb => SqliteStatusResult
 
 	## Compile one statement for reuse.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_prepare! : SqliteDb, Str => SqlitePrepareResult
 
 	## Bind and run a prepared statement to completion, then reset it.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_run_stmt! : SqliteStmt, List(SqliteBindingWire) => SqliteQueryResult
 
 	## Prepare, bind, run, and finalize without retaining a statement.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_run_once! : SqliteDb, Str, List(SqliteBindingWire) => SqliteQueryResult
 
 	## Run a script without bindings or returned rows.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	sqlite_exec_script! : SqliteDb, Str => SqliteStatusResult
 
 	## Draw interface
@@ -961,99 +1059,131 @@ Host := [].{
 	DrawTextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 
 	## Begin 2D drawing with a camera.
+	## Legal in `render!` only.
 	draw_begin_camera! : Camera.Camera2D => U8
 
 	## End 2D camera drawing.
+	## Legal in `render!` only.
 	draw_end_camera! : () => {}
 
 	## Begin the flattened blend mode.
+	## Legal in `render!` only.
 	draw_begin_blend! : U8 => U8
 
 	## Restore alpha blending.
+	## Legal in `render!` only.
 	draw_end_blend! : () => {}
 
 	## Begin drawing to a render target.
+	## Legal in `render!` only.
 	draw_begin_render_texture! : TextureRenderTarget => U8
 
 	## End render-target drawing.
+	## Legal in `render!` only.
 	draw_end_render_texture! : () => {}
 
 	## Begin clipping to a screen rectangle.
+	## Legal in `render!` only.
 	draw_begin_scissor! : DrawScissor => U8
 
 	## End scissor clipping.
+	## Legal in `render!` only.
 	draw_end_scissor! : () => {}
 
 	## Begin custom-shader drawing.
+	## Legal in `render!` only.
 	draw_begin_shader! : Shader => U8
 
 	## Restore the default shader.
+	## Legal in `render!` only.
 	draw_end_shader! : () => {}
 
 	## Draw a filled circle.
+	## Legal in `render!` only.
 	draw_circle! : DrawCircle => {}
 
 	## Draw a gradient-filled circle.
+	## Legal in `render!` only.
 	draw_circle_gradient! : DrawCircleGradient => {}
 
 	## Draw a circle outline.
+	## Legal in `render!` only.
 	draw_circle_lines! : DrawCircleLines => {}
 
 	## Clear the current drawing target.
+	## Legal in `render!` only.
 	draw_clear! : Color.Rgba => {}
 
 	## Draw the current FPS.
+	## Legal in `render!` only.
 	draw_fps! : DrawFps => {}
 
 	## Draw a line.
+	## Legal in `render!` only.
 	draw_line! : DrawLine => {}
 
 	## Draw prepared text.
+	## Legal in `render!` only.
 	draw_draw_prepared_text! : DrawPreparedTextDraw => {}
 
 	## Get the current frame dimensions.
+	## Legal in `render!` only.
 	draw_frame_size! : () => DrawFrameSize
 
 	## Draw a filled polygon.
+	## Legal in `render!` only.
 	draw_polygon! : DrawPolygon => {}
 
 	## Draw a polygon outline.
+	## Legal in `render!` only.
 	draw_polygon_lines! : DrawPolygonLines => {}
 
 	## Draw a filled rectangle.
+	## Legal in `render!` only.
 	draw_rectangle! : DrawRectangle => {}
 
 	## Draw a horizontal-gradient rectangle.
+	## Legal in `render!` only.
 	draw_rectangle_gradient_h! : DrawRectangleGradientH => {}
 
 	## Draw a vertical-gradient rectangle.
+	## Legal in `render!` only.
 	draw_rectangle_gradient_v! : DrawRectangleGradientV => {}
 
 	## Draw a rectangle outline.
+	## Legal in `render!` only.
 	draw_rectangle_lines! : DrawRectangleLines => {}
 
 	## Draw a filled rounded rectangle.
+	## Legal in `render!` only.
 	draw_rounded_rectangle! : DrawRoundedRectangle => {}
 
 	## Draw a rounded-rectangle outline.
+	## Legal in `render!` only.
 	draw_rounded_rectangle_lines! : DrawRoundedRectangleLines => {}
 
 	## Draw text with a font.
+	## Legal in `render!` only.
 	draw_text! : DrawText => {}
 
 	## Draw part of a texture into a rectangle.
+	## Legal in `render!` only.
 	draw_draw_texture! : DrawTextureDraw => {}
 
 	## Draw a batch of texture instances.
+	## Legal in `render!` only.
 	draw_draw_texture_instances! : DrawTextureInstances => {}
 
 	## Draw part of a texture as an arbitrary quad.
+	## Legal in `render!` only.
 	draw_draw_texture_quad! : DrawTextureQuad => {}
 
 	## Draw a filled counter-clockwise triangle.
+	## Legal in `render!` only.
 	draw_triangle! : DrawTriangle => {}
 
 	## Draw a counter-clockwise triangle outline.
+	## Legal in `render!` only.
 	draw_triangle_lines! : DrawTriangleLines => {}
 
 	## Capture interface
@@ -1089,6 +1219,7 @@ Host := [].{
 		wheel : F32,
 	}
 
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_set_virtual_mouse! : CaptureVirtualMouse => {}
 
 	## Scripted held keys; inactive returns control to hardware.
@@ -1099,18 +1230,23 @@ Host := [].{
 		keys : List(U64),
 	}
 
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_set_virtual_keys! : CaptureVirtualKeys => {}
 
 	## Queue codepoints for one delivery on the next frame.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_set_virtual_text! : List(U32) => {}
 
 	## Arm recording and latch its result for the next `Input`.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_start_recording! : CaptureStartRecording => U8
 
 	## Finalize the running recording and write its file.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_stop_recording! : () => CaptureStopResult
 
 	## Write the next framebuffer as PNG, parking until complete.
+	## Legal only in a task, where it parks the task; refused in `init!`, `update!`, and `render!`.
 	capture_screenshot! : Str => U8
 
 	## A render target and output path.
@@ -1120,6 +1256,7 @@ Host := [].{
 	}
 
 	## Read back a target, then park while encoding and writing its PNG.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	capture_screenshot_texture! : CaptureTextureShot => U8
 
 	## Flattened screen-or-target source.
@@ -1147,6 +1284,7 @@ Host := [].{
 	}
 
 	## Read one pixel synchronously.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_pixel_at! : CapturePixelProbe => CapturePixelResult
 
 	## A source-relative pixel rectangle.
@@ -1165,6 +1303,7 @@ Host := [].{
 	}
 
 	## Read a rectangle of a source as row-major, top-down RGBA8 bytes.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_read_region! : CaptureRegionProbe => CaptureRegionResult
 
 }

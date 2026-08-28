@@ -22,17 +22,17 @@
 ##
 ## Raylib-backed rendering and interaction interfaces:
 ##
+## - `Texture` resource: loading, generation, updates, configuration, and render targets.
+## - `Text` resource: font loading, glyph metrics, and text preparation.
+## - `Shader` resource: loading, uniform lookup, and uniform updates.
+## - `Store` resource: confined asset directories.
 ## - `Mouse`: cursor shape, visibility, and capture effects.
 ## - `Input`: raw per-cycle observations decoded into `App.Input`.
 ## - `Audio`: host-owned sounds and music plus playback effects.
-## - `Store`: confined asset directories.
-## - `Texture`: loading, generation, updates, configuration, and render targets.
 ## - `Random`: operating-system entropy and the backend's ranged generator.
 ## - `Keys`: host keyboard policy such as the configured exit key.
 ## - `Window`: clipboard, window geometry, DPI scale, and monitor operations.
 ## - `Tilemap`: flattened TMX data and batched tile-layer drawing.
-## - `Text`: font loading, glyph metrics, and text preparation.
-## - `Shader`: loading, uniform lookup, and uniform updates.
 ## - `Draw`: frame authority, render resources, scopes, and drawing primitives.
 ## - `Capture`: virtual input, recording, screenshots, and pixel readback.
 ##
@@ -59,6 +59,207 @@ import rrt.Math
 import rrt.Texture
 
 HostABI := [].{
+
+	## Texture resource interface
+	## Store-relative texture path.
+	TextureLoadStore : { store : Store, path : Str }
+
+	## Loaded texture or error.
+	TextureResult : { texture : Texture, err : U8 }
+
+	## Encoded texture bytes and format code.
+	TextureBytes : { format : U8, bytes : List(U8) }
+
+	## Solid-color texture parameters.
+	TextureGenerateColor : { width : I32, height : I32, color : Color.Rgba }
+
+	## Checkerboard texture parameters.
+	TextureGenerateChecked : {
+		width : I32,
+		height : I32,
+		checks_x : I32,
+		checks_y : I32,
+		color_a : Color.Rgba,
+		color_b : Color.Rgba,
+	}
+
+	## Full texture update.
+	TextureUpdate : { texture : Texture, pixels : List(Color.Rgba) }
+
+	## Rectangular texture update.
+	TextureUpdateRegion : {
+		texture : Texture,
+		x : I32,
+		y : I32,
+		width : I32,
+		height : I32,
+		pixels : List(Color.Rgba),
+	}
+
+	## Load a texture from an asset store.
+	texture_load_store! : TextureLoadStore => TextureResult
+
+	## Load a texture from encoded bytes.
+	texture_load_bytes! : TextureBytes => TextureResult
+
+	## Generate a solid-color texture.
+	texture_generate_color! : TextureGenerateColor => TextureResult
+
+	## Generate a checkerboard texture.
+	texture_generate_checked! : TextureGenerateChecked => TextureResult
+
+	## Replace all texture pixels.
+	texture_update! : TextureUpdate => U8
+
+	## Replace pixels within a texture rectangle.
+	texture_update_region! : TextureUpdateRegion => U8
+
+	## Set the texture scaling filter.
+	texture_set_filter! : Texture, U8 => {}
+
+	## Set the texture wrapping mode.
+	texture_set_wrap! : Texture, U8 => {}
+
+	## Texture used as a render target.
+	TextureRenderTarget : Texture
+
+	## Render-target dimensions.
+	TextureRenderTargetSize : { width : I32, height : I32 }
+
+	## Loaded render target or error.
+	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
+
+	## Load a render target.
+	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
+
+	## Text resource interface
+	## Opaque ARC-owned prepared text.
+	TextPrepared : Box(U64)
+
+	## One glyph's layout metrics.
+	TextGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
+
+	## Font metrics and glyph lookup data.
+	TextFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(TextGlyphMetric) }
+
+	## Text-preparation parameters.
+	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
+
+	## Prepared text, measured size, or error.
+	TextPrepareResult : { prepared : TextPrepared, width : F32, height : F32, err : U8 }
+
+	## Font bytes, format, and pixel size.
+	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
+
+	## Store-relative font path and pixel size.
+	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
+
+	## Loaded font or error.
+	TextFontResult : { font : Font.Handle, err : U8 }
+
+	## Get the default font during rendering.
+	text_default_font! : () => Font.Handle
+
+	## Get the default font during startup.
+	text_startup_default_font! : () => TextFontResult
+
+	## Load a font from encoded bytes.
+	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
+
+	## Load a font from an asset store.
+	text_load_store_font! : TextLoadStoreFont => TextFontResult
+
+	## Get font and glyph metrics.
+	text_font_metrics! : Font.Handle => TextFontMetrics
+
+	## Shape and measure text for repeated drawing.
+	text_prepare! : TextPrepare => TextPrepareResult
+
+	## Shader resource interface
+	## Opaque ARC-owned shader.
+	Shader : Box(U64)
+
+	## Located shader uniform.
+	ShaderUniform : { shader : Shader, location : I32 }
+
+	## Vertex and fragment shader sources.
+	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
+
+	## Store-relative vertex and fragment shader paths.
+	ShaderLoadStore : { store : Store, vertex_path : Str, fragment_path : Str }
+
+	## Shader-uniform lookup parameters.
+	ShaderLocation : { shader : Shader, name : Str }
+
+	## Scalar floating-point uniform value.
+	ShaderFloat : { uniform : ShaderUniform, value : F32 }
+
+	## Scalar integer uniform value.
+	ShaderInt : { uniform : ShaderUniform, value : I32 }
+
+	## Two-component vector uniform value.
+	ShaderVec2 : { uniform : ShaderUniform, value : Math.Vec2 }
+
+	## Three-component vector uniform value.
+	ShaderVec3 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32 } }
+
+	## Four-component vector uniform value.
+	ShaderVec4 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32, w : F32 } }
+
+	## Texture uniform value.
+	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
+
+	## Loaded shader or error.
+	ShaderResult : { shader : Shader, err : U8 }
+
+	## Load a shader from source strings.
+	shader_load_source! : ShaderLoadSource => ShaderResult
+
+	## Load a shader from an asset store.
+	shader_load_store! : ShaderLoadStore => ShaderResult
+
+	## Get a shader uniform location.
+	shader_location! : ShaderLocation => I32
+
+	## Set a floating-point shader uniform.
+	shader_set_float! : ShaderFloat => {}
+
+	## Set an integer shader uniform.
+	shader_set_int! : ShaderInt => {}
+
+	## Set a two-component shader uniform.
+	shader_set_vec2! : ShaderVec2 => {}
+
+	## Set a three-component shader uniform.
+	shader_set_vec3! : ShaderVec3 => {}
+
+	## Set a four-component shader uniform.
+	shader_set_vec4! : ShaderVec4 => {}
+
+	## Set a texture shader uniform.
+	shader_set_texture! : ShaderTexture => {}
+
+	## Store resource interface
+	## Opaque ARC-owned directory store; copies keep it open.
+	Store : Box(U64)
+
+	## Parameters for opening a confined asset store.
+	StoreOpen : {
+		location_kind : U8,
+		root : Str,
+		manifest_required : Bool,
+		asset_set : Str,
+		schema : U32,
+		content_version : U32,
+		content_hash_mode : U8,
+		content_hash : Str,
+	}
+
+	## Open asset store or error.
+	StoreOpenResult : { store : Store, err : U8 }
+
+	## Open a confined asset store.
+	store_open! : StoreOpen => StoreOpenResult
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
@@ -228,100 +429,6 @@ HostABI := [].{
 
 	## Set master volume; `1` is full volume.
 	audio_set_master_volume! : F32 => {}
-
-	## Store interface
-	## Opaque ARC-owned directory store; copies keep it open.
-	Store : Box(U64)
-
-	## Parameters for opening a confined asset store.
-	StoreOpen : {
-		location_kind : U8,
-		root : Str,
-		manifest_required : Bool,
-		asset_set : Str,
-		schema : U32,
-		content_version : U32,
-		content_hash_mode : U8,
-		content_hash : Str,
-	}
-
-	## Open asset store or error.
-	StoreOpenResult : { store : Store, err : U8 }
-
-	## Open a confined asset store.
-	store_open! : StoreOpen => StoreOpenResult
-
-	## Texture interface
-	## Store-relative texture path.
-	TextureLoadStore : { store : Store, path : Str }
-
-	## Loaded texture or error.
-	TextureResult : { texture : Texture, err : U8 }
-
-	## Encoded texture bytes and format code.
-	TextureBytes : { format : U8, bytes : List(U8) }
-
-	## Solid-color texture parameters.
-	TextureGenerateColor : { width : I32, height : I32, color : Color.Rgba }
-
-	## Checkerboard texture parameters.
-	TextureGenerateChecked : {
-		width : I32,
-		height : I32,
-		checks_x : I32,
-		checks_y : I32,
-		color_a : Color.Rgba,
-		color_b : Color.Rgba,
-	}
-
-	## Full texture update.
-	TextureUpdate : { texture : Texture, pixels : List(Color.Rgba) }
-
-	## Rectangular texture update.
-	TextureUpdateRegion : {
-		texture : Texture,
-		x : I32,
-		y : I32,
-		width : I32,
-		height : I32,
-		pixels : List(Color.Rgba),
-	}
-
-	## Load a texture from an asset store.
-	texture_load_store! : TextureLoadStore => TextureResult
-
-	## Load a texture from encoded bytes.
-	texture_load_bytes! : TextureBytes => TextureResult
-
-	## Generate a solid-color texture.
-	texture_generate_color! : TextureGenerateColor => TextureResult
-
-	## Generate a checkerboard texture.
-	texture_generate_checked! : TextureGenerateChecked => TextureResult
-
-	## Replace all texture pixels.
-	texture_update! : TextureUpdate => U8
-
-	## Replace pixels within a texture rectangle.
-	texture_update_region! : TextureUpdateRegion => U8
-
-	## Set the texture scaling filter.
-	texture_set_filter! : Texture, U8 => {}
-
-	## Set the texture wrapping mode.
-	texture_set_wrap! : Texture, U8 => {}
-
-	## Texture used as a render target.
-	TextureRenderTarget : Texture
-
-	## Render-target dimensions.
-	TextureRenderTargetSize : { width : I32, height : I32 }
-
-	## Loaded render target or error.
-	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
-
-	## Load a render target.
-	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
 
 	## Files interface
 	## Text contents when `err` is `0`; otherwise empty.
@@ -779,113 +886,6 @@ HostABI := [].{
 
 	## Run a script without bindings or returned rows.
 	sqlite_exec_script! : SqliteDb, Str => SqliteStatusResult
-
-	## Text interface
-	## Opaque ARC-owned prepared text.
-	TextPrepared : Box(U64)
-
-	## One glyph's layout metrics.
-	TextGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
-
-	## Font metrics and glyph lookup data.
-	TextFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(TextGlyphMetric) }
-
-	## Text-preparation parameters.
-	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
-
-	## Prepared text, measured size, or error.
-	TextPrepareResult : { prepared : TextPrepared, width : F32, height : F32, err : U8 }
-
-	## Font bytes, format, and pixel size.
-	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
-
-	## Store-relative font path and pixel size.
-	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
-
-	## Loaded font or error.
-	TextFontResult : { font : Font.Handle, err : U8 }
-
-	## Get the default font during rendering.
-	text_default_font! : () => Font.Handle
-
-	## Get the default font during startup.
-	text_startup_default_font! : () => TextFontResult
-
-	## Load a font from encoded bytes.
-	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
-
-	## Load a font from an asset store.
-	text_load_store_font! : TextLoadStoreFont => TextFontResult
-
-	## Get font and glyph metrics.
-	text_font_metrics! : Font.Handle => TextFontMetrics
-
-	## Shape and measure text for repeated drawing.
-	text_prepare! : TextPrepare => TextPrepareResult
-
-	## Shader interface
-	## Opaque ARC-owned shader.
-	Shader : Box(U64)
-
-	## Located shader uniform.
-	ShaderUniform : { shader : Shader, location : I32 }
-
-	## Vertex and fragment shader sources.
-	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
-
-	## Store-relative vertex and fragment shader paths.
-	ShaderLoadStore : { store : Store, vertex_path : Str, fragment_path : Str }
-
-	## Shader-uniform lookup parameters.
-	ShaderLocation : { shader : Shader, name : Str }
-
-	## Scalar floating-point uniform value.
-	ShaderFloat : { uniform : ShaderUniform, value : F32 }
-
-	## Scalar integer uniform value.
-	ShaderInt : { uniform : ShaderUniform, value : I32 }
-
-	## Two-component vector uniform value.
-	ShaderVec2 : { uniform : ShaderUniform, value : Math.Vec2 }
-
-	## Three-component vector uniform value.
-	ShaderVec3 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32 } }
-
-	## Four-component vector uniform value.
-	ShaderVec4 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-
-	## Texture uniform value.
-	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
-
-	## Loaded shader or error.
-	ShaderResult : { shader : Shader, err : U8 }
-
-	## Load a shader from source strings.
-	shader_load_source! : ShaderLoadSource => ShaderResult
-
-	## Load a shader from an asset store.
-	shader_load_store! : ShaderLoadStore => ShaderResult
-
-	## Get a shader uniform location.
-	shader_location! : ShaderLocation => I32
-
-	## Set a floating-point shader uniform.
-	shader_set_float! : ShaderFloat => {}
-
-	## Set an integer shader uniform.
-	shader_set_int! : ShaderInt => {}
-
-	## Set a two-component shader uniform.
-	shader_set_vec2! : ShaderVec2 => {}
-
-	## Set a three-component shader uniform.
-	shader_set_vec3! : ShaderVec3 => {}
-
-	## Set a four-component shader uniform.
-	shader_set_vec4! : ShaderVec4 => {}
-
-	## Set a texture shader uniform.
-	shader_set_texture! : ShaderTexture => {}
 
 	## Draw interface
 	## Zero-sized frame authority minted by the adapter.

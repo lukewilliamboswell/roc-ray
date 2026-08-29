@@ -8,10 +8,49 @@
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
-import CaptureHost
+import Host
 import Keys
 import Mouse
 import rrt.Capture as RrtCapture
+
+capture_format_code = |value|
+	match value {
+		Png => 0
+		Gif => 1
+		WebM => 2
+	}
+
+capture_timing_code = |value|
+	match value {
+		RealTime => 0
+		FixedStep => 1
+	}
+
+capture_cursor_code = |value|
+	match value {
+		NoCursor => 0
+		DrawCursor => 1
+	}
+
+capture_quality_code = |value|
+	match value {
+		Fast => 0
+		Balanced => 1
+		Best => 2
+	}
+
+capture_scale_ratio = |value|
+	match value {
+		Full => { numerator: 1, denominator: 1 }
+		Half => { numerator: 1, denominator: 2 }
+		Quarter => { numerator: 1, denominator: 4 }
+		Ratio(r) =>
+			if r.numerator == 0 or r.denominator == 0 {
+				{ numerator: 1, denominator: 1 }
+			} else {
+				{ numerator: r.numerator, denominator: r.denominator }
+			}
+		}
 
 AppHostConfig : {
 	title : Str,
@@ -116,22 +155,22 @@ host_recording = |value|
 			every_nth: 1,
 			timing: 0,
 			cursor: 0,
-			quality: CaptureHost.quality_code(Balanced),
+			quality: capture_quality_code(Balanced),
 		}
 		Record(recording) => {
-			ratio = CaptureHost.scale_ratio(recording.scale())
+			ratio = capture_scale_ratio(recording.scale())
 			{
 				enabled: Bool.True,
 				path: recording.path(),
-				format: CaptureHost.format_code(recording.format()),
+				format: capture_format_code(recording.format()),
 				fps: recording.fps(),
 				max_frames: recording.max_frames(),
 				scale_numerator: ratio.numerator,
 				scale_denominator: ratio.denominator,
 				every_nth: recording.every_nth(),
-				timing: CaptureHost.timing_code(recording.timing()),
-				cursor: CaptureHost.cursor_code(recording.cursor()),
-				quality: CaptureHost.quality_code(recording.quality()),
+				timing: capture_timing_code(recording.timing()),
+				cursor: capture_cursor_code(recording.cursor()),
+				quality: capture_quality_code(recording.quality()),
 			}
 		}
 	}

@@ -24,7 +24,7 @@
 ## dropped. At shutdown live tasks are cancelled, queued closures are dropped,
 ## and messages that were produced but never delivered are released.
 import App
-import TaskHost
+import Host
 
 Task := [].{
 
@@ -53,7 +53,7 @@ Task := [].{
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`
 	## never sees the answering input, and `render!` does not change the world.
 	spawn! : App.Input(msg), (() => msg) => {}
-	spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
+	spawn! = |_input, task!| Host.task_spawn!(Box.box(task!))
 
 	## Start a task whose message belongs to a component, wrapped into the app's
 	## own `Msg` on the way back.
@@ -92,5 +92,5 @@ Task := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	sleep! : U64 => {}
-	sleep! = |millis| TaskHost.sleep!(millis)
+	sleep! = |millis| Host.task_sleep!(millis)
 }

@@ -247,7 +247,7 @@ const BindingBytes = struct {
 };
 
 /// One encoded cell. Field-for-field the record `Sqlite` decodes.
-const Cell = abi.SqliteHostRun_stmtCells;
+const Cell = abi.HostSqlite_run_stmtCells;
 
 /// What a worker filled in, and what the frame thread turns into Roc values.
 const Result = struct {
@@ -574,7 +574,7 @@ fn dupeZ(allocator: std.mem.Allocator, text: abi.RocStr) ?[:0]const u8 {
 /// Copy every binding out of Roc memory, so a worker can read them.
 fn copyBindings(
     allocator: std.mem.Allocator,
-    list: abi.RocList(abi.SqliteHostRun_stmtArg1),
+    list: abi.RocList(abi.HostSqlite_run_stmtArg1),
 ) ?[]BindingBytes {
     const items = list.items();
     const copied = allocator.alloc(BindingBytes, items.len) catch return null;
@@ -665,7 +665,7 @@ pub fn open(
     mode: u8,
     busy_timeout_ms: u64,
     max_result_bytes: u64,
-) abi.SqliteHostOpen {
+) abi.HostSqlite_open {
     _ = rt;
     const allocator = workerAllocator();
 
@@ -719,7 +719,7 @@ pub fn close(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
     db_arg: *u64,
-) abi.SqliteHostClose {
+) abi.HostSqlite_close {
     const resource = db_heap.get(db_arg.*) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
@@ -752,14 +752,14 @@ pub fn close(
     if (rt) |runtime| {
         var blocking = runtime.spawnBlocking(Closer.run, .{&job}) catch {
             Closer.run(&job);
-            return toRocStatus(abi.SqliteHostClose, roc_host, &result);
+            return toRocStatus(abi.HostSqlite_close, roc_host, &result);
         };
         blocking.join();
     } else {
         Closer.run(&job);
     }
 
-    return toRocStatus(abi.SqliteHostClose, roc_host, &result);
+    return toRocStatus(abi.HostSqlite_close, roc_host, &result);
 }
 
 /// `Sqlite.prepare!`: compile one statement for reuse.
@@ -768,7 +768,7 @@ pub fn prepare(
     rt: ?*zio.Runtime,
     db_arg: *u64,
     sql_arg: abi.RocStr,
-) abi.SqliteHostPrepare {
+) abi.HostSqlite_prepare {
     _ = rt;
     const allocator = workerAllocator();
 
@@ -833,9 +833,9 @@ pub fn runStmt(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
     stmt_arg: *u64,
-    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
-) abi.SqliteHostRun_stmt {
-    const Record = abi.SqliteHostRun_stmt;
+    bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
+) abi.HostSqlite_run_stmt {
+    const Record = abi.HostSqlite_run_stmt;
     const allocator = workerAllocator();
 
     const stmt_resource = stmt_heap.get(stmt_arg.*) orelse
@@ -872,9 +872,9 @@ pub fn runOnce(
     rt: ?*zio.Runtime,
     db_arg: *u64,
     sql_arg: abi.RocStr,
-    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
-) abi.SqliteHostRun_once {
-    const Record = abi.SqliteHostRun_once;
+    bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
+) abi.HostSqlite_run_once {
+    const Record = abi.HostSqlite_run_once;
     const allocator = workerAllocator();
 
     const resource = db_heap.get(db_arg.*) orelse
@@ -911,8 +911,8 @@ pub fn execScript(
     rt: ?*zio.Runtime,
     db_arg: *u64,
     sql_arg: abi.RocStr,
-) abi.SqliteHostExec_script {
-    const Record = abi.SqliteHostExec_script;
+) abi.HostSqlite_exec_script {
+    const Record = abi.HostSqlite_exec_script;
     const allocator = workerAllocator();
 
     const resource = db_heap.get(db_arg.*) orelse return .{

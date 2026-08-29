@@ -11,8 +11,7 @@
 ## This module re-exports them, so `Key` here and in the package are the
 ## same nominal type and values pass between them freely.
 import rrt.Keys as RrtKeys
-import HostHost
-import CaptureHost
+import Host
 
 Keys := [].{
 
@@ -74,7 +73,7 @@ Keys := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_exit_key! : ExitKey => {}
-	set_exit_key! = |key| HostHost.set_exit_key!(exit_key_code(key))
+	set_exit_key! = |key| Host.keys_set_exit_key!(exit_key_code(key))
 
 	## Where keyboard state comes from: the hardware, or a script.
 	##
@@ -114,8 +113,8 @@ Keys := [].{
 	set_source! : Source => {}
 	set_source! = |source|
 		match source {
-			Hardware => CaptureHost.set_virtual_keys!({ active: Bool.False, keys: [] })
-			Virtual(keys) => CaptureHost.set_virtual_keys!({ active: Bool.True, keys: List.map(keys, key_code) })
+			Hardware => Host.capture_set_virtual_keys!({ active: Bool.False, keys: [] })
+			Virtual(keys) => Host.capture_set_virtual_keys!({ active: Bool.True, keys: List.map(keys, key_code) })
 		}
 
 	## Codepoints for a string, ready for `Keys.set_text!`.
@@ -153,7 +152,7 @@ Keys := [].{
 	## Keys.set_text!(Keys.typing("hello"))
 	## ```
 	set_text! : List(U32) => {}
-	set_text! = |text| CaptureHost.set_virtual_text!(text)
+	set_text! = |text| Host.capture_set_virtual_text!(text)
 }
 
 ## Decode UTF-8 bytes to the codepoints they encode.

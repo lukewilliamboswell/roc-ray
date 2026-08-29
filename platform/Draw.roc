@@ -35,7 +35,7 @@
 import Assets
 import Camera
 import Color
-import DrawHost
+import Host
 import rrt.Font
 import Math
 
@@ -207,8 +207,8 @@ Draw := [].{
 	## reach `init!` or `update!`. Roc does not enforce affine use or encode a
 	## frame epoch, so do not retain a `Frame` in the model: pass the
 	## callback's own frame down through helpers.
-	Frame :: DrawHost.Frame.{
-		from_host : DrawHost.Frame -> Frame
+	Frame :: Host.DrawFrame.{
+		from_host : Host.DrawFrame -> Frame
 		from_host = |frame| Frame.(frame)
 
 		## How big the surface being drawn to right now is.
@@ -233,7 +233,7 @@ Draw := [].{
 		##
 		## Legal in `render!` only.
 		size! : Frame => FrameSize
-		size! = |_frame| DrawHost.frame_size!()
+		size! = |_frame| Host.draw_frame_size!()
 	}
 
 	## Dimensions of the surface `render!` is currently drawing to.
@@ -542,20 +542,20 @@ Draw := [].{
 	## Host-owned framebuffer. Its texture-shaped box has a distinct host kind;
 	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
-	RenderTexture :: DrawHost.RenderTexture.{
+	RenderTexture :: Host.TextureRenderTarget.{
 
 		## Allocate an offscreen framebuffer.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
 		load! = |size| {
-			result = DrawHost.load_render_texture!(size)
+			result = Host.texture_load_render_target!(size)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(RenderTexture.(result.target))
 		}
 
 		## Read-only view of this render target's color attachment.
 		texture : RenderTexture -> Texture
-		texture = |RenderTexture.(target)| DrawHost.RenderTexture.texture(target)
+		texture = |RenderTexture.(target)| target
 
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
@@ -573,7 +573,11 @@ Draw := [].{
 		## the test needs. Do not use it to test drawing, offscreen scopes, or
 		## resource lifetime.
 		stub : RenderTexture
-		stub = RenderTexture.(DrawHost.RenderTexture.stub)
+		stub = RenderTexture.(Texture.stub)
+
+		## Internal bridge for capture operations that use a render target.
+		for_host : RenderTexture -> Host.TextureRenderTarget
+		for_host = |RenderTexture.(target)| target
 	}
 
 	## Pixel dimensions for a new offscreen render target.
@@ -584,14 +588,14 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: DrawHost.Shader.{
+	Shader :: Host.Shader.{
 
 		## Compile shader stages from source strings.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
-			result = DrawHost.load_shader_source!(cfg)
+			result = Host.shader_load_source!(cfg)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
 		}
 
@@ -604,7 +608,7 @@ Draw := [].{
 		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
 		from_store! = |store, cfg| {
-			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
+			result = Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
 			if result.err == 1 {
 				Err(PathInvalid)
 			} else if result.err == 2 {
@@ -676,7 +680,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(DrawHost.Shader.stub)
+		stub = Shader.(Box.box(U64.highest))
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -710,72 +714,72 @@ Draw := [].{
 	## The typed uniform handles are zero-cost nominal wrappers over the cached
 	## host location plus its owning shader. Their distinct types prevent using
 	## the wrong setter without adding a tag, allocation, or host lookup.
-	F32Uniform :: DrawHost.Uniform.{
+	F32Uniform :: Host.ShaderUniform.{
 
 		## Send a scalar float to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : F32Uniform, F32 => {}
-		set! = |F32Uniform.(uniform), value| DrawHost.set_shader_float!({ uniform, value })
+		set! = |F32Uniform.(uniform), value| Host.shader_set_float!({ uniform, value })
 	}
 
 	## A resolved `I32` uniform location, from `Shader.uniform_i32!`.
-	I32Uniform :: DrawHost.Uniform.{
+	I32Uniform :: Host.ShaderUniform.{
 
 		## Send a scalar integer to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : I32Uniform, I32 => {}
-		set! = |I32Uniform.(uniform), value| DrawHost.set_shader_int!({ uniform, value })
+		set! = |I32Uniform.(uniform), value| Host.shader_set_int!({ uniform, value })
 	}
 
 	## A resolved two-component uniform location, from `Shader.uniform_vec2!`.
-	Vec2Uniform :: DrawHost.Uniform.{
+	Vec2Uniform :: Host.ShaderUniform.{
 
 		## Send a two-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec2Uniform, Vector2 => {}
-		set! = |Vec2Uniform.(uniform), value| DrawHost.set_shader_vec2!({ uniform, value })
+		set! = |Vec2Uniform.(uniform), value| Host.shader_set_vec2!({ uniform, value })
 	}
 
 	## A resolved `Vec3` uniform location, from `Shader.uniform_vec3!`.
-	Vec3Uniform :: DrawHost.Uniform.{
+	Vec3Uniform :: Host.ShaderUniform.{
 
 		## Send a three-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec3Uniform, Vec3 => {}
-		set! = |Vec3Uniform.(uniform), value| DrawHost.set_shader_vec3!({ uniform, value })
+		set! = |Vec3Uniform.(uniform), value| Host.shader_set_vec3!({ uniform, value })
 	}
 
 	## A resolved `Vec4` uniform location, from `Shader.uniform_vec4!`.
-	Vec4Uniform :: DrawHost.Uniform.{
+	Vec4Uniform :: Host.ShaderUniform.{
 
 		## Send a four-component vector to this uniform for the draws that follow.
 		##
 		## Legal in `render!` only.
 		set! : Vec4Uniform, Vec4 => {}
-		set! = |Vec4Uniform.(uniform), value| DrawHost.set_shader_vec4!({ uniform, value })
+		set! = |Vec4Uniform.(uniform), value| Host.shader_set_vec4!({ uniform, value })
 	}
 
 	## A resolved color uniform location, from `Shader.uniform_color!`. GLSL has
 	## no color type, so this is a `vec4` whose components the setter normalizes
 	## from the 0-to-255 bytes of an `Rgba` to the 0-to-1 floats a shader reads.
-	ColorUniform :: DrawHost.Uniform.{
+	ColorUniform :: Host.ShaderUniform.{
 
 		## Send a color to this uniform for the draws that follow, normalized to
 		## the 0-to-1 range GLSL uses.
 		##
 		## Legal in `render!` only.
 		set! : ColorUniform, Color.Rgba => {}
-		set! = |ColorUniform.(uniform), color| DrawHost.set_shader_vec4!({
+		set! = |ColorUniform.(uniform), color| Host.shader_set_vec4!({
 			uniform,
 			value: normalized_color(color),
 		})
 	}
 
-	TextureUniform :: DrawHost.Uniform.{
+	TextureUniform :: Host.ShaderUniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
 		##
@@ -785,7 +789,7 @@ Draw := [].{
 		## for the ordinary case, and exists only because binding a plain
 		## texture is what most shaders want and `set!` does not say so.
 		set! : TextureUniform, Texture => {}
-		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
+		set! = |TextureUniform.(uniform), texture| Host.shader_set_texture!({
 			uniform,
 			texture,
 		})
@@ -863,7 +867,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || font_from_host!(DrawHost.default_font!())
+	default_font! = || font_from_host!(Host.text_default_font!())
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -882,31 +886,31 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	clear! : Frame, Color.Rgba => {}
-	clear! = |_frame, color| DrawHost.clear!(color)
+	clear! = |_frame, color| Host.draw_clear!(color)
 
 	## Draw a vertical rectangle gradient.
 	##
 	## Legal in `render!` only.
 	rectangle_gradient_v! : Frame, RectangleGradientV => {}
-	rectangle_gradient_v! = |_frame, cfg| DrawHost.rectangle_gradient_v!(cfg)
+	rectangle_gradient_v! = |_frame, cfg| Host.draw_rectangle_gradient_v!(cfg)
 
 	## Draw a horizontal rectangle gradient.
 	##
 	## Legal in `render!` only.
 	rectangle_gradient_h! : Frame, RectangleGradientH => {}
-	rectangle_gradient_h! = |_frame, cfg| DrawHost.rectangle_gradient_h!(cfg)
+	rectangle_gradient_h! = |_frame, cfg| Host.draw_rectangle_gradient_h!(cfg)
 
 	## Draw a radial circle gradient.
 	##
 	## Legal in `render!` only.
 	circle_gradient! : Frame, CircleGradient => {}
-	circle_gradient! = |_frame, cfg| DrawHost.circle_gradient!(cfg)
+	circle_gradient! = |_frame, cfg| Host.draw_circle_gradient!(cfg)
 
 	## Draw raylib's current frames-per-second counter.
 	##
 	## Legal in `render!` only.
 	fps! : Frame, Fps => {}
-	fps! = |_frame, cfg| DrawHost.fps!(cfg)
+	fps! = |_frame, cfg| Host.draw_fps!(cfg)
 
 	## Draw a filled and/or outlined axis-aligned rectangle.
 	##
@@ -915,12 +919,12 @@ Draw := [].{
 	rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => DrawHost.rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
+			Fill(color) => Host.draw_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
@@ -931,12 +935,12 @@ Draw := [].{
 	rounded_rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => DrawHost.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
+			Fill(color) => Host.draw_rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.rounded_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_rounded_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
@@ -947,12 +951,12 @@ Draw := [].{
 	circle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => DrawHost.circle!({ center: cfg.center, radius: cfg.radius, color })
+			Fill(color) => Host.draw_circle!({ center: cfg.center, radius: cfg.radius, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.circle_lines!({ center: cfg.center, radius: cfg.radius, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_circle_lines!({ center: cfg.center, radius: cfg.radius, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
@@ -963,7 +967,7 @@ Draw := [].{
 	line! = |_frame, cfg|
 		match cfg.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 
 	## Draw a filled and/or outlined triangle.
@@ -973,12 +977,12 @@ Draw := [].{
 	triangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => DrawHost.triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
+			Fill(color) => Host.draw_triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.triangle_lines!({ a: cfg.a, b: cfg.b, c: cfg.c, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_triangle_lines!({ a: cfg.a, b: cfg.b, c: cfg.c, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
@@ -997,12 +1001,12 @@ Draw := [].{
 	convex_polygon! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => DrawHost.polygon!({ points: cfg.points, color })
+			Fill(color) => Host.draw_polygon!({ points: cfg.points, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => DrawHost.polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => Host.draw_polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
@@ -1014,7 +1018,7 @@ Draw := [].{
 	## `update!`, use `font_from_bytes!` with bytes the app already holds.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
-		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
+		result = Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size })
 		if result.err == 1 {
 			Err(PathInvalid)
 		} else if result.err == 2 {
@@ -1037,7 +1041,7 @@ Draw := [].{
 	## tasks; refused in `render!`.
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
-		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
+		result = Host.text_load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(result.font))
 	}
 
@@ -1063,7 +1067,7 @@ Draw := [].{
 	## Legal in `render!` only.
 	texture! : Frame, TextureDraw => {}
 	texture! = |_frame, cfg| {
-		DrawHost.draw_texture!({
+		Host.draw_draw_texture!({
 			texture: cfg.texture,
 			source: cfg.source,
 			dest: cfg.dest,
@@ -1094,7 +1098,7 @@ Draw := [].{
 		if List.len(instances) == 0 {
 			{}
 		} else {
-			DrawHost.draw_texture_instances!({ texture, instances })
+			Host.draw_draw_texture_instances!({ texture, instances })
 		}
 	}
 
@@ -1103,7 +1107,7 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	projective_texture! : Frame, ProjectiveTexture => {}
-	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
+	projective_texture! = |_frame, cfg| Host.draw_draw_texture_quad!({
 		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.quad.top_left,
@@ -1121,7 +1125,7 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	projective_texture_view! : Frame, ProjectiveTextureView => {}
-	projective_texture_view! = |_frame, cfg| DrawHost.draw_texture_quad!({
+	projective_texture_view! = |_frame, cfg| Host.draw_draw_texture_quad!({
 		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.quad.top_left,
@@ -1170,10 +1174,10 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_render_texture! = |frame, RenderTexture.(target), callback| {
-		status = DrawHost.begin_render_texture!(target)
+		status = Host.draw_begin_render_texture!(target)
 		if status == scope_ok {
 			result = callback(frame)
-			DrawHost.end_render_texture!()
+			Host.draw_end_render_texture!()
 			result
 		} else if status == scope_limit {
 			Err(ScopeLimit)
@@ -1188,10 +1192,10 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_shader! : Frame, Shader, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_shader! = |frame, Shader.(shader), callback| {
-		status = DrawHost.begin_shader!(shader)
+		status = Host.draw_begin_shader!(shader)
 		if status == scope_ok {
 			result = callback(frame)
-			DrawHost.end_shader!()
+			Host.draw_end_shader!()
 			result
 		} else if status == scope_limit {
 			Err(ScopeLimit)
@@ -1206,10 +1210,10 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_blend_mode! = |frame, mode, callback| {
-		status = DrawHost.begin_blend!(blend_mode_code(mode))
+		status = Host.draw_begin_blend!(blend_mode_code(mode))
 		if status == scope_ok {
 			result = callback(frame)
-			DrawHost.end_blend!()
+			Host.draw_end_blend!()
 			result
 		} else if status == scope_limit {
 			Err(ScopeLimit)
@@ -1223,10 +1227,10 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_camera! = |frame, camera, callback| {
-		status = DrawHost.begin_camera!(camera)
+		status = Host.draw_begin_camera!(camera)
 		if status == scope_ok {
 			result = callback(frame)
-			DrawHost.end_camera!()
+			Host.draw_end_camera!()
 			result
 		} else if status == scope_limit {
 			Err(ScopeLimit)
@@ -1253,12 +1257,12 @@ Draw := [].{
 		# Reconstruct the internal transport record at the hosted boundary. Keeping
 		# this annotation explicit prevents the compiler from specializing the
 		# extern with Math.Rect's public ability-bearing alias.
-		scissor : DrawHost.Scissor
+		scissor : Host.DrawScissor
 		scissor = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
-		status = DrawHost.begin_scissor!(scissor)
+		status = Host.draw_begin_scissor!(scissor)
 		if status == scope_ok {
 			result = callback(frame)
-			DrawHost.end_scissor!()
+			Host.draw_end_scissor!()
 			result
 		} else if status == scope_limit {
 			Err(ScopeLimit)
@@ -1273,7 +1277,7 @@ Draw := [].{
 	## Legal in `render!` only.
 	text! : Frame, Text => {}
 	text! = |_frame, cfg|
-		DrawHost.text!({
+		Host.draw_text!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
@@ -1326,7 +1330,7 @@ Draw := [].{
 ## Private, because minting a live `Font` is the host's business.
 font_from_host! : Font.Handle => Font
 font_from_host! = |handle| {
-	metrics = DrawHost.font_metrics!(handle)
+	metrics = Host.text_font_metrics!(handle)
 	{ handle, metrics }
 }
 
@@ -1354,13 +1358,13 @@ scope_ok = 0
 scope_limit : U8
 scope_limit = 2
 
-uniform_host! : DrawHost.Shader, Str => Try(DrawHost.Uniform, [UniformNotFound, ..])
+uniform_host! : Host.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
-	location = DrawHost.shader_location!({ shader, name })
+	location = Host.shader_location!({ shader, name })
 	if location < 0 {
 		Err(UniformNotFound)
 	} else {
-		Ok(DrawHost.Uniform.from_shader_location(shader, location))
+		Ok({ shader, location })
 	}
 }
 

@@ -32,7 +32,8 @@ PLATFORM_ENTRY = ROOT / "platform" / "main.roc"
 PACKAGE_ENTRY = ROOT / "types" / "main.roc"
 TYPES_SUBDIR = "types"
 PRIVATE_ENTRIES = {
-    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host"),
+    "Assets": ("Store.for_host",),
+    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host", "RenderTexture.for_host"),
     "Keys": ("exit_key_code",),
     "Mouse": ("cursor_code", "cursor_mode_code"),
     # `integer` is what every width-checked integer decoder is built from. It
@@ -484,9 +485,12 @@ def validate(version_root: Path) -> list[str]:
     problems += check_cross_links(version_root, version_root / TYPES_SUBDIR)
     problems += check_phase_sentences(version_root)
     problems += check_prose_renders(version_root)
-    app_page = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_source = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_blocks = [body for _, body in entries(app_source)]
+    app_blocks += [body for body in MODULE_DOC_PATTERN.findall(app_source)]
+    app_text = " ".join(app_blocks)
     for forbidden in (*APP_INTERNAL_TYPES, "AppTransport"):
-        if forbidden in app_page:
+        if forbidden in app_text:
             problems.append(f"App: private boundary term leaked into docs: {forbidden}")
     platform_pages = [version_root / "index.html"] + [
         page

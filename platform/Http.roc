@@ -65,7 +65,7 @@
 ##
 ## HTTPS verifies peers with the operating system's certificate store. Custom
 ## certificate authorities and disabling verification are not supported.
-import HttpHost
+import Host
 import Url
 import http.Request
 import http.Response
@@ -161,7 +161,7 @@ Http := [].{
 		check_method(Request.method(request)) ? HttpErr
 		url = Url.parse(Request.uri(request)) ? InvalidUrl
 		canonical = Url.without_fragment(url)
-		raw = HttpHost.send!(to_host_request(config, request, Url.to_str(canonical)))
+		raw = Host.http_send!(to_host_request(config, request, Url.to_str(canonical)))
 		if raw.err == 0 {
 			Ok(from_host_response(raw))
 		} else {
@@ -294,7 +294,7 @@ expect check_method(Unknown("FROB")) == Err(Other(Str.to_utf8("FROB is not a met
 ##
 ## The URI is passed separately because the caller has already canonicalized
 ## it; rebuilding the request just to carry it back would copy its body.
-to_host_request : Http.Config, Request, Str -> HttpHost.RequestToHost
+to_host_request : Http.Config, Request, Str -> Host.HttpRequestToHost
 to_host_request = |config, request, uri| {
 	method = Request.method(request)
 	{
@@ -309,7 +309,7 @@ to_host_request = |config, request, uri| {
 }
 
 ## Rebuild the shared `Response` from the host's flat record.
-from_host_response : HttpHost.ResponseFromHost -> Response
+from_host_response : Host.HttpResponseFromHost -> Response
 from_host_response = |raw|
 	Response.from_status(raw.status)
 		.with_headers(raw.headers.map(|{ name, value }| { name, value }))
@@ -319,7 +319,7 @@ from_host_response = |raw|
 ##
 ## Unknown codes become `Other` rather than crashing, so a host that learns to
 ## distinguish a new failure still reports something an app can print.
-to_transport_err : HttpHost.ResponseFromHost -> Http.TransportErr
+to_transport_err : Host.HttpResponseFromHost -> Http.TransportErr
 to_transport_err = |raw|
 	if raw.err == 1 {
 		Timeout

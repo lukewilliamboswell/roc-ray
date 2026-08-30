@@ -6,7 +6,8 @@
 ##
 ## - State (`Game.roc`): ball, paddle, remaining bricks, score, lives, and match
 ## - Controls (`main.roc`): horizontal movement, launch/restart, and quit
-## - App wiring (`main.roc`): assets, recording, and event sounds
+## - Assets (`Assets.roc`): sounds, font, and prepared interface text
+## - App wiring (`main.roc`): recording and event sounds
 ## - Rendering (`Render.roc`): cabinet, brick wall, HUD, bodies, and prompts
 ## - Gameplay (`Ball.roc`, `Paddle.roc`, `Bricks.roc`): motion and collisions
 ## - Tests (`main.roc`): key mapping, launch, wall bounce, and last life lost
@@ -16,12 +17,13 @@ import rr.App
 import rr.Capture
 import rr.Devices
 import rr.Draw
+import Assets
 import Ball
 import Game
 import Render
 
 Model : {
-	assets : Render.Assets,
+	assets : Assets,
 	world : Game.World,
 	demo : Bool,
 	elapsed : F32,
@@ -64,7 +66,7 @@ init! = App.init_for_args(
 	breakout_config,
 	|startup| {
 		demo = List.contains(App.args!(startup), record_demo_flag)
-		Ok({ assets: Render.load!()?, world: Game.new_world(), demo, elapsed: 0 })
+		Ok({ assets: Assets.load!()?, world: Game.new_world(), demo, elapsed: 0 })
 	},
 )
 
@@ -81,7 +83,7 @@ read_controls = |devices| {
 }
 
 ## Interprets one pure gameplay event as its corresponding sound effect.
-play_event! : Render.Assets, Game.Event => {}
+play_event! : Assets, Game.Event => {}
 play_event! = |assets, event|
 	match event {
 		GameStarted => assets.sounds.start.playback().play!()

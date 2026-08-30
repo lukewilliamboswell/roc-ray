@@ -9,7 +9,7 @@
 ## - App wiring (`main.roc`): reproducible random seed and event sounds
 ## - Rendering (`Render.roc`): board, HUD, snake, food, glow, and game over
 ## - Gameplay (`Snake.roc`, `Board.roc`): legal turns, growth, collisions, and food
-## - Tests (`main.roc`): turns, food placement, movement, eating, and crashes
+## - Tests (`main.roc`, `Board.roc`, `Game.roc`): controls, turns, food placement, movement, eating, and crashes
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -18,7 +18,6 @@ import rr.Draw
 import rr.Math
 import rr.Random
 import Assets
-import Board
 import Game
 import Render
 import Snake
@@ -84,45 +83,6 @@ update! = |model, program_input| {
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| Render.draw!(frame, model.assets, model.world, model.elapsed)
 
-no_controls : Controls
-no_controls = { requested_direction: KeepDirection, restart_pressed: Bool.False, quit_pressed: Bool.False }
-
 expect read_controls(Devices.none.with_key_pressed(KeyUp)).requested_direction == Turn(Up)
-expect {
-	direction : Snake.Direction
-	direction = Right
-	!direction.can_turn_to(Left)
-}
-
-expect {
-	direction : Snake.Direction
-	direction = Right
-	direction.can_turn_to(Up)
-}
-expect Board.find_open_cell({ x: 12, y: 9 }, Snake.initial.cells, 0) == { x: 13, y: 9 }
-
-expect {
-	world = Game.new_world(Random.seed(1))
-	(next, events) = Game.step_snake(world)
-	next.snake.head() == { x: 13, y: 9 } and List.len(next.snake.cells) == 3 and List.is_empty(events)
-}
-
-expect {
-	world = { ..Game.new_world(Random.seed(1)), food: { x: 13, y: 9 } }
-	(next, events) = Game.step_snake(world)
-	List.len(next.snake.cells) == 4 and next.score == 1 and events == [FoodEaten]
-}
-
-expect {
-	world = Game.new_world(Random.seed(1))
-	snake : Snake
-	snake = { ..world.snake, cells: [{ x: 24, y: 9 }] }
-	(next, events) = Game.step_snake({ ..world, snake })
-	next.state == GameOver and events == [SnakeCrashed]
-}
-
-expect {
-	world = Game.new_world(Random.seed(1))
-	(next, _events) = Game.update(world, no_controls, Game.step_time * 2)
-	next.snake.head() == { x: 14, y: 9 }
-}
+expect Snake.initial.request_turn(Left).pending_direction == Right
+expect Snake.initial.request_turn(Up).pending_direction == Up

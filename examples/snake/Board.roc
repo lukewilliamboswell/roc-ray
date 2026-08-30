@@ -21,19 +21,6 @@ Board := [].{
 	cell_rect : Cell -> Math.Rect
 	cell_rect = |cell| { x: origin.x + I32.to_f32(cell.x) * cell_size, y: origin.y + I32.to_f32(cell.y) * cell_size, width: cell_size, height: cell_size }
 
-	## Walks forward from a candidate until it finds a cell outside the snake.
-	find_open_cell : Cell, List(Cell), I32 -> Cell
-	find_open_cell = |seed, occupied, attempt| {
-		cell_count = columns * rows
-		if attempt >= cell_count {
-			seed
-		} else {
-			flat_index = (seed.y * columns + seed.x + attempt) % cell_count
-			candidate = { x: flat_index % columns, y: flat_index // columns }
-			if List.contains(occupied, candidate) find_open_cell(seed, occupied, attempt + 1) else candidate
-		}
-	}
-
 	## Chooses a reproducible unoccupied food cell and advances the random state.
 	spawn_food : Random.State, List(Cell) -> { cell : Cell, state : Random.State }
 	spawn_food = |state, occupied| {
@@ -42,3 +29,18 @@ Board := [].{
 		{ cell: find_open_cell({ x: column.value, y: row.value }, occupied, 0), state: row.state }
 	}
 }
+
+## Walks forward from a candidate until it finds a cell outside the snake.
+find_open_cell : Board.Cell, List(Board.Cell), I32 -> Board.Cell
+find_open_cell = |seed, occupied, attempt| {
+	cell_count = Board.columns * Board.rows
+	if attempt >= cell_count {
+		seed
+	} else {
+		flat_index = (seed.y * Board.columns + seed.x + attempt) % cell_count
+		candidate = { x: flat_index % Board.columns, y: flat_index // Board.columns }
+		if List.contains(occupied, candidate) find_open_cell(seed, occupied, attempt + 1) else candidate
+	}
+}
+
+expect find_open_cell({ x: 12, y: 9 }, [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }], 0) == { x: 13, y: 9 }

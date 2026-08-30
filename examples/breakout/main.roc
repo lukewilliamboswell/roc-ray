@@ -17,9 +17,11 @@ import rr.App
 import rr.Capture
 import rr.Devices
 import rr.Draw
+import rr.Math
 import Assets
 import Ball
 import Game
+import Paddle
 import Render
 
 Model : {
@@ -82,6 +84,21 @@ read_controls = |devices| {
 	}
 }
 
+## Converts demo ball tracking into the same semantic controls as a player.
+demo_controls : Game.World -> Controls
+demo_controls = |world| {
+	paddle_center = Math.center(world.paddle.rect()).x
+	delta = world.ball.pos.x - paddle_center
+	{
+		move: if delta < -8 Left else if delta > 8 Right else Still,
+		action_pressed: match world.state {
+			Playing => Bool.False
+			_ => Bool.True
+		},
+		quit_pressed: Bool.False,
+	}
+}
+
 ## Interprets one pure gameplay event as its corresponding sound effect.
 play_event! : Assets, Game.Event => {}
 play_event! = |assets, event|
@@ -100,7 +117,7 @@ Msg : []
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	dt = program_input.time.elapsed_seconds
-	controls = if model.demo Game.demo_controls(model.world) else read_controls(program_input.devices)
+	controls = if model.demo demo_controls(model.world) else read_controls(program_input.devices)
 	(world, events) = Game.update(model.world, controls, dt)
 
 	for event in events {

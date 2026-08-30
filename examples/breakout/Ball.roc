@@ -1,18 +1,16 @@
 ## Ball movement and geometry for Breakout.
 import rr.Math
 
+ready_gap = 2.F32
+
+launch_velocity : Math.Vec2
+launch_velocity = { x: 170, y: -340 }
+
 Ball := {
 	pos : Math.Vec2,
 	velocity : Math.Vec2,
 }.{
 	radius = 8.F32
-
-	ready_gap = 2.F32
-
-	bounce_gap = 1.F32
-
-	launch_velocity : Math.Vec2
-	launch_velocity = { x: 170, y: -340 }
 
 	## Places a newly launched ball just above the center of the paddle.
 	on : Math.Rect -> Ball

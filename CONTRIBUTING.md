@@ -133,11 +133,10 @@ Three things follow:
   relative dependency without complaining, and the app it breaks fails
   `roc check` with INVALID PACKAGE DEPENDENCY.
 - Every reference to roc-ray-types resolves one freshly built artifact: the
-  platform's, the four examples that name the package themselves
-  (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
-  halves of `test/package_interop`. Building an app against a package build
-  nobody produced is not expressible. `test/package_interop` is built every run
-  to keep that honest.
+  platform's and both reusable packages in `test/package_interop`. Applications
+  use only the platform alias. Building an app against a package build nobody
+  produced is not expressible.
+  `test/package_interop` is built every run to keep that honest.
 - No tracked file is ever rewritten, so `git status` stays clean however a run
   ends -- including a `kill -9` part way through a build.
 
@@ -253,21 +252,29 @@ Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
 when the work can be paid once.
 
-**The package describes, the app performs.** A package that needs fonts,
-textures, a window size, or work that waits does not get startup authority to
-go and take them: `App.Startup` is a capability token the platform adapter
-mints, and a type nobody outside the platform can construct would be a type
-nobody outside the platform can use. Instead the package exposes a plan and a
-pure constructor -- `Toolkit.required_assets : Theme -> List(AssetRequest)` and
-`Toolkit.init : List(Draw.Texture), Text.Font -> Toolkit.State` -- and the
-app's `init!` walks the plan, calls `Assets.load_texture!` and
-`Draw.load_store_font!`, and hands the results back. For work that waits the
-package exposes a closure rather than spawning: `Toolkit.fetch_theme! : () =>
-Toolkit.Msg`, which the app starts with `Task.spawn_with!(input,
-Toolkit.fetch_theme!, |m| ToolkitMsg(m))`. A package wanting to configure the
-window answers the same way, with a suggestion the app applies. This is why
-`Task.spawn_with!` exists, and it is the answer whenever a package author asks
-for `App.Init` or `App.Config` in `roc-ray-types`.
+**The application supplies authority.** A package that needs fonts, textures,
+or startup-only facts does not get `App.Startup` and go take them itself. It can
+expose a plan and a pure constructor -- `Toolkit.required_assets : Theme ->
+List(AssetRequest)` and `Toolkit.init : List(Draw.Texture), Text.Font ->
+Toolkit.State` -- so the app performs startup work and hands the results back.
+
+For synchronous work after that boundary, a package may instead accept a
+companion-package effect handle supplied by the application. A renderer accepts
+`Drawing.Effects`; a package with a deliberately different drawing API can
+accept `App.Effects(frame)` plus `frame` and bind its own handle. The package
+owns the receiver implementation, but it acquires no frame or hosted function
+until the app passes the configured value. Calls remain synchronous and the
+underlying platform effect remains responsible for phase checks, bounds,
+ordering, ownership, and typed outcomes.
+
+For work that waits, the package still exposes a task body rather than spawning
+without the app's message witness. It may accept `App.Effects(frame)` and call a
+waiting receiver inside that body; the app starts it with `Task.spawn_with!` and
+chooses the message wrapper. A package wanting to configure the window likewise
+returns a suggestion or accepts only the deliberately injected effect interface
+that expresses that operation. `App.Init`, `App.Config`, `App.Input`, and
+`Draw.Frame` remain application/platform capabilities, not ambient package
+context.
 
 ### Validate before the hot path
 

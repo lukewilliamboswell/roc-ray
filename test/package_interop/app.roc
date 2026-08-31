@@ -1,7 +1,7 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
 	adapter: "input_adapter/main.roc",
-	rrt: "../../types/main.roc",
+	drawing: "drawing_adapter/main.roc",
 	roc: "nightly-2026-08-23-fb208ba",
 }
 
@@ -12,8 +12,9 @@ import rr.Draw
 import rr.Devices
 import rr.Keys
 import rr.Math
-import rrt.Font
+import rr.Text
 import adapter.Input as Events
+import drawing.DrawingAdapter
 
 ## Everything the view needs, derived in `update!` from values that came through
 ## the package. `render!` only draws, so the round trip has to survive being
@@ -24,7 +25,7 @@ Model : {
 	clicked : Bool,
 	padded : Bool,
 	age : F32,
-	font : Font,
+	font : Text.Font,
 	layout : { label : Draw.TextSize, label_pos : { x : F32, y : F32 } },
 	layout_passes : U64,
 
@@ -54,6 +55,10 @@ init! = App.init(
 	App.default,
 	|_startup| {
 		font = Draw.default_font!()
+		# The package-owned root bundle also forwards a waiting effect. This call
+		# is legal during startup and deliberately keeps its outcome out of the
+		# fixture's policy; the interop assertion is that the typed call crosses.
+		_effect_read = App.effects().read_text!("README.md")
 		label = "idle"
 		sized = Events.describe(Assets.generate_color_texture!({ width: 8, height: 4, color: Color.blue })?)
 		Ok({
@@ -72,13 +77,12 @@ init! = App.init(
 	},
 )
 
-## This is the UI package boundary: it names the types package's `Font`
-## directly, so layout can run during update without host authority. The value
-## it is handed is a `Font` loaded through the platform, which compiles
-## only because the two are one nominal.
-solve_layout : Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
+## This is the UI package boundary: the app names only the platform's
+## `Text.Font`, while the package names the types package's `Font`. The value
+## crosses unchanged because those are one nominal.
+solve_layout : Text.Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
 solve_layout = |font, label| {
-	label_size = Font.measure(font, { text: label, size: 20, spacing: Draw.default_spacing })
+	label_size = font.measure({ text: label, size: 20, spacing: Draw.default_spacing })
 	{ label: label_size, label_pos: { x: 10, y: 10 } }
 }
 
@@ -152,18 +156,28 @@ update! = |model, program_input| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
 	frame.clear!(if model.clicked Color.blue else Color.ray_white)
-	frame.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font })
-	frame.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
-	frame.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
+	effects = App.effects()
+	draw = effects.render(frame)
+	DrawingAdapter.canonical!(draw, model.font)
+	match DrawingAdapter.scoped!(draw, model.font) {
+		Err(ScopeLimit) => Err(ScopeLimit)
+		Ok({}) => {
+			DrawingAdapter.Alternative.from_effects(effects, frame).panel!(model.font)
 
-	# The last step of the round trip: a texture that has been through a
-	# package-typed function every cycle since `init!` goes back to the host,
-	# through a platform call that accepts nothing but the platform's own type.
-	frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
-	frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
-	frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
-	Ok({})
+			frame.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font })
+			frame.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
+			frame.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
+
+			# The last step of the round trip: a texture that has been through a
+			# package-typed function every cycle since `init!` goes back to the host,
+			# through a platform call that accepts nothing but the platform's own type.
+			frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
+			frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
+			frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
+			Ok({})
+		}
+	}
 }

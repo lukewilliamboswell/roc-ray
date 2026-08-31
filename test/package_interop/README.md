@@ -40,29 +40,40 @@ since the types inside them are separate nominals.
 `Sprite` stays put because it has `draw!`; its backing texture is now the shared
 `rrt.Texture` value.
 
-What does not move is *authority*. `App.Startup` is a capability token only the
-platform adapter can mint, so `App.Init` and `App.Config` would be types nobody
-outside the platform could use; the shape the architecture supports instead is
-**the package describes, the app performs** -- the package exposes a plan and a
-pure constructor, or a closure for work that waits, and the app's `init!` or
-`Task.spawn_with!` performs it. `CONTRIBUTING.md` "Make ownership explicit"
-spells the pattern out.
+What does not move is *host authority*. The types package has no hosted
+declarations, cannot mint a `Draw.Frame`, and cannot spawn or schedule a task.
+It can own an opaque effect interface whose synchronous delegates are supplied
+by the platform application. The application obtains `App.Effects(frame)`
+through the platform's `App.effects()`, then either binds a frame with
+`effects.render(frame)` or passes the root handle and frame to another package.
+The called host operation still enforces its phase at runtime. Work that waits
+still runs only as a task body the application passes to `Task.spawn!`; the
+package-owned handle merely lets that body call `effects.read_text!`.
+`CONTRIBUTING.md` "Make ownership explicit" spells out the boundary.
 
 ## Layout
 
 - `input_adapter/` — a package depending **only** on `roc-ray-types`, never on
   the platform.
+- `drawing_adapter/` — another types-only package. Its canonical API accepts
+  `Drawing.Effects`; its alternative API accepts the same
+  `App.Effects(frame)` root and a frame, then exposes its own drawing facade
+  directly over the root's low-level operations.
 - `app.roc` — runs on the platform and passes it the platform's
   `Devices.Snapshot`, `input.mouse`, `input.gamepads`, a re-exported `Key`, and
   the whole `App.Input(Msg)` (`Events.pulse`), then feeds the returned key back
   into `rr.Keys.key_code`. It also retains the previous layout for hit testing,
   measures the next layout once in `update` — through a `Font`-typed package
   function, no `where` clause — stores it in the model, and renders only stored
-  commands.
+  commands. It has no direct `roc-ray-types` dependency. During `init!` it calls
+  the root bundle's waiting file effect; in `render!` it gives both forms of the
+  drawing adapter authority originating at `App.effects()`.
 
 It compiles only if those are the same nominal types on both sides. Give
 `input_adapter` a look-alike local key type instead and it fails, so this is
-shared identity rather than structural unification.
+shared identity rather than structural unification. The drawing calls also
+compile only if the platform alias, root effect handle, explicit frame, and
+package-owned drawing facade agree on the same hidden `frame` witness.
 
 ## The texture round trip
 

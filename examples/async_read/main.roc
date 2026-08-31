@@ -69,7 +69,12 @@ update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
+		# The common package effect bundle is safe to capture here because it
+		# contains configured functions, not a frame or an input snapshot. The
+		# underlying waiting effect still enforces task phase and preserves the
+		# complete `Files.ReadTextError` result.
+		effects = App.effects()
+		Task.spawn!(program_input, || SmallReadFinished(effects.read_text!(small_path)))
 		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
 		Task.spawn!(program_input, || MetadataFinished(Files.metadata!(small_path)))
 	}

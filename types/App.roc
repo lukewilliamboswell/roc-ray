@@ -11,6 +11,9 @@
 ## effect and lives in the platform's `Task`.
 import Capture
 import Devices
+import Drawing
+import Files
+import Math
 import Time
 import Window
 
@@ -159,6 +162,68 @@ App := [].{
 		with_dropped_overflow : Input(msg), Bool -> Input(msg)
 		with_dropped_overflow = |Input.(sampled), overflowed| Input.({ ..sampled, dropped_overflow: overflowed })
 	}
+
+	## Platform-configured low-level effects shared with reusable packages.
+	##
+	## Applications obtain this through the platform's `App.effects()` alias;
+	## they never add the companion package to their own header. Drawing keeps
+	## its frame explicit until `effects.render(frame)` binds it into the
+	## canonical `Drawing.Effects` handle.
+	Effects(frame) :: {
+		shape_impl! : frame, Drawing.Geometry, Drawing.Paint => {},
+		draw_text_impl! : frame, Drawing.Text => {},
+		with_scissor_impl! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
+		read_text_impl! : Str => Try(Str, Files.ReadTextError),
+	}.{
+
+		## Bind the current rendering frame into the canonical drawing API.
+		render : Effects(frame), frame -> Drawing.Effects
+		render = |effects, frame| Drawing.effects_for(effects, frame)
+
+		## Low-level fillable-shape operation available to alternative APIs.
+		shape! : Effects(frame), frame, Drawing.Geometry, Drawing.Paint => {}
+		shape! = |Effects.(implementation), frame, geometry, paint|
+			(implementation.shape_impl!)(frame, geometry, paint)
+
+		## Low-level explicit text operation available to alternative APIs.
+		draw_text! : Effects(frame), frame, Drawing.Text => {}
+		draw_text! = |Effects.(implementation), frame, text|
+			(implementation.draw_text_impl!)(frame, text)
+
+		## Low-level scissor scope used by canonical and alternative drawing APIs.
+		with_scissor! : Effects(frame), frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
+		with_scissor! = |Effects.(implementation), frame, bounds, callback|
+			(implementation.with_scissor_impl!)(frame, bounds, callback)
+
+		## Read one bounded UTF-8 file.
+		##
+		## The platform permits this during `init!`, where it blocks startup, and
+		## in a task, where it parks the task. Calling it from `update!` or
+		## `render!` remains a platform-enforced programmer error.
+		read_text! : Effects(frame), Str => Try(Str, Files.ReadTextError)
+		read_text! = |Effects.(implementation), path|
+			(implementation.read_text_impl!)(path)
+	}
+
+	## Configure the shared bundle from a provider that already implements the
+	## required operations. Construction is pure and performs no hosted call.
+	effects_for : provider -> Effects(frame)
+		where [
+			provider.shape! : provider, frame, Drawing.Geometry, Drawing.Paint => {},
+			provider.draw_text! : provider, frame, Drawing.Text => {},
+			provider.with_scissor! : provider, frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
+			provider.read_text! : provider, Str => Try(Str, Files.ReadTextError),
+		]
+	effects_for = |provider|
+		Effects.(
+			{
+				shape_impl!: |frame, geometry, paint| provider.shape!(frame, geometry, paint),
+				draw_text_impl!: |frame, text| provider.draw_text!(frame, text),
+				with_scissor_impl!: |frame, bounds, callback|
+					provider.with_scissor!(frame, bounds, callback),
+				read_text_impl!: |path| provider.read_text!(path),
+			},
+		)
 
 	## The window size `Input.for_tests` reports. Ordinary rather than special:
 	## a test that depends on the size should say so with `with_window`.

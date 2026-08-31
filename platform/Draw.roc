@@ -16,6 +16,17 @@
 ## render-texture, and blend scopes restore their outer state even when their
 ## callback returns `Err`.
 ##
+## Reusable packages normally accept the companion package's canonical drawing
+## handle. Applications obtain it without a direct package dependency:
+##
+## ```roc
+## draw = App.effects().render(frame)
+## Widgets.draw!(draw, model.widgets)
+## ```
+##
+## The primitives on `Frame` remain available for application-specific or
+## alternative package APIs.
+##
 ## Every effect that takes a `Frame` is legal only in `render!`. Resource
 ## constructors `default_font!`, `font_from_bytes!`,
 ## `load_render_texture!`, `Shader.from_source!` and the `Shader.uniform_*!`
@@ -37,6 +48,7 @@ import Camera
 import Color
 import Host
 import rrt.Font
+import rrt.Drawing as RrtDrawing
 import Math
 
 TextureDrawConfig : {
@@ -269,6 +281,12 @@ Draw := [].{
 		fill : Fill,
 		stroke : Stroke,
 	}
+
+	## Fillable geometry shared with package-defined drawing APIs.
+	Geometry : RrtDrawing.Geometry
+
+	## One solid fill or stroke applied by the low-level `shape!` primitive.
+	Paint : RrtDrawing.Paint
 
 	## Axis-aligned rectangle and its style.
 	Rectangle : {
@@ -887,6 +905,92 @@ Draw := [].{
 	## Legal in `render!` only.
 	clear! : Frame, Color.Rgba => {}
 	clear! = |_frame, color| Host.draw_clear!(color)
+
+	## Apply one solid fill or stroke to a supported geometry.
+	##
+	## This is the flexible low-level shape operation used by package-defined
+	## drawing APIs. It selects an existing hosted primitive, so it adds no host
+	## ABI operation and preserves one hosted call per paint.
+	##
+	## Legal in `render!` only.
+	shape! : Frame, Geometry, Paint => {}
+	shape! = |_frame, geometry, paint|
+		match geometry {
+			Rectangle(bounds) =>
+				match paint {
+					SolidFill(color) => Host.draw_rectangle!({
+						x: bounds.x,
+						y: bounds.y,
+						width: bounds.width,
+						height: bounds.height,
+						color,
+					})
+					SolidStroke(stroke_cfg) => Host.draw_rectangle_lines!({
+						x: bounds.x,
+						y: bounds.y,
+						width: bounds.width,
+						height: bounds.height,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			RoundedRectangle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_rounded_rectangle!({
+						x: cfg.bounds.x,
+						y: cfg.bounds.y,
+						width: cfg.bounds.width,
+						height: cfg.bounds.height,
+						radius: cfg.radius,
+						segments: cfg.segments,
+						color,
+					})
+					SolidStroke(stroke_cfg) => Host.draw_rounded_rectangle_lines!({
+						x: cfg.bounds.x,
+						y: cfg.bounds.y,
+						width: cfg.bounds.width,
+						height: cfg.bounds.height,
+						radius: cfg.radius,
+						segments: cfg.segments,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			Circle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_circle!({ center: cfg.center, radius: cfg.radius, color })
+					SolidStroke(stroke_cfg) => Host.draw_circle_lines!({
+						center: cfg.center,
+						radius: cfg.radius,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			Triangle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
+					SolidStroke(stroke_cfg) => Host.draw_triangle_lines!({
+						a: cfg.a,
+						b: cfg.b,
+						c: cfg.c,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			ConvexPolygon(points) =>
+				match paint {
+					SolidFill(color) => Host.draw_polygon!({ points, color })
+					SolidStroke(stroke_cfg) => Host.draw_polygon_lines!({
+						points,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+			}
 
 	## Draw a vertical rectangle gradient.
 	##

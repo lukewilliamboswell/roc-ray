@@ -1,370 +1,45 @@
-## Explore a top-down arena with WASD or the arrow keys, dash with Space,
-## collect every spark, and reach the open gate. Escape quits. Run with
-## `--record-demo` to save a repeatable gallery recording.
+## Spark Run: collect every spark, avoid moving hazards, and reach the gate.
 ##
-## This larger example combines a Tiled map, animated sprites, collision rules,
-## a following camera, screen shake, music, and sound cues chosen by pure game
-## calculations before `update!` plays them.
+## Use WASD or Arrow keys to move, Space to dash or restart, and Escape to quit.
+## File structure:
+##
+## - State (`Game.roc`): player, remaining sparks, score, lives, gate, and feedback
+## - Controls (`main.roc`): movement, dash, restart, quit, and repeatable demo route
+## - Assets (`GameAssets.roc`): character and tile textures, font, sounds, and music
+## - Level (`Level.roc`): Tiled map, spawn, exit, obstacles, hazards, and decorations
+## - Gameplay (`Player.roc`, `Spark.roc`, `Hazard.roc`): movement, dash, collection, and damage bodies
+## - Rendering (`Render.roc`): camera, arena layers, sprites, effects, HUD, and end states
+## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
 }
 
 import rr.App
-import rr.Time
-import rr.Assets
-import rr.Audio
-import rr.Camera
-import rr.Color
 import rr.Capture
-import rr.Draw
-import rr.Text
+import rr.Color
 import rr.Devices
-import rr.Keys
+import rr.Draw
 import rr.Math
-import rr.Sprite
 import rr.Tilemap
+import Game
+import GameAssets
+import Hazard
+import Level
+import Player
+import Render
+import Spark
 
-Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
-	is_eq : _
-}
+Model : { assets : GameAssets, level : Level, world : Game.World, demo : Bool, demo_frame : U64 }
 
-GateState := [GateLocked, GateOpen].{
-	is_eq : _
-}
-
-Lane := [Horizontal, Vertical]
-
-Tile := [
-	TileFloor,
-	TileBlockA,
-	TileBlockB,
-	TileMarker,
-	TileRockA,
-	TilePlantA,
-	TilePlantB,
-	TileFlowerA,
-	TileFlowerB,
-	TileCrystalA,
-	TileCrystalB,
-	TileSparkA,
-	TileSparkB,
-]
-
-Decoration : {
-	pos : Math.Vec2,
-	tile : Tile,
-	scale : F32,
-	rotation : F32,
-}
-
-Level : {
-	tilemap : Tilemap,
-	spawn : Math.Vec2,
-	exit_center : Math.Vec2,
-	exit_radius : F32,
-	sparks : List(World.Spark),
-	spark_total : U64,
-	obstacles : List(World.Obstacle),
-	hazards : List(World.Hazard),
-	decorations : List(Decoration),
-	bounds : Math.Rect,
-}
-
-GameState := [Playing, Won, GameOver].{
-	is_eq : _
-}
-
-World := {
-	player : World.Player,
-	sparks : List(World.Spark),
-	score : U64,
-	lives : U64,
-	phase : F32,
-	shake : F32,
-	flash : F32,
-	burst_pos : Math.Vec2,
-	burst_timer : F32,
-	gate : GateState,
-	gate_flash : F32,
-	state : GameState,
-}.{
-	PlayerStep : {
-		pos : Math.Vec2,
-		raw_dir : Math.Vec2,
-		move_dir : Math.Vec2,
-		dash_started : Bool,
-		dash_active : Bool,
-		dt : F32,
-	}
-
-	Player := {
-		pos : Math.Vec2,
-		invuln : F32,
-		dash_cooldown : F32,
-		dash_timer : F32,
-		animation : Sprite.Animation,
-		facing : Facing,
-	}.{
-		new : Math.Vec2 -> Player
-		new = |pos| {
-			pos,
-			invuln: 0,
-			dash_cooldown: 0,
-			dash_timer: 0,
-			animation: Sprite.animation({ frame_count: 4, fps: 10 }),
-			facing: East,
-		}
-
-		circle : Player -> Math.Circle
-		circle = |player| Math.circle(player.pos, player_radius)
-
-		facing_dir : Player -> Math.Vec2
-		facing_dir = |player| facing_to_vec(player.facing)
-
-		rotation : Player -> F32
-		rotation = |player| facing_to_rotation(player.facing)
-
-		dash_ready : Player -> Bool
-		dash_ready = |player| player.dash_cooldown <= 0
-
-		dash_active : Player -> Bool
-		dash_active = |player| player.dash_timer > 0
-
-		dash_charge : Player -> F32
-		dash_charge = |player| if player.dash_ready() 1 else 1 - player.dash_cooldown / dash_cooldown_time
-
-		step : Player, PlayerStep -> Player
-		step = |player, frame| {
-			raw_moving = is_moving(frame.raw_dir)
-			move_moving = is_moving(frame.move_dir)
-
-			{
-				..player,
-				pos: frame.pos,
-				invuln: tick_timer(player.invuln, frame.dt),
-				dash_cooldown: if frame.dash_started dash_cooldown_time else tick_timer(player.dash_cooldown, frame.dt),
-				dash_timer: if frame.dash_started dash_duration else tick_timer(player.dash_timer, frame.dt),
-				animation: if move_moving Sprite.step(player.animation, frame.dt) else idle_animation(player.animation),
-				facing: if frame.dash_active and !(raw_moving) player.facing else facing_from_input(frame.raw_dir, player.facing),
-			}
-		}
-
-		damage_respawn : Player, Math.Vec2 -> Player
-		damage_respawn = |player, respawn_pos| {
-			..player,
-			pos: respawn_pos,
-			invuln: 1.2,
-			dash_timer: 0,
-			facing: East,
-		}
-	}
-
-	Spark := {
-		id : U64,
-		pos : Math.Vec2,
-	}.{
-		is_eq : _
-
-		new : U64, F32, F32 -> Spark
-		new = |id, x, y| { id, pos: { x, y } }
-
-		circle : Spark -> Math.Circle
-		circle = |spark| Math.circle(spark.pos, spark_radius)
-
-		hit_by : Spark, Math.Circle -> Bool
-		hit_by = |spark, other| Math.circle_overlaps(other, spark.circle())
-	}
-
-	Obstacle := {
-		rect : Math.Rect,
-		tile : Tile,
-		rotation : F32,
-	}.{
-		new : F32, F32, F32, F32, Tile, F32 -> Obstacle
-		new = |x, y, width, height, tile, rotation| {
-			rect: Math.rect(x, y, width, height),
-			tile,
-			rotation,
-		}
-
-		center : Obstacle -> Math.Vec2
-		center = |obstacle| Math.center(obstacle.rect)
-
-		hit_by : Obstacle, Math.Circle -> Bool
-		hit_by = |obstacle, circle| Math.circle_rect(circle, obstacle.rect)
-	}
-
-	Hazard := {
-		center : Math.Vec2,
-		span : F32,
-		lane : Lane,
-		offset : F32,
-		radius : F32,
-		color : Color.Rgba,
-	}.{
-		pos : Hazard, F32 -> Math.Vec2
-		pos = |hazard, phase| {
-			amount = ping_pong(wrap_unit(phase + hazard.offset))
-			match hazard.lane {
-				Vertical => { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 + hazard.span * amount }
-				Horizontal => { x: hazard.center.x - hazard.span * 0.5 + hazard.span * amount, y: hazard.center.y }
-			}
-		}
-
-		circle : Hazard, F32 -> Math.Circle
-		circle = |hazard, phase| Math.circle(hazard.pos(phase), hazard.radius)
-
-		lane_start : Hazard -> Math.Vec2
-		lane_start = |hazard|
-			match hazard.lane {
-				Vertical => { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 }
-				Horizontal => { x: hazard.center.x - hazard.span * 0.5, y: hazard.center.y }
-			}
-
-		lane_end : Hazard -> Math.Vec2
-		lane_end = |hazard|
-			match hazard.lane {
-				Vertical => { x: hazard.center.x, y: hazard.center.y + hazard.span * 0.5 }
-				Horizontal => { x: hazard.center.x + hazard.span * 0.5, y: hazard.center.y }
-			}
-
-		hit_by : Hazard, Math.Circle, F32 -> Bool
-		hit_by = |hazard, other, phase| Math.circle_overlaps(other, hazard.circle(phase))
-	}
-
-	StepInput : {
-		raw_dir : Math.Vec2,
-		dash_pressed : Bool,
-		dt : F32,
-	}
-
-	StepEvent := [DashStarted(Math.Vec2), SparkCollected(Spark), GateOpened, Escaped, Damaged(GameState)].{
-		is_eq : _
-	}
-
-	StepResult : {
-		world : World,
-		events : List(StepEvent),
-	}
-
-	CollectResult : {
-		world : World,
-		collected : Try(Spark, [NoSpark]),
-		gate_opened : Bool,
-	}
-
-	EscapeResult : {
-		world : World,
-		escaped : Bool,
-	}
-
-	DamageResult : {
-		world : World,
-		damaged : Bool,
-	}
-
-	new : Level -> World
-	new = |level| {
-		player: Player.new(level.spawn),
-		sparks: level.sparks,
-		score: 0,
-		lives: 3,
-		phase: 0,
-		shake: 0,
-		flash: 0,
-		burst_pos: level.spawn,
-		burst_timer: 0,
-		gate: GateLocked,
-		gate_flash: 0,
-		state: Playing,
-	}
-}
-
-Sounds : {
-	collect : Audio.Sound,
-	hurt : Audio.Sound,
-	win : Audio.Sound,
-	lose : Audio.Sound,
-	gate : Audio.Sound,
-	dash : Audio.Sound,
-	sparkle : Audio.Sound,
-	music : Audio.Music,
-}
-
-## State retained between updates: loaded fonts, textures and audio, the parsed
-## level, the changing game world, and progress through the repeatable demo.
-## Keeping resources beside the world lets `update!` advance the game and
-## `render!` draw the result without loading anything again.
-Model : {
-	font : Text.Font,
-	characters : Draw.Texture,
-	tiles : Draw.Texture,
-	level : Level,
-	sounds : Sounds,
-	world : World,
-	demo : Bool,
-	demo_frame : U64,
-}
+Controls : Game.Controls
 
 program = { init!, update!, render! }
 
-screen_w = 800.F32
+demo_frames = 150.U64
 
-screen_h = 600.F32
+record_demo_flag = "--record-demo"
 
-world_left = -720.F32
-
-world_top = -520.F32
-
-world_right = 1456.F32
-
-world_bottom = 1144.F32
-
-player_radius = 22.F32
-
-player_speed = 330.F32
-
-dash_speed = 760.F32
-
-dash_duration = 0.18.F32
-
-dash_cooldown_time = 0.62.F32
-
-spark_radius = 24.F32
-
-spark_total = 10.U64
-
-top_down_map_path : Str
-top_down_map_path = "examples/top_down/assets/top_down.tmx"
-
-collect_path : Str
-collect_path = "examples/top_down/assets/kenney-audio/sfx/collect.ogg"
-
-hurt_path : Str
-hurt_path = "examples/top_down/assets/kenney-audio/sfx/hurt.ogg"
-
-win_path : Str
-win_path = "examples/top_down/assets/kenney-audio/sfx/win.ogg"
-
-lose_path : Str
-lose_path = "examples/top_down/assets/kenney-audio/sfx/lose.ogg"
-
-gate_path : Str
-gate_path = "examples/top_down/assets/kenney-audio/sfx/gate.ogg"
-
-dash_path : Str
-dash_path = "examples/top_down/assets/kenney-audio/sfx/dash.ogg"
-
-music_path : Str
-music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
-
-## How loud each effect is mixed.
-##
-## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
-## so every play has to name its sound's level -- a `Sound` has no volume of
-## its own to set in `init!` and inherit. These constants are the one place the
-## levels live, so no single play can drift away from what the mix intends.
 collect_volume = 0.58.F32
 
 hurt_volume = 0.55.F32
@@ -379,33 +54,14 @@ dash_volume = 0.3.F32
 
 sparkle_volume = 0.16.F32
 
-## The music stream is different: `SetMusicVolume` is a real mutation that
-## sticks, so this is the level `init!` starts at and a restart returns to.
 music_volume = 0.13.F32
 
-## Where the music is ducked to once the exit is reached, so the win sting sits
-## on top of it.
 music_won_volume = 0.08.F32
 
-fallback_spawn : Math.Vec2
-fallback_spawn = { x: -560, y: -360 }
-
-fallback_exit_center : Math.Vec2
-fallback_exit_center = { x: 1185, y: 920 }
-
-fallback_exit_radius = 58.F32
-
-burst_duration = 0.36.F32
-
-demo_frames = 150.U64
-
-record_demo_flag : Str
-record_demo_flag = "--record-demo"
-
+## Configures the interactive window or the repeatable hidden gallery recording.
 top_down_config : List(Str) -> App.Config
 top_down_config = |args| {
 	base = App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))
-
 	if List.contains(args, record_demo_flag) {
 		base
 			.with_visible(Bool.False)
@@ -424,1132 +80,169 @@ top_down_config = |args| {
 	}
 }
 
+## Loads resources and level data before starting music and the first world.
 init! : App.Init(Model, _)
 init! = App.init_for_args(
 	top_down_config,
 	|startup| {
-		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
-		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
-		tiles = Assets.load_texture!(assets, "kenney-topdown/tiles.png")?
-		raw_map = Tilemap.load_tmx!(top_down_map_path)?
-
-		tilemap = Tilemap.from_raw(raw_map)
-			.with_origin(
-				{ x: world_left, y: world_top },
-			)
-			.with_tileset_texture(
-				1,
-				tiles,
-			)
-			.layer_role(
-				"Ground",
-				Drawn,
-			)
-			.layer_role(
-				"Decor",
-				Drawn,
-			)
-			.layer_role(
-				"Walls",
-				Solid,
-			)
-			.object_role(
-				"spawn",
-				Spawn,
-			)
-			.object_role(
-				"spark",
-				Collectible,
-			)
-			.object_role(
-				"hazard",
-				Hazard,
-			)
-			.object_role(
-				"exit",
-				Exit,
-			)
-			.build()?
-		level = level_from_tilemap(tilemap)
-		sounds = make_sounds!()?
-		sounds.music.play!()
-		model = new_game(Draw.default_font!(), characters, tiles, level, sounds)
-		Ok({
-			..model,
-			demo: List.contains(App.args!(startup), record_demo_flag),
-			demo_frame: 0,
-		})
+		assets = GameAssets.load!()?
+		level = Level.load!(assets.tiles)?
+		assets.sounds.music.play!()
+		Ok({ assets, level, world: Game.new(level), demo: List.contains(App.args!(startup), record_demo_flag), demo_frame: 0 })
 	},
 )
 
-make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [ResourceLimit, SoundGenerationFailed, ..])
-make_sound! = |waveform, from, to, ms, volume|
-	Audio.gen_sound!({
-		waveform,
-		freq_start: from,
-		freq_end: to,
-		ms,
-		attack_ms: 2,
-		decay_ms: 24,
-		sustain: 0.45,
-		release_ms: 45,
-		volume,
-	})
-
-load_sound_or! : Str, Audio.Sound => Audio.Sound
-load_sound_or! = |path, fallback|
-	match Audio.load_sound!(path) {
-		Ok(sound) => sound
-		Err(_) => fallback
-	}
-
-make_sounds! : () => Try(Sounds, [MusicLoadFailed, ResourceLimit, SoundGenerationFailed, ..])
-make_sounds! = || {
-	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
-	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
-	win = load_sound_or!(win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
-	lose = load_sound_or!(lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
-	gate = load_sound_or!(gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
-	dash = load_sound_or!(dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
-	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)?
-	music = Audio.load_music!(music_path)?
-
-	# Only the music sets a volume here. Every effect is played through a
-	# `Playback` that states its own, so a volume set here would be a second
-	# source of truth that the next play overwrites anyway.
-	music.set_volume!(music_volume)
-	music.set_looping!(Bool.True)
-
-	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
-}
-
-new_game : Text.Font, Draw.Texture, Draw.Texture, Level, Sounds -> Model
-new_game = |font, characters, tiles, level, sounds| {
-	font,
-	characters,
-	tiles,
-	level,
-	sounds,
-	world: World.new(level),
-	demo: Bool.False,
-	demo_frame: 0,
-}
-
-fallback_sparks : List(World.Spark)
-fallback_sparks = [
-	World.Spark.new(0, -430, -150),
-	World.Spark.new(1, -55, -350),
-	World.Spark.new(2, 315, -295),
-	World.Spark.new(3, 760, -405),
-	World.Spark.new(4, 1110, -65),
-	World.Spark.new(5, 910, 350),
-	World.Spark.new(6, 560, 820),
-	World.Spark.new(7, 105, 640),
-	World.Spark.new(8, -280, 895),
-	World.Spark.new(9, -540, 410),
-]
-
-fallback_obstacles : List(World.Obstacle)
-fallback_obstacles = [
-	World.Obstacle.new(-305, -300, 150, 440, TileBlockA, 0),
-	World.Obstacle.new(85, -430, 150, 295, TileBlockB, 11),
-	World.Obstacle.new(210, -45, 510, 120, TileBlockA, 22),
-	World.Obstacle.new(705, 150, 140, 425, TileBlockB, 33),
-	World.Obstacle.new(5, 505, 480, 115, TileBlockA, 44),
-	World.Obstacle.new(-535, 515, 340, 105, TileBlockB, 55),
-	World.Obstacle.new(965, -300, 145, 450, TileBlockA, 66),
-]
-
-fallback_hazards : List(World.Hazard)
-fallback_hazards = [
-	{ center: { x: -445, y: 165 }, span: 520, lane: Horizontal, offset: 0, radius: 30, color: Color.from_hex_rgb(0xf94144) },
-	{ center: { x: 25, y: 320 }, span: 650, lane: Vertical, offset: 0.22, radius: 34, color: Color.from_hex_rgb(0xf3722c) },
-	{ center: { x: 600, y: -255 }, span: 650, lane: Horizontal, offset: 0.48, radius: 32, color: Color.from_hex_rgb(0xf8961e) },
-	{ center: { x: 1035, y: 455 }, span: 700, lane: Vertical, offset: 0.72, radius: 36, color: Color.from_hex_rgb(0xf94144) },
-]
-
-fallback_decorations : List(Decoration)
-fallback_decorations = [
-	{ pos: { x: -640, y: 80 }, tile: TileCrystalA, scale: 1.35, rotation: 0 },
-	{ pos: { x: -575, y: 585 }, tile: TileCrystalB, scale: 1.2, rotation: 0 },
-	{ pos: { x: -85, y: -455 }, tile: TilePlantA, scale: 1.35, rotation: 0 },
-	{ pos: { x: 190, y: 185 }, tile: TileMarker, scale: 1.15, rotation: 0 },
-	{ pos: { x: 780, y: -210 }, tile: TileBlockA, scale: 1.1, rotation: 12 },
-	{ pos: { x: 1110, y: 190 }, tile: TileRockA, scale: 1.45, rotation: 0 },
-	{ pos: { x: 1035, y: 785 }, tile: TileBlockB, scale: 1.2, rotation: -14 },
-	{ pos: { x: 315, y: 975 }, tile: TileFlowerA, scale: 1.05, rotation: 0 },
-	{ pos: { x: -395, y: 960 }, tile: TileFlowerB, scale: 0.9, rotation: 0 },
-	{ pos: { x: 1185, y: 735 }, tile: TileSparkA, scale: 0.7, rotation: 20 },
-	{ pos: { x: 1280, y: -395 }, tile: TileSparkB, scale: 0.72, rotation: -18 },
-	{ pos: { x: -615, y: -405 }, tile: TilePlantB, scale: 1.1, rotation: 0 },
-]
-
-fallback_level : Level
-fallback_level = {
-	tilemap: Tilemap.empty,
-	spawn: fallback_spawn,
-	exit_center: fallback_exit_center,
-	exit_radius: fallback_exit_radius,
-	sparks: fallback_sparks,
-	spark_total,
-	obstacles: fallback_obstacles,
-	hazards: fallback_hazards,
-	decorations: fallback_decorations,
-	bounds: Math.rect(world_left, world_top, world_right - world_left, world_bottom - world_top),
-}
-
-level_from_tilemap : Tilemap -> Level
-level_from_tilemap = |tilemap| {
-	raw = tilemap.raw_map()
-	spawn_object = first_typed_object(tilemap, "spawn")
-	exit_object = first_typed_object(tilemap, "exit")
-	sparks = sparks_from_tilemap(tilemap)
-
-	{
-		tilemap,
-		spawn: object_center_or(tilemap, spawn_object, fallback_spawn),
-		exit_center: object_center_or(tilemap, exit_object, fallback_exit_center),
-		exit_radius: object_radius_or(exit_object, fallback_exit_radius),
-		sparks,
-		spark_total: List.len(sparks),
-		obstacles: obstacles_from_tilemap(raw, tilemap),
-		hazards: hazards_from_tilemap(raw, tilemap),
-		decorations: decorations_from_tilemap(raw, tilemap),
-		bounds: Math.rect(world_left, world_top, world_right - world_left, world_bottom - world_top),
-	}
-}
-
-first_typed_object : Tilemap, Str -> Try(Tilemap.RawObject, [NotFound])
-first_typed_object = |tilemap, type_name|
-	match List.first(tilemap.objects_typed(type_name)) {
-		Ok(object) => Ok(object)
-		Err(_) => Err(NotFound)
-	}
-
-object_center_or : Tilemap, Try(Tilemap.RawObject, [NotFound]), Math.Vec2 -> Math.Vec2
-object_center_or = |tilemap, object_result, fallback|
-	match object_result {
-		Ok(object) => tilemap.object_world_center(object)
-		Err(_) => fallback
-	}
-
-object_radius_or : Try(Tilemap.RawObject, [NotFound]), F32 -> F32
-object_radius_or = |object_result, fallback|
-	match object_result {
-		Ok(object) => if object.width == 0 and object.height == 0 fallback else F32.max(object.width, object.height) * 0.5
-		Err(_) => fallback
-	}
-
-sparks_from_tilemap : Tilemap -> List(World.Spark)
-sparks_from_tilemap = |tilemap| {
-	var $sparks = []
-	for object in tilemap.objects_typed("spark") {
-		pos = tilemap.object_world_center(object)
-		$sparks = List.append($sparks, World.Spark.new(object.id, pos.x, pos.y))
-	}
-	if List.len($sparks) == 0 fallback_sparks else $sparks
-}
-
-obstacles_from_tilemap : Tilemap.RawMap, Tilemap -> List(World.Obstacle)
-obstacles_from_tilemap = |raw, tilemap| {
-	var $items = []
-	for object in tilemap.objects_typed("obstacle") {
-		rect = tilemap.object_world_rect(object)
-		tile = tile_from_name(Tilemap.property_str(raw, object, "tile", "TileBlockA"))
-		rotation = Tilemap.property_f32(raw, object, "rotation", object.rotation)
-		$items = List.append($items, World.Obstacle.new(rect.x, rect.y, rect.width, rect.height, tile, rotation))
-	}
-	if List.len($items) == 0 fallback_obstacles else $items
-}
-
-hazards_from_tilemap : Tilemap.RawMap, Tilemap -> List(World.Hazard)
-hazards_from_tilemap = |raw, tilemap| {
-	var $items = []
-	for object in tilemap.objects_typed("hazard") {
-		center = tilemap.object_world_center(object)
-		lane = lane_from_name(Tilemap.property_str(raw, object, "lane", "Horizontal"))
-		span = Tilemap.property_f32(raw, object, "span", 520)
-		offset = Tilemap.property_f32(raw, object, "offset", 0)
-		radius = Tilemap.property_f32(raw, object, "radius", 30)
-		$items = List.append($items, { center, span, lane, offset, radius, color: hazard_color(object.id) })
-	}
-	if List.len($items) == 0 fallback_hazards else $items
-}
-
-decorations_from_tilemap : Tilemap.RawMap, Tilemap -> List(Decoration)
-decorations_from_tilemap = |raw, tilemap| {
-	var $items = []
-	for object in tilemap.objects_typed("decoration") {
-		$items = List.append(
-			$items,
-			{
-				pos: tilemap.object_world_center(object),
-				tile: tile_from_name(Tilemap.property_str(raw, object, "tile", "TilePlantA")),
-				scale: Tilemap.property_f32(raw, object, "scale", 1),
-				rotation: Tilemap.property_f32(raw, object, "rotation", object.rotation),
-			},
-		)
-	}
-	if List.len($items) == 0 fallback_decorations else $items
-}
-
-tile_from_name : Str -> Tile
-tile_from_name = |name|
-	if name == "TileBlockB" {
-		TileBlockB
-	} else if name == "TileMarker" {
-		TileMarker
-	} else if name == "TileRockA" {
-		TileRockA
-	} else if name == "TilePlantA" {
-		TilePlantA
-	} else if name == "TilePlantB" {
-		TilePlantB
-	} else if name == "TileFlowerA" {
-		TileFlowerA
-	} else if name == "TileFlowerB" {
-		TileFlowerB
-	} else if name == "TileCrystalA" {
-		TileCrystalA
-	} else if name == "TileCrystalB" {
-		TileCrystalB
-	} else if name == "TileSparkA" {
-		TileSparkA
-	} else if name == "TileSparkB" {
-		TileSparkB
-	} else {
-		TileBlockA
-	}
-
-lane_from_name : Str -> Lane
-lane_from_name = |name| if name == "Vertical" Vertical else Horizontal
-
-hazard_color : U64 -> Color.Rgba
-hazard_color = |id|
-	match id % 4 {
-		0 => Color.from_hex_rgb(0xf94144)
-		1 => Color.from_hex_rgb(0xf3722c)
-		2 => Color.from_hex_rgb(0xf8961e)
-		_ => Color.from_hex_rgb(0xf94144)
-	}
-
+## Converts two opposing keys into one signed movement axis.
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Devices.Snapshot -> Math.Vec2
-input_axis = |input| {
+## Translates keyboard bindings into semantic Spark Run controls.
+read_controls : Devices.Snapshot -> Controls
+read_controls = |input| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
 	up = input.key_down(KeyUp) or input.key_down(KeyW)
 	down = input.key_down(KeyDown) or input.key_down(KeyS)
-
-	{ x: axis(left, right), y: axis(up, down) }
+	{
+		move: { x: axis(left, right), y: axis(up, down) },
+		dash_pressed: input.key_pressed(KeySpace),
+		restart_pressed: input.key_pressed(KeySpace),
+		quit_pressed: input.key_pressed(KeyEscape),
+	}
 }
 
-## A short route through the arena, expressed as the same device snapshots the
-## interactive game consumes. It collects a spark, then dashes through the map
-## to show movement, animation, camera tracking, and screen shake.
-demo_input : U64 -> Devices.Snapshot
-demo_input = |frame| {
-	base =
+## Produces the semantic controls for one frame of the gallery route.
+demo_controls : U64 -> Controls
+demo_controls = |frame| {
+	move =
 		if frame < 19 {
-			Devices.none.with_key_down(KeyD).with_key_down(KeyS)
+			{ x: 1, y: 1 }
 		} else if frame < 38 {
-			Devices.none.with_key_down(KeyW)
+			{ x: 0, y: -1 }
 		} else if frame < 76 {
-			Devices.none.with_key_down(KeyD)
+			{ x: 1, y: 0 }
 		} else if frame < 108 {
-			Devices.none.with_key_down(KeyS).with_key_down(KeyD)
+			{ x: 1, y: 1 }
 		} else {
-			Devices.none.with_key_down(KeyA)
+			{ x: -1, y: 0 }
 		}
-
-	if frame == 20 or frame == 43 or frame == 82 or frame == 116 {
-		base.with_key_pressed(KeySpace)
-	} else {
-		base
-	}
+	pressed = frame == 20 or frame == 43 or frame == 82 or frame == 116
+	{ move, dash_pressed: pressed, restart_pressed: pressed, quit_pressed: Bool.False }
 }
 
-facing_from_input : Math.Vec2, Facing -> Facing
-facing_from_input = |dir, fallback| {
-	if dir.y < 0 and dir.x == 0 {
-		North
-	} else if dir.y < 0 and dir.x > 0 {
-		NorthEast
-	} else if dir.x > 0 and dir.y == 0 {
-		East
-	} else if dir.x > 0 and dir.y > 0 {
-		SouthEast
-	} else if dir.y > 0 and dir.x == 0 {
-		South
-	} else if dir.x < 0 and dir.y > 0 {
-		SouthWest
-	} else if dir.x < 0 and dir.y == 0 {
-		West
-	} else if dir.x < 0 and dir.y < 0 {
-		NorthWest
-	} else {
-		fallback
-	}
-}
+## Converts a world x-coordinate into stereo pan across the level bounds.
+pan_for_world_x : Level, F32 -> F32
+pan_for_world_x = |level, x| Math.clamp((x - Math.left(level.bounds)) / level.bounds.width * 2 - 1, -1, 1)
 
-clamp_to_world : Level, Math.Vec2 -> Math.Vec2
-clamp_to_world = |level, pos| {
-	x: Math.clamp(pos.x, Math.left(level.bounds) + player_radius, Math.right(level.bounds) - player_radius),
-	y: Math.clamp(pos.y, Math.top(level.bounds) + player_radius, Math.bottom(level.bounds) - player_radius),
-}
-
-any_obstacle_hit : Level, Math.Circle -> Bool
-any_obstacle_hit = |level, circle| {
-	var $hit = Bool.False
-	for obstacle in level.obstacles {
-		if obstacle.hit_by(circle) {
-			$hit = Bool.True
-		}
-	}
-	if level.tilemap.circle_touches_solid(circle) {
-		$hit = Bool.True
-	}
-	$hit
-}
-
-move_player_speed : Level, Math.Vec2, Math.Vec2, F32, F32 -> Math.Vec2
-move_player_speed = |level, player, raw_dir, dt, speed| {
-	dir = Math.normalize(raw_dir)
-	candidate = clamp_to_world(level, Math.add(player, Math.scale(dir, speed * dt)))
-
-	if any_obstacle_hit(level, Math.circle(candidate, player_radius)) player else candidate
-}
-
-wrap_unit : F32 -> F32
-wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
-
-ping_pong : F32 -> F32
-ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
-
-tick_timer : F32, F32 -> F32
-tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
-
-find_hit_spark : List(World.Spark), Math.Circle, U64 -> Try(World.Spark, [NoSpark])
-find_hit_spark = |sparks, player_circle, index|
-	match List.get(sparks, index) {
-		Ok(spark) =>
-			if spark.hit_by(player_circle) {
-				Ok(spark)
+## Performs the audio or music effect requested by one pure gameplay event.
+play_event! : GameAssets, Level, Game.World, Game.World, Game.Event => {}
+play_event! = |assets, level, previous_world, world, event| {
+	sounds = assets.sounds
+	match event {
+		DashStarted(pos) =>
+			sounds.dash.playback().with_volume(dash_volume).with_pan(pan_for_world_x(level, pos.x)).with_pitch(0.95 + U64.to_f32(previous_world.score) * 0.015).play!()
+		SparkCollected(spark) => {
+			sounds.collect.playback().with_volume(collect_volume).with_pan(pan_for_world_x(level, spark.pos.x)).play!()
+			if world.score % 3 == 0 {
+				sounds.sparkle.playback().with_volume(sparkle_volume).with_pitch(0.92 + U64.to_f32(world.score) * 0.045).play!()
 			} else {
-				find_hit_spark(sparks, player_circle, index + 1)
-			}
-		Err(_) => Err(NoSpark)
-	}
-
-pan_for_world_x : F32 -> F32
-pan_for_world_x = |x| Math.clamp((x - world_left) / (world_right - world_left) * 2 - 1, -1, 1)
-
-gate_is_open : GateState -> Bool
-gate_is_open = |gate|
-	match gate {
-		GateLocked => Bool.False
-		GateOpen => Bool.True
-	}
-
-gate_after_collect : List(World.Spark) -> GateState
-gate_after_collect = |remaining| if List.len(remaining) == 0 GateOpen else GateLocked
-
-collect_spark : World -> World.CollectResult
-collect_spark = |world|
-	match find_hit_spark(world.sparks, world.player.circle(), 0) {
-		Ok(spark) => {
-			remaining = List.keep_if(world.sparks, |item| item.id != spark.id)
-			next_score = world.score + 1
-			next_gate = gate_after_collect(remaining)
-			gate_opened = next_gate == GateOpen and !(gate_is_open(world.gate))
-
-			{
-				world: {
-					..world,
-					sparks: remaining,
-					score: next_score,
-					shake: 0,
-					flash: 0,
-					burst_pos: spark.pos,
-					burst_timer: burst_duration,
-					gate: next_gate,
-					gate_flash: if gate_opened 1 else world.gate_flash,
-					state: Playing,
-				},
-				collected: Ok(spark),
-				gate_opened,
+				{}
 			}
 		}
-		Err(_) => { world, collected: Err(NoSpark), gate_opened: Bool.False }
-	}
-
-any_hazard_hit : Level, Math.Circle, F32 -> Bool
-any_hazard_hit = |level, circle, phase| {
-	var $hit = Bool.False
-	for hazard in level.hazards {
-		if hazard.hit_by(circle, phase) {
-			$hit = Bool.True
+		GateOpened => sounds.gate.playback().with_volume(gate_volume).play!()
+		Escaped => {
+			sounds.music.set_volume!(music_won_volume)
+			sounds.win.playback().with_volume(win_volume).play!()
 		}
-	}
-	$hit
-}
-
-damage_if_needed : Level, World -> World.DamageResult
-damage_if_needed = |level, world| {
-	if world.player.invuln <= 0 and any_hazard_hit(level, world.player.circle(), world.phase) {
-		next_lives = if world.lives > 0 world.lives - 1 else 0
-		next_state = if world.lives <= 1 GameOver else Playing
-		{
-			world: {
-				..world,
-				player: world.player.damage_respawn(level.spawn),
-				lives: next_lives,
-				shake: 10,
-				flash: 0.28,
-				burst_pos: world.player.pos,
-				burst_timer: burst_duration,
-				state: next_state,
-			},
-			damaged: Bool.True,
-		}
-	} else {
-		{ world, damaged: Bool.False }
+		Damaged(state) =>
+			if state == GameOver {
+				sounds.lose.playback().with_volume(lose_volume).play!()
+			} else {
+				sounds.hurt.playback().with_volume(hurt_volume).play!()
+			}
+		GameStarted => sounds.music.set_volume!(music_volume)
 	}
 }
 
-escape_if_needed : Level, World -> World.EscapeResult
-escape_if_needed = |level, world| {
-	if gate_is_open(world.gate) and Math.circle_overlaps(world.player.circle(), Math.circle(level.exit_center, level.exit_radius)) {
-		{
-			world: {
-				..world,
-				shake: 10,
-				flash: 0,
-				burst_pos: level.exit_center,
-				burst_timer: burst_duration,
-				gate_flash: 1,
-				state: Won,
-			},
-			escaped: Bool.True,
-		}
-	} else {
-		{ world, escaped: Bool.False }
-	}
-}
-
-is_moving : Math.Vec2 -> Bool
-is_moving = |dir| dir.x != 0 or dir.y != 0
-
-facing_to_vec : Facing -> Math.Vec2
-facing_to_vec = |facing|
-	match facing {
-		North => { x: 0, y: -1 }
-		NorthEast => { x: 0.7, y: -0.7 }
-		East => { x: 1, y: 0 }
-		SouthEast => { x: 0.7, y: 0.7 }
-		South => { x: 0, y: 1 }
-		SouthWest => { x: -0.7, y: 0.7 }
-		West => { x: -1, y: 0 }
-		NorthWest => { x: -0.7, y: -0.7 }
-	}
-
-facing_to_rotation : Facing -> F32
-facing_to_rotation = |facing|
-	match facing {
-		North => -90
-		NorthEast => -45
-		East => 0
-		SouthEast => 45
-		South => 90
-		SouthWest => 135
-		West => 180
-		NorthWest => 225
-	}
-
-idle_animation : Sprite.Animation -> Sprite.Animation
-idle_animation = |animation| {
-	frame: 0,
-	frame_count: animation.frame_count,
-	fps: animation.fps,
-	elapsed: 0,
-}
-
-event_when : Bool, World.StepEvent -> List(World.StepEvent)
-event_when = |condition, event| if condition [event] else []
-
-spark_collected_events : Try(World.Spark, [NoSpark]) -> List(World.StepEvent)
-spark_collected_events = |collected|
-	match collected {
-		Ok(spark) => [SparkCollected(spark)]
-		Err(_) => []
-	}
-
-step_events : Bool, Try(World.Spark, [NoSpark]), Bool, Bool, Bool, GameState, Math.Vec2 -> List(World.StepEvent)
-step_events = |dash_started, collected, gate_opened, escaped, damaged, damage_state, dash_pos|
-	List.concat(
-		event_when(dash_started, DashStarted(dash_pos)),
-		List.concat(
-			spark_collected_events(collected),
-			List.concat(
-				event_when(gate_opened, GateOpened),
-				List.concat(
-					event_when(escaped, Escaped),
-					event_when(damaged, Damaged(damage_state)),
-				),
-			),
-		),
-	)
-
-advance_world : Level, World, World.StepInput -> World.StepResult
-advance_world = |level, world, input| {
-	moving = is_moving(input.raw_dir)
-	dash_started = input.dash_pressed and world.player.dash_ready()
-	dash_active = dash_started or world.player.dash_active()
-	move_dir = if dash_active and !(moving) world.player.facing_dir() else input.raw_dir
-	speed = if dash_active dash_speed else player_speed
-	player_pos = move_player_speed(level, world.player.pos, move_dir, input.dt, speed)
-	player = world.player.step({ pos: player_pos, raw_dir: input.raw_dir, move_dir, dash_started, dash_active, dt: input.dt })
-	hazard_speed = 0.15 + U64.to_f32(world.score) * 0.012
-	phase = wrap_unit(world.phase + input.dt * hazard_speed)
-
-	moved = {
-		..world,
-		player,
-		phase,
-		shake: Math.clamp(world.shake - input.dt * 36, 0, 99),
-		flash: tick_timer(world.flash, input.dt * 1.8),
-		burst_timer: tick_timer(world.burst_timer, input.dt),
-		gate_flash: tick_timer(world.gate_flash, input.dt * 1.15),
-		state: Playing,
-	}
-	collect_result = collect_spark(moved)
-	escape_result = escape_if_needed(level, collect_result.world)
-	damage_result = if escape_result.world.state == Won { world: escape_result.world, damaged: Bool.False } else damage_if_needed(level, escape_result.world)
-
-	{
-		world: damage_result.world,
-		events: step_events(
-			dash_started,
-			collect_result.collected,
-			collect_result.gate_opened,
-			escape_result.escaped,
-			damage_result.damaged,
-			damage_result.world.state,
-			world.player.pos,
-		),
-	}
-}
-
-## What a cycle of play asks the audio host for, as data. The pure step names
-## each cue; `update!` performs them in order.
-Cue : [Play(Audio.Playback), MusicVolume(F32)]
-
-perform_cue! : Model, Cue => {}
-perform_cue! = |model, cue|
-	match cue {
-		Play(playback) => playback.play!()
-		MusicVolume(volume) => model.sounds.music.set_volume!(volume)
-	}
-
-## Turn a cycle's world events into the sound cues they ask for.
-##
-## Pure: nothing is played here, each event just names the playback it wants.
-## Pan and pitch are that playback's own parameters rather than settings written
-## onto the shared `Sound`, so a parameter cannot be left behind on the wrong
-## sound -- note that a collected spark pans `collect` but pitches `sparkle`.
-play_step_events : Model, World.StepResult -> List(Cue)
-play_step_events = |model, result| {
-	sounds = model.sounds
-
-	var $cues = []
-	for event in result.events {
-		event_cues =
-			match event {
-				DashStarted(pos) => [
-					Play(
-						sounds.dash
-							.playback()
-							.with_volume(dash_volume)
-							.with_pan(pan_for_world_x(pos.x))
-							.with_pitch(0.95 + U64.to_f32(model.world.score) * 0.015),
-					),
-				]
-				SparkCollected(spark) => {
-					collect = Play(sounds.collect.playback().with_volume(collect_volume).with_pan(pan_for_world_x(spark.pos.x)))
-					sparkle = Play(sounds.sparkle.playback().with_volume(sparkle_volume).with_pitch(0.92 + U64.to_f32(result.world.score) * 0.045))
-					if result.world.score % 3 == 0 [collect, sparkle] else [collect]
-				}
-				GateOpened => [Play(sounds.gate.playback().with_volume(gate_volume))]
-				Escaped => [MusicVolume(music_won_volume), Play(sounds.win.playback().with_volume(win_volume))]
-				Damaged(state) =>
-					if state == GameOver {
-						[Play(sounds.lose.playback().with_volume(lose_volume))]
-					} else {
-						[Play(sounds.hurt.playback().with_volume(hurt_volume))]
-					}
-				}
-
-		$cues = List.concat($cues, event_cues)
-	}
-	$cues
-}
-
-## One cycle of play: the next model together with the cues it wants performed.
-##
-## The cues travel back with the model rather than being fired here, and the
-## caller performs them as it unwinds.
-##
-## The seconds to advance by are a plain parameter rather than a whole
-## `Time.Cycle`: only the elapsed time is used, so the caller stays free to pass
-## a fixed step instead of whatever the last frame happened to take.
-advance_playing : Model, Devices.Snapshot, F32 -> { model : Model, cues : List(Cue) }
-advance_playing = |model, input, dt| {
-	result = advance_world(
-		model.level,
-		model.world,
-		{
-			raw_dir: input_axis(input),
-			dash_pressed: input.key_pressed(KeySpace),
-			dt,
-		},
-	)
-
-	{
-		model: { ..model, world: result.world },
-		cues: play_step_events(model, result),
-	}
-}
-
-## Space restarts from either end state, restoring the music to the level
-## `Escaped` ducked it away from.
-restart_on_space : Model, Devices.Snapshot -> { model : Model, cues : List(Cue) }
-restart_on_space = |model, input|
-	if input.key_pressed(KeySpace) {
-		fresh = new_game(model.font, model.characters, model.tiles, model.level, model.sounds)
-		{
-			model: { ..fresh, demo: model.demo, demo_frame: model.demo_frame },
-			cues: [MusicVolume(music_volume)],
-		}
-	} else {
-		{ model, cues: [] }
-	}
-
-## Nothing here waits, so there is no task to spawn and no message to fold in.
-## The step is pure and returns the cues it wants; `update!` performs them in
-## order and decides whether Escape ends the app.
 Msg : []
 
+## Advances pure gameplay, performs its events, and handles capture or quit.
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	input = if model.demo demo_input(model.demo_frame) else program_input.devices
-
-	next = match model.world.state {
-		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
-		Won => restart_on_space(model, input)
-		GameOver => restart_on_space(model, input)
+	controls = if model.demo demo_controls(model.demo_frame) else read_controls(program_input.devices)
+	dt = program_input.time.elapsed_seconds
+	(world, events) = Game.update(model.level, model.world, controls, dt)
+	for event in events {
+		play_event!(model.assets, model.level, model.world, world, event)
 	}
-
-	for cue in next.cues {
-		perform_cue!(model, cue)
-	}
-
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if input.key_pressed(KeyEscape) {
-			Err(Exit(0))
-		} else {
-			Ok({})
+	if model.demo {
+		match program_input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(1))
+			_ => Ok({ ..model, world, demo_frame: model.demo_frame + 1 })
 		}
-
-	match exit {
-		Err(code) => Err(code)
-		Ok({}) => Ok({ ..next.model, demo_frame: model.demo_frame + 1 })
+	} else if controls.quit_pressed {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, world, demo_frame: model.demo_frame + 1 })
 	}
 }
 
-## The camera follows the (shaken) player position, so it is a pure function of
-## the model and is derived here rather than stored.
+## Delegates the complete presentation frame to the rendering module.
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
-render! = |model, frame| {
-	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
-	viewport = camera.viewport({ x: screen_w, y: screen_h })
+render! = |model, frame| Render.draw!(frame, model.assets, model.level, model.world)
 
-	frame.clear!(Color.from_hex_rgb(0x071018))
-	frame.with_camera!(
-		camera,
-		|world_frame| {
-			draw_world!(world_frame, model.level, model.characters, model.tiles, model.world, viewport, model.font)
-			Ok({})
-		},
-	)?
-	draw_hud!(frame, model.level, model.world, model.font)
+no_controls : Controls
+no_controls = { move: { x: 0, y: 0 }, dash_pressed: Bool.False, restart_pressed: Bool.False, quit_pressed: Bool.False }
 
-	Ok({})
+test_level : Level
+test_level = {
+	tilemap: Tilemap.empty,
+	spawn: { x: -560, y: -360 },
+	exit_center: { x: 1185, y: 920 },
+	exit_radius: 58,
+	sparks: [Spark.{ id: 0, pos: { x: -430, y: -150 } }, Spark.{ id: 1, pos: { x: 100, y: 100 } }],
+	spark_total: 2,
+	obstacles: [],
+	hazards: [Hazard.{ center: { x: -445, y: 165 }, span: 520, lane: Horizontal, offset: 0, radius: 30, color: Color.red }],
+	decorations: [],
+	bounds: Math.rect(-720, -520, 2176, 1664),
 }
 
-shaken_target : World -> Math.Vec2
-shaken_target = |world| {
-	amount = world.shake
-	x_phase = ping_pong(wrap_unit(world.phase * 9.7))
-	y_phase = ping_pong(wrap_unit(world.phase * 13.1 + 0.31))
-	{
-		x: world.player.pos.x + (x_phase - 0.5) * amount,
-		y: world.player.pos.y + (y_phase - 0.5) * amount,
+expect Player.new(test_level.spawn).circle().radius == Player.radius
+expect Player.new(test_level.spawn).facing_dir() == { x: 1, y: 0 }
+expect
+	match Player.new(test_level.spawn).facing {
+		East => Bool.True
+		_ => Bool.False
 	}
-}
-
-draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, World, Math.Rect, Text.Font => {}
-draw_world! = |frame, level, characters, tiles, world, viewport, font| {
-	draw = App.effects().render(frame)
-	draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
-	level.tilemap.draw_all_in!(frame, viewport)
-	draw_hazard_lanes!(frame, level, world.phase)
-	draw_props!(frame, level, tiles, viewport)
-	draw.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
-
-	draw_spawn!(frame, level, font)
-	draw_exit!(frame, level, world, font)
-	draw_obstacles!(frame, level, tiles, viewport)
-	draw_sparks!(frame, tiles, world.sparks, world.phase, viewport)
-	draw_hazards!(frame, level, characters, world.phase, viewport)
-	draw_burst!(frame, world)
-	draw_player!(frame, characters, world.player)
-}
-
-tile_cols = 27.U64
-
-tile_id : Tile -> U64
-tile_id = |tile|
-	match tile {
-		TileFloor => 1
-		TileBlockA => 156
-		TileBlockB => 157
-		TileMarker => 158
-		TileRockA => 181
-		TilePlantA => 183
-		TilePlantB => 184
-		TileFlowerA => 213
-		TileFlowerB => 214
-		TileCrystalA => 237
-		TileCrystalB => 238
-		TileSparkA => 239
-		TileSparkB => 240
-	}
-
-tile_source : Tile -> Math.Rect
-tile_source = |tile| {
-	index = tile_id(tile) - 1
-	Sprite.sheet_frame({ frame_size: { x: 64, y: 64 }, row: index // tile_cols, col: index % tile_cols })
-}
-
-tile_sprite : Draw.Texture, Tile, Math.Vec2, F32 -> Sprite.Sprite
-tile_sprite = |tiles, tile, pos, scale|
-	Sprite.from_texture(tiles)
-		.source(
-			tile_source(tile),
-		)
-		.pos(
-			pos,
-		)
-		.scale(
-			scale,
-		)
-
-draw_tile! : Draw.Frame, Draw.Texture, Tile, Math.Vec2, F32 => {}
-draw_tile! = |frame, tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scale).draw!(frame)
-
-draw_tile_centered! : Draw.Frame, Draw.Texture, Tile, Math.Vec2, F32, F32 => {}
-draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!(frame)
-
-draw_spawn! : Draw.Frame, Level, Text.Font => {}
-draw_spawn! = |frame, level, font| {
-	draw = App.effects().render(frame)
-	draw.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
-	draw.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
-	Text.from("START", font)
-		.size(18)
-		.draw!(frame, { pos: { x: level.spawn.x, y: level.spawn.y + 63 }, color: Color.with_alpha(Color.white, 190), align: (Top, Center) })
-}
-
-draw_exit! : Draw.Frame, Level, World, Text.Font => {}
-draw_exit! = |frame, level, world, font| {
-	draw = App.effects().render(frame)
-	is_open = gate_is_open(world.gate)
-	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
-	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
-	draw.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
-	draw.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
-	Text.from(if is_open "EXIT OPEN" else "LOCKED EXIT", font)
-		.size(19)
-		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: (Top, Center) })
-}
-
-draw_obstacle! : Draw.Frame, Draw.Texture, World.Obstacle => {}
-draw_obstacle! = |frame, tiles, obstacle| {
-	draw = App.effects().render(frame)
-	rect = obstacle.rect
-	draw.rounded_rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
-	draw_tile_centered!(frame, tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
-}
-
-draw_obstacles! : Draw.Frame, Level, Draw.Texture, Math.Rect => {}
-draw_obstacles! = |frame, level, tiles, viewport| {
-	for obstacle in level.obstacles {
-		rect = obstacle.rect
-		visual_bounds = Math.rect(rect.x - 48, rect.y - 48, rect.width + 96, rect.height + 96)
-		if Math.overlaps(visual_bounds, viewport) {
-			draw_obstacle!(frame, tiles, obstacle)
-		}
-	}
-}
-
-draw_props! : Draw.Frame, Level, Draw.Texture, Math.Rect => {}
-draw_props! = |frame, level, tiles, viewport| {
-	for decoration in level.decorations {
-		if Math.circle_rect({ center: decoration.pos, radius: 48 * decoration.scale }, viewport) {
-			draw_tile_centered!(frame, tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
-		}
-	}
-}
-
-draw_spark! : Draw.Frame, Draw.Texture, World.Spark, F32 => {}
-draw_spark! = |frame, tiles, spark, phase| {
-	draw = App.effects().render(frame)
-	tile = if spark.id % 2 == 0 TileSparkA else TileSparkB
-	rotation = phase * 160 + U64.to_f32(spark.id) * 19
-	pulse = 1 + ping_pong(wrap_unit(phase * 2 + U64.to_f32(spark.id) * 0.09)) * 0.1
-	draw.circle_gradient!({ center: spark.pos, radius: spark_radius * 2 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 0) })
-	draw.circle!({ center: spark.pos, radius: spark_radius + 4 * pulse, style: Draw.outlined(Color.with_alpha(Color.white, 110), 3) })
-	draw_tile_centered!(frame, tiles, tile, spark.pos, 0.72 * pulse, rotation)
-}
-
-draw_sparks! : Draw.Frame, Draw.Texture, List(World.Spark), F32, Math.Rect => {}
-draw_sparks! = |frame, tiles, sparks, phase, viewport| {
-	for spark in sparks {
-		if Math.circle_rect({ center: spark.pos, radius: spark_radius * 2.2 }, viewport) {
-			draw_spark!(frame, tiles, spark, phase)
-		}
-	}
-}
-
-draw_hazard_lanes! : Draw.Frame, Level, F32 => {}
-draw_hazard_lanes! = |frame, level, phase| {
-	draw = App.effects().render(frame)
-	for hazard in level.hazards {
-		pos = hazard.pos(phase)
-		draw.line!({ start: hazard.lane_start(), end: hazard.lane_end(), stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
-		draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
-	}
-}
-
-robot_source : Math.Rect
-robot_source = Math.rect(458, 88, 33, 43)
-
-draw_hazard! : Draw.Frame, Draw.Texture, World.Hazard, F32 => {}
-draw_hazard! = |frame, characters, hazard, phase| {
-	draw = App.effects().render(frame)
-	pos = hazard.pos(phase)
-	sprite = Sprite.from_texture(characters)
-		.source(
-			robot_source,
-		)
-		.pos(
-			pos,
-		)
-		.scale(
-			1.38,
-		)
-		.centered()
-
-	sprite.draw!(frame)
-	draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
-}
-
-draw_hazards! : Draw.Frame, Level, Draw.Texture, F32, Math.Rect => {}
-draw_hazards! = |frame, level, characters, phase, viewport| {
-	for hazard in level.hazards {
-		pos = hazard.pos(phase)
-		if Math.circle_rect({ center: pos, radius: F32.max(hazard.radius + 3, 34) }, viewport) {
-			draw_hazard!(frame, characters, hazard, phase)
-		}
-	}
-}
-
-burst_dir : U64 -> Math.Vec2
-burst_dir = |index|
-	match index % 8 {
-		0 => { x: 1, y: 0 }
-		1 => { x: 0.7, y: 0.7 }
-		2 => { x: 0, y: 1 }
-		3 => { x: -0.7, y: 0.7 }
-		4 => { x: -1, y: 0 }
-		5 => { x: -0.7, y: -0.7 }
-		6 => { x: 0, y: -1 }
-		_ => { x: 0.7, y: -0.7 }
-	}
-
-draw_burst_particle! : Draw.Frame, World, U64 => {}
-draw_burst_particle! = |frame, world, index| {
-	draw = App.effects().render(frame)
-	if index >= 6 or world.burst_timer <= 0 {
-		{}
-	} else {
-		progress = 1 - world.burst_timer / burst_duration
-		dir = burst_dir(index)
-		pos = Math.add(world.burst_pos, Math.scale(dir, 18 + progress * 58))
-		size = 6 + ping_pong(wrap_unit(world.phase * 5 + U64.to_f32(index) * 0.11)) * 3
-		draw.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
-		draw_burst_particle!(frame, world, index + 1)
-	}
-}
-
-draw_burst! : Draw.Frame, World => {}
-draw_burst! = |frame, world| draw_burst_particle!(frame, world, 0)
-
-player_source : Math.Rect
-player_source = Math.rect(0, 0, 52, 43)
-
-draw_player! : Draw.Frame, Draw.Texture, World.Player => {}
-draw_player! = |frame, characters, player| {
-	draw = App.effects().render(frame)
-	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
-	scale = if player.dash_active() 1.3 else 1.22
-	sprite = Sprite.from_texture(characters)
-		.source(
-			player_source,
-		)
-		.pos(
-			player.pos,
-		)
-		.scale(
-			scale,
-		)
-		.centered()
-		.rotation(
-			player.rotation(),
-		)
-		.tint(
-			tint,
-		)
-
-	draw.circle!({ center: { x: player.pos.x + 5, y: player.pos.y + 7 }, radius: player_radius + 6, style: Draw.filled(Color.with_alpha(Color.black, 85)) })
-	if player.dash_active() {
-		trail_center = Math.add(player.pos, Math.scale(player.facing_dir(), -38))
-		draw.circle_gradient!({ center: trail_center, radius: 44, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
-		draw.circle_gradient!({ center: player.pos, radius: 54, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 70), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
-	} else {
-		{}
-	}
-	sprite.draw!(frame)
-	draw.circle!({ center: player.pos, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
-}
-
-draw_bar! : Draw.Frame, F32, F32, F32, F32, F32, Color.Rgba => {}
-draw_bar! = |frame, x, y, width, height, amount, color| {
-	draw = App.effects().render(frame)
-	draw.rounded_rectangle!({ x, y, width, height, radius: 5, segments: 6, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
-	draw.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
-}
-
-draw_hud! : Draw.Frame, Level, World, Text.Font => {}
-draw_hud! = |frame, level, world, font| {
-	draw = App.effects().render(frame)
-	is_open = gate_is_open(world.gate)
-
-	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
-	draw.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
-	draw.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font })
-	draw.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-	draw.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
-	draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
-	draw_bar!(frame, 196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
-	draw_bar!(frame, 510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
-	draw.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-
-	if world.flash > 0 {
-		draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })
-	} else {
-		{}
-	}
-
-	match world.state {
-		Playing => {}
-		Won => draw_modal!(frame, font, "All sparks recovered", "Press SPACE to run again", Color.from_hex_rgb(0x43aa8b))
-		GameOver => draw_modal!(frame, font, "Spark Run ended", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
-	}
-}
-
-draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
-draw_modal! = |frame, font, title, subtitle, accent| {
-	draw = App.effects().render(frame)
-	draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
-	draw.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
-	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
-	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
-}
-
-approx : F32, F32 -> Bool
-approx = |a, b| F32.abs(a - b) < 0.0001
-
-approx_vec : Math.Vec2, Math.Vec2 -> Bool
-approx_vec = |a, b| approx(a.x, b.x) and approx(a.y, b.y)
-
-test_hazard : World.Hazard
-test_hazard = { center: { x: 0, y: 0 }, span: 20, lane: Horizontal, offset: 0, radius: 5, color: Color.white }
-
-expect World.Player.new(fallback_spawn).circle().radius == player_radius
-expect World.Player.new(fallback_spawn).facing_dir() == { x: 1, y: 0 }
-expect World.Player.new(fallback_spawn).facing == East
-expect facing_to_rotation(East) == 0
-expect facing_to_vec(NorthWest) == { x: -0.7, y: -0.7 }
-expect gate_is_open(GateOpen)
-expect !(gate_is_open(GateLocked))
-expect tile_id(TileBlockA) == 156
-expect tile_id(TileSparkB) == 240
-expect World.Player.new({ x: 10, y: 20 }).damage_respawn(fallback_spawn).pos == fallback_spawn
-expect World.Obstacle.new(0, 0, 10, 10, TileBlockA, 0).hit_by(Math.circle({ x: 5, y: 5 }, 1))
-expect !(World.Obstacle.new(0, 0, 10, 10, TileBlockA, 0).hit_by(Math.circle({ x: 30, y: 30 }, 1)))
-expect approx_vec(test_hazard.pos(0), { x: -10, y: 0 })
-expect approx_vec(test_hazard.pos(0.25), { x: 0, y: 0 })
+expect Player.new({ x: 10, y: 20 }).damage_respawn(test_level.spawn).pos == test_level.spawn
 
 expect {
-	spark = World.Spark.new(7, 10, 20)
-	find_hit_spark([spark], Math.circle({ x: 10, y: 20 }, 1), 0) == Ok(spark)
+	hazard = Hazard.{ center: { x: 0, y: 0 }, span: 20, lane: Horizontal, offset: 0, radius: 5, color: Color.white }
+	hazard.pos(0) == { x: -10, y: 0 } and hazard.pos(0.25) == { x: 0, y: 0 }
 }
 
 expect {
-	world = { ..World.new(fallback_level), player: World.Player.new({ x: -430, y: -150 }) }
-	result = collect_spark(world)
-	result.world.score == 1 and result.collected == Ok(World.Spark.new(0, -430, -150))
+	world = { ..Game.new(test_level), player: Player.new({ x: -430, y: -150 }) }
+	(next, events) = Game.update(test_level, world, no_controls, 0)
+	next.score == 1 and events == [SparkCollected(Spark.{ id: 0, pos: { x: -430, y: -150 } })]
 }
 
 expect {
-	spark = World.Spark.new(99, 0, 0)
-	world = { ..World.new(fallback_level), player: World.Player.new({ x: 0, y: 0 }), sparks: [spark], score: 9 }
-	result = collect_spark(world)
-	result.gate_opened and result.world.gate == GateOpen and result.world.score == 10
+	world = { ..Game.new(test_level), player: Player.new({ x: -705, y: 165 }) }
+	(next, events) = Game.update(test_level, world, no_controls, 0)
+	next.lives == 2 and events == [Damaged(Playing)]
 }
 
 expect {
-	world = { ..World.new(fallback_level), player: World.Player.new({ x: -705, y: 165 }) }
-	result = damage_if_needed(fallback_level, world)
-	result.damaged and result.world.lives == 2 and result.world.player.pos == fallback_spawn
+	world = { ..Game.new(test_level), gate: GateOpen, player: Player.new(test_level.exit_center) }
+	(next, events) = Game.update(test_level, world, no_controls, 0)
+	next.state == Won and events == [Escaped]
 }
 
 expect {
-	world = { ..World.new(fallback_level), gate: GateOpen, player: World.Player.new(fallback_exit_center) }
-	result = escape_if_needed(fallback_level, world)
-	result.escaped and result.world.state == Won
-}
-
-expect {
-	result = advance_world(fallback_level, World.new(fallback_level), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
-	List.first(result.events) == Ok(DashStarted(fallback_spawn)) and result.world.player.dash_timer == dash_duration
+	controls = { ..no_controls, move: { x: 1, y: 0 }, dash_pressed: Bool.True }
+	(next, events) = Game.update(test_level, Game.new(test_level), controls, 0.01)
+	List.first(events) == Ok(DashStarted(test_level.spawn)) and next.player.dash_active()
 }

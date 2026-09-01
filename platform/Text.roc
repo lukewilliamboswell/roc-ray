@@ -202,19 +202,18 @@ Text := [].{
 			spacing: builder.spacing,
 			font: builder.font.handle,
 		})
-		if result.err == 2 {
-			Err(ResourceLimit)
-		} else if result.err != 0 {
-			crash "prepared text host invariant failed"
-		} else {
-			Ok(
+		match result {
+			# closed error union to open error union
+			Ok(prepared_result) => Ok(
 				Prepared.(
 					{
-						resource: result.prepared,
-						measured: { width: result.width, height: result.height },
+						resource: prepared_result.prepared,
+						measured: { width: prepared_result.width, height: prepared_result.height },
 					},
 				),
 			)
+			Err(ResourceLimit) => Err(ResourceLimit)
+			Err(InvalidResource) => crash "prepared text host invariant failed"
 		}
 	}
 

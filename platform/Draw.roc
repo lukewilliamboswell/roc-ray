@@ -548,10 +548,13 @@ Draw := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
-		load! = |size| {
-			result = Host.texture_load_render_target!(size)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(RenderTexture.(result.target))
-		}
+		load! = |size|
+			match Host.texture_load_render_target!(size) {
+				# closed error union to open error union
+				Ok(target) => Ok(RenderTexture.(target))
+				Err(RenderTextureLoadFailed) => Err(RenderTextureLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
+			}
 
 		## Read-only view of this render target's color attachment.
 		texture : RenderTexture -> Texture

@@ -295,17 +295,50 @@ Audio := [].{
 	expect waveform_code(Noise) == 4
 }
 
-loaded_sound_from_resource : Host.AudioSoundResult -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource : Try(Host.AudioSound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
 loaded_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundLoadFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Sound.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(SoundLoadFailed) => Err(SoundLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-generated_sound_from_resource : Host.AudioSoundResult -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource : Try(Host.AudioSound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
 generated_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundGenerationFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Sound.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(SoundGenerationFailed) => Err(SoundGenerationFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-music_from_resource : Host.AudioMusicResult -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
+music_from_resource : Try(Host.AudioMusic, Host.AudioLoadMusicError) -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
 music_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(MusicLoadFailed) else Ok({ resource: result.music })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Music.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(MusicLoadFailed) => Err(MusicLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
 waveform_code : Audio.Waveform -> U8
 waveform_code = |waveform|

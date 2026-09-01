@@ -4365,19 +4365,20 @@ test "prepared text allocates long native bytes once and retains its loaded font
         .size = 18,
         .spacing = 1,
     });
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, result.err);
+    try std.testing.expectEqual(abi.HostText_prepareResultTag.Ok, result.tag);
+    const prepared = result.payload_ok().prepared;
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
-    const resource = prepared_text_heap.get(result.prepared.*).?;
+    const resource = prepared_text_heap.get(prepared.*).?;
     try std.testing.expectEqual(long_text.len, resource.text.len);
     try std.testing.expectEqual(@as(u8, 0), resource.text.ptr[resource.text.len]);
 
     for (0..10) |_| {
-        abi.increfBox(@ptrCast(result.prepared), 1);
+        abi.increfBox(@ptrCast(prepared), 1);
         hostedDrawPreparedTextRaw(&roc_host, .{
-            .prepared = result.prepared,
+            .prepared = prepared,
             .pos = .{ .x = 20, .y = 30 },
             .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
         });
@@ -4390,7 +4391,7 @@ test "prepared text allocates long native bytes once and retains its loaded font
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
 
-    releaseResourceBox(&roc_host, result.prepared);
+    releaseResourceBox(&roc_host, prepared);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -4428,7 +4429,8 @@ test "prepared text rejects resource kind confusion and releases transferred own
         .size = 16,
         .spacing = 1,
     });
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, result.err);
+    try std.testing.expectEqual(abi.HostText_prepareResultTag.Err, result.tag);
+    try std.testing.expectEqual(abi.HostText_prepareErr.invalid_resource, result.payload_err());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -4703,8 +4705,8 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     defer active_headless = false;
     const before = render_texture_heap.active();
     const target = hostedTextureLoadRenderTargetRaw(.{ .height = 0, .width = 160 });
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, target.err);
-    try std.testing.expectEqual(INVALID_RESOURCE_TOKEN, target.target.handle.*);
+    try std.testing.expectEqual(abi.HostTexture_load_render_targetResultTag.Err, target.tag);
+    try std.testing.expectEqual(abi.HostTexture_load_render_targetErr.render_texture_load_failed, target.payload_err());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(before, render_texture_heap.active());
 }
@@ -4971,8 +4973,8 @@ test "resource-free draw handles are inert, and leave real resources alone" {
             .size = 16,
             .spacing = 1,
         });
-        try std.testing.expectEqual(RESOURCE_ERR_FAILED, prepared.err);
-        try std.testing.expectEqual(@as(f32, 0), prepared.width);
+        try std.testing.expectEqual(abi.HostText_prepareResultTag.Err, prepared.tag);
+        try std.testing.expectEqual(abi.HostText_prepareErr.invalid_resource, prepared.payload_err());
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 
@@ -5382,12 +5384,16 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var sounds: [128]*u64 = undefined;
     for (&sounds) |*sound| sound.* = storeSound(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAudioGenTone(.{ .freq = 440, .ms = 20 }).err);
+    const refused_tone = hostedAudioGenTone(.{ .freq = 440, .ms = 20 });
+    try std.testing.expectEqual(abi.HostAudio_gen_toneResultTag.Err, refused_tone.tag);
+    try std.testing.expectEqual(abi.HostAudio_gen_toneErr.resource_limit, refused_tone.payload_err());
     for (sounds) |sound| releaseResourceBox(&roc_host, sound);
 
     var music: [16]*u64 = undefined;
     for (&music) |*item| item.* = storeMusic(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice("README.md", &roc_host)).err);
+    const refused_music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice("README.md", &roc_host));
+    try std.testing.expectEqual(abi.HostAudio_load_musicResultTag.Err, refused_music.tag);
+    try std.testing.expectEqual(abi.HostAudio_load_musicErr.resource_limit, refused_music.payload_err());
     for (music) |item| releaseResourceBox(&roc_host, item);
 
     var textures: [128]*u64 = undefined;
@@ -5403,7 +5409,9 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var targets: [32]*u64 = undefined;
     for (&targets) |*target| target.* = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedTextureLoadRenderTargetRaw(.{ .height = 1, .width = 1 }).err);
+    const refused_target = hostedTextureLoadRenderTargetRaw(.{ .height = 1, .width = 1 });
+    try std.testing.expectEqual(abi.HostTexture_load_render_targetResultTag.Err, refused_target.tag);
+    try std.testing.expectEqual(abi.HostTexture_load_render_targetErr.resource_limit, refused_target.payload_err());
     for (targets) |target| releaseResourceBox(&roc_host, target);
 
     var shaders: [32]*u64 = undefined;
@@ -5435,15 +5443,17 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
             .size = 16,
             .spacing = 1,
         });
-        try std.testing.expectEqual(RESOURCE_ERR_NONE, result.err);
-        prepared.* = result.prepared;
+        try std.testing.expectEqual(abi.HostText_prepareResultTag.Ok, result.tag);
+        prepared.* = result.payload_ok().prepared;
     }
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedTextPrepareRaw(&roc_host, .{
+    const refused_text = hostedTextPrepareRaw(&roc_host, .{
         .font = defaultFontHandle(),
         .text = abi.RocStr.empty(),
         .size = 16,
         .spacing = 1,
-    }).err);
+    });
+    try std.testing.expectEqual(abi.HostText_prepareResultTag.Err, refused_text.tag);
+    try std.testing.expectEqual(abi.HostText_prepareErr.resource_limit, refused_text.payload_err());
     for (prepared_texts) |prepared| releaseResourceBox(&roc_host, prepared);
 
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -6424,21 +6434,23 @@ fn storeShader(resource: ShaderResource) ?*u64 {
     };
 }
 
-fn hostedTextureLoadRenderTargetRaw(args: abi.HostTexture_load_render_targetArgs) callconv(.c) abi.HostTexture_load_render_targetRetRecord {
+fn hostedTextureLoadRenderTargetRaw(args: abi.HostTexture_load_render_targetArgs) callconv(.c) abi.HostTexture_load_render_targetResult {
+    const Result = abi.HostTexture_load_render_targetResult;
+    const Error = abi.HostTexture_load_render_targetErr;
     enforcePhase("Draw.RenderTexture.load!", during_load);
     const effect = EffectScope.begin("Draw.RenderTexture.load!", 0);
     defer effect.end();
-    if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
+    if (args.width <= 0 or args.height <= 0) return abiTryErr(Result, Error.render_texture_load_failed);
     if (headlessMode()) {
         const target = storeRenderTexture(.headless) orelse
-            return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_LIMIT };
-        return .{ .target = .{ .handle = target, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
+            return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, abi.Texture{ .handle = target, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) });
     }
     const target = raylib.loadRenderTexture(args.width, args.height) orelse
-        return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
+        return abiTryErr(Result, Error.render_texture_load_failed);
     const stored = storeRenderTexture(.{ .native = target }) orelse
-        return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_LIMIT };
-    return .{ .target = .{ .handle = stored, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
+        return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, abi.Texture{ .handle = stored, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) });
 }
 
 fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceResult {
@@ -7201,7 +7213,9 @@ test "complete fonts retain a resource alongside an owned scalar metric snapshot
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
 }
 
-fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareRetRecord {
+fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareResult {
+    const Result = abi.HostText_prepareResult;
+    const Error = abi.HostText_prepareErr;
     enforcePhase("Text.prepare!", during_load);
     const effect = EffectScope.begin("Text.prepare!", args.text.asSlice().len);
     defer effect.end();
@@ -7217,7 +7231,7 @@ fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv
         }
     else {
         releaseResourceBox(host, args.font);
-        return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_FAILED };
+        return abiTryErr(Result, Error.invalid_resource);
     };
 
     const text_slice = args.text.asSlice();
@@ -7225,7 +7239,7 @@ fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv
     const allocator = allocatorFromHost(host);
     const allocation = allocator.alloc(u8, text_len + 1) catch {
         releaseResourceBox(host, args.font);
-        return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
+        return abiTryErr(Result, Error.resource_limit);
     };
     @memcpy(allocation[0..text_len], text_slice[0..text_len]);
     allocation[text_len] = 0;
@@ -7246,12 +7260,12 @@ fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv
         .font_owner = args.font,
         .size = args.size,
         .spacing = args.spacing,
-    }) orelse return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
+    }) orelse return abiTryErr(Result, Error.resource_limit);
 
-    return .{ .prepared = prepared, .height = measured.height, .width = measured.width, .err = RESOURCE_ERR_NONE };
+    return abiTryOk(Result, abi.HostText_prepareOk{ .prepared = prepared, .height = measured.height, .width = measured.width });
 }
 
-fn exportedTextPrepareRaw(args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareRetRecord {
+fn exportedTextPrepareRaw(args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareResult {
     return hostedTextPrepareRaw(activeHost(), args);
 }
 
@@ -8414,30 +8428,34 @@ fn storeMusic(resource: MusicResource) ?*u64 {
     };
 }
 
-fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAudio_gen_toneRetRecord {
+fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAudio_gen_toneResult {
+    const Result = abi.HostAudio_gen_toneResult;
+    const Error = abi.HostAudio_gen_toneErr;
     enforcePhase("Audio.gen_tone!", during_load);
     const effect = EffectScope.begin("Audio.gen_tone!", 0);
     defer effect.end();
     if (headlessMode()) {
-        const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
+        const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, sound);
     }
-    const sound = raylib.genTone(args.freq, args.ms) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
+    const sound = raylib.genTone(args.freq, args.ms) orelse return abiTryErr(Result, Error.sound_generation_failed);
+    const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, stored);
 }
 
-fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostAudio_gen_soundRetRecord {
+fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostAudio_gen_toneResult {
+    const Result = abi.HostAudio_gen_toneResult;
+    const Error = abi.HostAudio_gen_toneErr;
     enforcePhase("Audio.gen_sound!", during_load);
     const effect = EffectScope.begin("Audio.gen_sound!", 0);
     defer effect.end();
     if (headlessMode()) {
-        const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
+        const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, sound);
     }
-    const sound = raylib.genSound(args) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
+    const sound = raylib.genSound(args) orelse return abiTryErr(Result, Error.sound_generation_failed);
+    const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, stored);
 }
 
 /// The extension raylib's in-memory audio decoders dispatch on.
@@ -8466,7 +8484,9 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
 /// The read waits -- it parks a task and blocks `init!` -- and the decode and
 /// the upload run on the frame thread once the bytes are back. Nothing of the
 /// file survives the call: `LoadSoundFromWave` copies the samples it needs.
-fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundRetRecord {
+fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
+    const Result = abi.HostAudio_load_soundResult;
+    const Error = abi.HostAudio_load_soundErr;
     enforcePhase("Audio.load_sound!", during_wait);
     const effect = EffectScope.begin("Audio.load_sound!", path_arg.asSlice().len);
     defer effect.end();
@@ -8476,22 +8496,22 @@ fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
     const allocator = allocatorFromHost(host);
     var read_err: u8 = READ_ERR_FAILED;
     const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+        return abiTryErr(Result, Error.sound_load_failed);
     defer allocator.free(bytes);
 
     if (headlessMode()) {
-        const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
+        const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, sound);
     }
 
     const file_type = audioFileTypeFromPath(path_slice, false) orelse
-        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
+        return abiTryErr(Result, Error.sound_load_failed);
+    const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return abiTryErr(Result, Error.sound_load_failed);
+    const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, stored);
 }
 
-fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundRetRecord {
+fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
     return hostedAudioLoadSound(activeHost(), path_arg);
 }
 
@@ -8501,7 +8521,9 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_
 /// released afterwards: raylib's memory decoders read out of that buffer for
 /// as long as the stream plays, so the slot takes ownership of it and frees it
 /// only once the stream has been unloaded.
-fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicRetRecord {
+fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
+    const Result = abi.HostAudio_load_musicResult;
+    const Error = abi.HostAudio_load_musicErr;
     enforcePhase("Audio.load_music!", during_wait);
     const effect = EffectScope.begin("Audio.load_music!", path_arg.asSlice().len);
     defer effect.end();
@@ -8511,27 +8533,27 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
     const allocator = allocatorFromHost(host);
     var read_err: u8 = READ_ERR_FAILED;
     const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+        return abiTryErr(Result, Error.music_load_failed);
     var bytes_transferred = false;
     defer if (!bytes_transferred) allocator.free(bytes);
 
     if (headlessMode()) {
-        const music = storeMusic(.headless) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .music = music, .err = RESOURCE_ERR_NONE };
+        const music = storeMusic(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, music);
     }
 
     const file_type = audioFileTypeFromPath(path_slice, true) orelse
-        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const music = raylib.loadMusicFromMemory(file_type, bytes) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+        return abiTryErr(Result, Error.music_load_failed);
+    const music = raylib.loadMusicFromMemory(file_type, bytes) orelse return abiTryErr(Result, Error.music_load_failed);
     const stored = storeMusic(.{ .native = .{ .stream = music, .encoded = bytes, .allocator = allocator } }) orelse {
         raylib.unloadMusic(music);
-        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
+        return abiTryErr(Result, Error.resource_limit);
     };
     bytes_transferred = true;
-    return .{ .music = stored, .err = RESOURCE_ERR_NONE };
+    return abiTryOk(Result, stored);
 }
 
-fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicRetRecord {
+fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
     return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
@@ -8576,21 +8598,22 @@ test "the audio file loaders wait rather than load" {
     const startup = PhaseScope.enter(.startup);
     last_phase_violation = null;
     const sound = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, sound.err);
+    try std.testing.expectEqual(abi.HostAudio_load_soundResultTag.Ok, sound.tag);
     startup.leave();
 
     const task = PhaseScope.enter(.task);
     defer task.leave();
     const music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, music.err);
+    try std.testing.expectEqual(abi.HostAudio_load_musicResultTag.Ok, music.tag);
     try std.testing.expect(last_phase_violation == null);
 
     // A path with nothing behind it is a load failure rather than a resource.
     const missing = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-sound.wav", &roc_host));
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, missing.err);
+    try std.testing.expectEqual(abi.HostAudio_load_soundResultTag.Err, missing.tag);
+    try std.testing.expectEqual(abi.HostAudio_load_soundErr.sound_load_failed, missing.payload_err());
 
-    releaseResourceBox(&roc_host, sound.sound);
-    releaseResourceBox(&roc_host, music.music);
+    releaseResourceBox(&roc_host, sound.payload_ok());
+    releaseResourceBox(&roc_host, music.payload_ok());
 }
 
 test "an extension raylib cannot decode is refused, and module music is music only" {

@@ -1081,48 +1081,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_62cff3ac2b7521b9
-pub const __AnonStruct_62cff3ac2b7521b9 = if (@sizeOf(usize) == 4) extern struct {
-    target: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.target.incref(amount);
-    }
-} else extern struct {
-    target: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.target.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 24) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
-        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 8) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_62cff3ac2b7521b9) != 16) @compileError("__AnonStruct_62cff3ac2b7521b9 size mismatch");
-        if (@alignOf(__AnonStruct_62cff3ac2b7521b9) != 4) @compileError("__AnonStruct_62cff3ac2b7521b9 alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_bc8fa73ca49a5ac0
 pub const __AnonStruct_bc8fa73ca49a5ac0 = if (@sizeOf(usize) == 4) extern struct {
     height: i32,
@@ -1407,12 +1365,11 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_2a39039201b5023d
-pub const __AnonStruct_2a39039201b5023d = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_e1165210b218b76c
+pub const __AnonStruct_e1165210b218b76c = if (@sizeOf(usize) == 4) extern struct {
     prepared: *u64,
     height: f32,
     width: f32,
-    err: u8,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -1428,7 +1385,6 @@ pub const __AnonStruct_2a39039201b5023d = if (@sizeOf(usize) == 4) extern struct
     prepared: *u64,
     height: f32,
     width: f32,
-    err: u8,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -1444,12 +1400,12 @@ pub const __AnonStruct_2a39039201b5023d = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_2a39039201b5023d) != 24) @compileError("__AnonStruct_2a39039201b5023d size mismatch");
-        if (@alignOf(__AnonStruct_2a39039201b5023d) != 8) @compileError("__AnonStruct_2a39039201b5023d alignment mismatch");
+        if (@sizeOf(__AnonStruct_e1165210b218b76c) != 16) @compileError("__AnonStruct_e1165210b218b76c size mismatch");
+        if (@alignOf(__AnonStruct_e1165210b218b76c) != 8) @compileError("__AnonStruct_e1165210b218b76c alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_2a39039201b5023d) != 16) @compileError("__AnonStruct_2a39039201b5023d size mismatch");
-        if (@alignOf(__AnonStruct_2a39039201b5023d) != 4) @compileError("__AnonStruct_2a39039201b5023d alignment mismatch");
+        if (@sizeOf(__AnonStruct_e1165210b218b76c) != 12) @compileError("__AnonStruct_e1165210b218b76c size mismatch");
+        if (@alignOf(__AnonStruct_e1165210b218b76c) != 4) @compileError("__AnonStruct_e1165210b218b76c alignment mismatch");
     }
 }
 
@@ -2209,48 +2165,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_82ca12cef4f5714b
-pub const __AnonStruct_82ca12cef4f5714b = if (@sizeOf(usize) == 4) extern struct {
-    sound: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.sound), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.sound), amount);
-    }
-} else extern struct {
-    sound: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.sound), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.sound), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_82ca12cef4f5714b) != 16) @compileError("__AnonStruct_82ca12cef4f5714b size mismatch");
-        if (@alignOf(__AnonStruct_82ca12cef4f5714b) != 8) @compileError("__AnonStruct_82ca12cef4f5714b alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_82ca12cef4f5714b) != 8) @compileError("__AnonStruct_82ca12cef4f5714b size mismatch");
-        if (@alignOf(__AnonStruct_82ca12cef4f5714b) != 4) @compileError("__AnonStruct_82ca12cef4f5714b alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_74e1febaa758f087
 pub const __AnonStruct_74e1febaa758f087 = if (@sizeOf(usize) == 4) extern struct {
     freq: f32,
@@ -2354,48 +2268,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_37b6eb678c2c2ca2) != 36) @compileError("__AnonStruct_37b6eb678c2c2ca2 size mismatch");
         if (@alignOf(__AnonStruct_37b6eb678c2c2ca2) != 4) @compileError("__AnonStruct_37b6eb678c2c2ca2 alignment mismatch");
-    }
-}
-
-/// Element type for __AnonStruct_71f03d460dd53e7d
-pub const __AnonStruct_71f03d460dd53e7d = if (@sizeOf(usize) == 4) extern struct {
-    music: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.music), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.music), amount);
-    }
-} else extern struct {
-    music: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.music), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.music), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_71f03d460dd53e7d) != 16) @compileError("__AnonStruct_71f03d460dd53e7d size mismatch");
-        if (@alignOf(__AnonStruct_71f03d460dd53e7d) != 8) @compileError("__AnonStruct_71f03d460dd53e7d alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_71f03d460dd53e7d) != 8) @compileError("__AnonStruct_71f03d460dd53e7d size mismatch");
-        if (@alignOf(__AnonStruct_71f03d460dd53e7d) != 4) @compileError("__AnonStruct_71f03d460dd53e7d alignment mismatch");
     }
 }
 
@@ -6907,6 +6779,100 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostTexture_load_render_targetResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostTexture_load_render_targetResultPayload = extern union {
+    err: RenderTextureLoadFailedOrResourceLimit,
+    ok: Texture,
+};
+
+/// Tag union: Try
+pub const HostTexture_load_render_targetResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostTexture_load_render_targetResultTag,
+    pub fn payload_err(self: *const @This()) RenderTextureLoadFailedOrResourceLimit {
+        const ptr: *const RenderTextureLoadFailedOrResourceLimit = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        const ptr: *const Texture = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_render_targetResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_render_targetResult(self, amount);
+    }
+} else extern struct {
+    payload: HostTexture_load_render_targetResultPayload,
+    tag: HostTexture_load_render_targetResultTag,
+    pub fn payload_err(self: *const @This()) RenderTextureLoadFailedOrResourceLimit {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_render_targetResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_render_targetResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_render_targetResult) != 24) @compileError("HostTexture_load_render_targetResult size mismatch");
+        if (@alignOf(HostTexture_load_render_targetResult) != 8) @compileError("HostTexture_load_render_targetResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_render_targetResult, "tag") != 16) @compileError("HostTexture_load_render_targetResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_render_targetResult) != 16) @compileError("HostTexture_load_render_targetResult size mismatch");
+        if (@alignOf(HostTexture_load_render_targetResult) != 4) @compileError("HostTexture_load_render_targetResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_render_targetResult, "tag") != 12) @compileError("HostTexture_load_render_targetResult tag offset mismatch");
+    }
+}
+
+/// Tag union: RenderTextureLoadFailedOrResourceLimit
+pub const RenderTextureLoadFailedOrResourceLimit = enum(u8) {
+    render_texture_load_failed = 0,
+    resource_limit = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(RenderTextureLoadFailedOrResourceLimit) != 1) @compileError("RenderTextureLoadFailedOrResourceLimit size mismatch");
+        if (@alignOf(RenderTextureLoadFailedOrResourceLimit) != 1) @compileError("RenderTextureLoadFailedOrResourceLimit alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(RenderTextureLoadFailedOrResourceLimit) != 1) @compileError("RenderTextureLoadFailedOrResourceLimit size mismatch");
+        if (@alignOf(RenderTextureLoadFailedOrResourceLimit) != 1) @compileError("RenderTextureLoadFailedOrResourceLimit alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostText_startup_default_fontResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -7191,6 +7157,100 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit size mismatch");
         if (@alignOf(FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostText_prepareResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostText_prepareResultPayload = extern union {
+    err: InvalidResourceOrResourceLimit,
+    ok: __AnonStruct_e1165210b218b76c,
+};
+
+/// Tag union: Try
+pub const HostText_prepareResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostText_prepareResultTag,
+    pub fn payload_err(self: *const @This()) InvalidResourceOrResourceLimit {
+        const ptr: *const InvalidResourceOrResourceLimit = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) __AnonStruct_e1165210b218b76c {
+        const ptr: *const __AnonStruct_e1165210b218b76c = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostText_prepareResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostText_prepareResult(self, amount);
+    }
+} else extern struct {
+    payload: HostText_prepareResultPayload,
+    tag: HostText_prepareResultTag,
+    pub fn payload_err(self: *const @This()) InvalidResourceOrResourceLimit {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) __AnonStruct_e1165210b218b76c {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostText_prepareResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostText_prepareResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostText_prepareResult) != 24) @compileError("HostText_prepareResult size mismatch");
+        if (@alignOf(HostText_prepareResult) != 8) @compileError("HostText_prepareResult alignment mismatch");
+        if (@offsetOf(HostText_prepareResult, "tag") != 16) @compileError("HostText_prepareResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostText_prepareResult) != 16) @compileError("HostText_prepareResult size mismatch");
+        if (@alignOf(HostText_prepareResult) != 4) @compileError("HostText_prepareResult alignment mismatch");
+        if (@offsetOf(HostText_prepareResult, "tag") != 12) @compileError("HostText_prepareResult tag offset mismatch");
+    }
+}
+
+/// Tag union: InvalidResourceOrResourceLimit
+pub const InvalidResourceOrResourceLimit = enum(u8) {
+    invalid_resource = 0,
+    resource_limit = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(InvalidResourceOrResourceLimit) != 1) @compileError("InvalidResourceOrResourceLimit size mismatch");
+        if (@alignOf(InvalidResourceOrResourceLimit) != 1) @compileError("InvalidResourceOrResourceLimit alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(InvalidResourceOrResourceLimit) != 1) @compileError("InvalidResourceOrResourceLimit size mismatch");
+        if (@alignOf(InvalidResourceOrResourceLimit) != 1) @compileError("InvalidResourceOrResourceLimit alignment mismatch");
     }
 }
 
@@ -7487,6 +7547,288 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
         if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostAudio_gen_toneResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostAudio_gen_toneResultPayload = extern union {
+    err: ResourceLimitOrSoundGenerationFailed,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostAudio_gen_toneResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostAudio_gen_toneResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrSoundGenerationFailed {
+        const ptr: *const ResourceLimitOrSoundGenerationFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_gen_toneResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_gen_toneResult(self, amount);
+    }
+} else extern struct {
+    payload: HostAudio_gen_toneResultPayload,
+    tag: HostAudio_gen_toneResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrSoundGenerationFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_gen_toneResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_gen_toneResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_gen_toneResult) != 16) @compileError("HostAudio_gen_toneResult size mismatch");
+        if (@alignOf(HostAudio_gen_toneResult) != 8) @compileError("HostAudio_gen_toneResult alignment mismatch");
+        if (@offsetOf(HostAudio_gen_toneResult, "tag") != 8) @compileError("HostAudio_gen_toneResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_gen_toneResult) != 8) @compileError("HostAudio_gen_toneResult size mismatch");
+        if (@alignOf(HostAudio_gen_toneResult) != 4) @compileError("HostAudio_gen_toneResult alignment mismatch");
+        if (@offsetOf(HostAudio_gen_toneResult, "tag") != 4) @compileError("HostAudio_gen_toneResult tag offset mismatch");
+    }
+}
+
+/// Tag union: ResourceLimitOrSoundGenerationFailed
+pub const ResourceLimitOrSoundGenerationFailed = enum(u8) {
+    resource_limit = 0,
+    sound_generation_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ResourceLimitOrSoundGenerationFailed) != 1) @compileError("ResourceLimitOrSoundGenerationFailed size mismatch");
+        if (@alignOf(ResourceLimitOrSoundGenerationFailed) != 1) @compileError("ResourceLimitOrSoundGenerationFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ResourceLimitOrSoundGenerationFailed) != 1) @compileError("ResourceLimitOrSoundGenerationFailed size mismatch");
+        if (@alignOf(ResourceLimitOrSoundGenerationFailed) != 1) @compileError("ResourceLimitOrSoundGenerationFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostAudio_load_soundResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostAudio_load_soundResultPayload = extern union {
+    err: ResourceLimitOrSoundLoadFailed,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostAudio_load_soundResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostAudio_load_soundResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrSoundLoadFailed {
+        const ptr: *const ResourceLimitOrSoundLoadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_load_soundResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_load_soundResult(self, amount);
+    }
+} else extern struct {
+    payload: HostAudio_load_soundResultPayload,
+    tag: HostAudio_load_soundResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrSoundLoadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_load_soundResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_load_soundResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_load_soundResult) != 16) @compileError("HostAudio_load_soundResult size mismatch");
+        if (@alignOf(HostAudio_load_soundResult) != 8) @compileError("HostAudio_load_soundResult alignment mismatch");
+        if (@offsetOf(HostAudio_load_soundResult, "tag") != 8) @compileError("HostAudio_load_soundResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_load_soundResult) != 8) @compileError("HostAudio_load_soundResult size mismatch");
+        if (@alignOf(HostAudio_load_soundResult) != 4) @compileError("HostAudio_load_soundResult alignment mismatch");
+        if (@offsetOf(HostAudio_load_soundResult, "tag") != 4) @compileError("HostAudio_load_soundResult tag offset mismatch");
+    }
+}
+
+/// Tag union: ResourceLimitOrSoundLoadFailed
+pub const ResourceLimitOrSoundLoadFailed = enum(u8) {
+    resource_limit = 0,
+    sound_load_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ResourceLimitOrSoundLoadFailed) != 1) @compileError("ResourceLimitOrSoundLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrSoundLoadFailed) != 1) @compileError("ResourceLimitOrSoundLoadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ResourceLimitOrSoundLoadFailed) != 1) @compileError("ResourceLimitOrSoundLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrSoundLoadFailed) != 1) @compileError("ResourceLimitOrSoundLoadFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostAudio_load_musicResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostAudio_load_musicResultPayload = extern union {
+    err: MusicLoadFailedOrResourceLimit,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostAudio_load_musicResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostAudio_load_musicResultTag,
+    pub fn payload_err(self: *const @This()) MusicLoadFailedOrResourceLimit {
+        const ptr: *const MusicLoadFailedOrResourceLimit = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_load_musicResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_load_musicResult(self, amount);
+    }
+} else extern struct {
+    payload: HostAudio_load_musicResultPayload,
+    tag: HostAudio_load_musicResultTag,
+    pub fn payload_err(self: *const @This()) MusicLoadFailedOrResourceLimit {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostAudio_load_musicResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostAudio_load_musicResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_load_musicResult) != 16) @compileError("HostAudio_load_musicResult size mismatch");
+        if (@alignOf(HostAudio_load_musicResult) != 8) @compileError("HostAudio_load_musicResult alignment mismatch");
+        if (@offsetOf(HostAudio_load_musicResult, "tag") != 8) @compileError("HostAudio_load_musicResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_load_musicResult) != 8) @compileError("HostAudio_load_musicResult size mismatch");
+        if (@alignOf(HostAudio_load_musicResult) != 4) @compileError("HostAudio_load_musicResult alignment mismatch");
+        if (@offsetOf(HostAudio_load_musicResult, "tag") != 4) @compileError("HostAudio_load_musicResult tag offset mismatch");
+    }
+}
+
+/// Tag union: MusicLoadFailedOrResourceLimit
+pub const MusicLoadFailedOrResourceLimit = enum(u8) {
+    music_load_failed = 0,
+    resource_limit = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(MusicLoadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrResourceLimit size mismatch");
+        if (@alignOf(MusicLoadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrResourceLimit alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(MusicLoadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrResourceLimit size mismatch");
+        if (@alignOf(MusicLoadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrResourceLimit alignment mismatch");
     }
 }
 
@@ -7965,90 +8307,6 @@ comptime {
     }
 }
 
-/// Return type record for Host.audio_gen_tone!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostAudio_gen_toneRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    sound: *u64,
-    err: u8,
-} else extern struct {
-    sound: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_gen_toneRetRecord) != 16) @compileError("HostAudio_gen_toneRetRecord size mismatch");
-        if (@alignOf(HostAudio_gen_toneRetRecord) != 8) @compileError("HostAudio_gen_toneRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_gen_toneRetRecord) != 8) @compileError("HostAudio_gen_toneRetRecord size mismatch");
-        if (@alignOf(HostAudio_gen_toneRetRecord) != 4) @compileError("HostAudio_gen_toneRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.audio_gen_sound!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostAudio_gen_soundRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    sound: *u64,
-    err: u8,
-} else extern struct {
-    sound: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_gen_soundRetRecord) != 16) @compileError("HostAudio_gen_soundRetRecord size mismatch");
-        if (@alignOf(HostAudio_gen_soundRetRecord) != 8) @compileError("HostAudio_gen_soundRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_gen_soundRetRecord) != 8) @compileError("HostAudio_gen_soundRetRecord size mismatch");
-        if (@alignOf(HostAudio_gen_soundRetRecord) != 4) @compileError("HostAudio_gen_soundRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.audio_load_sound!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostAudio_load_soundRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    sound: *u64,
-    err: u8,
-} else extern struct {
-    sound: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_load_soundRetRecord) != 16) @compileError("HostAudio_load_soundRetRecord size mismatch");
-        if (@alignOf(HostAudio_load_soundRetRecord) != 8) @compileError("HostAudio_load_soundRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_load_soundRetRecord) != 8) @compileError("HostAudio_load_soundRetRecord size mismatch");
-        if (@alignOf(HostAudio_load_soundRetRecord) != 4) @compileError("HostAudio_load_soundRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.audio_load_music!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostAudio_load_musicRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    music: *u64,
-    err: u8,
-} else extern struct {
-    music: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_load_musicRetRecord) != 16) @compileError("HostAudio_load_musicRetRecord size mismatch");
-        if (@alignOf(HostAudio_load_musicRetRecord) != 8) @compileError("HostAudio_load_musicRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_load_musicRetRecord) != 8) @compileError("HostAudio_load_musicRetRecord size mismatch");
-        if (@alignOf(HostAudio_load_musicRetRecord) != 4) @compileError("HostAudio_load_musicRetRecord alignment mismatch");
-    }
-}
-
 /// Return type record for Host.text_default_font!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const HostText_default_fontRetRecord = if (@sizeOf(usize) == 4) extern struct {
@@ -8088,31 +8346,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostDraw_frame_sizeRetRecord) != 8) @compileError("HostDraw_frame_sizeRetRecord size mismatch");
         if (@alignOf(HostDraw_frame_sizeRetRecord) != 4) @compileError("HostDraw_frame_sizeRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.text_prepare!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostText_prepareRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    prepared: *u64,
-    height: f32,
-    width: f32,
-    err: u8,
-} else extern struct {
-    prepared: *u64,
-    height: f32,
-    width: f32,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostText_prepareRetRecord) != 24) @compileError("HostText_prepareRetRecord size mismatch");
-        if (@alignOf(HostText_prepareRetRecord) != 8) @compileError("HostText_prepareRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostText_prepareRetRecord) != 16) @compileError("HostText_prepareRetRecord size mismatch");
-        if (@alignOf(HostText_prepareRetRecord) != 4) @compileError("HostText_prepareRetRecord alignment mismatch");
     }
 }
 
@@ -8316,27 +8549,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
         if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.texture_load_render_target!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTexture_load_render_targetRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    target: Texture,
-    err: u8,
-} else extern struct {
-    target: Texture,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_render_targetRetRecord) != 24) @compileError("HostTexture_load_render_targetRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_render_targetRetRecord) != 8) @compileError("HostTexture_load_render_targetRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_render_targetRetRecord) != 16) @compileError("HostTexture_load_render_targetRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_render_targetRetRecord) != 4) @compileError("HostTexture_load_render_targetRetRecord alignment mismatch");
     }
 }
 
@@ -8998,7 +9210,7 @@ pub const HostTexture_set_wrapArgs = extern struct {
 };
 
 /// Arguments for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => { err : U8, sound : Box(U64) }
+/// Roc signature: { freq : F32, ms : I32 } => Try(Box(U64), [ResourceLimit, SoundGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_gen_toneArgs = if (@sizeOf(usize) == 4) extern struct {
     freq: f32,
@@ -9046,7 +9258,7 @@ comptime {
 }
 
 /// Arguments for Host.audio_gen_sound!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => { err : U8, sound : Box(U64) }
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Box(U64), [ResourceLimit, SoundGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_gen_soundArgs = if (@sizeOf(usize) == 4) extern struct {
     attack_ms: i32,
@@ -9108,14 +9320,14 @@ comptime {
 }
 
 /// Arguments for Host.audio_load_sound!
-/// Roc signature: Str => { err : U8, sound : Box(U64) }
+/// Roc signature: Str => Try(Box(U64), [ResourceLimit, SoundLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_load_soundArgs = extern struct {
     arg0: RocStr,
 };
 
 /// Arguments for Host.audio_load_music!
-/// Roc signature: Str => { err : U8, music : Box(U64) }
+/// Roc signature: Str => Try(Box(U64), [MusicLoadFailed, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_load_musicArgs = extern struct {
     arg0: RocStr,
@@ -9943,7 +10155,7 @@ comptime {
 }
 
 /// Arguments for Host.text_prepare!
-/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : Box(U64), width : F32 }
+/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Box(U64), width : F32 }, [InvalidResource, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostText_prepareArgs = if (@sizeOf(usize) == 4) extern struct {
     font: *u64,
@@ -11445,7 +11657,7 @@ pub const HostDraw_begin_shaderArgs = extern struct {
 };
 
 /// Arguments for Host.texture_load_render_target!
-/// Roc signature: { height : I32, width : I32 } => { err : U8, target : Texture }
+/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_load_render_targetArgs = if (@sizeOf(usize) == 4) extern struct {
     height: i32,
@@ -12339,11 +12551,14 @@ pub const HostTexture_updateArg0Pixels = ColorRgba;
 pub const HostTexture_update_regionArg0 = __AnonStruct_307d51efe2380633;
 pub const HostTexture_update_regionArg0Pixels = ColorRgba;
 pub const HostAudio_gen_toneArg0 = __AnonStruct_74e1febaa758f087;
-pub const HostAudio_gen_tone = __AnonStruct_82ca12cef4f5714b;
+pub const HostAudio_gen_toneErr = ResourceLimitOrSoundGenerationFailed;
 pub const HostAudio_gen_soundArg0 = __AnonStruct_37b6eb678c2c2ca2;
-pub const HostAudio_gen_sound = __AnonStruct_82ca12cef4f5714b;
-pub const HostAudio_load_sound = __AnonStruct_82ca12cef4f5714b;
-pub const HostAudio_load_music = __AnonStruct_71f03d460dd53e7d;
+pub const HostAudio_gen_soundResult = HostAudio_gen_toneResult;
+pub const HostAudio_gen_soundResultPayload = HostAudio_gen_toneResultPayload;
+pub const HostAudio_gen_soundResultTag = HostAudio_gen_toneResultTag;
+pub const HostAudio_gen_soundErr = ResourceLimitOrSoundGenerationFailed;
+pub const HostAudio_load_soundErr = ResourceLimitOrSoundLoadFailed;
+pub const HostAudio_load_musicErr = MusicLoadFailedOrResourceLimit;
 pub const HostDraw_begin_scissorArg0 = __AnonStruct_5d393593a1f032cb;
 pub const HostDraw_circle_gradientArg0 = __AnonStruct_f8a458371716c148;
 pub const HostDraw_circle_linesArg0 = __AnonStruct_8b18bd818a3a6ac2;
@@ -12366,7 +12581,8 @@ pub const HostText_load_store_fontArg0 = __AnonStruct_80c864420ea33e1e;
 pub const HostText_load_store_fontErr = FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit;
 pub const HostText_load_store_fontOk = Font;
 pub const HostText_prepareArg0 = __AnonStruct_7f4d6dac6c3eef5e;
-pub const HostText_prepare = __AnonStruct_2a39039201b5023d;
+pub const HostText_prepareErr = InvalidResourceOrResourceLimit;
+pub const HostText_prepareOk = __AnonStruct_e1165210b218b76c;
 pub const HostDraw_draw_prepared_textArg0 = __AnonStruct_6bff15fb6a4cb85a;
 pub const HostDraw_polygon_linesArg0 = __AnonStruct_2dcd38bc772d0799;
 pub const HostDraw_polygon_linesArg0Points = MathVec2;
@@ -12415,7 +12631,8 @@ pub const HostTilemap_drawArg0 = __AnonStruct_bcdb8f2e5f1946e1;
 pub const HostTilemap_drawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
 pub const HostTilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
 pub const HostTexture_load_render_targetArg0 = __AnonStruct_bc8fa73ca49a5ac0;
-pub const HostTexture_load_render_target = __AnonStruct_62cff3ac2b7521b9;
+pub const HostTexture_load_render_targetErr = RenderTextureLoadFailedOrResourceLimit;
+pub const HostTexture_load_render_targetOk = Texture;
 pub const HostShader_load_sourceArg0 = __AnonStruct_c813cb81fdeac2dc;
 pub const HostShader_load_sourceErr = ResourceLimitOrShaderLoadFailed;
 pub const HostShader_load_storeArg0 = __AnonStruct_3e85b4e878c74d96;
@@ -12606,8 +12823,30 @@ pub const __AnonStruct_307d51efe2380633Release = struct {
     }
 };
 
-pub const __AnonStruct_62cff3ac2b7521b9Release = struct {
-    pub fn release(value: __AnonStruct_62cff3ac2b7521b9, roc_host: *RocHost) void {
+fn decrefHostTexture_load_render_targetResult(value: HostTexture_load_render_targetResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostTexture_load_render_targetResult(value: HostTexture_load_render_targetResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostTexture_load_render_targetResultRelease = struct {
+    pub fn release(value: HostTexture_load_render_targetResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12732,8 +12971,36 @@ pub const __AnonStruct_80c864420ea33e1eRelease = struct {
     }
 };
 
-pub const __AnonStruct_2a39039201b5023dRelease = struct {
-    pub fn release(value: __AnonStruct_2a39039201b5023d, roc_host: *RocHost) void {
+fn decrefHostText_prepareResult(value: HostText_prepareResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostText_prepareResult(value: HostText_prepareResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostText_prepareResultRelease = struct {
+    pub fn release(value: HostText_prepareResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_e1165210b218b76cRelease = struct {
+    pub fn release(value: __AnonStruct_e1165210b218b76c, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12918,8 +13185,30 @@ pub const __AnonStruct_bbf5049c4fa71893Release = struct {
     }
 };
 
-pub const __AnonStruct_82ca12cef4f5714bRelease = struct {
-    pub fn release(value: __AnonStruct_82ca12cef4f5714b, roc_host: *RocHost) void {
+fn decrefHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostAudio_gen_toneResultRelease = struct {
+    pub fn release(value: HostAudio_gen_toneResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12936,8 +13225,58 @@ pub const __AnonStruct_37b6eb678c2c2ca2Release = struct {
     }
 };
 
-pub const __AnonStruct_71f03d460dd53e7dRelease = struct {
-    pub fn release(value: __AnonStruct_71f03d460dd53e7d, roc_host: *RocHost) void {
+fn decrefHostAudio_load_soundResult(value: HostAudio_load_soundResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostAudio_load_soundResult(value: HostAudio_load_soundResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostAudio_load_soundResultRelease = struct {
+    pub fn release(value: HostAudio_load_soundResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostAudio_load_musicResult(value: HostAudio_load_musicResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostAudio_load_musicResult(value: HostAudio_load_musicResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostAudio_load_musicResultRelease = struct {
+    pub fn release(value: HostAudio_load_musicResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13691,7 +14030,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_8e0d47be14ad0be3) return __AnonStruct_8e0d47be14ad0be3Release;
     if (T == RocListWith(ColorRgba, false)) return RocListSpineRelease(RocListWith(ColorRgba, false));
     if (T == __AnonStruct_307d51efe2380633) return __AnonStruct_307d51efe2380633Release;
-    if (T == __AnonStruct_62cff3ac2b7521b9) return __AnonStruct_62cff3ac2b7521b9Release;
+    if (T == HostTexture_load_render_targetResult) return HostTexture_load_render_targetResultRelease;
     if (T == Font) return FontRelease;
     if (T == __AnonStruct_2bfb89334ad27c35) return __AnonStruct_2bfb89334ad27c35Release;
     if (T == RocListWith(__AnonStruct_a31979034eec4b2e, false)) return RocListSpineRelease(RocListWith(__AnonStruct_a31979034eec4b2e, false));
@@ -13700,7 +14039,8 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_5cba559c3a07b56a) return __AnonStruct_5cba559c3a07b56aRelease;
     if (T == HostText_load_store_fontResult) return HostText_load_store_fontResultRelease;
     if (T == __AnonStruct_80c864420ea33e1e) return __AnonStruct_80c864420ea33e1eRelease;
-    if (T == __AnonStruct_2a39039201b5023d) return __AnonStruct_2a39039201b5023dRelease;
+    if (T == HostText_prepareResult) return HostText_prepareResultRelease;
+    if (T == __AnonStruct_e1165210b218b76c) return __AnonStruct_e1165210b218b76cRelease;
     if (T == __AnonStruct_7f4d6dac6c3eef5e) return __AnonStruct_7f4d6dac6c3eef5eRelease;
     if (T == HostShader_load_sourceResult) return HostShader_load_sourceResultRelease;
     if (T == __AnonStruct_c813cb81fdeac2dc) return __AnonStruct_c813cb81fdeac2dcRelease;
@@ -13717,8 +14057,9 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostStore_openResult) return HostStore_openResultRelease;
     if (T == __AnonStruct_8f4b2816fd84fce2) return __AnonStruct_8f4b2816fd84fce2Release;
     if (T == RocErasedCallable) return RocErasedCallableRelease;
-    if (T == __AnonStruct_82ca12cef4f5714b) return __AnonStruct_82ca12cef4f5714bRelease;
-    if (T == __AnonStruct_71f03d460dd53e7d) return __AnonStruct_71f03d460dd53e7dRelease;
+    if (T == HostAudio_gen_toneResult) return HostAudio_gen_toneResultRelease;
+    if (T == HostAudio_load_soundResult) return HostAudio_load_soundResultRelease;
+    if (T == HostAudio_load_musicResult) return HostAudio_load_musicResultRelease;
     if (T == __AnonStruct_e98c7d72bcd7a610) return __AnonStruct_e98c7d72bcd7a610Release;
     if (T == __AnonStruct_5b08b74ffdd2f118) return __AnonStruct_5b08b74ffdd2f118Release;
     if (T == __AnonStruct_da7cbd33c88fa20a) return __AnonStruct_da7cbd33c88fa20aRelease;
@@ -13873,30 +14214,30 @@ pub extern fn roc_texture_set_filter_raw(arg0: Texture, arg1: u8) callconv(.c) v
 pub extern fn roc_texture_set_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => { err : U8, sound : Box(U64) }
+/// Roc signature: { freq : F32, ms : I32 } => Try(Box(U64), [ResourceLimit, SoundGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) __AnonStruct_82ca12cef4f5714b;
+pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) HostAudio_gen_toneResult;
 
 /// Hosted symbol for Host.audio_gen_sound!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => { err : U8, sound : Box(U64) }
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Box(U64), [ResourceLimit, SoundGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) __AnonStruct_82ca12cef4f5714b;
+pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) HostAudio_gen_toneResult;
 
 /// Hosted symbol for Host.audio_load_sound!
-/// Roc signature: Str => { err : U8, sound : Box(U64) }
+/// Roc signature: Str => Try(Box(U64), [ResourceLimit, SoundLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) __AnonStruct_82ca12cef4f5714b;
+pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) HostAudio_load_soundResult;
 
 /// Hosted symbol for Host.audio_load_music!
-/// Roc signature: Str => { err : U8, music : Box(U64) }
+/// Roc signature: Str => Try(Box(U64), [MusicLoadFailed, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_load_music_raw(arg0: RocStr) callconv(.c) __AnonStruct_71f03d460dd53e7d;
+pub extern fn roc_audio_load_music_raw(arg0: RocStr) callconv(.c) HostAudio_load_musicResult;
 
 /// Hosted symbol for Host.audio_play_sound!
 /// Roc signature: Box(U64) => {}
@@ -14129,12 +14470,12 @@ pub extern fn roc_text_load_font_raw(arg0: HostText_load_fontArgs) callconv(.c) 
 pub extern fn roc_text_load_store_font_raw(arg0: HostText_load_store_fontArgs) callconv(.c) HostText_load_store_fontResult;
 
 /// Hosted symbol for Host.text_prepare!
-/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : Box(U64), width : F32 }
+/// Roc signature: { font : Font.Handle, size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Box(U64), width : F32 }, [InvalidResource, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_prepare_raw(arg0: HostText_prepareArgs) callconv(.c) __AnonStruct_2a39039201b5023d;
+pub extern fn roc_text_prepare_raw(arg0: HostText_prepareArgs) callconv(.c) HostText_prepareResult;
 
 /// Hosted symbol for Host.draw_draw_prepared_text!
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Box(U64) } => {}
@@ -14455,9 +14796,9 @@ pub extern fn roc_draw_end_render_texture_raw() callconv(.c) void;
 pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
 
 /// Hosted symbol for Host.texture_load_render_target!
-/// Roc signature: { height : I32, width : I32 } => { err : U8, target : Texture }
+/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) __AnonStruct_62cff3ac2b7521b9;
+pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) HostTexture_load_render_targetResult;
 
 /// Hosted symbol for Host.shader_load_source!
 /// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Box(U64), [ResourceLimit, ShaderLoadFailed])

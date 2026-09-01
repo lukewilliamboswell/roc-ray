@@ -139,12 +139,12 @@ Host := [].{
 	## Render-target dimensions.
 	TextureRenderTargetSize : { width : I32, height : I32 }
 
-	## Loaded render target or error.
-	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
+	## Failures while loading a render target.
+	TextureRenderTargetError : [ResourceLimit, RenderTextureLoadFailed]
 
 	## Load a render target.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
+	texture_load_render_target! : TextureRenderTargetSize => Try(TextureRenderTarget, TextureRenderTargetError)
 
 	## Text resource interface
 	## Opaque ARC-owned prepared text.
@@ -153,8 +153,11 @@ Host := [].{
 	## Text-preparation parameters.
 	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
 
-	## Prepared text, measured size, or error.
-	TextPrepareResult : { prepared : TextPrepared, width : F32, height : F32, err : U8 }
+	## Failures while preparing text.
+	TextPrepareError : [ResourceLimit, InvalidResource]
+
+	## Prepared text and its measured size.
+	TextPreparedResult : { prepared : TextPrepared, width : F32, height : F32 }
 
 	## Font bytes, format, and pixel size.
 	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
@@ -186,7 +189,7 @@ Host := [].{
 
 	## Shape and measure text for repeated drawing.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_prepare! : TextPrepare => TextPrepareResult
+	text_prepare! : TextPrepare => Try(TextPreparedResult, TextPrepareError)
 
 	## Shader resource interface
 	## Opaque ARC-owned shader.
@@ -362,11 +365,14 @@ Host := [].{
 	## Opaque ARC-owned music stream.
 	AudioMusic : Box(U64)
 
-	## Loaded sound or error.
-	AudioSoundResult : { sound : AudioSound, err : U8 }
+	## Failures while generating a sound.
+	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
 
-	## Loaded music stream or error.
-	AudioMusicResult : { music : AudioMusic, err : U8 }
+	## Failures while loading a sound.
+	AudioLoadSoundError : [ResourceLimit, SoundLoadFailed]
+
+	## Failures while loading a music stream.
+	AudioLoadMusicError : [MusicLoadFailed, ResourceLimit]
 
 	## Parameters for a generated sound envelope.
 	AudioGenSound : {
@@ -383,19 +389,19 @@ Host := [].{
 
 	## Generate a tone.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_tone! : { freq : F32, ms : I32 } => AudioSoundResult
+	audio_gen_tone! : { freq : F32, ms : I32 } => Try(AudioSound, AudioGenerateSoundError)
 
 	## Generate a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_sound! : AudioGenSound => AudioSoundResult
+	audio_gen_sound! : AudioGenSound => Try(AudioSound, AudioGenerateSoundError)
 
 	## Load a sound from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Str => AudioSoundResult
+	audio_load_sound! : Str => Try(AudioSound, AudioLoadSoundError)
 
 	## Load a music stream from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Str => AudioMusicResult
+	audio_load_music! : Str => Try(AudioMusic, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

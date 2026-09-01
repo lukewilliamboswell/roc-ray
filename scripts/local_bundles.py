@@ -14,7 +14,7 @@ Three things bite local testing because of it:
    was last rewritten. When two of those routes resolve
    different builds of the package, the same types arrive under two nominal
    identities. `test/package_interop/README.md` records what that costs.
-   (Measured on the pin in `.roc-version`, `nightly-2026-08-23-fb208ba`, the
+   (Measured on the pin in `.roc-version`, `nightly-2026-08-31-86e69b4`, the
    compiler tolerates it: path and URL unify, and so do two *different* types
    bundles on either side of one app. It has not always, and the arrangement is
    still one where an app can be built against a package build nobody shipped.)
@@ -187,8 +187,8 @@ def check_roc_pin(root: Path, roc: str = "roc") -> str | None:
     against a locally built compiler.
 
     A build of the pinned revision counts as a match even though it reports its
-    build mode instead of the tag -- `release-fast-fb208ba` is the compiler
-    `nightly-2026-08-23-fb208ba` names. `roc_platform_abi.compiler_matches_pin`
+    build mode instead of the tag -- `release-fast-86e69b4` is the compiler
+    `nightly-2026-08-31-86e69b4` names. `roc_platform_abi.compiler_matches_pin`
     is the shared rule; this falls back to a plain comparison if that module
     cannot parse the pin.
     """

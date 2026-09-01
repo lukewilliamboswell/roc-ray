@@ -80,7 +80,14 @@ Font := {
 		if Str.is_empty(text) {
 			{ width: 0, height: 0 }
 		} else {
-			var $state = {
+			initial_state : {
+				line_count : U64,
+				line_width : F32,
+				widest_count : U64,
+				widest_width : F32,
+				height : F32,
+			}
+			initial_state = {
 				# Codepoint count on the current line.
 				line_count: 0,
 				# Unscaled glyph-advance total for the current line.
@@ -92,10 +99,13 @@ Font := {
 				# Accumulated height across all lines.
 				height: size,
 			}
+			var $state = initial_state
 			$state = text_codepoints(text).fold(
 				$state,
 				|current, codepoint| {
 					if codepoint == 10 {
+						current_height : F32
+						current_height = current.height
 						# Line Feed ("\n"):
 						# - Width preserves the widest completed line.
 						# - Height increases by font size plus line spacing.
@@ -104,7 +114,7 @@ Font := {
 							widest_width: max_f32(current.widest_width, current.line_width),
 							line_count: 0,
 							widest_count: max_u64(current.widest_count, current.line_count),
-							height: current.height + size + font.metrics.line_spacing,
+							height: current_height + size + font.metrics.line_spacing,
 						}
 					} else {
 						# Other codepoints:

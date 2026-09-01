@@ -4,7 +4,7 @@
 The host consumes its model box on every `update_for_host` call and the platform
 adapter boxes the returned model again. If nothing else references the old model
 while `update` runs, writing to a list in it is an in-place write and a frame
-costs nothing proportional to the list. As of the `nightly-2026-08-23-fb208ba`
+costs nothing proportional to the list. As of the `nightly-2026-08-31-86e69b4`
 pin that is what happens: `test/model_inplace` writes one element of a
 one-million-`F32` list and the frame allocates only the model box.
 

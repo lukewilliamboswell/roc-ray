@@ -6,7 +6,7 @@
 ## `update!` can change the clipboard, cursor, and window or read a pixel from
 ## the previous drawing. Every cycle with events prints them to stdout in
 ## delivery order, which is what the windowed sweep asserts on.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.Draw
 import rr.Text
@@ -339,17 +339,19 @@ theme = {
 ## A titled surface for one group of indicators.
 panel! : Draw.Frame, Text.Font, { x : F32, y : F32, width : F32, height : F32, label : Str } => {}
 panel! = |frame, font, cfg| {
-	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
-	frame.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	draw.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font })
 }
 
 ## One indicator chip, lit while the snapshot says its input is active.
 chip! : Draw.Frame, Text.Prepared, { x : F32, y : F32, width : F32, on : Bool } => {}
 chip! = |frame, label, cfg| {
+	draw = App.effects().render(frame)
 	fill = if cfg.on theme.active else theme.idle
 	edge = if cfg.on theme.active else theme.edge
 	ink = if cfg.on theme.active_ink else theme.idle_ink
-	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
+	draw.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
 	label.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: (Middle, Center) })
 }
 
@@ -357,18 +359,20 @@ chip! = |frame, label, cfg| {
 ## rather than named keys.
 light! : Draw.Frame, Text.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
 light! = |frame, font, cfg| {
-	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font })
+	draw = App.effects().render(frame)
+	draw.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font })
 	fill = if cfg.on theme.active else theme.idle
-	frame.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if cfg.on theme.active else theme.edge, 1) })
+	draw.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if cfg.on theme.active else theme.edge, 1) })
 }
 
 ## A line of body text inside a panel.
-line! : Draw.Frame, Text.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
-line! = |frame, font, cfg|
-	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font })
+line! : Draw.Effects, Text.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
+line! = |draw, font, cfg|
+	draw.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	input = model.input
 	font = model.font
 	chips = Box.unbox(model.chips)
@@ -404,8 +408,8 @@ render! = |model, frame| {
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
 
 	frame.clear!(theme.bg)
-	frame.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font })
-	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live; the bits as chips, the event record as a line", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
+	draw.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font })
+	draw.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live; the bits as chips, the event record as a line", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font })
 
 	panel!(frame, font, { x: 20, y: 84, width: 780, height: 258, label: "KEYS AND BUTTONS" })
 	chip!(frame, chips.w, { x: 70, y: 126, width: 30, on: w_down })
@@ -431,19 +435,19 @@ render! = |model, frame| {
 	light!(frame, font, { x: 30, y: 424, label: "Gamepad 1", on: gamepad_connected })
 	light!(frame, font, { x: 220, y: 424, label: "Left stick", on: stick_moved })
 	light!(frame, font, { x: 410, y: 424, label: "Face down", on: gamepad_action_pressed })
-	line!(frame, font, { x: 600, y: 391, text: "Mouse ${F32.to_str(mouse_position.x)}, ${F32.to_str(mouse_position.y)}", color: theme.muted })
-	frame.text!({ pos: { x: 30, y: 446 }, text: model.events_line, size: 13, spacing: Draw.default_spacing, color: theme.ink, font: font })
+	line!(draw, font, { x: 600, y: 391, text: "Mouse ${F32.to_str(mouse_position.x)}, ${F32.to_str(mouse_position.y)}", color: theme.muted })
+	draw.text!({ pos: { x: 30, y: 446 }, text: model.events_line, size: 13, spacing: Draw.default_spacing, color: theme.ink, font: font })
 
 	panel!(frame, font, { x: 20, y: 478, width: 780, height: 184, label: "HOST EFFECTS" })
-	line!(frame, font, { x: 30, y: 510, text: cursor_help_visibility, color: theme.muted })
-	line!(frame, font, { x: 250, y: 510, text: cursor_help_locking, color: theme.muted })
-	line!(frame, font, { x: 30, y: 536, text: clipboard_help, color: theme.muted })
-	line!(frame, font, { x: 30, y: 560, text: window_help, color: theme.muted })
-	line!(frame, font, { x: 30, y: 586, text: Str.concat("Buffer: ", model.typed), color: theme.ink })
-	line!(frame, font, { x: 30, y: 610, text: model.clipboard_status, color: theme.muted })
-	frame.rounded_rectangle!({ x: 30, y: 632, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), theme.edge, 1) })
-	line!(frame, font, { x: 62, y: 634, text: eyedropper_label(model.picked), color: theme.muted })
+	line!(draw, font, { x: 30, y: 510, text: cursor_help_visibility, color: theme.muted })
+	line!(draw, font, { x: 250, y: 510, text: cursor_help_locking, color: theme.muted })
+	line!(draw, font, { x: 30, y: 536, text: clipboard_help, color: theme.muted })
+	line!(draw, font, { x: 30, y: 560, text: window_help, color: theme.muted })
+	line!(draw, font, { x: 30, y: 586, text: Str.concat("Buffer: ", model.typed), color: theme.ink })
+	line!(draw, font, { x: 30, y: 610, text: model.clipboard_status, color: theme.muted })
+	draw.rounded_rectangle!({ x: 30, y: 632, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), theme.edge, 1) })
+	line!(draw, font, { x: 62, y: 634, text: eyedropper_label(model.picked), color: theme.muted })
 
-	frame.text!({ pos: { x: 30, y: 676 }, text: "Q exits  |  Esc is a normal key  |  hold left mouse for a crosshair", size: 14, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x5c6b87), font: font })
+	draw.text!({ pos: { x: 30, y: 676 }, text: "Q exits  |  Esc is a normal key  |  hold left mouse for a crosshair", size: 14, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x5c6b87), font: font })
 	Ok({})
 }

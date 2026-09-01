@@ -11,7 +11,7 @@
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
 ## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.Draw
 import rr.Color
@@ -273,12 +273,13 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	assets = model.assets
 	world = model.world
 	frame.clear!(field_bottom)
 	# The field is a vertical gradient rather than flat black, so the paddles
 	# and the glow below have something to sit on.
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
 	draw_center_line!(frame)
 	draw_scores!(frame, assets, world)
 
@@ -287,11 +288,12 @@ render! = |model, frame| {
 	frame.with_blend_mode!(
 		Draw.additive_blend,
 		|glow_frame| {
-			draw_trail!(glow_frame, world)
-			draw_glow!(glow_frame, world)
+			glow_draw = App.effects().render(glow_frame)
+			draw_trail!(glow_draw, world)
+			draw_glow!(glow_draw, world)
 			# Alpha zero when the flash has decayed, so no branch is needed here.
 			wash = Color.with_alpha(world.flash.color, F32.to_u8_wrap(world.flash.intensity * 70))
-			glow_frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(wash) })
+			glow_draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(wash) })
 			Ok({})
 		},
 	)?
@@ -300,7 +302,7 @@ render! = |model, frame| {
 
 	if is_over(world) {
 		# Dim the frozen field so the banner reads, then name the winner.
-		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(field_bottom, 190)) })
+		draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(field_bottom, 190)) })
 		winner_index = if world.left.score >= win_score 0 else 1
 		winner_color = if winner_index == 0 left_neon else right_neon
 		match List.get(assets.win_lines, winner_index) {
@@ -319,18 +321,19 @@ render! = |model, frame| {
 # competing with the paddles for attention.
 draw_center_line! : Draw.Frame => {}
 draw_center_line! = |frame| {
+	draw = App.effects().render(frame)
 	for dash in List.map_with_index(List.repeat({}, 15), |_unit, index| 12 + U64.to_f32(index) * 40) {
 		y = dash
-		frame.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: y, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
+		draw.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: y, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
 	}
 }
 
 # Newest position first, so the index is the age of the sample: alpha and radius
 # both fall off with it and the ball drags a short comet tail.
-draw_trail! : Draw.Frame, World => {}
-draw_trail! = |frame, world| {
+draw_trail! : Draw.Effects, World => {}
+draw_trail! = |draw, world| {
 	for sample in List.map_with_index(world.trail, |pos, index| { pos, fade: 1 - U64.to_f32(index) / U64.to_f32(trail_length) }) {
-		frame.circle!({
+		draw.circle!({
 			center: sample.pos,
 			radius: ball_r * (0.35 + 0.55 * sample.fade),
 			style: Draw.filled(Color.with_alpha(ball_neon, F32.to_u8_wrap(sample.fade * sample.fade * 130))),
@@ -340,9 +343,9 @@ draw_trail! = |frame, world| {
 
 # Radial gradients fading to fully transparent, drawn additively, are the
 # cheapest convincing bloom available without a shader.
-draw_glow! : Draw.Frame, World => {}
-draw_glow! = |frame, world| {
-	halo! = |center, color, radius| frame.circle_gradient!({
+draw_glow! : Draw.Effects, World => {}
+draw_glow! = |draw, world| {
+	halo! = |center, color, radius| draw.circle_gradient!({
 		center: center,
 		radius: radius,
 		color_inner: Color.with_alpha(color, 100),
@@ -357,13 +360,14 @@ draw_glow! = |frame, world| {
 # The solid bodies, drawn over their own glow so the edges stay crisp.
 draw_bodies! : Draw.Frame, World => {}
 draw_bodies! = |frame, world| {
+	draw = App.effects().render(frame)
 	left_rect = left_paddle(world.left.paddle_y)
 	right_rect = right_paddle(world.right.paddle_y)
 
-	frame.rounded_rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, radius: 0.5, segments: 8, style: Draw.filled(left_neon) })
-	frame.rounded_rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, radius: 0.5, segments: 8, style: Draw.filled(right_neon) })
-	frame.circle!({ center: world.ball.pos, radius: ball_r, style: Draw.filled(ball_neon) })
-	frame.circle!({ center: { x: world.ball.pos.x - 2, y: world.ball.pos.y - 3 }, radius: ball_r * 0.42, style: Draw.filled(Color.white) })
+	draw.rounded_rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, radius: 0.5, segments: 8, style: Draw.filled(left_neon) })
+	draw.rounded_rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, radius: 0.5, segments: 8, style: Draw.filled(right_neon) })
+	draw.circle!({ center: world.ball.pos, radius: ball_r, style: Draw.filled(ball_neon) })
+	draw.circle!({ center: { x: world.ball.pos.x - 2, y: world.ball.pos.y - 3 }, radius: ball_r * 0.42, style: Draw.filled(Color.white) })
 }
 
 # Scores are prepared glyphs picked by value, so a frame lays out no text.

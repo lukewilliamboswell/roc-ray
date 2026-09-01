@@ -2,7 +2,7 @@
 ## Move with WASD or the arrow keys, zoom with the mouse wheel, rotate with
 ## Q/E, reset with R, and quit with Escape. This example demonstrates camera
 ## drawing and converting positions between world and screen coordinates.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Camera
@@ -99,12 +99,13 @@ update! = |model, program_input| {
 ## avoids storing calculated values that could become inconsistent.
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	camera = Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom }).with_rotation(model.rotation)
 	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
 	view = camera_world_bounds(camera)
 
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: Color.from_hex_rgb(0x101a24), color_bottom: Color.from_hex_rgb(0x060a0f) })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: Color.from_hex_rgb(0x101a24), color_bottom: Color.from_hex_rgb(0x060a0f) })
 	frame.with_camera!(
 		camera,
 		|world_frame| {
@@ -114,9 +115,9 @@ render! = |model, frame| {
 	)?
 	# Drawn outside the camera scope: `world_to_screen` is what puts a
 	# screen-space mark back on top of a world-space point.
-	frame.circle!({ center: mouse_screen, radius: 7, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
-	frame.line!({ start: { x: mouse_screen.x - 14, y: mouse_screen.y }, end: { x: mouse_screen.x + 14, y: mouse_screen.y }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
-	frame.line!({ start: { x: mouse_screen.x, y: mouse_screen.y - 14 }, end: { x: mouse_screen.x, y: mouse_screen.y + 14 }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
+	draw.circle!({ center: mouse_screen, radius: 7, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
+	draw.line!({ start: { x: mouse_screen.x - 14, y: mouse_screen.y }, end: { x: mouse_screen.x + 14, y: mouse_screen.y }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
+	draw.line!({ start: { x: mouse_screen.x, y: mouse_screen.y - 14 }, end: { x: mouse_screen.x, y: mouse_screen.y + 14 }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
 	draw_hud!(frame, model, mouse_world)
 
 	Ok({})
@@ -137,7 +138,8 @@ camera_world_bounds = |camera| {
 
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2, Math.Rect => {}
 draw_world! = |frame, player, mouse_world, view| {
-	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x16222b), Color.with_alpha(Color.from_hex_rgb(0x5fa8d3), 90), 3) })
+	draw = App.effects().render(frame)
+	draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x16222b), Color.with_alpha(Color.from_hex_rgb(0x5fa8d3), 90), 3) })
 	draw_grid_x!(frame, world_left, view)
 	draw_grid_y!(frame, world_top, view)
 
@@ -146,32 +148,34 @@ draw_world! = |frame, player, mouse_world, view| {
 	landmark!(frame, { x: 860, y: -280, width: 420, height: 460 }, Color.from_hex_rgb(0x8f6540))
 
 	axis_color = Color.with_alpha(Color.from_hex_rgb(0xffd166), 200)
-	frame.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(axis_color, 3) })
-	frame.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(axis_color, 3) })
+	draw.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(axis_color, 3) })
+	draw.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(axis_color, 3) })
 
-	frame.circle!({ center: { x: player.x, y: player.y + 6 }, radius: 26, style: Draw.filled(Color.with_alpha(Color.black, 110)) })
-	frame.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xef476f), Color.white, 4) })
-	frame.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
-	frame.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
-	frame.circle!({ center: mouse_world, radius: 10, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
+	draw.circle!({ center: { x: player.x, y: player.y + 6 }, radius: 26, style: Draw.filled(Color.with_alpha(Color.black, 110)) })
+	draw.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xef476f), Color.white, 4) })
+	draw.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
+	draw.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
+	draw.circle!({ center: mouse_world, radius: 10, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
 }
 
 ## A world landmark: a soft shadow, the slab, and a lighter cap so the world
 ## reads as depth rather than as three flat swatches.
 landmark! : Draw.Frame, { x : F32, y : F32, width : F32, height : F32 }, Color.Rgba => {}
 landmark! = |frame, rect, color| {
-	frame.rectangle!({ x: rect.x + 10, y: rect.y + 14, width: rect.width, height: rect.height, style: Draw.filled(Color.with_alpha(Color.black, 90)) })
-	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, style: Draw.filled(color) })
-	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: 10, style: Draw.filled(Color.with_alpha(Color.white, 45)) })
+	draw = App.effects().render(frame)
+	draw.rectangle!({ x: rect.x + 10, y: rect.y + 14, width: rect.width, height: rect.height, style: Draw.filled(Color.with_alpha(Color.black, 90)) })
+	draw.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, style: Draw.filled(color) })
+	draw.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: 10, style: Draw.filled(Color.with_alpha(Color.white, 45)) })
 }
 
 draw_grid_x! : Draw.Frame, F32, Math.Rect => {}
 draw_grid_x! = |frame, x, view| {
+	draw = App.effects().render(frame)
 	if x > world_right {
 		{}
 	} else {
 		if x >= view.x and x <= view.x + view.width {
-			frame.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+			draw.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
 		}
 		draw_grid_x!(frame, x + 80, view)
 	}
@@ -179,11 +183,12 @@ draw_grid_x! = |frame, x, view| {
 
 draw_grid_y! : Draw.Frame, F32, Math.Rect => {}
 draw_grid_y! = |frame, y, view| {
+	draw = App.effects().render(frame)
 	if y > world_bottom {
 		{}
 	} else {
 		if y >= view.y and y <= view.y + view.height {
-			frame.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+			draw.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
 		}
 		draw_grid_y!(frame, y + 80, view)
 	}
@@ -191,13 +196,14 @@ draw_grid_y! = |frame, y, view| {
 
 draw_hud! : Draw.Frame, Model, Math.Vec2 => {}
 draw_hud! = |frame, model, mouse_world| {
+	draw = App.effects().render(frame)
 	hud = Box.unbox(model.hud)
-	frame.rounded_rectangle!({ x: 16, y: 16, width: 340, height: 122, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x0b1219), 215), Color.with_alpha(Color.white, 40), 1) })
+	draw.rounded_rectangle!({ x: 16, y: 16, width: 340, height: 122, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x0b1219), 215), Color.with_alpha(Color.white, 40), 1) })
 	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white })
 	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8) })
-	frame.line!({ start: { x: 32, y: 84 }, end: { x: 340, y: 84 }, stroke: Draw.stroke(Color.with_alpha(Color.white, 30), 1) })
+	draw.line!({ start: { x: 32, y: 84 }, end: { x: 340, y: 84 }, stroke: Draw.stroke(Color.with_alpha(Color.white, 30), 1) })
 	# Show the pointer coordinates in both spaces for direct comparison.
-	frame.text_at!({ pos: { x: 32, y: 92 }, text: "world ${coord(mouse_world.x)}, ${coord(mouse_world.y)}   zoom ${coord(model.zoom * 100)}%", size: 14, color: Color.from_hex_rgb(0xffd166) })
+	draw.text_at!({ pos: { x: 32, y: 92 }, text: "world ${coord(mouse_world.x)}, ${coord(mouse_world.y)}   zoom ${coord(model.zoom * 100)}%", size: 14, color: Color.from_hex_rgb(0xffd166) })
 	hud.help.draw!(frame, { pos: { x: 32, y: 114 }, color: Color.from_hex_rgb(0x8fa3b8) })
 }
 

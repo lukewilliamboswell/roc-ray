@@ -15,6 +15,18 @@
 ##
 ## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
 ## change the model or reach host work of any other kind.
+## `App.effects()` returns the companion package's configured effect handle;
+## bind a frame with `App.effects().render(frame)` before passing the resulting
+## `Drawing.Effects` to a reusable renderer.
+##
+## ```roc
+## program = Toolkit.program(App.effects(), configure, init!, update!, view)
+## ```
+##
+## The toolkit depends on `roc-ray-types`, not this platform. It may retain the
+## root handle because that value contains no frame or input; its `render!`
+## binds the current frame before calling the package renderer. Applications do
+## not add a separate `roc-ray-types` dependency.
 ##
 ## Each effect documents its legal phases. Host-state effects are legal in
 ## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
@@ -59,11 +71,71 @@ import Window
 import Time
 import Audio
 import Capture
+import Draw
 import Files
 import AppTransport
 import rrt.Font
 
+AppEffectsProvider :: {}.{
+
+	new : {} -> AppEffectsProvider
+	new = |{}| AppEffectsProvider.({})
+
+	shape! : AppEffectsProvider, Draw.Frame, Draw.Geometry, Draw.Paint => {}
+	shape! = |_provider, frame, geometry, paint| frame.shape!(geometry, paint)
+
+	draw_text! : AppEffectsProvider, Draw.Frame, Draw.Text => {}
+	draw_text! = |_provider, frame, text| frame.text!(text)
+
+	rectangle_gradient_v! : AppEffectsProvider, Draw.Frame, Draw.RectangleGradientV => {}
+	rectangle_gradient_v! = |_provider, frame, cfg| frame.rectangle_gradient_v!(cfg)
+
+	rectangle_gradient_h! : AppEffectsProvider, Draw.Frame, Draw.RectangleGradientH => {}
+	rectangle_gradient_h! = |_provider, frame, cfg| frame.rectangle_gradient_h!(cfg)
+
+	circle_gradient! : AppEffectsProvider, Draw.Frame, Draw.CircleGradient => {}
+	circle_gradient! = |_provider, frame, cfg| frame.circle_gradient!(cfg)
+
+	fps! : AppEffectsProvider, Draw.Frame, Draw.Fps => {}
+	fps! = |_provider, frame, cfg| frame.fps!(cfg)
+
+	line! : AppEffectsProvider, Draw.Frame, Draw.Line => {}
+	line! = |_provider, frame, cfg| frame.line!(cfg)
+
+	texture! : AppEffectsProvider, Draw.Frame, Draw.TextureDraw => {}
+	texture! = |_provider, frame, cfg| frame.texture!(cfg)
+
+	texture_instances! : AppEffectsProvider, Draw.Frame, Draw.Texture, List(Draw.TextureInstance) => {}
+	texture_instances! = |_provider, frame, texture, instances| frame.texture_instances!(texture, instances)
+
+	projective_texture! : AppEffectsProvider, Draw.Frame, Draw.ProjectiveTexture => {}
+	projective_texture! = |_provider, frame, cfg| frame.projective_texture!(cfg)
+
+	with_scissor! : AppEffectsProvider, Draw.Frame, Draw.Rect, (Draw.Frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
+	with_scissor! = |_provider, frame, bounds, callback|
+		frame.with_scissor!(bounds, callback)
+
+	read_text! : AppEffectsProvider, Str => Try(Str, Files.ReadTextError)
+	read_text! = |_provider, path| Files.read_text!(path)
+}
+
 App := [].{
+
+	## The package-owned low-level effect bundle configured for RocRay.
+	##
+	## Construct one with `App.effects()`. Receiver methods defined in
+	## `roc-ray-types` remain available through this transparent alias, including
+	## `effects.render(frame)` and `effects.read_text!(path)`.
+	Effects : RrtApp.Effects(Draw.Frame)
+
+	## Configure the shared package effect bundle with RocRay's implementations.
+	##
+	## Construction is pure and performs no hosted call. The returned value is
+	## phase-neutral: each eventual hosted operation retains its existing runtime
+	## phase check, while drawing still requires an explicit `Draw.Frame` through
+	## `effects.render(frame)`.
+	effects : () -> Effects
+	effects = || RrtApp.effects_for(AppEffectsProvider.new({}))
 
 	## Mutually exclusive frame pacing strategy: `VSync`, `Capped(fps)`, or
 	## `Uncapped`. Config normalization maps a non-positive `Capped` value to

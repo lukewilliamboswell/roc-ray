@@ -5,8 +5,9 @@
 ## ```roc
 ## render! = |model, frame| {
 ##     frame.clear!(Color.from_hex_rgb(0x0d1425))
-##     frame.rectangle!({ x: 40, y: 40, width: 200, height: 90, style: Draw.filled(Color.white) })
-##     frame.circle!({ center: model.pointer, radius: 18, style: Draw.outlined(Color.red, 3) })
+##     draw = App.effects().render(frame)
+##     draw.rectangle!({ x: 40, y: 40, width: 200, height: 90, style: Draw.filled(Color.white) })
+##     draw.circle!({ center: model.pointer, radius: 18, style: Draw.outlined(Color.red, 3) })
 ##     Ok({})
 ## }
 ## ```
@@ -15,6 +16,17 @@
 ## helpers; do not retain it in the model. Nested camera, shader, scissor,
 ## render-texture, and blend scopes restore their outer state even when their
 ## callback returns `Err`.
+##
+## Reusable packages normally accept the companion package's canonical drawing
+## handle. Applications obtain it without a direct package dependency:
+##
+## ```roc
+## draw = App.effects().render(frame)
+## Widgets.draw!(draw, model.widgets)
+## ```
+##
+## The primitives on `Frame` remain available for application-specific or
+## alternative package APIs.
 ##
 ## Every effect that takes a `Frame` is legal only in `render!`. Resource
 ## constructors `default_font!`, `font_from_bytes!`,
@@ -27,8 +39,8 @@
 ## `update!` and `render!`. Create long-lived resources in `init!` and retain
 ## them in the model.
 ##
-## Most shapes support equivalent receiver and free-function forms, such as
-## `frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`.
+## Package-owned drawing helpers live on `Draw.Effects`. Bind one once for the
+## current frame or nested scope and pass it through rendering helpers.
 ##
 ## `Draw.text!` draws at an already-resolved top-left origin without a layout
 ## pass. Use `Text` for optional anchor alignment or prepared text.
@@ -37,168 +49,20 @@ import Camera
 import Color
 import Host
 import rrt.Font
+import rrt.Drawing as RrtDrawing
 import Math
-
-TextureDrawConfig : {
-	texture : Assets.Texture,
-	source : Math.Rect,
-	dest : Math.Rect,
-	origin : Math.Vec2,
-	rotation : F32,
-	tint : Color.Rgba,
-}
-
-TextureInstanceConfig : {
-	source : Math.Rect,
-	dest : Math.Rect,
-	origin : Math.Vec2,
-	rotation : F32,
-	tint : Color.Rgba,
-}
-
-TextureDrawOptions : {
-	source : Math.Rect,
-	source_set : Bool,
-	dest : Math.Rect,
-	dest_set : Bool,
-	pos : Math.Vec2,
-	origin : Math.Vec2,
-	origin_set : Bool,
-	origin_center : Bool,
-	rotation : F32,
-	scale : Math.Vec2,
-	tint : Color.Rgba,
-}
-
-TextureDrawBuilder(field) := {
-	value : field,
-	apply : TextureDrawOptions -> TextureDrawOptions,
-}.{
-
-	default_options : TextureDrawOptions
-	default_options = {
-		source: Math.rect(0, 0, 0, 0),
-		source_set: Bool.False,
-		dest: Math.rect(0, 0, 0, 0),
-		dest_set: Bool.False,
-		pos: Math.zero,
-		origin: Math.zero,
-		origin_set: Bool.False,
-		origin_center: Bool.False,
-		rotation: 0,
-		scale: { x: 1, y: 1 },
-		tint: Color.white,
-	}
-
-	map2 : TextureDrawBuilder(a), TextureDrawBuilder(b), (a, b -> c) -> TextureDrawBuilder(c)
-	map2 = |left, right, combine| {
-		value: combine(left.value, right.value),
-		apply: |options| (right.apply)((left.apply)(options)),
-	}
-
-	empty : TextureDrawBuilder({})
-	empty = { value: {}, apply: |options| options }
-
-	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
-	run = |builder, texture| {
-		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
-
-		dest = if options.dest_set {
-			options.dest
-		} else {
-			{
-				x: options.pos.x,
-				y: options.pos.y,
-				width: source.width * options.scale.x,
-				height: source.height * options.scale.y,
-			}
-		}
-
-		origin = if options.origin_set {
-			options.origin
-		} else if options.origin_center {
-			{ x: dest.width * 0.5, y: dest.height * 0.5 }
-		} else {
-			Math.zero
-		}
-
-		{ texture, source, dest, origin, rotation: options.rotation, tint: options.tint }
-	}
-
-	pos : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
-	pos = |value| {
-		value,
-		apply: |options| { ..options, pos: value },
-	}
-
-	source : Math.Rect -> TextureDrawBuilder(Math.Rect)
-	source = |value| {
-		value,
-		apply: |options| { ..options, source: value, source_set: Bool.True },
-	}
-
-	dest : Math.Rect -> TextureDrawBuilder(Math.Rect)
-	dest = |value| {
-		value,
-		apply: |options| { ..options, dest: value, dest_set: Bool.True },
-	}
-
-	origin : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
-	origin = |value| {
-		value,
-		apply: |options| { ..options, origin: value, origin_set: Bool.True, origin_center: Bool.False },
-	}
-
-	origin_center : TextureDrawBuilder({})
-	origin_center = {
-		value: {},
-		apply: |options| { ..options, origin_set: Bool.False, origin_center: Bool.True },
-	}
-
-	rotation : F32 -> TextureDrawBuilder(F32)
-	rotation = |value| {
-		value,
-		apply: |options| { ..options, rotation: value },
-	}
-
-	scale : F32 -> TextureDrawBuilder(F32)
-	scale = |value| {
-		value,
-		apply: |options| { ..options, scale: { x: value, y: value } },
-	}
-
-	scale_xy : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
-	scale_xy = |value| {
-		value,
-		apply: |options| { ..options, scale: value },
-	}
-
-	tint : Color.Rgba -> TextureDrawBuilder(Color.Rgba)
-	tint = |value| {
-		value,
-		apply: |options| { ..options, tint: value },
-	}
-}
-
-vec_is_finite : Math.Vec2 -> Bool
-vec_is_finite = |vec| F32.is_finite(vec.x) and F32.is_finite(vec.y)
-
-corner_cross : Math.Vec2, Math.Vec2, Math.Vec2 -> F32
-corner_cross = |a, b, c| (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
-
-crosses_have_one_sign : F32, F32, F32, F32 -> Bool
-crosses_have_one_sign = |a, b, c, d| {
-	all_positive = a > 0 and b > 0 and c > 0 and d > 0
-	all_negative = a < 0 and b < 0 and c < 0 and d < 0
-	all_positive or all_negative
-}
 
 Draw := [].{
 
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
 	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color.Rgba
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
+
+	## Package-owned drawing effects bound to the current render frame.
+	##
+	## Obtain this with `App.effects().render(frame)` and pass it through reusable
+	## drawing helpers so the bundle is configured once per scope.
+	Effects : RrtDrawing.Effects
 
 	## Opaque, zero-sized authority the host supplies only while it runs
 	## `render!`.
@@ -259,107 +123,57 @@ Draw := [].{
 	Camera2D : Camera.Camera2D
 
 	## Optional shape fill.
-	Fill : [NoFill, Fill(Color.Rgba)]
+	Fill : RrtDrawing.Fill
 
 	## Optional shape outline with color and thickness.
-	Stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })]
+	Stroke : RrtDrawing.Stroke
 
 	## Combined fill and outline applied by shape helpers.
-	ShapeStyle : {
-		fill : Fill,
-		stroke : Stroke,
-	}
+	ShapeStyle : RrtDrawing.ShapeStyle
+
+	## Fillable geometry shared with package-defined drawing APIs.
+	Geometry : RrtDrawing.Geometry
+
+	## One solid fill or stroke applied by the low-level `shape!` primitive.
+	Paint : RrtDrawing.Paint
 
 	## Axis-aligned rectangle and its style.
-	Rectangle : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		style : ShapeStyle,
-	}
+	Rectangle : RrtDrawing.Rectangle
 
 	## Rounded rectangle; radius and segment count control corner tessellation.
-	RoundedRectangle : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		radius : F32,
-		segments : I32,
-		style : ShapeStyle,
-	}
+	RoundedRectangle : RrtDrawing.RoundedRectangle
 
 	## Vertical rectangle gradient from top to bottom.
-	RectangleGradientV : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		color_top : Color.Rgba,
-		color_bottom : Color.Rgba,
-	}
+	RectangleGradientV : RrtDrawing.RectangleGradientV
 
 	## Horizontal rectangle gradient from left to right.
-	RectangleGradientH : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		color_left : Color.Rgba,
-		color_right : Color.Rgba,
-	}
+	RectangleGradientH : RrtDrawing.RectangleGradientH
 
 	## Circle and its style.
-	Circle : {
-		center : Vector2,
-		radius : F32,
-		style : ShapeStyle,
-	}
+	Circle : RrtDrawing.Circle
 
 	## Radial gradient from inner to outer color.
-	CircleGradient : {
-		center : Vector2,
-		radius : F32,
-		color_inner : Color.Rgba,
-		color_outer : Color.Rgba,
-	}
+	CircleGradient : RrtDrawing.CircleGradient
 
 	## Line segment and stroke.
-	Line : {
-		start : Vector2,
-		end : Vector2,
-		stroke : Stroke,
-	}
+	Line : RrtDrawing.Line
 
 	## Triangle vertices and style.
-	Triangle : {
-		a : Vector2,
-		b : Vector2,
-		c : Vector2,
-		style : ShapeStyle,
-	}
+	Triangle : RrtDrawing.Triangle
 
 	## A simple convex polygon. Points must be ordered around the boundary (clockwise
 	## or counter-clockwise). Filled concave or self-intersecting polygons are not
 	## supported; outlines accept any ordered point path.
-	ConvexPolygon : {
-		points : List(Vector2),
-		style : ShapeStyle,
-	}
+	ConvexPolygon : RrtDrawing.ConvexPolygon
 
 	## Deprecated: use `ConvexPolygon`.
 	##
 	## The same type under its older name. `ConvexPolygon` says the constraint
 	## the host relies on, so it is visible at the call site.
-	Polygon : ConvexPolygon
+	Polygon : RrtDrawing.Polygon
 
 	## Position, size, and color for the FPS counter.
-	Fps : {
-		pos : Vector2,
-		size : F32,
-		color : Color.Rgba,
-	}
+	Fps : RrtDrawing.Fps
 
 	## Scalar metrics for one glyph, shared with platform-independent packages.
 	GlyphMetrics : Font.GlyphMetrics
@@ -378,20 +192,10 @@ Draw := [].{
 	}
 
 	## Built-in-font text intended for quick diagnostics.
-	DebugText : {
-		pos : Vector2,
-		text : Str,
-		size : F32,
-		color : Color.Rgba,
-	}
+	DebugText : RrtDrawing.DebugText
 
 	## Built-in-font text with default spacing.
-	SimpleText : {
-		pos : Vector2,
-		text : Str,
-		size : F32,
-		color : Color.Rgba,
-	}
+	SimpleText : RrtDrawing.SimpleText
 
 	## Font path and base pixel size.
 	LoadFont : {
@@ -405,136 +209,28 @@ Draw := [].{
 	## `TextureDrawConfig` in the signature is the module-private record this
 	## aliases; `Draw.TextureDraw` is the name to write. Build one with
 	## `texture_draw`, `texture_at`, or the `TextureDrawBuilder` combinators.
-	TextureDraw : TextureDrawConfig
+	TextureDraw : RrtDrawing.TextureDraw
 
 	## One instance of a batched texture draw. These are the fields of
 	## `TextureDraw` minus the texture, which the batch supplies once.
 	##
 	## `TextureInstanceConfig` in the signature is the module-private record
 	## this aliases; `Draw.TextureInstance` is the name to write.
-	TextureInstance : TextureInstanceConfig
+	TextureInstance : RrtDrawing.TextureInstance
+
+	TextureDrawOptions : RrtDrawing.TextureDrawOptions
+	TextureDrawBuilder(field) : RrtDrawing.TextureDrawBuilder(field)
 
 	## Four ordered corners of a projected planar surface.
-	ProjectiveQuadCorners : {
-		top_left : Math.Vec2,
-		bottom_left : Math.Vec2,
-		bottom_right : Math.Vec2,
-		top_right : Math.Vec2,
-	}
-
-	## A finite, convex planar projection with a bounded homography. Construct it
-	## with `ProjectiveQuad.from_corners`; the opaque representation carries the
-	## homogeneous weights needed for exact perspective-correct interpolation.
-	ProjectiveQuad :: {
-		top_left : Math.Vec2,
-		bottom_left : Math.Vec2,
-		bottom_right : Math.Vec2,
-		top_right : Math.Vec2,
-		q_top_left : F32,
-		q_bottom_left : F32,
-		q_bottom_right : F32,
-		q_top_right : F32,
-	}.{
-
-		## Validate four boundary-ordered corners and solve their projective weights.
-		## A single homography cannot represent a concave, self-intersecting, or
-		## horizon-crossing destination, so those states are rejected here.
-		from_corners : ProjectiveQuadCorners -> Try(ProjectiveQuad, [NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon, ..])
-		from_corners = |corners| {
-			finite = vec_is_finite(corners.top_left)
-				and vec_is_finite(corners.bottom_left)
-					and vec_is_finite(corners.bottom_right)
-						and vec_is_finite(corners.top_right)
-			if !finite {
-				Err(NonFiniteQuad)
-			} else {
-				cross_0 = corner_cross(corners.top_left, corners.bottom_left, corners.bottom_right)
-				cross_1 = corner_cross(corners.bottom_left, corners.bottom_right, corners.top_right)
-				cross_2 = corner_cross(corners.bottom_right, corners.top_right, corners.top_left)
-				cross_3 = corner_cross(corners.top_right, corners.top_left, corners.bottom_left)
-				if cross_0 == 0 or cross_1 == 0 or cross_2 == 0 or cross_3 == 0 {
-					Err(DegenerateQuad)
-				} else if !crosses_have_one_sign(cross_0, cross_1, cross_2, cross_3) {
-					Err(NonConvexQuad)
-				} else {
-					dx_1 = corners.top_right.x - corners.bottom_right.x
-					dx_2 = corners.bottom_left.x - corners.bottom_right.x
-					dx_3 = corners.top_left.x - corners.top_right.x + corners.bottom_right.x - corners.bottom_left.x
-					dy_1 = corners.top_right.y - corners.bottom_right.y
-					dy_2 = corners.bottom_left.y - corners.bottom_right.y
-					dy_3 = corners.top_left.y - corners.top_right.y + corners.bottom_right.y - corners.bottom_left.y
-					denominator = dx_1 * dy_2 - dx_2 * dy_1
-					if denominator == 0 {
-						Err(DegenerateQuad)
-					} else {
-						projective_x = (dx_3 * dy_2 - dx_2 * dy_3) / denominator
-						projective_y = (dx_1 * dy_3 - dx_3 * dy_1) / denominator
-						q_top_left = 1
-						q_top_right = 1 + projective_x
-						q_bottom_left = 1 + projective_y
-						q_bottom_right = 1 + projective_x + projective_y
-						weights_finite = F32.is_finite(q_top_right) and F32.is_finite(q_bottom_left) and F32.is_finite(q_bottom_right)
-						q_max = F32.max(q_top_left, F32.max(F32.abs(q_top_right), F32.max(F32.abs(q_bottom_left), F32.abs(q_bottom_right))))
-						normalized_top_left = q_top_left / q_max
-						normalized_top_right = q_top_right / q_max
-						normalized_bottom_left = q_bottom_left / q_max
-						normalized_bottom_right = q_bottom_right / q_max
-						bounded = normalized_top_left > 0.000001
-							and normalized_top_right > 0.000001
-								and normalized_bottom_left > 0.000001
-									and normalized_bottom_right > 0.000001
-						if !weights_finite or !bounded {
-							Err(ProjectiveHorizon)
-						} else {
-							Ok({
-								top_left: corners.top_left,
-								bottom_left: corners.bottom_left,
-								bottom_right: corners.bottom_right,
-								top_right: corners.top_right,
-								q_top_left: normalized_top_left,
-								q_bottom_left: normalized_bottom_left,
-								q_bottom_right: normalized_bottom_right,
-								q_top_right: normalized_top_right,
-							})
-						}
-					}
-				}
-			}
-		}
-
-		## Project a unit-square coordinate onto the destination surface. This uses
-		## the same homography as rendering and is useful for aligned overlays.
-		project : ProjectiveQuad, Math.Vec2 -> Math.Vec2
-		project = |quad, uv| {
-			one_minus_u = 1 - uv.x
-			one_minus_v = 1 - uv.y
-			top_left_weight = one_minus_u * one_minus_v * quad.q_top_left
-			top_right_weight = uv.x * one_minus_v * quad.q_top_right
-			bottom_left_weight = one_minus_u * uv.y * quad.q_bottom_left
-			bottom_right_weight = uv.x * uv.y * quad.q_bottom_right
-			weight_sum = top_left_weight + top_right_weight + bottom_left_weight + bottom_right_weight
-			{
-				x: (quad.top_left.x * top_left_weight + quad.top_right.x * top_right_weight + quad.bottom_left.x * bottom_left_weight + quad.bottom_right.x * bottom_right_weight) / weight_sum,
-				y: (quad.top_left.y * top_left_weight + quad.top_right.y * top_right_weight + quad.bottom_left.y * bottom_left_weight + quad.bottom_right.y * bottom_right_weight) / weight_sum,
-			}
-		}
-	}
+	ProjectiveQuadCorners : RrtDrawing.ProjectiveQuadCorners
+	ProjectiveQuadFields : RrtDrawing.ProjectiveQuadFields
+	ProjectiveQuad : RrtDrawing.ProjectiveQuad
 
 	## Texture and source region projected exactly onto a validated planar quad.
-	ProjectiveTexture : {
-		texture : Texture,
-		source : Math.Rect,
-		quad : ProjectiveQuad,
-		tint : Color.Rgba,
-	}
+	ProjectiveTexture : RrtDrawing.ProjectiveTexture
 
 	## Sampled texture view projected exactly onto a validated planar quad.
-	ProjectiveTextureView : {
-		texture : Texture,
-		source : Math.Rect,
-		quad : ProjectiveQuad,
-		tint : Color.Rgba,
-	}
+	ProjectiveTextureView : RrtDrawing.ProjectiveTextureView
 
 	## Camera accepted by scoped 2D drawing.
 	CameraMode : Camera2D
@@ -849,19 +545,19 @@ Draw := [].{
 
 	## Create a fill-only shape style.
 	filled : Color.Rgba -> ShapeStyle
-	filled = |color| { fill: Fill(color), stroke: NoStroke }
+	filled = RrtDrawing.filled
 
 	## Create a stroke with color and thickness in logical pixels.
 	stroke : Color.Rgba, F32 -> Stroke
-	stroke = |color, thickness| Stroke({ color, thickness })
+	stroke = RrtDrawing.stroke
 
 	## Create a stroke-only shape style.
 	outlined : Color.Rgba, F32 -> ShapeStyle
-	outlined = |color, thickness| { fill: NoFill, stroke: Draw.stroke(color, thickness) }
+	outlined = RrtDrawing.outlined
 
 	## Create a shape style with both fill and outline.
 	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
-	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
+	filled_and_outlined = RrtDrawing.filled_and_outlined
 
 	## Snapshot raylib's built-in font, metrics included.
 	##
@@ -871,16 +567,11 @@ Draw := [].{
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
-	default_spacing = 1
+	default_spacing = RrtDrawing.default_spacing
 
 	## Find the top-left position that centers measured text in a rectangle.
 	center_in_rect : Rectangle, TextSize -> Vector2
-	center_in_rect = |rect, size| {
-		{
-			x: rect.x + rect.width * 0.5 - size.width * 0.5,
-			y: rect.y + rect.height * 0.5 - size.height * 0.5,
-		}
-	}
+	center_in_rect = RrtDrawing.center_in_rect
 
 	## Clear the active drawing target to a solid color.
 	##
@@ -888,109 +579,151 @@ Draw := [].{
 	clear! : Frame, Color.Rgba => {}
 	clear! = |_frame, color| Host.draw_clear!(color)
 
+	## Apply one solid fill or stroke to a supported geometry.
+	##
+	## This is the flexible low-level shape operation used by package-defined
+	## drawing APIs. It selects an existing hosted primitive, so it adds no host
+	## ABI operation and preserves one hosted call per paint.
+	##
+	## Legal in `render!` only.
+	shape! : Frame, Geometry, Paint => {}
+	shape! = |_frame, geometry, paint|
+		match geometry {
+			Rectangle(bounds) =>
+				match paint {
+					SolidFill(color) => Host.draw_rectangle!({
+						x: bounds.x,
+						y: bounds.y,
+						width: bounds.width,
+						height: bounds.height,
+						color,
+					})
+					SolidStroke(stroke_cfg) => Host.draw_rectangle_lines!({
+						x: bounds.x,
+						y: bounds.y,
+						width: bounds.width,
+						height: bounds.height,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			RoundedRectangle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_rounded_rectangle!({
+						x: cfg.bounds.x,
+						y: cfg.bounds.y,
+						width: cfg.bounds.width,
+						height: cfg.bounds.height,
+						radius: cfg.radius,
+						segments: cfg.segments,
+						color,
+					})
+					SolidStroke(stroke_cfg) => Host.draw_rounded_rectangle_lines!({
+						x: cfg.bounds.x,
+						y: cfg.bounds.y,
+						width: cfg.bounds.width,
+						height: cfg.bounds.height,
+						radius: cfg.radius,
+						segments: cfg.segments,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			Circle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_circle!({ center: cfg.center, radius: cfg.radius, color })
+					SolidStroke(stroke_cfg) => Host.draw_circle_lines!({
+						center: cfg.center,
+						radius: cfg.radius,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			Triangle(cfg) =>
+				match paint {
+					SolidFill(color) => Host.draw_triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
+					SolidStroke(stroke_cfg) => Host.draw_triangle_lines!({
+						a: cfg.a,
+						b: cfg.b,
+						c: cfg.c,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+
+			ConvexPolygon(points) =>
+				match paint {
+					SolidFill(color) => Host.draw_polygon!({ points, color })
+					SolidStroke(stroke_cfg) => Host.draw_polygon_lines!({
+						points,
+						color: stroke_cfg.color,
+						thickness: stroke_cfg.thickness,
+					})
+				}
+			}
+
 	## Draw a vertical rectangle gradient.
 	##
 	## Legal in `render!` only.
 	rectangle_gradient_v! : Frame, RectangleGradientV => {}
-	rectangle_gradient_v! = |_frame, cfg| Host.draw_rectangle_gradient_v!(cfg)
+	rectangle_gradient_v! = |frame, cfg| package_effects(frame).rectangle_gradient_v!(cfg)
 
 	## Draw a horizontal rectangle gradient.
 	##
 	## Legal in `render!` only.
 	rectangle_gradient_h! : Frame, RectangleGradientH => {}
-	rectangle_gradient_h! = |_frame, cfg| Host.draw_rectangle_gradient_h!(cfg)
+	rectangle_gradient_h! = |frame, cfg| package_effects(frame).rectangle_gradient_h!(cfg)
 
 	## Draw a radial circle gradient.
 	##
 	## Legal in `render!` only.
 	circle_gradient! : Frame, CircleGradient => {}
-	circle_gradient! = |_frame, cfg| Host.draw_circle_gradient!(cfg)
+	circle_gradient! = |frame, cfg| package_effects(frame).circle_gradient!(cfg)
 
 	## Draw raylib's current frames-per-second counter.
 	##
 	## Legal in `render!` only.
 	fps! : Frame, Fps => {}
-	fps! = |_frame, cfg| Host.draw_fps!(cfg)
+	fps! = |frame, cfg| package_effects(frame).fps!(cfg)
 
 	## Draw a filled and/or outlined axis-aligned rectangle.
 	##
 	## Legal in `render!` only.
 	rectangle! : Frame, Rectangle => {}
-	rectangle! = |_frame, cfg| {
-		match cfg.style.fill {
-			NoFill => {}
-			Fill(color) => Host.draw_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
-		}
-
-		match cfg.style.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
-	}
+	rectangle! = |frame, cfg| package_effects(frame).rectangle!(cfg)
 
 	## Draw a filled and/or outlined rounded rectangle.
 	##
 	## Legal in `render!` only.
 	rounded_rectangle! : Frame, RoundedRectangle => {}
-	rounded_rectangle! = |_frame, cfg| {
-		match cfg.style.fill {
-			NoFill => {}
-			Fill(color) => Host.draw_rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
-		}
-
-		match cfg.style.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_rounded_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
-	}
+	rounded_rectangle! = |frame, cfg| package_effects(frame).rounded_rectangle!(cfg)
 
 	## Draw a filled and/or outlined circle.
 	##
 	## Legal in `render!` only.
 	circle! : Frame, Circle => {}
-	circle! = |_frame, cfg| {
-		match cfg.style.fill {
-			NoFill => {}
-			Fill(color) => Host.draw_circle!({ center: cfg.center, radius: cfg.radius, color })
-		}
-
-		match cfg.style.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_circle_lines!({ center: cfg.center, radius: cfg.radius, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
-	}
+	circle! = |frame, cfg| package_effects(frame).circle!(cfg)
 
 	## Draw a stroked line segment. `NoStroke` performs no drawing.
 	##
 	## Legal in `render!` only.
 	line! : Frame, Line => {}
-	line! = |_frame, cfg|
-		match cfg.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
+	line! = |frame, cfg| package_effects(frame).line!(cfg)
 
 	## Draw a filled and/or outlined triangle.
 	##
 	## Legal in `render!` only.
 	triangle! : Frame, Triangle => {}
-	triangle! = |_frame, cfg| {
-		match cfg.style.fill {
-			NoFill => {}
-			Fill(color) => Host.draw_triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
-		}
-
-		match cfg.style.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_triangle_lines!({ a: cfg.a, b: cfg.b, c: cfg.c, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
-	}
+	triangle! = |frame, cfg| package_effects(frame).triangle!(cfg)
 
 	## Deprecated: use `convex_polygon!`.
 	##
 	## Legal in `render!` only.
 	polygon! : Frame, Polygon => {}
-	polygon! = |frame, cfg| frame.convex_polygon!(cfg)
+	polygon! = |frame, cfg| package_effects(frame).polygon!(cfg)
 
 	## Draw a convex filled polygon and/or an ordered polygon outline. The host
 	## triangulates the fill without allocating; fewer than three points do not
@@ -998,17 +731,7 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	convex_polygon! : Frame, ConvexPolygon => {}
-	convex_polygon! = |_frame, cfg| {
-		match cfg.style.fill {
-			NoFill => {}
-			Fill(color) => Host.draw_polygon!({ points: cfg.points, color })
-		}
-
-		match cfg.style.stroke {
-			NoStroke => {}
-			Stroke(stroke_cfg) => Host.draw_polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
-		}
-	}
+	convex_polygon! = |frame, cfg| package_effects(frame).convex_polygon!(cfg)
 
 	## Load a font relative to an explicit asset store.
 	##
@@ -1047,35 +770,26 @@ Draw := [].{
 
 	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Texture -> TextureDraw
-	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
+	texture_draw = |texture| RrtDrawing.texture_draw(texture)
 
 	## Create a draw configuration covering the whole texture at `pos`.
 	texture_at : Texture, Math.Vec2 -> TextureDraw
-	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
+	texture_at = |texture, pos| RrtDrawing.texture_at(texture, pos)
 
 	## Create a draw configuration covering a read-only sampled view.
 	texture_view_draw : Texture -> TextureDraw
-	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
+	texture_view_draw = |texture| RrtDrawing.texture_view_draw(texture)
 
 	## Create a sampled-view draw configuration at `pos`.
 	texture_view_at : Texture, Math.Vec2 -> TextureDraw
-	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
+	texture_view_at = |texture, pos| RrtDrawing.texture_view_at(texture, pos)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and
 	## tint.
 	##
 	## Legal in `render!` only.
 	texture! : Frame, TextureDraw => {}
-	texture! = |_frame, cfg| {
-		Host.draw_draw_texture!({
-			texture: cfg.texture,
-			source: cfg.source,
-			dest: cfg.dest,
-			origin: cfg.origin,
-			rotation: cfg.rotation,
-			tint: cfg.tint,
-		})
-	}
+	texture! = |frame, cfg| package_effects(frame).texture!(cfg)
 
 	## Deprecated: use `texture!`.
 	##
@@ -1094,50 +808,20 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	texture_instances! : Frame, Texture, List(TextureInstance) => {}
-	texture_instances! = |_frame, texture, instances| {
-		if List.len(instances) == 0 {
-			{}
-		} else {
-			Host.draw_draw_texture_instances!({ texture, instances })
-		}
-	}
+	texture_instances! = |frame, texture, instances| package_effects(frame).texture_instances!(texture, instances)
 
 	## Project a texture onto a validated planar quad with exact homogeneous UV
 	## interpolation. This remains one hosted call and preserves active shaders.
 	##
 	## Legal in `render!` only.
 	projective_texture! : Frame, ProjectiveTexture => {}
-	projective_texture! = |_frame, cfg| Host.draw_draw_texture_quad!({
-		texture: cfg.texture,
-		source: cfg.source,
-		top_left: cfg.quad.top_left,
-		bottom_left: cfg.quad.bottom_left,
-		bottom_right: cfg.quad.bottom_right,
-		top_right: cfg.quad.top_right,
-		q_top_left: cfg.quad.q_top_left,
-		q_bottom_left: cfg.quad.q_bottom_left,
-		q_bottom_right: cfg.quad.q_bottom_right,
-		q_top_right: cfg.quad.q_top_right,
-		tint: cfg.tint,
-	})
+	projective_texture! = |frame, cfg| package_effects(frame).projective_texture!(cfg)
 
 	## Project a sampled texture view onto a validated planar quad.
 	##
 	## Legal in `render!` only.
 	projective_texture_view! : Frame, ProjectiveTextureView => {}
-	projective_texture_view! = |_frame, cfg| Host.draw_draw_texture_quad!({
-		texture: cfg.texture,
-		source: cfg.source,
-		top_left: cfg.quad.top_left,
-		bottom_left: cfg.quad.bottom_left,
-		bottom_right: cfg.quad.bottom_right,
-		top_right: cfg.quad.top_right,
-		q_top_left: cfg.quad.q_top_left,
-		q_bottom_left: cfg.quad.q_bottom_left,
-		q_bottom_right: cfg.quad.q_bottom_right,
-		q_top_right: cfg.quad.q_top_right,
-		tint: cfg.tint,
-	})
+	projective_texture_view! = |frame, cfg| package_effects(frame).projective_texture_view!(cfg)
 
 	## Allocate an offscreen framebuffer.
 	##
@@ -1290,37 +974,78 @@ Draw := [].{
 	##
 	## Legal in `render!` only.
 	debug_text! : Frame, DebugText => {}
-	debug_text! = |frame, cfg|
-		Draw.text!(
-			frame,
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Font.stub,
-			},
-		)
+	debug_text! = |frame, cfg| package_effects(frame).debug_text!(cfg)
 
 	## Draw simple top-left aligned text with the built-in font.
 	##
 	## Legal in `render!` only.
 	text_at! : Frame, SimpleText => {}
-	text_at! = |frame, cfg|
-		Draw.text!(
-			frame,
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Font.stub,
-			},
-		)
+	text_at! = |frame, cfg| package_effects(frame).text_at!(cfg)
 
 }
+
+## Adapt the platform's irreducible frame operations to the companion
+## package's canonical drawing composition. Construction is pure; the eventual
+## leaf call still reaches the same hosted operation and phase check.
+PackageDrawingProvider :: {}.{
+	new : {} -> PackageDrawingProvider
+	new = |{}| PackageDrawingProvider.({})
+
+	shape! : PackageDrawingProvider, Draw.Frame, Draw.Geometry, Draw.Paint => {}
+	shape! = |_provider, frame, geometry, paint| frame.shape!(geometry, paint)
+
+	draw_text! : PackageDrawingProvider, Draw.Frame, Draw.Text => {}
+	draw_text! = |_provider, frame, text| frame.text!(text)
+
+	rectangle_gradient_v! : PackageDrawingProvider, Draw.Frame, Draw.RectangleGradientV => {}
+	rectangle_gradient_v! = |_provider, _frame, cfg| Host.draw_rectangle_gradient_v!(cfg)
+
+	rectangle_gradient_h! : PackageDrawingProvider, Draw.Frame, Draw.RectangleGradientH => {}
+	rectangle_gradient_h! = |_provider, _frame, cfg| Host.draw_rectangle_gradient_h!(cfg)
+
+	circle_gradient! : PackageDrawingProvider, Draw.Frame, Draw.CircleGradient => {}
+	circle_gradient! = |_provider, _frame, cfg| Host.draw_circle_gradient!(cfg)
+
+	fps! : PackageDrawingProvider, Draw.Frame, Draw.Fps => {}
+	fps! = |_provider, _frame, cfg| Host.draw_fps!(cfg)
+
+	line! : PackageDrawingProvider, Draw.Frame, Draw.Line => {}
+	line! = |_provider, _frame, cfg|
+		match cfg.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+
+	texture! : PackageDrawingProvider, Draw.Frame, Draw.TextureDraw => {}
+	texture! = |_provider, _frame, cfg| Host.draw_draw_texture!(cfg)
+
+	texture_instances! : PackageDrawingProvider, Draw.Frame, Draw.Texture, List(Draw.TextureInstance) => {}
+	texture_instances! = |_provider, _frame, texture, instances| Host.draw_draw_texture_instances!({ texture, instances })
+
+	projective_texture! : PackageDrawingProvider, Draw.Frame, Draw.ProjectiveTexture => {}
+	projective_texture! = |_provider, _frame, cfg| {
+		quad = cfg.quad.fields()
+		Host.draw_draw_texture_quad!({
+			texture: cfg.texture,
+			source: cfg.source,
+			top_left: quad.top_left,
+			bottom_left: quad.bottom_left,
+			bottom_right: quad.bottom_right,
+			top_right: quad.top_right,
+			q_top_left: quad.q_top_left,
+			q_bottom_left: quad.q_bottom_left,
+			q_bottom_right: quad.q_bottom_right,
+			q_top_right: quad.q_top_right,
+			tint: cfg.tint,
+		})
+	}
+
+	with_scissor! : PackageDrawingProvider, Draw.Frame, Draw.Rect, (Draw.Frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
+	with_scissor! = |_provider, frame, bounds, callback| frame.with_scissor!(bounds, callback)
+}
+
+package_effects : Draw.Frame -> RrtDrawing.Effects
+package_effects = |frame| RrtDrawing.effects_for(PackageDrawingProvider.new({}), frame)
 
 ## Take the metric snapshot a font value carries.
 ##
@@ -1378,63 +1103,6 @@ normalized_color = |color| {
 
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: 0, y: 0 },
-	bottom_left: { x: 0, y: 10 },
-	bottom_right: { x: 20, y: 10 },
-	top_right: { x: 20, y: 0 },
-}) {
-	Ok(quad) => quad.project({ x: 0.5, y: 0.5 }) == { x: 10, y: 5 }
-	Err(_) => False
-}
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: 130, y: 90 },
-	bottom_left: { x: 75, y: 525 },
-	bottom_right: { x: 725, y: 475 },
-	top_right: { x: 610, y: 155 },
-}) {
-	Ok(quad) => {
-		center = quad.project({ x: 0.5, y: 0.5 })
-		F32.abs(center.x - 426.54004) < 0.001 and F32.abs(center.y - 281.87885) < 0.001
-	}
-	Err(_) => False
-}
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: F32.nan, y: 0 },
-	bottom_left: { x: 0, y: 10 },
-	bottom_right: { x: 10, y: 10 },
-	top_right: { x: 10, y: 0 },
-}) {
-	Err(NonFiniteQuad) => True
-	_ => False
-}
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: 0, y: 0 },
-	bottom_left: { x: 1, y: 1 },
-	bottom_right: { x: 2, y: 2 },
-	top_right: { x: 3, y: 3 },
-}) {
-	Err(DegenerateQuad) => True
-	_ => False
-}
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: 0, y: 0 },
-	bottom_left: { x: 0, y: 10 },
-	bottom_right: { x: 3, y: 5 },
-	top_right: { x: 10, y: 0 },
-}) {
-	Err(NonConvexQuad) => True
-	_ => False
-}
-expect match Draw.ProjectiveQuad.from_corners({
-	top_left: { x: 0, y: 0 },
-	bottom_left: { x: 0, y: 10 },
-	bottom_right: { x: 10, y: 10 },
-	top_right: { x: 0.0000001, y: 0 },
-}) {
-	Err(ProjectiveHorizon) => True
-	_ => False
-}
 
 ## The resource-free stubs are pure values an app puts in a model to reach its
 ## own `update!` from an `expect`. What they must never do is pass for a loaded

@@ -4,7 +4,7 @@
 ##
 ## This example shows immediate UDP sends, a Task for receiving data that may
 ## wait, and Messages that carry received batches back to `update!`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Color
@@ -195,9 +195,10 @@ expect flag_port([], "--udp-port", 5) == 5
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
-	draw_grid!(frame, size)
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw_grid!(draw, size)
 
 	# The peer's pointer first, so this instance's own crosshair stays on top
 	# of it when the two overlap -- which is exactly what a lone run looks like.
@@ -211,13 +212,13 @@ render! = |model, frame| {
 	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted })
 
 	local = Udp.Socket.local_address(model.socket)
-	frame.rounded_rectangle!({ x: 44, y: 112, width: 384, height: 96, radius: 0.12, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
-	frame.text_at!({ pos: { x: 64, y: 126 }, text: "bound", size: 13, color: faint })
-	frame.text_at!({ pos: { x: 64, y: 144 }, text: "127.0.0.1:${U16.to_str(local.port)}", size: 17, color: accent_local })
-	frame.text_at!({ pos: { x: 232, y: 126 }, text: "peer", size: 13, color: faint })
-	frame.text_at!({ pos: { x: 232, y: 144 }, text: "127.0.0.1:${U16.to_str(model.peer.port)}", size: 17, color: accent_peer })
-	frame.text_at!({ pos: { x: 64, y: 178 }, text: "${U64.to_str(model.received)} received", size: 14, color: muted })
-	frame.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if model.dropped == 0 muted else accent_bad })
+	draw.rounded_rectangle!({ x: 44, y: 112, width: 384, height: 96, radius: 0.12, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	draw.text_at!({ pos: { x: 64, y: 126 }, text: "bound", size: 13, color: faint })
+	draw.text_at!({ pos: { x: 64, y: 144 }, text: "127.0.0.1:${U16.to_str(local.port)}", size: 17, color: accent_local })
+	draw.text_at!({ pos: { x: 232, y: 126 }, text: "peer", size: 13, color: faint })
+	draw.text_at!({ pos: { x: 232, y: 144 }, text: "127.0.0.1:${U16.to_str(model.peer.port)}", size: 17, color: accent_peer })
+	draw.text_at!({ pos: { x: 64, y: 178 }, text: "${U64.to_str(model.received)} received", size: 14, color: muted })
+	draw.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if model.dropped == 0 muted else accent_bad })
 
 	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
 	Ok({})
@@ -225,16 +226,16 @@ render! = |model, frame| {
 
 ## A faint square grid, so a pointer moving over it reads as motion rather than
 ## as a circle floating in the dark.
-draw_grid! : Draw.Frame, Draw.FrameSize => {}
-draw_grid! = |frame, size|
+draw_grid! : Draw.Effects, Draw.FrameSize => {}
+draw_grid! = |draw, size|
 	List.for_each!(
 		List.map_with_index(List.repeat({}, 32), |_unit, index| U64.to_f32(index) * 40),
 		|offset| {
 			if offset <= size.width {
-				frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
+				draw.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
 			}
 			if offset <= size.height {
-				frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
+				draw.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
 			}
 		},
 	)
@@ -242,32 +243,34 @@ draw_grid! = |frame, size|
 ## One pointer: a soft glow, a ring, and a crosshair with its name.
 draw_pointer! : Draw.Frame, { x : F32, y : F32 }, Color.Rgba, Str, F32 => {}
 draw_pointer! = |frame, at, color, label, radius| {
-	frame.circle_gradient!({ center: at, radius: radius * 2.6, color_inner: Color.with_alpha(color, 40), color_outer: Color.with_alpha(color, 0) })
-	frame.circle!({ center: at, radius: radius, style: Draw.outlined(color, 2) })
-	frame.line!({ start: { x: at.x - radius - 8, y: at.y }, end: { x: at.x - radius + 2, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
-	frame.line!({ start: { x: at.x + radius - 2, y: at.y }, end: { x: at.x + radius + 8, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
-	frame.text_at!({ pos: { x: at.x + radius + 12, y: at.y - 8 }, text: label, size: 14, color: color })
+	draw = App.effects().render(frame)
+	draw.circle_gradient!({ center: at, radius: radius * 2.6, color_inner: Color.with_alpha(color, 40), color_outer: Color.with_alpha(color, 0) })
+	draw.circle!({ center: at, radius: radius, style: Draw.outlined(color, 2) })
+	draw.line!({ start: { x: at.x - radius - 8, y: at.y }, end: { x: at.x - radius + 2, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
+	draw.line!({ start: { x: at.x + radius - 2, y: at.y }, end: { x: at.x + radius + 8, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
+	draw.text_at!({ pos: { x: at.x + radius + 12, y: at.y - 8 }, text: label, size: 14, color: color })
 }
 
 ## Nothing has arrived yet: a comet turning on the received count, so the
 ## waiting state is visibly alive rather than a line of grey text.
 draw_searching! : Draw.Frame, Draw.FrameSize, U64 => {}
 draw_searching! = |frame, size, received| {
+	draw = App.effects().render(frame)
 	center = { x: size.width * 0.5, y: size.height * 0.55 }
 	turn = U64.to_f32(received % 360) * 0.12
-	frame.circle!({ center: center, radius: 26, style: Draw.outlined(Color.with_alpha(accent_peer, 50), 1.5) })
+	draw.circle!({ center: center, radius: 26, style: Draw.outlined(Color.with_alpha(accent_peer, 50), 1.5) })
 	List.for_each!(
 		spinner_dots,
 		|dot| {
 			angle = turn - dot.lag
-			frame.circle!({
+			draw.circle!({
 				center: { x: center.x + 26 * F32.cos(angle), y: center.y + 26 * F32.sin(angle) },
 				radius: dot.radius,
 				style: Draw.filled(Color.with_alpha(accent_peer, dot.alpha)),
 			})
 		},
 	)
-	frame.text_at!({ pos: { x: center.x - 78, y: center.y + 44 }, text: "waiting for the peer...", size: 15, color: muted })
+	draw.text_at!({ pos: { x: center.x - 78, y: center.y + 44 }, text: "waiting for the peer...", size: 15, color: muted })
 }
 
 spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Color
@@ -7,7 +7,7 @@ import rr.Draw
 ## A measurement app: does a large collection in the model survive a frame
 ## without being copied?
 ##
-## It does, as of `nightly-2026-08-23-fb208ba`. Run it under
+## It does, as of `nightly-2026-08-31-86e69b4`. Run it under
 ## `ROC_RAY_ALLOC_STATS=1` and read the per-frame allocator line: writing one
 ## element of a million-`F32` list in the model allocates well under a hundred
 ## bytes a frame -- the model box, and nothing proportional to the list.
@@ -208,8 +208,9 @@ marker = |cursor| U64.to_f32(cursor % 1024) * 0.5
 ## Trivial on purpose: the frame's cost should be the model's, not the drawing's.
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(Color.from_hex_rgb(0x101820))
-	frame.rectangle!({ x: 10, y: 10, width: 20, height: 20, style: Draw.filled(Color.white) })
+	draw.rectangle!({ x: 10, y: 10, width: 20, height: 20, style: Draw.filled(Color.white) })
 
 	Ok({})
 }

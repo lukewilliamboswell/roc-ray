@@ -8,10 +8,9 @@ bundles the roc-ray-types package and the platform into a scratch directory,
 *copied* to a scratch directory with its header pointed at the served bundle.
 Three things follow: every app is checked and built in the shape it ships in
 rather than against the platform sources, every reference to roc-ray-types --
-the platform's and both halves of test/package_interop, which is all of them
-now that the platform re-exports the types an app needs to name -- resolves one
-freshly built artifact, and no tracked file is ever rewritten, so an
-interrupted run cannot leave the working tree dirty.
+the platform's and both packages in test/package_interop -- resolves one
+freshly built artifact, and no tracked file is ever rewritten, so an interrupted
+run cannot leave the working tree dirty.
 
 This script runs:
 - zig build       - Build the native host libraries
@@ -1340,12 +1339,13 @@ def run_package_interop_test(
 ) -> list[str]:
     """Build `test/package_interop` with the *package* pinning types by URL.
 
-    This is the arrangement the served bundles exist for: `input_adapter` is a
-    package depending only on roc-ray-types, and the app depends on both it and
-    the platform, so three separate references have to describe one package.
-    Staging points every `rrt:` entry in the tree at the served URL, and this
-    asserts the result still compiles and runs -- which is the property the
-    README says the whole types-package split rests on.
+    This is the arrangement the served bundles exist for: `input_adapter` and
+    `drawing_adapter` depend only on roc-ray-types, while the app depends only
+    on both packages and the platform. The three package references therefore
+    have to describe one roc-ray-types build. Staging points every `rrt:` entry
+    in the tree at the served URL, and this asserts the result still compiles
+    and runs -- which is the property the README says the whole types-package
+    split rests on.
     """
     entry = root / "test" / "package_interop" / "app.roc"
     if not entry.is_file():

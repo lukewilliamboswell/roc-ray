@@ -1,7 +1,7 @@
 ## Reads text, bytes, and file details while continuing to animate the window.
 ## Press Escape to quit. This example introduces tasks for work that may take
 ## time, messages that return task results to `update!`, and typed file errors.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Files
@@ -69,7 +69,12 @@ update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
+		# The common package effect bundle is safe to capture here because it
+		# contains configured functions, not a frame or an input snapshot. The
+		# underlying waiting effect still enforces task phase and preserves the
+		# complete `Files.ReadTextError` result.
+		effects = App.effects()
+		Task.spawn!(program_input, || SmallReadFinished(effects.read_text!(small_path)))
 		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
 		Task.spawn!(program_input, || MetadataFinished(Files.metadata!(small_path)))
 	}
@@ -178,34 +183,36 @@ render! = |model, frame| {
 ## something with depth rather than on flat grey.
 draw_backdrop! : Draw.Frame => Draw.FrameSize
 draw_backdrop! = |frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
-	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
 	size
 }
 
 ## One status card: accent bar, indicator, effect name, path, and answer.
 draw_row! : Draw.Frame, { y : F32, width : F32, accent : Color.Rgba, label : Str, path : Str, phase : Phase, value : Str, elapsed : F32 } => {}
 draw_row! = |frame, row| {
-	frame.rounded_rectangle!({ x: 44, y: row.y, width: row.width, height: 72, radius: 0.18, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
-	frame.rounded_rectangle!({ x: 44, y: row.y + 12, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(row.accent) })
-	draw_indicator!(frame, { x: 86, y: row.y + 36 }, row.phase, row.accent, row.elapsed)
-	frame.text_at!({ pos: { x: 116, y: row.y + 14 }, text: row.label, size: 17, color: ink })
-	frame.text_at!({ pos: { x: 116 + 172, y: row.y + 16 }, text: row.path, size: 14, color: faint })
-	frame.text_at!({ pos: { x: 116, y: row.y + 42 }, text: row.value, size: 15, color: phase_color(row.phase) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: 44, y: row.y, width: row.width, height: 72, radius: 0.18, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	draw.rounded_rectangle!({ x: 44, y: row.y + 12, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(row.accent) })
+	draw_indicator!(draw, { x: 86, y: row.y + 36 }, row.phase, row.accent, row.elapsed)
+	draw.text_at!({ pos: { x: 116, y: row.y + 14 }, text: row.label, size: 17, color: ink })
+	draw.text_at!({ pos: { x: 116 + 172, y: row.y + 16 }, text: row.path, size: 14, color: faint })
+	draw.text_at!({ pos: { x: 116, y: row.y + 42 }, text: row.value, size: 15, color: phase_color(row.phase) })
 }
 
 ## In flight: a comet of fading dots, driven by wall-clock elapsed time so a
 ## stalled frame loop would be obvious. Settled: a solid dot in a quiet ring.
-draw_indicator! : Draw.Frame, { x : F32, y : F32 }, Phase, Color.Rgba, F32 => {}
-draw_indicator! = |frame, center, phase, accent, elapsed|
+draw_indicator! : Draw.Effects, { x : F32, y : F32 }, Phase, Color.Rgba, F32 => {}
+draw_indicator! = |draw, center, phase, accent, elapsed|
 	match phase {
 		Pending =>
 			List.for_each!(
 				spinner_dots,
 				|dot| {
 					angle = elapsed * 3.6 - dot.lag
-					frame.circle!({
+					draw.circle!({
 						center: { x: center.x + 10 * F32.cos(angle), y: center.y + 10 * F32.sin(angle) },
 						radius: dot.radius,
 						style: Draw.filled(Color.with_alpha(accent, dot.alpha)),
@@ -214,8 +221,8 @@ draw_indicator! = |frame, center, phase, accent, elapsed|
 			)
 
 		Settled(color) => {
-			frame.circle!({ center: center, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
-			frame.circle!({ center: center, radius: 5, style: Draw.filled(color) })
+			draw.circle!({ center: center, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
+			draw.circle!({ center: center, radius: 5, style: Draw.filled(color) })
 		}
 	}
 

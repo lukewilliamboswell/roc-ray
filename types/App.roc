@@ -11,7 +11,11 @@
 ## effect and lives in the platform's `Task`.
 import Capture
 import Devices
+import Drawing
+import Files
+import Math
 import Time
+import Texture
 import Window
 
 App := [].{
@@ -159,6 +163,126 @@ App := [].{
 		with_dropped_overflow : Input(msg), Bool -> Input(msg)
 		with_dropped_overflow = |Input.(sampled), overflowed| Input.({ ..sampled, dropped_overflow: overflowed })
 	}
+
+	## Platform-configured low-level effects shared with reusable packages.
+	##
+	## Applications obtain this through the platform's `App.effects()` alias;
+	## they never add the companion package to their own header. Drawing keeps
+	## its frame explicit until `effects.render(frame)` binds it into the
+	## canonical `Drawing.Effects` handle.
+	##
+	## The root contains configured functions but no frame or input, so an
+	## application may retain it in a package adapter or capture it in a task
+	## body. That does not authorize spawning: the application still supplies
+	## its current `App.Input(msg)` and message wrapper to `Task.spawn_with!`.
+	## Packages with an intentionally different drawing facade may instead take
+	## this root plus the explicit frame and call its low-level receivers.
+	Effects(frame) :: {
+		shape_impl! : frame, Drawing.Geometry, Drawing.Paint => {},
+		draw_text_impl! : frame, Drawing.Text => {},
+		rectangle_gradient_v_impl! : frame, Drawing.RectangleGradientV => {},
+		rectangle_gradient_h_impl! : frame, Drawing.RectangleGradientH => {},
+		circle_gradient_impl! : frame, Drawing.CircleGradient => {},
+		fps_impl! : frame, Drawing.Fps => {},
+		line_impl! : frame, Drawing.Line => {},
+		texture_impl! : frame, Drawing.TextureDraw => {},
+		texture_instances_impl! : frame, Texture, List(Drawing.TextureInstance) => {},
+		projective_texture_impl! : frame, Drawing.ProjectiveTexture => {},
+		with_scissor_impl! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
+		read_text_impl! : Str => Try(Str, Files.ReadTextError),
+	}.{
+
+		## Bind the current rendering frame into the canonical drawing API.
+		##
+		## Call this inside `render!`, then pass the returned handle to a reusable
+		## renderer. Do not retain the frame-bound result in application state.
+		render : Effects(frame), frame -> Drawing.Effects
+		render = |effects, frame| Drawing.effects_for(effects, frame)
+
+		## Low-level fillable-shape operation available to alternative APIs.
+		shape! : Effects(frame), frame, Drawing.Geometry, Drawing.Paint => {}
+		shape! = |Effects.(implementation), frame, geometry, paint|
+			(implementation.shape_impl!)(frame, geometry, paint)
+
+		## Low-level explicit text operation available to alternative APIs.
+		draw_text! : Effects(frame), frame, Drawing.Text => {}
+		draw_text! = |Effects.(implementation), frame, text|
+			(implementation.draw_text_impl!)(frame, text)
+
+		rectangle_gradient_v! : Effects(frame), frame, Drawing.RectangleGradientV => {}
+		rectangle_gradient_v! = |Effects.(implementation), frame, cfg| (implementation.rectangle_gradient_v_impl!)(frame, cfg)
+
+		rectangle_gradient_h! : Effects(frame), frame, Drawing.RectangleGradientH => {}
+		rectangle_gradient_h! = |Effects.(implementation), frame, cfg| (implementation.rectangle_gradient_h_impl!)(frame, cfg)
+
+		circle_gradient! : Effects(frame), frame, Drawing.CircleGradient => {}
+		circle_gradient! = |Effects.(implementation), frame, cfg| (implementation.circle_gradient_impl!)(frame, cfg)
+
+		fps! : Effects(frame), frame, Drawing.Fps => {}
+		fps! = |Effects.(implementation), frame, cfg| (implementation.fps_impl!)(frame, cfg)
+
+		line! : Effects(frame), frame, Drawing.Line => {}
+		line! = |Effects.(implementation), frame, cfg| (implementation.line_impl!)(frame, cfg)
+
+		texture! : Effects(frame), frame, Drawing.TextureDraw => {}
+		texture! = |Effects.(implementation), frame, cfg| (implementation.texture_impl!)(frame, cfg)
+
+		texture_instances! : Effects(frame), frame, Texture, List(Drawing.TextureInstance) => {}
+		texture_instances! = |Effects.(implementation), frame, texture, instances| (implementation.texture_instances_impl!)(frame, texture, instances)
+
+		projective_texture! : Effects(frame), frame, Drawing.ProjectiveTexture => {}
+		projective_texture! = |Effects.(implementation), frame, cfg| (implementation.projective_texture_impl!)(frame, cfg)
+
+		## Low-level scissor scope used by canonical and alternative drawing APIs.
+		with_scissor! : Effects(frame), frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
+		with_scissor! = |Effects.(implementation), frame, bounds, callback|
+			(implementation.with_scissor_impl!)(frame, bounds, callback)
+
+		## Read one bounded UTF-8 file.
+		##
+		## The platform permits this during `init!`, where it blocks startup, and
+		## in a task, where it parks the task. Calling it from `update!` or
+		## `render!` remains a platform-enforced programmer error.
+		read_text! : Effects(frame), Str => Try(Str, Files.ReadTextError)
+		read_text! = |Effects.(implementation), path|
+			(implementation.read_text_impl!)(path)
+	}
+
+	## Configure the shared bundle from a provider that already implements the
+	## required operations. Construction is pure and performs no hosted call.
+	effects_for : provider -> Effects(frame)
+		where [
+			provider.shape! : provider, frame, Drawing.Geometry, Drawing.Paint => {},
+			provider.draw_text! : provider, frame, Drawing.Text => {},
+			provider.rectangle_gradient_v! : provider, frame, Drawing.RectangleGradientV => {},
+			provider.rectangle_gradient_h! : provider, frame, Drawing.RectangleGradientH => {},
+			provider.circle_gradient! : provider, frame, Drawing.CircleGradient => {},
+			provider.fps! : provider, frame, Drawing.Fps => {},
+			provider.line! : provider, frame, Drawing.Line => {},
+			provider.texture! : provider, frame, Drawing.TextureDraw => {},
+			provider.texture_instances! : provider, frame, Texture, List(Drawing.TextureInstance) => {},
+			provider.projective_texture! : provider, frame, Drawing.ProjectiveTexture => {},
+			provider.with_scissor! : provider, frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
+			provider.read_text! : provider, Str => Try(Str, Files.ReadTextError),
+		]
+	effects_for = |provider|
+		Effects.(
+			{
+				shape_impl!: |frame, geometry, paint| provider.shape!(frame, geometry, paint),
+				draw_text_impl!: |frame, text| provider.draw_text!(frame, text),
+				rectangle_gradient_v_impl!: |frame, cfg| provider.rectangle_gradient_v!(frame, cfg),
+				rectangle_gradient_h_impl!: |frame, cfg| provider.rectangle_gradient_h!(frame, cfg),
+				circle_gradient_impl!: |frame, cfg| provider.circle_gradient!(frame, cfg),
+				fps_impl!: |frame, cfg| provider.fps!(frame, cfg),
+				line_impl!: |frame, cfg| provider.line!(frame, cfg),
+				texture_impl!: |frame, cfg| provider.texture!(frame, cfg),
+				texture_instances_impl!: |frame, texture, instances| provider.texture_instances!(frame, texture, instances),
+				projective_texture_impl!: |frame, cfg| provider.projective_texture!(frame, cfg),
+				with_scissor_impl!: |frame, bounds, callback|
+					provider.with_scissor!(frame, bounds, callback),
+				read_text_impl!: |path| provider.read_text!(path),
+			},
+		)
 
 	## The window size `Input.for_tests` reports. Ordinary rather than special:
 	## a test that depends on the size should say so with `with_window`.

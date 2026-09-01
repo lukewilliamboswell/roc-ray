@@ -8,7 +8,7 @@
 ## points efficiently.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -67,7 +67,7 @@ import rr.Text
 ## time does not depend on how big the files are, only on the budget.
 ##
 ## Drawing is batched and bounded. Every point is one `Draw.TextureInstance` in
-## a single list, drawn with one `frame.texture_instances!` call from one sprite
+## a single list, drawn with one `App.effects().render(frame).texture_instances!` call from one sprite
 ## the batch tints per lane.
 ##
 ## That leaves what is kept and what is not. A quarter of a million points is
@@ -2032,15 +2032,16 @@ paint_glow! = |frame, model|
 	frame.with_render_texture!(
 		model.glow,
 		|sprite| {
+			sprite_draw = App.effects().render(sprite)
 			sprite.clear!(Color.transparent)
 			half = sprite_size / 2
-			sprite.circle_gradient!({
+			sprite_draw.circle_gradient!({
 				center: { x: half, y: half },
 				radius: half,
 				color_inner: Color.rgba(255, 255, 255, 90),
 				color_outer: Color.rgba(255, 255, 255, 0),
 			})
-			sprite.circle_gradient!({
+			sprite_draw.circle_gradient!({
 				center: { x: half, y: half },
 				radius: half * 0.26,
 				color_inner: Color.rgba(255, 255, 255, 255),
@@ -2053,8 +2054,9 @@ paint_glow! = |frame, model|
 ## The ground: one shallow vertical gradient, and nothing else.
 draw_page! : Draw.Frame, Model => {}
 draw_page! = |frame, model| {
+	draw = App.effects().render(frame)
 	frame.clear!(ground_bottom)
-	frame.rectangle_gradient_v!({
+	draw.rectangle_gradient_v!({
 		x: 0,
 		y: 0,
 		width: model.screen.x,
@@ -2066,6 +2068,7 @@ draw_page! = |frame, model| {
 
 draw_plot! : Draw.Frame, Model => Try({}, [ScopeLimit, ..])
 draw_plot! = |frame, model| {
+	draw = App.effects().render(frame)
 	area = plot_area(model.screen)
 	window = visible_lanes(model.camera, area, model.lanes)
 
@@ -2077,7 +2080,7 @@ draw_plot! = |frame, model| {
 			# of the table, so it should span the plot however far the view has
 			# been dragged sideways -- which a world-space rectangle stops doing
 			# the moment it is panned.
-			draw_bands!(clipped, model, area, window)
+			draw_bands!(App.effects().render(clipped), model, area, window)
 			draw_rules!(clipped, model, area, window)
 
 			clipped.with_camera!(
@@ -2095,21 +2098,21 @@ draw_plot! = |frame, model| {
 		},
 	)?
 
-	frame.rectangle!({ x: area.x, y: area.y, width: area.width, height: area.height, style: Draw.outlined(rule, 1) })
+	draw.rectangle!({ x: area.x, y: area.y, width: area.width, height: area.height, style: Draw.outlined(rule, 1) })
 	Ok({})
 }
 
 ## One band per visible file, alternating, with the lane being parsed lifted out
 ## of the alternation so the eye can find it.
-draw_bands! : Draw.Frame, Model, Math.Rect, Visible => {}
-draw_bands! = |frame, model, area, window|
+draw_bands! : Draw.Effects, Model, Math.Rect, Visible => {}
+draw_bands! = |draw, model, area, window|
 	List.for_each!(
 		lane_indices(window),
 		|index| {
 			top = screen_y(model, U64.to_f32(index) * lane_height)
 			bottom = screen_y(model, U64.to_f32(index + 1) * lane_height)
 			working = is_working(model, index)
-			frame.rectangle!({
+			draw.rectangle!({
 				x: area.x,
 				y: top,
 				width: area.width,
@@ -2135,6 +2138,7 @@ draw_bands! = |frame, model, area, window|
 ## of a lane's mass sits above it is how often that file broke its own rule.
 draw_rules! : Draw.Frame, Model, Math.Rect, Visible => {}
 draw_rules! = |frame, model, area, window| {
+	draw = App.effects().render(frame)
 	named = window.first
 	List.for_each!(
 		lane_indices(window),
@@ -2142,7 +2146,7 @@ draw_rules! = |frame, model, area, window| {
 			baseline = screen_y(model, lane_baseline(index))
 			eighty = screen_y(model, lane_baseline(index) - column_offset(80))
 			if baseline >= area.y and baseline <= area.y + area.height {
-				frame.line!({
+				draw.line!({
 					start: { x: area.x, y: baseline },
 					end: { x: area.x + area.width, y: baseline },
 					stroke: Draw.stroke(rule_strong, 1),
@@ -2151,7 +2155,7 @@ draw_rules! = |frame, model, area, window| {
 				{}
 			}
 			if eighty >= area.y + 16 and eighty <= area.y + area.height {
-				frame.line!({
+				draw.line!({
 					start: { x: area.x, y: eighty },
 					end: { x: area.x + area.width, y: eighty },
 					stroke: Draw.stroke(Color.with_alpha(rule_strong, 190), 1),
@@ -2196,6 +2200,7 @@ draw_summaries! = |frame, model, window|
 
 draw_density! : Draw.Frame, Lane, U64 => {}
 draw_density! = |frame, lane, index| {
+	draw = App.effects().render(frame)
 	baseline = lane_baseline(index)
 	peak = U64.to_f32(hist_peak(lane.hist))
 	span = max_columns / U64.to_f32(hist_buckets)
@@ -2209,7 +2214,7 @@ draw_density! = |frame, lane, index| {
 				low = column_offset(U64.to_f32(entry.index) * span)
 				high = column_offset(U64.to_f32(entry.index + 1) * span)
 				weight = F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
+				draw.rectangle!({
 					x: 0,
 					y: baseline - high,
 					width: world_width,
@@ -2234,14 +2239,15 @@ draw_points! = |frame, model|
 	frame.with_blend_mode!(
 		Draw.additive_blend,
 		|blended| {
-			blended.texture_instances!(sprite_of(model), model.instances)
+			blended_draw = App.effects().render(blended)
+			blended_draw.texture_instances!(sprite_of(model), model.instances)
 
 			match model.parsing {
 				Idle => {}
 				Parsing(_) => {
 					total = List.len(model.instances)
 					len = U64.min(total, trail_length)
-					blended.texture_instances!(
+					blended_draw.texture_instances!(
 						sprite_of(model),
 						List.map_with_index(
 							List.sublist(model.instances, { start: total - len, len: len }),
@@ -2270,7 +2276,7 @@ draw_head! = |frame, model|
 		Parsing(scan) => {
 			x = U64.to_f32(scan.line) * scan.x_scale
 			top = U64.to_f32(scan.lane) * lane_height
-			frame.line!({
+			App.effects().render(frame).line!({
 				start: { x: x, y: top + 2 },
 				end: { x: x, y: top + lane_height - 4 },
 				stroke: Draw.stroke(Color.with_alpha(accent, 190), 1.4 / model.camera.zoom()),
@@ -2282,9 +2288,10 @@ draw_head! = |frame, model|
 ## has something moving in it whether or not data is still arriving.
 draw_sweep! : Draw.Frame, Model, Math.Rect => {}
 draw_sweep! = |frame, model, area| {
+	draw = App.effects().render(frame)
 	width = area.width * 0.16
 	x = area.x - width + (area.width + width * 2) * (model.sweep / sweep_period)
-	frame.rectangle_gradient_h!({
+	draw.rectangle_gradient_h!({
 		x: x,
 		y: area.y,
 		width: width,
@@ -2292,7 +2299,7 @@ draw_sweep! = |frame, model, area| {
 		color_left: Color.rgba(255, 255, 255, 0),
 		color_right: Color.rgba(160, 200, 255, 9),
 	})
-	frame.rectangle_gradient_h!({
+	draw.rectangle_gradient_h!({
 		x: x + width,
 		y: area.y,
 		width: width * 0.5,
@@ -2338,6 +2345,7 @@ is_working = |model, index|
 
 draw_masthead! : Draw.Frame, Model => {}
 draw_masthead! = |frame, model| {
+	draw = App.effects().render(frame)
 	fade = ease_out(model.entrance)
 
 	model.eyebrow.draw!(frame, { pos: { x: margin, y: 26 }, color: fade_to(ink_faint, fade) })
@@ -2346,7 +2354,7 @@ draw_masthead! = |frame, model| {
 
 	draw_graphs!(frame, model, fade)
 
-	frame.line!({ start: { x: margin, y: 116 }, end: { x: model.screen.x - margin, y: 116 }, stroke: Draw.stroke(rule, 1) })
+	draw.line!({ start: { x: margin, y: 116 }, end: { x: model.screen.x - margin, y: 116 }, stroke: Draw.stroke(rule, 1) })
 
 	draw_figures!(frame, model, fade)
 }
@@ -2403,6 +2411,7 @@ Graph : {
 
 draw_graph! : Draw.Frame, Model, Graph => {}
 draw_graph! = |frame, model, graph| {
+	draw = App.effects().render(frame)
 	bounds = graph.bounds
 	plot_top = bounds.y + 30
 	plot_height = bounds.y + bounds.height - plot_top
@@ -2413,7 +2422,7 @@ draw_graph! = |frame, model, graph| {
 	text_left!(frame, model.small, { x: bounds.x, y: bounds.y }, graph.label, 9, 1.5, fade_to(ink_faint, graph.fade))
 	text_left!(frame, model.font, { x: bounds.x, y: bounds.y + 12 }, graph.value, 14, Draw.default_spacing, fade_to(ink, graph.fade))
 
-	frame.line!({
+	draw.line!({
 		start: { x: bounds.x, y: bounds.y + bounds.height },
 		end: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
 		stroke: Draw.stroke(Color.with_alpha(rule, alpha_of(graph.fade * 255)), 1),
@@ -2431,7 +2440,7 @@ draw_graph! = |frame, model, graph| {
 			if height < 0.6 {
 				{}
 			} else {
-				frame.rectangle!({
+				draw.rectangle!({
 					x: bounds.x + U64.to_f32(entry.index) * step,
 					y: plot_top + plot_height - height,
 					width: F32.max(step - 0.8, 0.8),
@@ -2582,13 +2591,14 @@ Row : {
 
 draw_row! : Draw.Frame, Model, Row => {}
 draw_row! = |frame, model, row| {
+	draw = App.effects().render(frame)
 	working = is_working(model, row.index)
 	kept = has_run(model.runs, row.index)
 	height = row.bottom - row.top
 
 	# The tint is a rule down the side of the row rather than a swatch, so it
 	# reads as the lane's own edge rather than as a bullet point.
-	frame.rectangle!({
+	draw.rectangle!({
 		x: margin,
 		y: row.top + 2,
 		width: 2,
@@ -2661,8 +2671,8 @@ draw_row! = |frame, model, row| {
 		# What normalising the x axis costs, given back: the file's length as a
 		# fraction of the longest one on screen.
 		track = right - (margin + 14)
-		frame.rectangle!({ x: margin + 14, y: label_y + 20, width: track, height: 2, style: Draw.filled(rule) })
-		frame.rectangle!({
+		draw.rectangle!({ x: margin + 14, y: label_y + 20, width: track, height: 2, style: Draw.filled(rule) })
+		draw.rectangle!({
 			x: margin + 14,
 			y: label_y + 20,
 			width: track * U64.to_f32(row.lane.lines) / row.longest,
@@ -2691,6 +2701,7 @@ draw_row! = |frame, model, row| {
 ## this says it exactly, in forty pixels, for the whole run.
 draw_violin! : Draw.Frame, Lane, F32, F32 => {}
 draw_violin! = |frame, lane, top, bottom| {
+	draw = App.effects().render(frame)
 	height = Math.clamp(bottom - top - 6, 16, 40)
 	middle = (top + bottom) / 2
 	origin = middle - height / 2
@@ -2710,7 +2721,7 @@ draw_violin! = |frame, lane, top, bottom| {
 				low = column_offset(U64.to_f32(entry.index) * span) / lane_span
 				high = column_offset(U64.to_f32(entry.index + 1) * span) / lane_span
 				half = 20 * F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
+				draw.rectangle!({
 					x: centre - half,
 					y: origin + height * (1 - high),
 					width: half * 2,
@@ -2727,12 +2738,13 @@ draw_violin! = |frame, lane, top, bottom| {
 
 draw_footer! : Draw.Frame, Model => {}
 draw_footer! = |frame, model| {
+	draw = App.effects().render(frame)
 	fade = ease_out(model.entrance)
 	bottom = model.screen.y
 
 	text_left!(frame, model.font, { x: margin, y: bottom - hud_bottom + 12 }, peak_line(model), 12.5, Draw.default_spacing, fade_to(ink_dim, fade))
 
-	frame.line!({ start: { x: margin, y: bottom - 46 }, end: { x: model.screen.x - margin, y: bottom - 46 }, stroke: Draw.stroke(rule, 1) })
+	draw.line!({ start: { x: margin, y: bottom - 46 }, end: { x: model.screen.x - margin, y: bottom - 46 }, stroke: Draw.stroke(rule, 1) })
 
 	model.hint.draw!(frame, { pos: { x: margin, y: bottom - 34 }, color: fade_to(ink_faint, fade) })
 	text_right!(
@@ -2752,7 +2764,7 @@ draw_footer! = |frame, model| {
 
 text_left! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_left! = |frame, font, pos, content, size, spacing, color|
-	frame.text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font })
+	App.effects().render(frame).text!({ pos: pos, text: content, size: size, spacing: spacing, color: color, font: font })
 
 text_right! : Draw.Frame, Text.Font, Math.Vec2, Str, F32, F32, Color.Rgba => {}
 text_right! = |frame, font, pos, content, size, spacing, color|

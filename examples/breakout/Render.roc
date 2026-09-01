@@ -1,5 +1,6 @@
 ## Breakout drawing derived from loaded assets and the resulting world.
 import rr.Color
+import rr.App
 import rr.Draw
 import rr.Math
 import rr.Text
@@ -28,7 +29,7 @@ Render := [].{
 ## Paints the dark vertical gradient behind the cabinet.
 draw_background! : Draw.Frame => {}
 draw_background! = |frame|
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: field_top, color_bottom: field_bottom })
+	App.effects().render(frame).rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: field_top, color_bottom: field_bottom })
 
 ## Draws additive neon halos behind the paddle and ball.
 draw_glow! : Draw.Frame, Game.World => Try({}, [ScopeLimit, ..])
@@ -36,8 +37,9 @@ draw_glow! = |frame, world|
 	frame.with_blend_mode!(
 		Draw.additive_blend,
 		|glow_frame| {
-			glow_frame.circle_gradient!({ center: Math.center(world.paddle.rect()), radius: 90, color_inner: Color.with_alpha(paddle_neon, 95), color_outer: Color.with_alpha(paddle_neon, 0) })
-			glow_frame.circle_gradient!({ center: world.ball.pos, radius: 46, color_inner: Color.with_alpha(ball_neon, 95), color_outer: Color.with_alpha(ball_neon, 0) })
+			glow_draw = App.effects().render(glow_frame)
+			glow_draw.circle_gradient!({ center: Math.center(world.paddle.rect()), radius: 90, color_inner: Color.with_alpha(paddle_neon, 95), color_outer: Color.with_alpha(paddle_neon, 0) })
+			glow_draw.circle_gradient!({ center: world.ball.pos, radius: 46, color_inner: Color.with_alpha(ball_neon, 95), color_outer: Color.with_alpha(ball_neon, 0) })
 			Ok({})
 		},
 	)
@@ -45,8 +47,9 @@ draw_glow! = |frame, world|
 ## Draws one colored brick with a bright top-edge sheen.
 draw_brick! : Draw.Frame, Bricks.Brick => {}
 draw_brick! = |frame, brick| {
-	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 0.28, segments: 6, style: Draw.filled(Color.with_alpha(brick.color, 235)) })
-	frame.rectangle!({ x: brick.rect.x + 5, y: brick.rect.y + 3, width: brick.rect.width - 10, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 110)) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 0.28, segments: 6, style: Draw.filled(Color.with_alpha(brick.color, 235)) })
+	draw.rectangle!({ x: brick.rect.x + 5, y: brick.rect.y + 3, width: brick.rect.width - 10, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 110)) })
 }
 
 ## Draws every brick still remaining in the wall.
@@ -59,21 +62,23 @@ draw_bricks! = |frame, bricks|
 ## Draws the solid paddle and ball over their glows.
 draw_bodies! : Draw.Frame, Game.World => {}
 draw_bodies! = |frame, world| {
+	draw = App.effects().render(frame)
 	paddle = world.paddle.rect()
-	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 0.5, segments: 8, style: Draw.filled(paddle_neon) })
-	frame.rectangle!({ x: paddle.x + 8, y: paddle.y + 3, width: paddle.width - 16, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 150)) })
-	frame.circle!({ center: world.ball.pos, radius: Ball.radius, style: Draw.filled(ball_neon) })
-	frame.circle!({ center: { x: world.ball.pos.x - 2, y: world.ball.pos.y - 2 }, radius: Ball.radius * 0.4, style: Draw.filled(Color.with_alpha(Color.white, 210)) })
+	draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 0.5, segments: 8, style: Draw.filled(paddle_neon) })
+	draw.rectangle!({ x: paddle.x + 8, y: paddle.y + 3, width: paddle.width - 16, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 150)) })
+	draw.circle!({ center: world.ball.pos, radius: Ball.radius, style: Draw.filled(ball_neon) })
+	draw.circle!({ center: { x: world.ball.pos.x - 2, y: world.ball.pos.y - 2 }, radius: Ball.radius * 0.4, style: Draw.filled(Color.with_alpha(Color.white, 210)) })
 }
 
 ## Draws the title, score, lives, boundary, controls hint, and optional FPS.
 draw_hud! : Draw.Frame, Assets, Game.World, Bool => {}
 draw_hud! = |frame, assets, world, demo| {
+	draw = App.effects().render(frame)
 	assets.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon })
-	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(world.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
-	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(world.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
-	if demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
-	frame.line!({ start: { x: 44, y: 58 }, end: { x: 756, y: 58 }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
+	draw.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(world.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
+	draw.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(world.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
+	if demo {} else draw.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
+	draw.line!({ start: { x: 44, y: 58 }, end: { x: 756, y: 58 }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
 	assets.hint.draw!(frame, { pos: { x: 400, y: 580 }, color: hint_color, align: (Middle, Center) })
 }
 
@@ -94,7 +99,8 @@ draw_state_overlay! = |frame, assets, world, elapsed|
 ## Draws a won or game-over panel with its restart prompt.
 draw_banner! : Draw.Frame, Assets, Text.Prepared, Color.Rgba, F32 => {}
 draw_banner! = |frame, assets, line, accent, elapsed| {
-	frame.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
 	line.draw!(frame, { pos: { x: 400, y: 318 }, color: accent, align: (Middle, Center) })
 	assets.restart_line.draw!(frame, { pos: { x: 400, y: 362 }, color: Color.with_alpha(hint_color, prompt_alpha(elapsed)), align: (Middle, Center) })
 }

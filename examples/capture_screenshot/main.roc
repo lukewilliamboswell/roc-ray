@@ -2,7 +2,7 @@
 ## to save, E to try a refused `..` path, or Escape to quit. Without input it
 ## saves on the third frame and exits for automated runs. This example shows
 ## screenshot tasks, result messages, and output-directory confinement.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Capture
@@ -137,17 +137,18 @@ expect apply_messages(NoCapture, [SavedScreenshotFinished(Ok({})), EscapingScree
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
 
 	# Something worth photographing: a still motif, so two runs of the example
 	# differ only in the filename rather than in the picture.
 	center = { x: size.width - 140, y: 190 }
-	frame.circle_gradient!({ center: center, radius: 120, color_inner: Color.from_hex_rgba(0x5e81ac55), color_outer: Color.from_hex_rgba(0x5e81ac00) })
-	frame.circle!({ center: center, radius: 62, style: Draw.filled(Color.from_hex_rgb(0x4f7cc0)) })
-	frame.circle!({ center: center, radius: 79, style: Draw.outlined(Color.with_alpha(accent, 110), 2) })
-	frame.circle!({ center: center, radius: 94, style: Draw.outlined(Color.with_alpha(accent, 45), 1) })
-	frame.circle!({ center: { x: center.x + 56, y: center.y - 56 }, radius: 7, style: Draw.filled(accent) })
+	draw.circle_gradient!({ center: center, radius: 120, color_inner: Color.from_hex_rgba(0x5e81ac55), color_outer: Color.from_hex_rgba(0x5e81ac00) })
+	draw.circle!({ center: center, radius: 62, style: Draw.filled(Color.from_hex_rgb(0x4f7cc0)) })
+	draw.circle!({ center: center, radius: 79, style: Draw.outlined(Color.with_alpha(accent, 110), 2) })
+	draw.circle!({ center: center, radius: 94, style: Draw.outlined(Color.with_alpha(accent, 45), 1) })
+	draw.circle!({ center: { x: center.x + 56, y: center.y - 56 }, radius: 7, style: Draw.filled(accent) })
 
 	model.title.draw!(frame, { pos: { x: 36, y: 34 }, color: ink })
 	model.subtitle.draw!(frame, { pos: { x: 36, y: 68 }, color: muted })
@@ -155,11 +156,11 @@ render! = |model, frame| {
 	# The outcome card. Its accent is the whole report: green for a file on
 	# disk, amber for the sandbox refusing a path, red for a write that failed.
 	color = outcome_color(model.outcome)
-	frame.rounded_rectangle!({ x: 36, y: 236, width: 404, height: 72, radius: 0.16, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
-	frame.rounded_rectangle!({ x: 36, y: 248, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(color) })
-	frame.circle!({ center: { x: 78, y: 272 }, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
-	frame.circle!({ center: { x: 78, y: 272 }, radius: 5, style: Draw.filled(color) })
-	frame.text_at!({ pos: { x: 108, y: 250 }, text: outcome_label(model.outcome), size: 13, color: faint })
+	draw.rounded_rectangle!({ x: 36, y: 236, width: 404, height: 72, radius: 0.16, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	draw.rounded_rectangle!({ x: 36, y: 248, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(color) })
+	draw.circle!({ center: { x: 78, y: 272 }, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
+	draw.circle!({ center: { x: 78, y: 272 }, radius: 5, style: Draw.filled(color) })
+	draw.text_at!({ pos: { x: 108, y: 250 }, text: outcome_label(model.outcome), size: 13, color: faint })
 	outcome_text(model).draw!(frame, { pos: { x: 108, y: 270 }, color: color })
 
 	model.help.draw!(frame, { pos: { x: 36, y: size.height - 38 }, color: faint })

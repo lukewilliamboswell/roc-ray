@@ -4,7 +4,7 @@
 ##
 ## This example shows how to draw a large composition into a render texture,
 ## display a scaled preview, and use a Task for an export that may take time.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Capture
@@ -177,6 +177,7 @@ Palette := { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, se
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	colors = Palette.for_theme(model.theme)
 	card = Box.unbox(model.card)
 
@@ -186,9 +187,10 @@ render! = |model, frame| {
 	frame.with_render_texture!(
 		model.poster,
 		|poster| {
-			poster.rectangle_gradient_v!({ x: 0, y: 0, width: poster_width, height: 680, color_top: colors.sky_top, color_bottom: colors.sky_bottom })
-			poster.circle_gradient!({ center: { x: model.sun.x * 2, y: model.sun.y * 2 }, radius: 156, color_inner: colors.sun, color_outer: Color.with_alpha(colors.sun, 0) })
-			poster.rectangle!({ x: 0, y: 680, width: poster_width, height: poster_height - 680, style: Draw.filled(colors.sea) })
+			poster_draw = App.effects().render(poster)
+			poster_draw.rectangle_gradient_v!({ x: 0, y: 0, width: poster_width, height: 680, color_top: colors.sky_top, color_bottom: colors.sky_bottom })
+			poster_draw.circle_gradient!({ center: { x: model.sun.x * 2, y: model.sun.y * 2 }, radius: 156, color_inner: colors.sun, color_outer: Color.with_alpha(colors.sun, 0) })
+			poster_draw.rectangle!({ x: 0, y: 680, width: poster_width, height: poster_height - 680, style: Draw.filled(colors.sea) })
 
 			# A few repeated strokes suggest moving water without needing an
 			# image asset.
@@ -197,7 +199,7 @@ render! = |model, frame| {
 				|index| {
 					y = 716 + U64.to_f32(index) * 28
 					x = if index % 2 == 0 100 else 184
-					poster.line!({ start: { x, y }, end: { x: x + 1120, y }, stroke: Draw.stroke(Color.with_alpha(colors.ink, 65), 4) })
+					poster_draw.line!({ start: { x, y }, end: { x: x + 1120, y }, stroke: Draw.stroke(Color.with_alpha(colors.ink, 65), 4) })
 				},
 			)
 
@@ -209,7 +211,7 @@ render! = |model, frame| {
 
 	# The window is a view of the poster, not a second rendering of it: one
 	# composition, shown small and exported large.
-	frame.texture!({
+	draw.texture!({
 		texture: model.poster.texture(),
 		source: model.poster.source(),
 		dest: Math.rect(0, 0, window_width, window_height),
@@ -220,8 +222,8 @@ render! = |model, frame| {
 
 	# A scrim under the chrome, so the controls stay legible over any colourway
 	# without a border cutting into the postcard itself.
-	frame.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 46, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x0b1120), 205)) })
-	frame.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 1, style: Draw.filled(Color.with_alpha(colors.ink, 60)) })
+	draw.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 46, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x0b1120), 205)) })
+	draw.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 1, style: Draw.filled(Color.with_alpha(colors.ink, 60)) })
 
 	chrome = Box.unbox(model.chrome)
 	chrome.help.draw!(frame, { pos: { x: 24, y: window_height - 23 }, color: Color.with_alpha(colors.ink, 170), align: (Middle, Left) })

@@ -17,6 +17,7 @@
 ## directory. Filesystem access is not sandboxed; `Capture` confines only its
 ## own outputs.
 import Host
+import rrt.Files as RrtFiles
 import Time
 
 Files := [].{
@@ -42,7 +43,7 @@ Files := [].{
 	## not have is one of them: the host does not distinguish it from a read
 	## that failed for any other reason. `metadata!` does, so a path that may be
 	## unreadable can be stat'd first to tell the two apart.
-	ReadTextError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
+	ReadTextError : RrtFiles.ReadTextError
 
 	## Why `read_bytes!` produced no byte list.
 	##

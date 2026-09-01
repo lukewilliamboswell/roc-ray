@@ -167,7 +167,7 @@ Each layer has a distinct responsibility:
 | Layer | Semantic authority | Runtime custody |
 | --- | --- | --- |
 | Roc application | Domain model, policy, interpretation of input, what work to start | Ordinary Roc values reachable from the model and from a task closure |
-| Pure Roc packages | Reusable vocabulary and algorithms | Their ordinary values, but no live host facility merely by defining its type |
+| Reusable Roc packages | Reusable vocabulary, algorithms, and caller-injected effect interfaces | Their ordinary values and synchronous delegated calls, but no live host facility merely by defining its type |
 | Platform adapter | Public input, effect, task, and frame protocols | Values moving between the application and host ABI |
 | Host runtime | Cycle ordering, sampling policy, phase enforcement, task scheduling, capacity, shutdown | The opaque model between callbacks, undelivered task messages, and native resources |
 | Backend and operating system | Device and operating-system behavior | Windows or surfaces, files, processes, sockets, GPU state, and audio state |
@@ -740,11 +740,15 @@ and device capabilities state their platform permission behavior. The
 platform does not turn a convenient feature into ambient, undocumented access
 to the machine.
 
-There is no arbitrary native-call facility. Effectful closures exist for
-exactly one purpose — the body of a task — and a task runs on the frame thread
-under the same phase guard as every other application code. No API accepts a
-closure the host will run at an unspecified time, on an unspecified thread, or
-outside a phase. New host work is represented by a typed effect, waiting
+There is no arbitrary native-call facility. A closure the host retains,
+schedules, parks, or resumes exists for exactly one purpose — the body of a
+task — and a task runs on the frame thread under the same phase guard as every
+other application code. Roc code may package an effectful delegate and invoke
+it synchronously in the caller's current phase; scoped render callbacks have
+the same immediate shape. The host never retains or schedules such a delegate,
+and the underlying hosted effect still performs the phase check. No API accepts
+a closure the host will run at an unspecified time, on an unspecified thread,
+or outside a phase. New host work is represented by a typed effect, waiting
 effect, input field, render operation, or startup capability.
 
 ## Targets and capability profiles
@@ -766,29 +770,45 @@ such as permissions, connected devices, capacity, or external failures; those
 are ordinary typed outcomes, not evidence that the capability profile lied.
 
 An application is portable across the profiles whose shared capabilities it
-uses. Pure packages remain portable regardless of host profile. Target-specific
-optimizations and backend objects stay below the platform boundary.
+uses. Pure packages remain portable regardless of host profile. A package that
+accepts an injected effect interface is portable across the profiles that
+provide that complete interface; it cannot turn a missing target capability
+into a no-op. Target-specific optimizations and backend objects stay below the
+platform boundary.
 
 A non-rendering headless host is a semantic test backend, not a pixel-accurate
 renderer. It preserves the host cycle, effect and task behavior, resource
 ownership, and controlled observations that do not require a real device.
 Pixel behavior is verified against graphical backends separately.
 
-## Pure types and package interoperability
+## Shared package vocabulary and effect interfaces
 
 Reusable Roc packages need to name common values without acquiring host
-authority. The companion pure-types package therefore owns shared vocabulary
-such as colors, vectors, input snapshots, time values, cameras, and descriptive
-parts of resource handles.
+authority. The companion package therefore owns shared vocabulary such as
+colors, vectors, input snapshots, time values, cameras, and descriptive parts
+of resource handles. It may also own opaque effect interfaces whose
+implementations an application platform injects. Defining or importing one of
+those interfaces manufactures no host authority; only the platform-configured
+value can reach a hosted effect.
 
 The platform re-exports every companion nominal that appears in its public API
 as the same nominal, not a wrapper. Applications can depend only on the
-platform while reusable packages depend on the pure vocabulary, and values
-cross that package boundary without conversion or loss of type identity.
+platform while reusable packages depend on the shared package, and values and
+effect handles cross that package boundary without conversion or loss of type
+identity. An application never adds a second direct dependency on the companion
+package.
 
-The pure package contains no hosted effects and cannot manufacture live
-resources. The platform pins a compatible published version so a release
-cannot refer to an unavailable or structurally different vocabulary build.
+The companion package contains no hosted declarations, cannot manufacture live
+resources, and cannot acquire a callback capability such as `Draw.Frame`.
+Package-owned effect receivers invoke only the functions supplied by their
+configured handle, synchronously. Every underlying hosted operation preserves
+its phase, timing, ordering, bounds, ownership, and typed outcomes. A target can
+construct only the effect interfaces supported by its declared capability
+profile; it does not fill unsupported operations with no-ops.
+
+The platform pins a compatible published companion version so a release cannot
+refer to an unavailable or structurally different vocabulary or interface
+build.
 
 ## Verification obligations
 

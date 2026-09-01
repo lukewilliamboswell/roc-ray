@@ -2,7 +2,7 @@
 ## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
 ## This example shows startup database setup, prepared statements, and Tasks:
 ## work that may wait runs separately and returns rows as a later Message.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Color
@@ -312,23 +312,24 @@ update! = |model, input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
-	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
 
 	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink })
 	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted })
 
 	width = size.width - 88
-	frame.rounded_rectangle!({ x: 44, y: 112, width: width, height: 388, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
-	frame.text_at!({ pos: { x: 68, y: 126 }, text: "#", size: 13, color: faint })
-	frame.text_at!({ pos: { x: 104, y: 126 }, text: "RUNNER", size: 13, color: faint })
-	frame.text_at!({ pos: { x: 268, y: 126 }, text: "SCORE", size: 13, color: faint })
-	frame.text_at!({ pos: { x: 596, y: 126 }, text: "RECORDED", size: 13, color: faint })
-	frame.line!({ start: { x: 44, y: 152 }, end: { x: 44 + width, y: 152 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
+	draw.rounded_rectangle!({ x: 44, y: 112, width: width, height: 388, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
+	draw.text_at!({ pos: { x: 68, y: 126 }, text: "#", size: 13, color: faint })
+	draw.text_at!({ pos: { x: 104, y: 126 }, text: "RUNNER", size: 13, color: faint })
+	draw.text_at!({ pos: { x: 268, y: 126 }, text: "SCORE", size: 13, color: faint })
+	draw.text_at!({ pos: { x: 596, y: 126 }, text: "RECORDED", size: 13, color: faint })
+	draw.line!({ start: { x: 44, y: 152 }, end: { x: 44 + width, y: 152 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
 
 	if List.is_empty(model.rows) {
-		frame.text_at!({ pos: { x: 68, y: 190 }, text: "No runs yet -- press SPACE to record one", size: 18, color: muted })
+		draw.text_at!({ pos: { x: 68, y: 190 }, text: "No runs yet -- press SPACE to record one", size: 18, color: muted })
 	} else {
 		best = List.fold(model.rows, 1, |top, entry| I64.max(top, entry.score))
 		List.for_each!(
@@ -346,28 +347,30 @@ render! = |model, frame| {
 ## and the wall-clock instant the run was written.
 draw_entry! : Draw.Frame, U64, Entry, I64, F32 => {}
 draw_entry! = |frame, index, entry, best, width| {
+	draw = App.effects().render(frame)
 	y = 168 + U64.to_f32(index) * 32
 	if index % 2 == 1 {
-		frame.rectangle!({ x: 45, y: y - 6, width: width - 2, height: 30, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
+		draw.rectangle!({ x: 45, y: y - 6, width: width - 2, height: 30, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
 	}
 	medal = if index == 0 gold else if index < 3 silver else faint
-	frame.circle!({ center: { x: 74, y: y + 9 }, radius: 11, style: Draw.filled(Color.with_alpha(medal, 40)) })
-	frame.text_at!({ pos: { x: if index < 9 70 else 66, y: y }, text: U64.to_str(index + 1), size: 16, color: medal })
-	frame.text_at!({ pos: { x: 104, y: y }, text: entry.name, size: 19, color: ink })
+	draw.circle!({ center: { x: 74, y: y + 9 }, radius: 11, style: Draw.filled(Color.with_alpha(medal, 40)) })
+	draw.text_at!({ pos: { x: if index < 9 70 else 66, y: y }, text: U64.to_str(index + 1), size: 16, color: medal })
+	draw.text_at!({ pos: { x: 104, y: y }, text: entry.name, size: 19, color: ink })
 
 	# The bar is the row's score against the board's best, so the shape of the
 	# board is readable before any of the numbers are.
 	share = I64.to_f32(entry.score) / I64.to_f32(I64.max(best, 1))
-	frame.rectangle!({ x: 348, y: y + 6, width: 220, height: 6, style: Draw.filled(Color.from_hex_rgba(0xffffff0c)) })
-	frame.rectangle!({ x: 348, y: y + 6, width: 220 * share, height: 6, style: Draw.filled(Color.with_alpha(accent_ok, 190)) })
-	frame.text_at!({ pos: { x: 268, y: y }, text: I64.to_str(entry.score), size: 19, color: accent_ok })
-	frame.text_at!({ pos: { x: 596, y: y + 1 }, text: Time.Timestamp.to_iso_8601(entry.played_at), size: 15, color: faint })
+	draw.rectangle!({ x: 348, y: y + 6, width: 220, height: 6, style: Draw.filled(Color.from_hex_rgba(0xffffff0c)) })
+	draw.rectangle!({ x: 348, y: y + 6, width: 220 * share, height: 6, style: Draw.filled(Color.with_alpha(accent_ok, 190)) })
+	draw.text_at!({ pos: { x: 268, y: y }, text: I64.to_str(entry.score), size: 19, color: accent_ok })
+	draw.text_at!({ pos: { x: 596, y: y + 1 }, text: Time.Timestamp.to_iso_8601(entry.played_at), size: 15, color: faint })
 }
 
 ## The status line, with a comet while a task is in flight and a resting dot
 ## once it has answered.
 draw_status! : Draw.Frame, Status, F32, F32 => {}
 draw_status! = |frame, status, elapsed, y| {
+	draw = App.effects().render(frame)
 	color = status_color(status)
 	center = { x: 44 + width_of_indicator, y: y - 46 }
 	match status {
@@ -376,7 +379,7 @@ draw_status! = |frame, status, elapsed, y| {
 				spinner_dots,
 				|dot| {
 					angle = elapsed * 3.6 - dot.lag
-					frame.circle!({
+					draw.circle!({
 						center: { x: center.x + 8 * F32.cos(angle), y: center.y + 8 * F32.sin(angle) },
 						radius: dot.radius,
 						style: Draw.filled(Color.with_alpha(color, dot.alpha)),
@@ -384,9 +387,9 @@ draw_status! = |frame, status, elapsed, y| {
 				},
 			)
 
-		_ => frame.circle!({ center: center, radius: 5, style: Draw.filled(color) })
+		_ => draw.circle!({ center: center, radius: 5, style: Draw.filled(color) })
 	}
-	frame.text_at!({ pos: { x: center.x + 20, y: center.y - 9 }, text: status_line(status), size: 16, color: color })
+	draw.text_at!({ pos: { x: center.x + 20, y: center.y - 9 }, text: status_line(status), size: 16, color: color })
 }
 
 ## Half the indicator's width, so the status line has the same left margin as

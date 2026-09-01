@@ -9,13 +9,12 @@ artifact. Release workflows rewrite that entry to the URL in `.types-version`.
 Three things bite local testing because of it:
 
 1. Apps reach the types package by several different routes at once, and nothing
-   makes them agree. `cave_climb`, `generated_assets`, `projective_texture` and
-   `top_down` name it by relative path in their own headers, `test/package_interop`
-   does so from both an app and a package, and the platform they build against
-   names it however it was last rewritten. When two of those routes resolve
+   makes them agree. Both reusable packages under `test/package_interop` name it
+   by relative path, while the platform they build against names it however it
+   was last rewritten. When two of those routes resolve
    different builds of the package, the same types arrive under two nominal
    identities. `test/package_interop/README.md` records what that costs.
-   (Measured on the pin in `.roc-version`, `nightly-2026-08-23-fb208ba`, the
+   (Measured on the pin in `.roc-version`, `nightly-2026-08-31-86e69b4`, the
    compiler tolerates it: path and URL unify, and so do two *different* types
    bundles on either side of one app. It has not always, and the arrangement is
    still one where an app can be built against a package build nobody shipped.)
@@ -188,8 +187,8 @@ def check_roc_pin(root: Path, roc: str = "roc") -> str | None:
     against a locally built compiler.
 
     A build of the pinned revision counts as a match even though it reports its
-    build mode instead of the tag -- `release-fast-fb208ba` is the compiler
-    `nightly-2026-08-23-fb208ba` names. `roc_platform_abi.compiler_matches_pin`
+    build mode instead of the tag -- `release-fast-86e69b4` is the compiler
+    `nightly-2026-08-31-86e69b4` names. `roc_platform_abi.compiler_matches_pin`
     is the shared rule; this falls back to a plain comparison if that module
     cannot parse the pin.
     """
@@ -234,10 +233,10 @@ def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
 def rewrite_types_dep(source: str, url: str) -> tuple[str, bool]:
     """Point every `rrt:` package entry in a header at `url`.
 
-    The platform carries one, and so do both halves of `test/package_interop`.
-    No example does: the platform re-exports every package type its own API
-    mentions, so an app names `Assets.Texture` rather than `rrt.Texture`.
-    Pointing every remaining entry at the same served build is what makes "the
+    The platform carries one, as do both reusable packages in
+    `test/package_interop`. Applications use the platform aliases instead of a
+    direct dependency. Pointing every remaining entry at the same served build
+    is what makes "the
     app and the platform agree about what roc-ray-types is" true by
     construction rather than by luck.
     """
@@ -660,7 +659,8 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
 
     Every `.roc` file under the app directory comes along, because an app is a
     directory here: `cave_climb` has a sibling `Cave.roc`, and
-    `test/package_interop` carries a whole `input_adapter` package.
+    `test/package_interop` carries complete `input_adapter` and
+    `drawing_adapter` packages.
 
     Assets are otherwise left where they are: they are opened at runtime through
     an `Assets.Store`, and the built executable is run from the repository root

@@ -4,7 +4,7 @@
 ##
 ## This example shows one shared layout calculation for drawing and pointer hit
 ## testing, resizable-window settings, and monitor information.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Capture
@@ -216,25 +216,28 @@ theme = {
 ## without shouting over the panel it sits in.
 draw_menu_item! : Draw.Frame, Math.Rect, Text.Prepared, Bool, Bool => {}
 draw_menu_item! = |frame, bounds, label, selected, hovered| {
+	draw = App.effects().render(frame)
 	fill = if selected theme.accent_soft else if hovered theme.panel_high else Color.from_hex_rgb(0x141d2f)
 	outline = if selected theme.accent else if hovered theme.edge else Color.with_alpha(theme.edge, 140)
-	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, if selected 2 else 1) })
+	draw.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, if selected 2 else 1) })
 	if selected {
-		frame.rounded_rectangle!({ x: bounds.x + 8, y: bounds.y + 10, width: 4, height: bounds.height - 20, radius: 2, segments: 4, style: Draw.filled(theme.accent) })
+		draw.rounded_rectangle!({ x: bounds.x + 8, y: bounds.y + 10, width: 4, height: bounds.height - 20, radius: 2, segments: 4, style: Draw.filled(theme.accent) })
 	}
 	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: (Middle, Left) })
 }
 
 draw_key! : Draw.Frame, Text.Font, F32, F32, Str => {}
 draw_key! = |frame, font, x, y, label| {
-	frame.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(theme.panel_high, theme.edge, 2) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(theme.panel_high, theme.edge, 2) })
 	Text.from(label, font).size(18).draw!(frame, { pos: { x: x + 34, y: y + 22 }, color: theme.ink, align: (Middle, Center) })
 }
 
 draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, Draw.FrameSize, Model => {}
 draw_preview! = |frame, bounds, selection, ui, screen, model| {
+	draw = App.effects().render(frame)
 	simulation_nanos = model.simulation_nanos
-	frame.rectangle_gradient_v!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, color_top: Color.from_hex_rgb(0x182540), color_bottom: Color.from_hex_rgb(0x0f1728) })
+	draw.rectangle_gradient_v!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, color_top: Color.from_hex_rgb(0x182540), color_bottom: Color.from_hex_rgb(0x0f1728) })
 
 	body = match selection {
 		Display => ui.display_body
@@ -242,35 +245,35 @@ draw_preview! = |frame, bounds, selection, ui, screen, model| {
 		Controls => ui.controls_body
 	}
 	# The preview reads as a card of its own, not as a hole in the background.
-	frame.rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, style: Draw.outlined(theme.edge, 2) })
+	draw.rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, style: Draw.outlined(theme.edge, 2) })
 	body.draw!(frame, { pos: { x: bounds.x + 28, y: bounds.y + 28 }, color: theme.ink })
 
 	match selection {
 		Display => {
 			size_text = Str.concat(I32.to_str(F32.to_i32_wrap(screen.width)), Str.concat(" x ", I32.to_str(F32.to_i32_wrap(screen.height))))
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 72 }, text: size_text, size: 20, color: theme.accent })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 72 }, text: size_text, size: 20, color: theme.accent })
 			# Asked for here rather than remembered: the scale belongs to the
 			# surface being drawn to, and reading it mid-frame is free.
 			scale = Window.scale!()
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 98 }, text: framebuffer_line(screen, scale), size: 16, color: theme.muted })
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 122 }, text: monitor_line(model.monitors, model.monitor_choice), size: 16, color: theme.muted })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 98 }, text: framebuffer_line(screen, scale), size: 16, color: theme.muted })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 122 }, text: monitor_line(model.monitors, model.monitor_choice), size: 16, color: theme.muted })
 			phase = U64.to_f32(simulation_nanos % 3_000_000_000) / 3_000_000_000
 			preview_x = bounds.x + bounds.width * phase
-			frame.circle_gradient!({ center: { x: preview_x, y: bounds.y + bounds.height * 0.62 }, radius: 105, color_inner: Color.with_alpha(theme.accent, 110), color_outer: Color.with_alpha(theme.accent, 0) })
-			frame.rounded_rectangle!({ x: bounds.x + 28, y: bounds.y + 152, width: bounds.width - 56, height: 78, radius: 12, segments: 8, style: Draw.outlined(Color.with_alpha(theme.muted, 90), 2) })
+			draw.circle_gradient!({ center: { x: preview_x, y: bounds.y + bounds.height * 0.62 }, radius: 105, color_inner: Color.with_alpha(theme.accent, 110), color_outer: Color.with_alpha(theme.accent, 0) })
+			draw.rounded_rectangle!({ x: bounds.x + 28, y: bounds.y + 152, width: bounds.width - 56, height: 78, radius: 12, segments: 8, style: Draw.outlined(Color.with_alpha(theme.muted, 90), 2) })
 		}
 		AudioSettings => {
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 74 }, text: "Music", size: 18, color: theme.muted })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: (bounds.width - 90) * 0.72, height: 14, style: Draw.filled(Color.from_hex_rgb(0x43aa8b)) })
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 154 }, text: "Effects", size: 18, color: theme.muted })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: (bounds.width - 90) * 0.9, height: 14, style: Draw.filled(Color.from_hex_rgb(0xf9c74f)) })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 74 }, text: "Music", size: 18, color: theme.muted })
+			draw.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
+			draw.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: (bounds.width - 90) * 0.72, height: 14, style: Draw.filled(Color.from_hex_rgb(0x43aa8b)) })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 154 }, text: "Effects", size: 18, color: theme.muted })
+			draw.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
+			draw.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: (bounds.width - 90) * 0.9, height: 14, style: Draw.filled(Color.from_hex_rgb(0xf9c74f)) })
 		}
 		Controls => {
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 76 }, text: "Move", size: 18, color: theme.muted })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 76 }, text: "Move", size: 18, color: theme.muted })
 			draw_key!(frame, ui.font, bounds.x + 28, bounds.y + 112, "WASD")
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 182 }, text: "Command", size: 18, color: theme.muted })
+			draw.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 182 }, text: "Command", size: 18, color: theme.muted })
 			draw_key!(frame, ui.font, bounds.x + 28, bounds.y + 218, "SPACE")
 		}
 	}
@@ -371,6 +374,7 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	ui = Box.unbox(model.ui)
 	# The surface being drawn to, asked for where it is used. A resize is
 	# visible here on the cycle it happens, without a copy in the model that
@@ -385,8 +389,8 @@ render! = |model, frame| {
 	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: theme.ink })
 	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: theme.muted })
 	# A hairline under the header, drawn to the live width so it follows a resize.
-	frame.rectangle!({ x: view.margin, y: 96, width: screen.width - view.margin * 2, height: 1, style: Draw.filled(theme.edge) })
-	frame.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	draw.rectangle!({ x: view.margin, y: 96, width: screen.width - view.margin * 2, height: 1, style: Draw.filled(theme.edge) })
+	draw.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	draw_menu_item!(frame, view.display_bounds, ui.display, model.selection == Display, hover_display)
 	draw_menu_item!(frame, view.audio_bounds, ui.audio, model.selection == AudioSettings, hover_audio)
 	draw_menu_item!(frame, view.controls_bounds, ui.controls, model.selection == Controls, hover_controls)

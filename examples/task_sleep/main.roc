@@ -2,7 +2,7 @@
 ## the task finishes, or press Escape to quit. This example introduces Tasks as
 ## work that may wait without pausing drawing, and Messages as the values
 ## completed tasks deliver to a later Input.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-31-86e69b4" }
 
 import rr.App
 import rr.Task
@@ -120,27 +120,28 @@ expect apply_message(Woke({ arrived_on: 18 }), Woke, 25) == Woke({ arrived_on: 1
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	# How much of the sleep has gone by, clamped so a slow frame cannot
 	# overshoot the ring. Purely a view value, so it is derived here.
 	progress = F32.min(model.elapsed * 1000 / U64.to_f32(sleep_millis), 1)
 	center = { x: 400.F32, y: 340.F32 }
 
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x1b2136), color_bottom: Color.from_hex_rgb(0x0a0c15) })
-	frame.circle_gradient!({ center, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 40), color_outer: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 0) })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x1b2136), color_bottom: Color.from_hex_rgb(0x0a0c15) })
+	draw.circle_gradient!({ center, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 40), color_outer: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 0) })
 
 	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white })
-	frame.text_at!({ pos: { x: 40, y: 78 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
-	frame.text_at!({ pos: { x: 40, y: 106 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
+	draw.text_at!({ pos: { x: 40, y: 78 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
+	draw.text_at!({ pos: { x: 40, y: 106 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
 	model.hint.draw!(frame, { pos: { x: 40, y: 552 }, color: Color.from_hex_rgb(0x6b7590) })
 
 	# The track, then the arc the sleeper has used up so far.
-	frame.circle!({ center, radius: 150, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
-	draw_arc!(frame, center, progress, 0)
+	draw.circle!({ center, radius: 150, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
+	draw_arc!(draw, center, progress, 0)
 
 	# A short trail of the orbiting comet: the same orbit sampled a few
 	# frames back, fading out behind the head.
-	draw_trail!(frame, center, model.elapsed, 8)
-	frame.circle!({ center: orbit(center, model.elapsed), radius: 14, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x88c0d0), Color.white, 3) })
+	draw_trail!(draw, center, model.elapsed, 8)
+	draw.circle!({ center: orbit(center, model.elapsed), radius: 14, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x88c0d0), Color.white, 3) })
 
 	Ok({})
 }
@@ -150,31 +151,31 @@ render! = |model, frame| {
 orbit : { x : F32, y : F32 }, F32 -> { x : F32, y : F32 }
 orbit = |center, seconds| { x: center.x + 150 * F32.cos(seconds * 2), y: center.y + 150 * F32.sin(seconds * 2) }
 
-draw_trail! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
-draw_trail! = |frame, center, seconds, remaining|
+draw_trail! : Draw.Effects, { x : F32, y : F32 }, F32, U64 => {}
+draw_trail! = |draw, center, seconds, remaining|
 	if remaining == 0 {
 		{}
 	} else {
 		fade = U64.to_f32(remaining) / 8
-		frame.circle!({ center: orbit(center, seconds - U64.to_f32(remaining) * 0.03), radius: 12 * fade, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x88c0d0), F32.to_u8_wrap(90 * fade))) })
-		draw_trail!(frame, center, seconds, remaining - 1)
+		draw.circle!({ center: orbit(center, seconds - U64.to_f32(remaining) * 0.03), radius: 12 * fade, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x88c0d0), F32.to_u8_wrap(90 * fade))) })
+		draw_trail!(draw, center, seconds, remaining - 1)
 	}
 
 ## The progress arc, stepped by hand out of short segments so it needs nothing
-## more than `frame.line!`.
-draw_arc! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
-draw_arc! = |frame, center, progress, step|
+## more than `App.effects().render(frame).line!`.
+draw_arc! : Draw.Effects, { x : F32, y : F32 }, F32, U64 => {}
+draw_arc! = |draw, center, progress, step|
 	if U64.to_f32(step) / 90 >= progress {
 		{}
 	} else {
 		a = -1.5707964 + 6.2831855 * U64.to_f32(step) / 90
 		b = -1.5707964 + 6.2831855 * U64.to_f32(step + 1) / 90
-		frame.line!({
+		draw.line!({
 			start: { x: center.x + 150 * F32.cos(a), y: center.y + 150 * F32.sin(a) },
 			end: { x: center.x + 150 * F32.cos(b), y: center.y + 150 * F32.sin(b) },
 			stroke: Draw.stroke(Color.from_hex_rgb(0xa3be8c), 5),
 		})
-		draw_arc!(frame, center, progress, step + 1)
+		draw_arc!(draw, center, progress, step + 1)
 	}
 
 describe : State -> Str

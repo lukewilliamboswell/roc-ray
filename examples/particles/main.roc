@@ -6,7 +6,7 @@
 ## copies of one texture in a single batch.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -215,8 +215,9 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
-	frame.texture_instances!(model.sprite, model.instances)
+	draw.texture_instances!(model.sprite, model.instances)
 	model.hud.draw!(frame, { pos: { x: 24, y: 24 }, color: Color.from_hex_rgb(0xa8b4cc) })
 
 	Ok({})

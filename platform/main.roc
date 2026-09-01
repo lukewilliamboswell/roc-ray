@@ -16,7 +16,7 @@
 ## This app opens a window, draws a circle, and exits on Escape:
 ##
 ## ```roc
-## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-31-86e69b4" }
 ##
 ## import rr.App
 ## import rr.Color
@@ -42,7 +42,7 @@
 ## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 ## render! = |_model, frame| {
 ##     frame.clear!(Color.black)
-##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+##     App.effects().render(frame).circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
 ##     Ok({})
 ## }
 ## ```

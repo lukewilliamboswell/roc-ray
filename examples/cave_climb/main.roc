@@ -5,7 +5,7 @@
 ## and calculations for the two tools.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -821,8 +821,9 @@ camera_for = |level, target| {
 
 draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, Draw.Texture, Draw.Texture, World, Math.Rect => {}
 draw_world! = |frame, level, background, tiles, characters, enemies_texture, world, viewport| {
-	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
-	frame.texture!({ texture: background, source: { x: 0, y: 0, width: background.width, height: background.height }, dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
+	draw = App.effects().render(frame)
+	draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
+	draw.texture!({ texture: background, source: { x: 0, y: 0, width: background.width, height: background.height }, dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
 	tilemap_zone = Trace.begin!("draw cave tilemap")
 	level.tilemap.draw_all_in!(frame, viewport)
 	Trace.end!(tilemap_zone)
@@ -896,13 +897,14 @@ draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 
 draw_gems! : Draw.Frame, Draw.Texture, List(Gem), F32, Math.Rect => {}
 draw_gems! = |frame, tiles, gems, phase, viewport| {
+	draw = App.effects().render(frame)
 	for gem in gems {
 		if !(gem.taken) {
 			pos = Cave.Space.world_to_map(gem.pos)
 			pulse = 0.86 + ping_pong(wrap_unit(phase + U64.to_f32(gem.id) * 0.07)) * 0.12
 			radius = 42 * pulse
 			if Math.circle_rect({ center: pos, radius }, viewport) {
-				frame.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
+				draw.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
 				draw_tile_sprite!(frame, tiles, gem_source, pos, 0.72 * pulse, phase * 60)
 			}
 		}
@@ -911,11 +913,12 @@ draw_gems! = |frame, tiles, gems, phase, viewport| {
 
 draw_hazard_marks! : Draw.Frame, Draw.Texture, List(Danger), F32, Math.Rect => {}
 draw_hazard_marks! = |frame, tiles, hazards, phase, viewport| {
+	draw = App.effects().render(frame)
 	for hazard in hazards {
 		pos = Cave.Space.world_to_map(hazard.pos)
 		radius = hazard.radius * 1.8
 		if Math.circle_rect({ center: pos, radius }, viewport) {
-			frame.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
+			draw.circle_gradient!({ center: pos, radius, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
 			draw_tile_sprite!(frame, tiles, saw_source, pos, 0.78, phase * 260)
 		}
 	}
@@ -947,15 +950,17 @@ draw_checkpoints! = |frame, tiles, level, world| {
 
 draw_goal! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_goal! = |frame, tiles, level, world| {
+	draw = App.effects().render(frame)
 	ready = world.collected == List.len(level.gems)
 	pos = Cave.Space.world_to_map(level.goal)
 	color = if ready Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
-	frame.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
+	draw.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
 	draw_tile_sprite!(frame, tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
 draw_mirrors! : Draw.Frame, List(Mirror), F32, Math.Rect => {}
 draw_mirrors! = |frame, mirrors, phase, viewport| {
+	draw = App.effects().render(frame)
 	for mirror in mirrors {
 		segment = mirror.segment(phase)
 		start = Cave.Space.world_to_map(segment.start)
@@ -965,12 +970,12 @@ draw_mirrors! = |frame, mirrors, phase, viewport| {
 		edge = Color.from_hex_rgb(0x3a506b)
 		bounds = Math.rect(F32.min(start.x, end.x) - 8, F32.min(start.y, end.y) - 8, F32.abs(end.x - start.x) + 16, F32.abs(end.y - start.y) + 16)
 		if Math.overlaps(bounds, viewport) {
-			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
-			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
-			frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-			frame.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
-			frame.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
-			frame.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+			draw.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
+			draw.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
+			draw.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
 		}
 	}
 }
@@ -983,13 +988,14 @@ enemy_source = |enemy, phase| {
 
 draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32, Math.Rect => {}
 draw_enemies! = |frame, texture, enemies, phase, viewport| {
+	draw = App.effects().render(frame)
 	for enemy in enemies {
 		if enemy.alive {
 			pos = Cave.Space.world_to_map(enemy.pos)
 			pulse = 0.9 + ping_pong(wrap_unit(phase + U64.to_f32(enemy.id) * 0.09)) * 0.08
 			radius = F32.max(enemy.radius + 3, 34 * pulse)
 			if Math.circle_rect({ center: pos, radius }, viewport) {
-				frame.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
+				draw.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
 				draw_tile_sprite!(frame, texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
 			}
 		}
@@ -1004,20 +1010,22 @@ draw_tools! = |frame, world| {
 
 draw_laser! : Draw.Frame, LaserState => {}
 draw_laser! = |frame, laser| {
+	draw = App.effects().render(frame)
 	if laser.active {
 		laser_color = Color.from_hex_rgb(0x72f7ff)
 		for segment in laser.segments {
 			start = Cave.Space.world_to_map(segment.start)
 			end = Cave.Space.world_to_map(segment.end)
-			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
-			frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-			frame.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+			draw.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
 		}
 	}
 }
 
 draw_hook! : Draw.Frame, Player, HookState => {}
 draw_hook! = |frame, player, hook| {
+	draw = App.effects().render(frame)
 	start = Cave.Space.world_to_map(player.pos)
 	match hook {
 		HookIdle => {}
@@ -1025,18 +1033,18 @@ draw_hook! = |frame, player, hook| {
 			end = Cave.Space.world_to_map(projectile.pos)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			hook_color = Color.from_hex_rgb(0xffc857)
-			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
-			frame.circle!({ center: end, radius: 7, style: Draw.filled(hook_color) })
-			frame.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
+			draw.circle!({ center: end, radius: 7, style: Draw.filled(hook_color) })
+			draw.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
 		}
 		HookLatched(latch) => {
 			end = Cave.Space.world_to_map(latch.anchor)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			anchor_color = Color.from_hex_rgb(0xf9c74f)
-			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
-			frame.line!({ start, end, stroke: Draw.stroke(cord, 3) })
-			frame.circle_gradient!({ center: end, radius: 20, color_inner: Color.with_alpha(anchor_color, 150), color_outer: Color.with_alpha(anchor_color, 0) })
-			frame.circle!({ center: end, radius: 6, style: Draw.filled(anchor_color) })
+			draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
+			draw.line!({ start, end, stroke: Draw.stroke(cord, 3) })
+			draw.circle_gradient!({ center: end, radius: 20, color_inner: Color.with_alpha(anchor_color, 150), color_outer: Color.with_alpha(anchor_color, 0) })
+			draw.circle!({ center: end, radius: 6, style: Draw.filled(anchor_color) })
 		}
 	}
 }
@@ -1055,6 +1063,7 @@ player_source = |player| {
 
 draw_player! : Draw.Frame, Draw.Texture, Player => {}
 draw_player! = |frame, characters, player| {
+	draw = App.effects().render(frame)
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
 	pos = Cave.Space.world_to_map(player.pos)
 	Sprite.from_texture(characters)
@@ -1072,20 +1081,21 @@ draw_player! = |frame, characters, player| {
 			tint,
 		)
 		.draw!(frame)
-	frame.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
+	draw.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
 }
 
 draw_hud! : Draw.Frame, Level, World, Text.Font => {}
 draw_hud! = |frame, level, world, font| {
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
-	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font })
-	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
-	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
+	draw = App.effects().render(frame)
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
+	draw.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
+	draw.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font })
+	draw.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	draw.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
+	draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 
 	if world.flash > 0 {
-		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, 80)) })
+		draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, 80)) })
 	}
 
 	match world.state {
@@ -1097,8 +1107,9 @@ draw_hud! = |frame, level, world, font| {
 
 draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, font, title, subtitle, accent| {
-	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
-	frame.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
+	draw = App.effects().render(frame)
+	draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
+	draw.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
 	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
 	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
 }

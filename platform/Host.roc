@@ -3,9 +3,10 @@
 ##
 ## This module is the single catalogue of native hosted functions and the wire
 ## values they exchange. It is deliberately not an application API: public
-## modules own application-facing types, validation, decoding, error tags, and
-## phase documentation. `Host` is exposed as `rr.Host` for direct structural
-## interface access.
+## modules own application-facing validation, naming, composition, and phase
+## documentation. A hosted declaration may carry a shared pure type or the
+## same concrete outcome tags its public adapter exposes. `Host` is exposed as
+## `rr.Host` for direct structural interface access.
 ##
 ## Declarations are grouped into interfaces which contain, where applicable:
 ##
@@ -13,8 +14,8 @@
 ## 2. Structural record aliases for hosted arguments and results.
 ## 3. Hosted effectful functions.
 ##
-## Records stay structural and unions cross as scalar codes because `roc glue`
-## generates the corresponding native layouts from these declarations.
+## Records stay structural and unions use concrete, closed rows because `roc
+## glue` generates the corresponding native layouts from these declarations.
 ##
 ## Interface glossary:
 ##
@@ -143,12 +144,6 @@ Host := [].{
 	## Opaque ARC-owned prepared text.
 	TextPrepared : Box(U64)
 
-	## One glyph's layout metrics.
-	TextGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
-
-	## Font metrics and glyph lookup data.
-	TextFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(TextGlyphMetric) }
-
 	## Text-preparation parameters.
 	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
 
@@ -161,28 +156,21 @@ Host := [].{
 	## Store-relative font path and pixel size.
 	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
 
-	## Loaded font or error.
-	TextFontResult : { font : Font.Handle, err : U8 }
-
-	## Get the default font during rendering.
+	## Snapshot the built-in default font.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_default_font! : () => Font.Handle
+	text_default_font! : () => Font
 
 	## Get the default font during startup.
 	## Legal only in `init!`.
-	text_startup_default_font! : () => TextFontResult
+	text_startup_default_font! : () => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 
 	## Load a font from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
+	text_load_font! : TextLoadFontBytes => Try(Font, [FontLoadFailed, ResourceLimit])
 
 	## Load a font from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	text_load_store_font! : TextLoadStoreFont => TextFontResult
-
-	## Get font and glyph metrics.
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_font_metrics! : Font.Handle => TextFontMetrics
+	text_load_store_font! : TextLoadStoreFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit])
 
 	## Shape and measure text for repeated drawing.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

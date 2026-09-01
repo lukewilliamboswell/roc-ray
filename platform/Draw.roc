@@ -867,7 +867,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || font_from_host!(Host.text_default_font!())
+	default_font! = || Host.text_default_font!()
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -1017,22 +1017,15 @@ Draw := [].{
 	## frame thread and rasterized when the bytes are back. To load a font from
 	## `update!`, use `font_from_bytes!` with bytes the app already holds.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
-	load_store_font! = |store, cfg| {
-		result = Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size })
-		if result.err == 1 {
-			Err(PathInvalid)
-		} else if result.err == 2 {
-			Err(NotFound)
-		} else if result.err == 3 {
-			Err(ReadFailed)
-		} else if result.err == 4 {
-			Err(FontLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			Ok(font_from_host!(result.font))
+	load_store_font! = |store, cfg|
+		match Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size }) {
+			Ok(font) => Ok(font)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(FontLoadFailed) => Err(FontLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Decode an authored, compile-time embedded font.
 	##
@@ -1040,10 +1033,12 @@ Draw := [].{
 	## Roc payload-sized buffer is created. Legal in `init!`, `update!`, and
 	## tasks; refused in `render!`.
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	font_from_bytes! = |cfg| {
-		result = Host.text_load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(result.font))
-	}
+	font_from_bytes! = |cfg|
+		match Host.text_load_font!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size }) {
+			Ok(font) => Ok(font)
+			Err(FontLoadFailed) => Err(FontLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Texture -> TextureDraw
@@ -1320,18 +1315,6 @@ Draw := [].{
 			},
 		)
 
-}
-
-## Take the metric snapshot a font value carries.
-##
-## This is the one impure step in a font's life: it asks the host for the atlas
-## metrics once, when the font loads, so that every reader afterwards -- here,
-## in an app, or in a package that never heard of this platform -- is pure.
-## Private, because minting a live `Font` is the host's business.
-font_from_host! : Font.Handle => Font
-font_from_host! = |handle| {
-	metrics = Host.text_font_metrics!(handle)
-	{ handle, metrics }
 }
 
 blend_mode_code : Draw.BlendMode -> U8

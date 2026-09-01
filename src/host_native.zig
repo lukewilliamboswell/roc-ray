@@ -55,6 +55,8 @@ const RocResult = ffi.Try(ffi.RocBox, i64);
 const InputSnapshot = ffi.InputSnapshot;
 const WindowSnapshot = ffi.WindowSnapshot;
 const RocHost = ffi.RocHost;
+const Font = abi.Font;
+const FontMetrics = abi.FontMetrics;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const Color = abi.ColorRgba;
@@ -4157,7 +4159,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     prepared_text_storage_allocations = 0;
 }
 
-const FontMetric = abi.HostText_font_metricsGlyphs;
+const FontMetric = abi.FontMetricsGlyphs;
 
 /// The headless font is deliberately small but still proportional. It exercises
 /// the pure snapshot path without pretending to have a GPU font resource.
@@ -4941,11 +4943,6 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         const scope = PhaseScope.enter(.startup);
         defer scope.leave();
 
-        // A stub font has no metrics to snapshot; the headless answer is the
-        // built-in one, and the transferred handle is still released.
-        const snapshot = hostedTextFontMetricsRaw(&roc_host, allocateTestResourceStub(&roc_host));
-        defer snapshot.glyphs.decref(&roc_host);
-
         // Preparing text with a stub font is refused rather than silently
         // prepared against the default font, and consumes no heap slot.
         const prepared = hostedTextPrepareRaw(&roc_host, .{
@@ -4977,7 +4974,8 @@ test "resource-free draw handles are inert, and leave real resources alone" {
             .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
             .size = 16,
         });
-        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_font.err);
+        try std.testing.expectEqual(abi.HostText_load_store_fontResultTag.Err, store_font.tag);
+        try std.testing.expectEqual(abi.HostText_load_store_fontErr.read_failed, store_font.payload_err());
 
         const store_shader = hostedShaderLoadStoreRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
@@ -5392,6 +5390,17 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     }).err);
     for (shaders) |shader| releaseResourceBox(&roc_host, shader);
 
+    var fonts: [32]*u64 = undefined;
+    for (&fonts) |*font| font.* = storeFont(.headless).?;
+    const refused_font = hostedTextLoadFontRaw(&roc_host, .{
+        .bytes = abi.RocListWith(u8, false).fromSlice("font", &roc_host),
+        .format = 0,
+        .size = 16,
+    });
+    try std.testing.expectEqual(abi.HostText_load_fontResultTag.Err, refused_font.tag);
+    try std.testing.expectEqual(abi.HostText_load_fontErr.resource_limit, refused_font.payload_err());
+    for (fonts) |font| releaseResourceBox(&roc_host, font);
+
     var prepared_texts: [256]*u64 = undefined;
     for (&prepared_texts) |*prepared| {
         const result = hostedTextPrepareRaw(&roc_host, .{
@@ -5449,45 +5458,68 @@ fn releaseStartupFontHandle(host: *RocHost) void {
     startup_font_handle = null;
 }
 
-fn configuredStartupFont(host: *RocHost) abi.HostText_load_font_bytesRetRecord {
+fn fontResultOk(comptime Result: type, font: Font) Result {
+    var result: Result = undefined;
+    result.tag = .Ok;
+    if (@sizeOf(usize) == 4) {
+        const payload: *Font = @ptrCast(@alignCast(&result.payload));
+        payload.* = font;
+    } else {
+        result.payload.ok = font;
+    }
+    return result;
+}
+
+fn fontResultErr(comptime Result: type, err: anytype) Result {
+    var result: Result = undefined;
+    result.tag = .Err;
+    if (@sizeOf(usize) == 4) {
+        const payload: *@TypeOf(err) = @ptrCast(@alignCast(&result.payload));
+        payload.* = err;
+    } else {
+        result.payload.err = err;
+    }
+    return result;
+}
+
+fn configuredStartupFont(host: *RocHost) abi.HostText_startup_default_fontResult {
+    const Result = abi.HostText_startup_default_fontResult;
+    const Error = abi.HostText_startup_default_fontErr;
     enforcePhase("App.Startup.default_font!", during_startup);
     const effect = EffectScope.begin("App.Startup.default_font!", startup_font_config.path.len);
     defer effect.end();
-    if (startup_font_config.path.len == 0) return .{ .font = defaultFontHandle(), .err = RESOURCE_ERR_NONE };
-    if (!isSafeStoreRelativePath(startup_font_config.path)) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH };
-    if (startup_font_config.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+    if (startup_font_config.path.len == 0) return fontResultOk(Result, completeFont(host, defaultFontHandle()));
+    if (!isSafeStoreRelativePath(startup_font_config.path)) return fontResultErr(Result, Error.asset_path_invalid);
+    if (startup_font_config.size <= 0) return fontResultErr(Result, Error.font_load_failed);
 
     if (startup_font_handle) |handle| {
         abi.increfBox(@ptrCast(handle), 1);
-        return .{ .font = handle, .err = RESOURCE_ERR_NONE };
+        return fontResultOk(Result, completeFont(host, handle));
     }
 
-    const file_type = fontFileTypeFromPath(startup_font_config.path) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+    const file_type = fontFileTypeFromPath(startup_font_config.path) orelse return fontResultErr(Result, Error.font_load_failed);
     const allocator = allocatorFromHost(host);
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), startup_font_config.path, allocator, .limited(MAX_ASSET_FILE_BYTES)) catch |err| {
-        return .{
-            .font = invalidResourceHandle(),
-            .err = switch (err) {
-                error.FileNotFound => STORE_LOAD_ERR_NOT_FOUND,
-                else => STORE_LOAD_ERR_READ,
-            },
-        };
+        return fontResultErr(Result, switch (err) {
+            error.FileNotFound => Error.asset_not_found,
+            else => Error.asset_read_failed,
+        });
     };
     defer allocator.free(bytes);
 
     const handle = if (headlessMode())
         storeFont(.headless)
     else blk: {
-        const font = raylib.loadFontFromMemory(file_type, bytes, startup_font_config.size) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
+        const font = raylib.loadFontFromMemory(file_type, bytes, startup_font_config.size) orelse return fontResultErr(Result, Error.font_load_failed);
         break :blk storeFont(.{ .native = font });
     };
-    const stored = handle orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
+    const stored = handle orelse return fontResultErr(Result, Error.resource_limit);
     startup_font_handle = stored;
     abi.increfBox(@ptrCast(stored), 1);
-    return .{ .font = stored, .err = RESOURCE_ERR_NONE };
+    return fontResultOk(Result, completeFont(host, stored));
 }
 
-fn exportedTextStartupDefaultFontRaw() callconv(.c) abi.HostText_load_font_bytesRetRecord {
+fn exportedTextStartupDefaultFontRaw() callconv(.c) abi.HostText_startup_default_fontResult {
     return configuredStartupFont(activeHost());
 }
 
@@ -5512,12 +5544,12 @@ test "configured startup font loads once and returns retained aliases" {
 
     const first = configuredStartupFont(&roc_host);
     const second = configuredStartupFont(&roc_host);
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, first.err);
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, second.err);
-    try std.testing.expectEqual(first.font, second.font);
+    try std.testing.expectEqual(abi.HostText_startup_default_fontResultTag.Ok, first.tag);
+    try std.testing.expectEqual(abi.HostText_startup_default_fontResultTag.Ok, second.tag);
+    try std.testing.expectEqual(first.payload_ok().handle, second.payload_ok().handle);
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
-    releaseResourceBox(&roc_host, first.font);
-    releaseResourceBox(&roc_host, second.font);
+    first.decref(&roc_host);
+    second.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
 }
@@ -6090,16 +6122,18 @@ test "embedded texture and font bytes are consumed exactly once" {
     const font_bytes = abi.RocListWith(u8, false).fromSlice("not decoded in headless tests", &roc_host);
     font_bytes.incref(1);
     const font_rc = byteListRefcount(font_bytes);
-    const font = hostedTextLoadFontBytesRaw(&roc_host, .{ .bytes = font_bytes, .format = 0, .size = 16 });
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, font.err);
+    const font = hostedTextLoadFontRaw(&roc_host, .{ .bytes = font_bytes, .format = 0, .size = 16 });
+    try std.testing.expectEqual(abi.HostText_load_fontResultTag.Ok, font.tag);
     try std.testing.expectEqual(@as(isize, 1), font_rc.*);
-    releaseResourceBox(&roc_host, font.font);
+    font.decref(&roc_host);
     font_bytes.decref(&roc_host);
 
     const bad_font_bytes = abi.RocListWith(u8, false).fromSlice("bad format", &roc_host);
     bad_font_bytes.incref(1);
     const bad_font_rc = byteListRefcount(bad_font_bytes);
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedTextLoadFontBytesRaw(&roc_host, .{ .bytes = bad_font_bytes, .format = 99, .size = 16 }).err);
+    const bad_font = hostedTextLoadFontRaw(&roc_host, .{ .bytes = bad_font_bytes, .format = 99, .size = 16 });
+    try std.testing.expectEqual(abi.HostText_load_fontResultTag.Err, bad_font.tag);
+    try std.testing.expectEqual(abi.HostText_load_fontErr.font_load_failed, bad_font.payload_err());
     try std.testing.expectEqual(@as(isize, 1), bad_font_rc.*);
     bad_font_bytes.decref(&roc_host);
 }
@@ -6899,56 +6933,60 @@ fn hostedDrawTriangleLinesRaw(args: abi.HostDraw_triangle_linesArgs) callconv(.c
     raylib.drawTriangleLines(args);
 }
 
-fn hostedTextLoadFontBytesRaw(host: *RocHost, args: abi.HostText_load_font_bytesArgs) callconv(.c) abi.HostText_load_font_bytesRetRecord {
+fn hostedTextLoadFontRaw(host: *RocHost, args: abi.HostText_load_fontArgs) callconv(.c) abi.HostText_load_fontResult {
+    const Result = abi.HostText_load_fontResult;
+    const Error = abi.HostText_load_fontErr;
     enforcePhase("Draw.font_from_bytes!", during_load);
     const effect = EffectScope.begin("Draw.font_from_bytes!", args.bytes.items().len);
     defer effect.end();
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
-    const file_type = fontFileType(args.format) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    if (bytes.len == 0 or args.size <= 0) return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const file_type = fontFileType(args.format) orelse return fontResultErr(Result, Error.font_load_failed);
+    if (bytes.len == 0 or args.size <= 0) return fontResultErr(Result, Error.font_load_failed);
     if (headlessMode()) {
-        const font = storeFont(.headless) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .font = font, .err = RESOURCE_ERR_NONE };
+        const font = storeFont(.headless) orelse return fontResultErr(Result, Error.resource_limit);
+        return fontResultOk(Result, completeFont(host, font));
     }
-    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeFont(.{ .native = font }) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .font = stored, .err = RESOURCE_ERR_NONE };
+    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return fontResultErr(Result, Error.font_load_failed);
+    const stored = storeFont(.{ .native = font }) orelse return fontResultErr(Result, Error.resource_limit);
+    return fontResultOk(Result, completeFont(host, stored));
 }
 
-fn exportedTextLoadFontBytesRaw(args: abi.HostText_load_font_bytesArgs) callconv(.c) abi.HostText_load_font_bytesRetRecord {
-    return hostedTextLoadFontBytesRaw(activeHost(), args);
+fn exportedTextLoadFontRaw(args: abi.HostText_load_fontArgs) callconv(.c) abi.HostText_load_fontResult {
+    return hostedTextLoadFontRaw(activeHost(), args);
 }
 
 /// `Draw.load_store_font!`: read a font file out of a store and rasterize it.
 ///
 /// The read waits -- it parks a task and blocks `init!` -- and the rasterizing
 /// happens on the frame thread with the bytes back in hand.
-fn hostedTextLoadStoreFontRaw(host: *RocHost, args: abi.HostText_load_store_fontArgs) callconv(.c) abi.HostText_load_store_fontRetRecord {
+fn hostedTextLoadStoreFontRaw(host: *RocHost, args: abi.HostText_load_store_fontArgs) callconv(.c) abi.HostText_load_store_fontResult {
+    const Result = abi.HostText_load_store_fontResult;
+    const Error = abi.HostText_load_store_fontErr;
     enforcePhase("Draw.load_store_font!", during_wait);
     const effect = EffectScope.begin("Draw.load_store_font!", args.path.asSlice().len);
     defer effect.end();
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
-    if (args.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
-    const store = store_heap.get(args.store.*) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ };
+    if (args.size <= 0) return fontResultErr(Result, Error.font_load_failed);
+    const store = store_heap.get(args.store.*) orelse return fontResultErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
     const source = readStoreAsset(allocator, store, args.path.asSlice());
     const bytes = switch (source) {
-        .path_invalid => return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH },
-        .not_found => return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_NOT_FOUND },
-        .failed => return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ },
+        .path_invalid => return fontResultErr(Result, Error.path_invalid),
+        .not_found => return fontResultErr(Result, Error.not_found),
+        .failed => return fontResultErr(Result, Error.read_failed),
         .bytes => |value| value,
     };
     defer allocator.free(bytes);
     if (headlessMode()) {
-        const font = storeFont(.headless) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
-        return .{ .font = font, .err = STORE_ERR_NONE };
+        const font = storeFont(.headless) orelse return fontResultErr(Result, Error.resource_limit);
+        return fontResultOk(Result, completeFont(host, font));
     }
-    const file_type = fontFileTypeFromPath(args.path.asSlice()) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
-    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
-    const stored = storeFont(.{ .native = font }) orelse return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
-    return .{ .font = stored, .err = STORE_ERR_NONE };
+    const file_type = fontFileTypeFromPath(args.path.asSlice()) orelse return fontResultErr(Result, Error.font_load_failed);
+    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return fontResultErr(Result, Error.font_load_failed);
+    const stored = storeFont(.{ .native = font }) orelse return fontResultErr(Result, Error.resource_limit);
+    return fontResultOk(Result, completeFont(host, stored));
 }
 
 fn fontFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
@@ -6958,7 +6996,7 @@ fn fontFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
     return null;
 }
 
-fn exportedTextLoadStoreFontRaw(args: abi.HostText_load_store_fontArgs) callconv(.c) abi.HostText_load_store_fontRetRecord {
+fn exportedTextLoadStoreFontRaw(args: abi.HostText_load_store_fontArgs) callconv(.c) abi.HostText_load_store_fontResult {
     return hostedTextLoadStoreFontRaw(activeHost(), args);
 }
 
@@ -7026,8 +7064,8 @@ test "the store-backed font and shader loaders wait rather than load" {
         .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
         .size = 16,
     });
-    try std.testing.expectEqual(STORE_ERR_NONE, font.err);
-    releaseResourceBox(&roc_host, font.font);
+    try std.testing.expectEqual(abi.HostText_load_store_fontResultTag.Ok, font.tag);
+    font.decref(&roc_host);
 
     const shader = hostedShaderLoadStoreRaw(&roc_host, .{
         .store = opened.store,
@@ -7049,14 +7087,18 @@ fn fontForHandle(handle: *u64) raylib.Font {
     };
 }
 
-fn hostedTextDefaultFontRaw() callconv(.c) *u64 {
+fn hostedTextDefaultFontRaw(host: *RocHost) callconv(.c) Font {
     enforcePhase("Draw.default_font!", during_load);
     const effect = EffectScope.begin("Draw.default_font!", 0);
     defer effect.end();
-    return defaultFontHandle();
+    return completeFont(host, defaultFontHandle());
 }
 
-fn headlessFontMetrics(host: *RocHost) abi.HostText_font_metricsRetRecord {
+fn exportedTextDefaultFontRaw() callconv(.c) Font {
+    return hostedTextDefaultFontRaw(activeHost());
+}
+
+fn headlessFontMetrics(host: *RocHost) FontMetrics {
     return .{
         .glyphs = abi.RocListWith(FontMetric, false).fromSlice(&HEADLESS_GLYPHS, host),
         .base_size = HEADLESS_FONT_BASE_SIZE,
@@ -7073,7 +7115,7 @@ fn glyphMetricLessThan(_: void, left: FontMetric, right: FontMetric) bool {
 ///
 /// The source font remains entirely owned by FontHeap. The returned list has
 /// primitive elements, so ordinary Roc ARC alone owns and drops this snapshot.
-fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.HostText_font_metricsRetRecord {
+fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) FontMetrics {
     const count = raylib.fontGlyphCount(font);
     if (count == 0) return headlessFontMetrics(host);
 
@@ -7108,20 +7150,12 @@ fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.HostText_fon
     };
 }
 
-fn hostedTextFontMetricsRaw(host: *RocHost, font: *u64) callconv(.c) abi.HostText_font_metricsRetRecord {
-    enforcePhase("Draw font metric snapshot", during_load);
-    const effect = EffectScope.begin("Draw font metric snapshot", 0);
-    defer effect.end();
-    defer releaseResourceBox(host, font);
-    if (headlessMode()) return headlessFontMetrics(host);
-    return snapshotRaylibFontMetrics(host, fontForHandle(font));
+fn completeFont(host: *RocHost, handle: *u64) Font {
+    const metrics = if (headlessMode()) headlessFontMetrics(host) else snapshotRaylibFontMetrics(host, fontForHandle(handle));
+    return .{ .handle = handle, .metrics = metrics };
 }
 
-fn exportedTextFontMetricsRaw(font: *u64) callconv(.c) abi.HostText_font_metricsRetRecord {
-    return hostedTextFontMetricsRaw(activeHost(), font);
-}
-
-test "font metric snapshots release the source Font and retain only scalar Roc data" {
+test "complete fonts retain a resource alongside an owned scalar metric snapshot" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
 
@@ -7137,8 +7171,8 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
     }
 
     const source = storeFont(.headless).?;
-    const snapshot = hostedTextFontMetricsRaw(&roc_host, source);
-    defer snapshot.glyphs.decref(&roc_host);
+    const font = completeFont(&roc_host, source);
+    const snapshot = font.metrics;
 
     try std.testing.expectEqual(@as(f32, 2), snapshot.base_size);
     try std.testing.expectEqual(RAYLIB_DEFAULT_TEXT_LINE_SPACING, snapshot.line_spacing);
@@ -7146,11 +7180,10 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
     try std.testing.expectEqual(@as(usize, HEADLESS_GLYPHS.len), snapshot.glyphs.len());
     try std.testing.expect(snapshot.glyphs.hasOneRef());
 
-    // The host call consumed the only loaded-font reference. The snapshot list
-    // itself is independent ordinary Roc ARC data.
+    try std.testing.expectEqual(@as(usize, 1), font_heap.active());
+    font.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
-    try std.testing.expectEqualSlices(FontMetric, &HEADLESS_GLYPHS, snapshot.glyphs.items());
 }
 
 fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareRetRecord {
@@ -8933,12 +8966,11 @@ comptime {
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
-        @export(&hostedTextDefaultFontRaw, .{ .name = "roc_text_default_font_raw" });
+        @export(&exportedTextDefaultFontRaw, .{ .name = "roc_text_default_font_raw" });
         @export(&exportedTextStartupDefaultFontRaw, .{ .name = "roc_text_startup_default_font_raw" });
-        @export(&exportedTextFontMetricsRaw, .{ .name = "roc_text_font_metrics_raw" });
         @export(&hostedDrawFrameSizeRaw, .{ .name = "roc_draw_frame_size" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
-        @export(&exportedTextLoadFontBytesRaw, .{ .name = "roc_text_load_font_bytes_raw" });
+        @export(&exportedTextLoadFontRaw, .{ .name = "roc_text_load_font_raw" });
         @export(&exportedTextLoadStoreFontRaw, .{ .name = "roc_text_load_store_font_raw" });
         @export(&hostedTextureLoadRenderTargetRaw, .{ .name = "roc_texture_load_render_target_raw" });
         @export(&exportedShaderLoadSourceRaw, .{ .name = "roc_shader_load_source_raw" });

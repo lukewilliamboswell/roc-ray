@@ -47,7 +47,7 @@
 ## > `Udp`: bound sockets and bounded datagram send/receive batches.
 ## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
-## Opaque `Resource.Handle(resource)` values erase to `Box(U64)` resource
+## Opaque `Handle(resource)` values erase to `Box(U64)` resource
 ## tokens resolved and lifetime-checked by the host, never exposing native
 ## addresses.
 ## Native pointers, backend objects, public unions, and application policy do
@@ -56,7 +56,7 @@ import rrt.Camera
 import rrt.Color
 import rrt.Font
 import rrt.Math
-import rrt.Resource
+import rrt.Handle
 import rrt.Texture
 
 Host := [].{
@@ -149,13 +149,15 @@ Host := [].{
 	texture_load_render_target! : TextureRenderTargetSize => Try(TextureRenderTarget, TextureRenderTargetError)
 
 	## Text resource interface
+	FontResource : [FontResource]
+
 	PreparedTextResource := {}
 
 	## Opaque ARC-owned prepared text.
-	TextPrepared : Resource.Handle(PreparedTextResource)
+	TextPrepared : Handle(PreparedTextResource)
 
 	## Text-preparation parameters.
-	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
+	TextPrepare : { text : Str, size : F32, spacing : F32, font : Handle(FontResource) }
 
 	## Failures while preparing text.
 	TextPrepareError : [ResourceLimit, InvalidResource]
@@ -199,7 +201,7 @@ Host := [].{
 	ShaderResource := {}
 
 	## Opaque ARC-owned shader.
-	Shader : Resource.Handle(ShaderResource)
+	Shader : Handle(ShaderResource)
 
 	## Located shader uniform.
 	ShaderUniform : { shader : Shader, location : I32 }
@@ -277,7 +279,7 @@ Host := [].{
 	StoreResource := {}
 
 	## Opaque ARC-owned directory store; copies keep it open.
-	Store : Resource.Handle(StoreResource)
+	Store : Handle(StoreResource)
 
 	## Parameters for opening a confined asset store.
 	StoreOpen : {
@@ -371,10 +373,10 @@ Host := [].{
 	MusicResource := {}
 
 	## Opaque ARC-owned sound.
-	AudioSound : Resource.Handle(SoundResource)
+	AudioSound : Handle(SoundResource)
 
 	## Opaque ARC-owned music stream.
-	AudioMusic : Resource.Handle(MusicResource)
+	AudioMusic : Handle(MusicResource)
 
 	## Failures while generating a sound.
 	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
@@ -643,7 +645,7 @@ Host := [].{
 	UdpSocketResource := {}
 
 	## Opaque ARC-owned bound socket.
-	UdpHandle : Resource.Handle(UdpSocketResource)
+	UdpHandle : Handle(UdpSocketResource)
 
 	## Bind a dotted-quad IPv4 literal; port `0` requests an assigned port.
 	UdpBindArgs : {
@@ -911,10 +913,10 @@ Host := [].{
 	SqliteStmtResource := {}
 
 	## Opaque ARC-owned database connection.
-	SqliteDb : Resource.Handle(SqliteDbResource)
+	SqliteDb : Handle(SqliteDbResource)
 
 	## Opaque statement that retains its connection.
-	SqliteStmt : Resource.Handle(SqliteStmtResource)
+	SqliteStmt : Handle(SqliteStmtResource)
 
 	## One row-major query cell.
 	##
@@ -1043,7 +1045,7 @@ Host := [].{
 	DrawFps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 
 	## Text-drawing parameters.
-	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle }
+	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Handle(FontResource) }
 
 	## Prepared-text drawing parameters.
 	DrawPreparedTextDraw : { prepared : TextPrepared, pos : Math.Vec2, color : Color.Rgba }

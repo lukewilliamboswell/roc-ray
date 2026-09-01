@@ -38,7 +38,7 @@
 ## Release textures the app no longer needs before loading more.
 import Color
 import Host
-import rrt.Resource
+import rrt.Handle
 import rrt.Texture as RrtTexture
 
 Assets := [].{
@@ -118,7 +118,7 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(Resource.stub)
+		stub = Store.(Handle.stub)
 
 		## Internal bridge for platform operations that also use an asset store.
 		for_host : Store -> Host.Store

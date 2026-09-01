@@ -37,7 +37,7 @@ import Camera
 import Color
 import Host
 import rrt.Font
-import rrt.Resource
+import rrt.Handle
 import Math
 
 TextureDrawConfig : {
@@ -363,10 +363,17 @@ Draw := [].{
 	}
 
 	## Scalar metrics for one glyph, shared with platform-independent packages.
-	GlyphMetrics : Font.GlyphMetrics
+	GlyphMetrics : {
+		codepoint : U32,
+		advance_x : F32,
+		offset_x : F32,
+		offset_y : F32,
+		width : F32,
+		height : F32,
+	}
 
 	## Text measurement result.
-	TextSize : Font.Size
+	TextSize : { width : F32, height : F32 }
 
 	## Fully configured text draw at a resolved top-left origin.
 	Text : {
@@ -681,7 +688,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Resource.stub)
+		stub = Shader.(Handle.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default

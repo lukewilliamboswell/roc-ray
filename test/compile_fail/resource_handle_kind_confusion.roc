@@ -9,6 +9,7 @@ app [Model, program] {
 import rr.App
 import rr.Draw
 import rrt.Font
+import rrt.Handle
 import rrt.Texture
 
 Model : {}
@@ -24,7 +25,7 @@ init! = App.init(
 	},
 )
 
-use_font_handle : Font.Handle -> {}
+use_font_handle : Handle([FontResource]) -> {}
 use_font_handle = |_handle| {}
 
 Msg : []

@@ -24,7 +24,7 @@ import Draw
 import Host
 import Math
 import rrt.Font as RrtFont
-import rrt.Resource
+import rrt.Handle
 
 Text := [].{
 
@@ -45,7 +45,7 @@ Text := [].{
 	## A measured width and height, in the same logical units as every drawing
 	## call. This is `Draw.TextSize` and the types package's `Font.Size` under a
 	## third name; they are one type.
-	Size : RrtFont.Size
+	Size : { width : F32, height : F32 }
 
 	## Resource-free synthetic monospace font for pure layout tests.
 	font_stub : Font
@@ -171,7 +171,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: Resource.stub,
+				resource: Handle.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)

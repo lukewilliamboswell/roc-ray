@@ -57,7 +57,7 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Resource.Handle"),
+        ("cannot use opaque nominal type", "instance of Handle"),
     ),
     (
         ROOT / "test" / "compile_fail" / "transition_removed.roc",
@@ -69,11 +69,11 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "font_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Resource.Handle"),
+        ("cannot use opaque nominal type", "instance of Handle"),
     ),
     (
         ROOT / "test" / "compile_fail" / "resource_handle_kind_confusion.roc",
-        ("type mismatch", "Texture.Handle", "Font.Handle"),
+        ("type mismatch", "Texture.TextureHandle", "FontResource"),
     ),
 )
 

@@ -37,7 +37,7 @@
 ## `Music.is_playing!`, `Music.length!`, and `Music.time_played!` -- are legal
 ## in any callback, `render!` included.
 import Host
-import rrt.Resource
+import rrt.Handle
 
 Audio := [].{
 
@@ -95,7 +95,7 @@ Audio := [].{
 		## Put it in a model to reach the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
-		stub = { resource: Resource.stub }
+		stub = { resource: Handle.stub }
 	}
 
 	## A sound together with the settings it should be played at.
@@ -218,7 +218,7 @@ Audio := [].{
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music
-		stub = { resource: Resource.stub }
+		stub = { resource: Handle.stub }
 	}
 
 	## Procedural waveform used by `gen_sound!`.

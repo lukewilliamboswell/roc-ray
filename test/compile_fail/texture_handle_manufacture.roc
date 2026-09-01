@@ -9,7 +9,7 @@ app [Model, program] {
 # handle from a raw integer.
 import rr.App
 import rr.Draw
-import rrt.Resource
+import rrt.Handle as ResourceHandle
 import rrt.Texture
 
 Model : {
@@ -22,8 +22,7 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle : Texture.Handle
-		handle = Resource.Handle.(Box.box(0))
+		handle = ResourceHandle.(Box.box(0))
 		Ok({ texture: { handle, width: 8, height: 8 } })
 	},
 )

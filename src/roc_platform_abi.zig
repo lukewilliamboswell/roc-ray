@@ -8832,7 +8832,7 @@ comptime {
 }
 
 /// Arguments for Host.store_open!
-/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Resource.Handle(Host.StoreResource), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Handle(Host.StoreResource), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Refcounted fields are owned by the hosted function.
 pub const HostStore_openArgs = if (@sizeOf(usize) == 4) extern struct {
     asset_set: RocStr,
@@ -8896,7 +8896,7 @@ comptime {
 }
 
 /// Arguments for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Resource.Handle(Host.StoreResource) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Roc signature: { path : Str, store : Handle(Host.StoreResource) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
@@ -9210,7 +9210,7 @@ pub const HostTexture_set_wrapArgs = extern struct {
 };
 
 /// Arguments for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
+/// Roc signature: { freq : F32, ms : I32 } => Try(Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_gen_toneArgs = if (@sizeOf(usize) == 4) extern struct {
     freq: f32,
@@ -9258,7 +9258,7 @@ comptime {
 }
 
 /// Arguments for Host.audio_gen_sound!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_gen_soundArgs = if (@sizeOf(usize) == 4) extern struct {
     attack_ms: i32,
@@ -9320,56 +9320,56 @@ comptime {
 }
 
 /// Arguments for Host.audio_load_sound!
-/// Roc signature: Str => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundLoadFailed])
+/// Roc signature: Str => Try(Handle(Host.SoundResource), [ResourceLimit, SoundLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_load_soundArgs = extern struct {
     arg0: RocStr,
 };
 
 /// Arguments for Host.audio_load_music!
-/// Roc signature: Str => Try(Resource.Handle(Host.MusicResource), [MusicLoadFailed, ResourceLimit])
+/// Roc signature: Str => Try(Handle(Host.MusicResource), [MusicLoadFailed, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_load_musicArgs = extern struct {
     arg0: RocStr,
 };
 
 /// Arguments for Host.audio_play_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_play_soundArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_stop_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_stop_soundArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_pause_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_pause_soundArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_resume_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_resume_soundArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_is_sound_playing!
-/// Roc signature: Resource.Handle(Host.SoundResource) => Bool
+/// Roc signature: Handle(Host.SoundResource) => Bool
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_is_sound_playingArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_set_sound_volume!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_sound_volumeArgs = extern struct {
     arg0: *u64,
@@ -9377,7 +9377,7 @@ pub const HostAudio_set_sound_volumeArgs = extern struct {
 };
 
 /// Arguments for Host.audio_set_sound_pitch!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_sound_pitchArgs = extern struct {
     arg0: *u64,
@@ -9385,7 +9385,7 @@ pub const HostAudio_set_sound_pitchArgs = extern struct {
 };
 
 /// Arguments for Host.audio_set_sound_pan!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_sound_panArgs = extern struct {
     arg0: *u64,
@@ -9393,35 +9393,35 @@ pub const HostAudio_set_sound_panArgs = extern struct {
 };
 
 /// Arguments for Host.audio_play_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_play_musicArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_stop_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_stop_musicArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_pause_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_pause_musicArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_resume_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_resume_musicArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_set_music_volume!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_music_volumeArgs = extern struct {
     arg0: *u64,
@@ -9429,7 +9429,7 @@ pub const HostAudio_set_music_volumeArgs = extern struct {
 };
 
 /// Arguments for Host.audio_set_music_pitch!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_music_pitchArgs = extern struct {
     arg0: *u64,
@@ -9437,7 +9437,7 @@ pub const HostAudio_set_music_pitchArgs = extern struct {
 };
 
 /// Arguments for Host.audio_set_music_pan!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_music_panArgs = extern struct {
     arg0: *u64,
@@ -9445,7 +9445,7 @@ pub const HostAudio_set_music_panArgs = extern struct {
 };
 
 /// Arguments for Host.audio_set_music_looping!
-/// Roc signature: Resource.Handle(Host.MusicResource), Bool => {}
+/// Roc signature: Handle(Host.MusicResource), Bool => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_music_loopingArgs = extern struct {
     arg0: *u64,
@@ -9453,14 +9453,14 @@ pub const HostAudio_set_music_loopingArgs = extern struct {
 };
 
 /// Arguments for Host.audio_is_music_playing!
-/// Roc signature: Resource.Handle(Host.MusicResource) => Bool
+/// Roc signature: Handle(Host.MusicResource) => Bool
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_is_music_playingArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_seek_music!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_seek_musicArgs = extern struct {
     arg0: *u64,
@@ -9468,14 +9468,14 @@ pub const HostAudio_seek_musicArgs = extern struct {
 };
 
 /// Arguments for Host.audio_music_length!
-/// Roc signature: Resource.Handle(Host.MusicResource) => F32
+/// Roc signature: Handle(Host.MusicResource) => F32
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_music_lengthArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.audio_music_time_played!
-/// Roc signature: Resource.Handle(Host.MusicResource) => F32
+/// Roc signature: Handle(Host.MusicResource) => F32
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_music_time_playedArgs = extern struct {
     arg0: *u64,
@@ -10105,7 +10105,7 @@ comptime {
 }
 
 /// Arguments for Host.text_load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Resource.Handle(Host.StoreResource) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
+/// Roc signature: { path : Str, size : I32, store : Handle(Host.StoreResource) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostText_load_store_fontArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
@@ -10155,7 +10155,7 @@ comptime {
 }
 
 /// Arguments for Host.text_prepare!
-/// Roc signature: { font : Resource.Handle(Font.FontResource), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle(Host.PreparedTextResource), width : F32 }, [InvalidResource, ResourceLimit])
+/// Roc signature: { font : Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Handle(Host.PreparedTextResource), width : F32 }, [InvalidResource, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
 pub const HostText_prepareArgs = if (@sizeOf(usize) == 4) extern struct {
     font: *u64,
@@ -10207,7 +10207,7 @@ comptime {
 }
 
 /// Arguments for Host.draw_draw_prepared_text!
-/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle(Host.PreparedTextResource) } => {}
+/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Handle(Host.PreparedTextResource) } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostDraw_draw_prepared_textArgs = if (@sizeOf(usize) == 4) extern struct {
     prepared: *u64,
@@ -10683,7 +10683,7 @@ comptime {
 }
 
 /// Arguments for Host.draw_text!
-/// Roc signature: { color : Color.Rgba, font : Resource.Handle(Font.FontResource), pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : Handle([FontResource]), pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostDraw_textArgs = if (@sizeOf(usize) == 4) extern struct {
     font: *u64,
@@ -11650,7 +11650,7 @@ comptime {
 }
 
 /// Arguments for Host.draw_begin_shader!
-/// Roc signature: Resource.Handle(Host.ShaderResource) => U8
+/// Roc signature: Handle(Host.ShaderResource) => U8
 /// Refcounted fields are owned by the hosted function.
 pub const HostDraw_begin_shaderArgs = extern struct {
     arg0: *u64,
@@ -11705,7 +11705,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_load_source!
-/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Resource.Handle(Host.ShaderResource), [ResourceLimit, ShaderLoadFailed])
+/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Handle(Host.ShaderResource), [ResourceLimit, ShaderLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_load_sourceArgs = if (@sizeOf(usize) == 4) extern struct {
     fragment_source: RocStr,
@@ -11753,7 +11753,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_load_store!
-/// Roc signature: { fragment_path : Str, store : Resource.Handle(Host.StoreResource), vertex_path : Str } => Try(Resource.Handle(Host.ShaderResource), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
+/// Roc signature: { fragment_path : Str, store : Handle(Host.StoreResource), vertex_path : Str } => Try(Handle(Host.ShaderResource), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
     fragment_path: RocStr,
@@ -11807,7 +11807,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_location!
-/// Roc signature: { name : Str, shader : Resource.Handle(Host.ShaderResource) } => I32
+/// Roc signature: { name : Str, shader : Handle(Host.ShaderResource) } => I32
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_locationArgs = if (@sizeOf(usize) == 4) extern struct {
     name: RocStr,
@@ -11855,7 +11855,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_float!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : F32 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_floatArgs = if (@sizeOf(usize) == 4) extern struct {
     uniform: __AnonStruct_5977b9984ceff2ca,
@@ -11899,7 +11899,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_int!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : I32 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : I32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_intArgs = if (@sizeOf(usize) == 4) extern struct {
     uniform: __AnonStruct_5977b9984ceff2ca,
@@ -11943,7 +11943,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_texture!
-/// Roc signature: { texture : Texture, uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) } } => {}
+/// Roc signature: { texture : Texture, uniform : { location : I32, shader : Handle(Host.ShaderResource) } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_textureArgs = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
@@ -11991,7 +11991,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_vec2!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : Math.Vec2 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : Math.Vec2 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_vec2Args = if (@sizeOf(usize) == 4) extern struct {
     uniform: __AnonStruct_5977b9984ceff2ca,
@@ -12039,7 +12039,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_vec3!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : { x : F32, y : F32, z : F32 } } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : { x : F32, y : F32, z : F32 } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_vec3Args = if (@sizeOf(usize) == 4) extern struct {
     uniform: __AnonStruct_5977b9984ceff2ca,
@@ -12087,7 +12087,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_set_vec4!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : { w : F32, x : F32, y : F32, z : F32 } } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : { w : F32, x : F32, y : F32, z : F32 } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_set_vec4Args = if (@sizeOf(usize) == 4) extern struct {
     uniform: __AnonStruct_5977b9984ceff2ca,
@@ -12225,7 +12225,7 @@ pub const HostStdio_write_bytesArgs = extern struct {
 };
 
 /// Arguments for Host.udp_bind!
-/// Roc signature: { ip : Str, port : U16 } => { err : U8, handle : Resource.Handle(Host.UdpSocketResource), ip : U32, port : U16 }
+/// Roc signature: { ip : Str, port : U16 } => { err : U8, handle : Handle(Host.UdpSocketResource), ip : U32, port : U16 }
 /// Refcounted fields are owned by the hosted function.
 pub const HostUdp_bindArgs = if (@sizeOf(usize) == 4) extern struct {
     ip: RocStr,
@@ -12269,7 +12269,7 @@ comptime {
 }
 
 /// Arguments for Host.udp_send!
-/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle(Host.UdpSocketResource) } => U8
+/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Handle(Host.UdpSocketResource) } => U8
 /// Refcounted fields are owned by the hosted function.
 pub const HostUdp_sendArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
@@ -12325,7 +12325,7 @@ comptime {
 }
 
 /// Arguments for Host.udp_receive!
-/// Roc signature: { max_datagrams : U32, socket : Resource.Handle(Host.UdpSocketResource), timeout_ms : U64 } => { err : U8, payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }
+/// Roc signature: { max_datagrams : U32, socket : Handle(Host.UdpSocketResource), timeout_ms : U64 } => { err : U8, payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }
 /// Refcounted fields are owned by the hosted function.
 pub const HostUdp_receiveArgs = if (@sizeOf(usize) == 4) extern struct {
     timeout_ms: u64,
@@ -12371,7 +12371,7 @@ comptime {
 }
 
 /// Arguments for Host.sqlite_open!
-/// Roc signature: Str, U8, U64, U64 => { db : Resource.Handle(Host.SqliteDbResource), err : I64, message : Str }
+/// Roc signature: Str, U8, U64, U64 => { db : Handle(Host.SqliteDbResource), err : I64, message : Str }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_openArgs = extern struct {
     arg0: RocStr,
@@ -12381,14 +12381,14 @@ pub const HostSqlite_openArgs = extern struct {
 };
 
 /// Arguments for Host.sqlite_close!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource) => { err : I64, message : Str }
+/// Roc signature: Handle(Host.SqliteDbResource) => { err : I64, message : Str }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_closeArgs = extern struct {
     arg0: *u64,
 };
 
 /// Arguments for Host.sqlite_prepare!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str => { err : I64, message : Str, stmt : Resource.Handle(Host.SqliteStmtResource) }
+/// Roc signature: Handle(Host.SqliteDbResource), Str => { err : I64, message : Str, stmt : Handle(Host.SqliteStmtResource) }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_prepareArgs = extern struct {
     arg0: *u64,
@@ -12396,7 +12396,7 @@ pub const HostSqlite_prepareArgs = extern struct {
 };
 
 /// Arguments for Host.sqlite_run_stmt!
-/// Roc signature: Resource.Handle(Host.SqliteStmtResource), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Roc signature: Handle(Host.SqliteStmtResource), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_run_stmtArgs = extern struct {
     arg0: *u64,
@@ -12404,7 +12404,7 @@ pub const HostSqlite_run_stmtArgs = extern struct {
 };
 
 /// Arguments for Host.sqlite_run_once!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Roc signature: Handle(Host.SqliteDbResource), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_run_onceArgs = extern struct {
     arg0: *u64,
@@ -12413,7 +12413,7 @@ pub const HostSqlite_run_onceArgs = extern struct {
 };
 
 /// Arguments for Host.sqlite_exec_script!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str => { err : I64, message : Str }
+/// Roc signature: Handle(Host.SqliteDbResource), Str => { err : I64, message : Str }
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_exec_scriptArgs = extern struct {
     arg0: *u64,
@@ -14152,7 +14152,7 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // Refcounted arguments are owned by the hosted function.
 
 /// Hosted symbol for Host.store_open!
-/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Resource.Handle(Host.StoreResource), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Handle(Host.StoreResource), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14160,7 +14160,7 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_store_open_raw(arg0: HostStore_openArgs) callconv(.c) HostStore_openResult;
 
 /// Hosted symbol for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Resource.Handle(Host.StoreResource) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Roc signature: { path : Str, store : Handle(Host.StoreResource) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14214,17 +14214,17 @@ pub extern fn roc_texture_set_filter_raw(arg0: Texture, arg1: u8) callconv(.c) v
 pub extern fn roc_texture_set_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
+/// Roc signature: { freq : F32, ms : I32 } => Try(Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) HostAudio_gen_toneResult;
 
 /// Hosted symbol for Host.audio_gen_sound!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Handle(Host.SoundResource), [ResourceLimit, SoundGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) HostAudio_gen_toneResult;
 
 /// Hosted symbol for Host.audio_load_sound!
-/// Roc signature: Str => Try(Resource.Handle(Host.SoundResource), [ResourceLimit, SoundLoadFailed])
+/// Roc signature: Str => Try(Handle(Host.SoundResource), [ResourceLimit, SoundLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14232,7 +14232,7 @@ pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c
 pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) HostAudio_load_soundResult;
 
 /// Hosted symbol for Host.audio_load_music!
-/// Roc signature: Str => Try(Resource.Handle(Host.MusicResource), [MusicLoadFailed, ResourceLimit])
+/// Roc signature: Str => Try(Handle(Host.MusicResource), [MusicLoadFailed, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14240,140 +14240,140 @@ pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) HostAudio_load
 pub extern fn roc_audio_load_music_raw(arg0: RocStr) callconv(.c) HostAudio_load_musicResult;
 
 /// Hosted symbol for Host.audio_play_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_play_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_stop_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_stop_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_pause_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_pause_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_resume_sound!
-/// Roc signature: Resource.Handle(Host.SoundResource) => {}
+/// Roc signature: Handle(Host.SoundResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_resume_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_is_sound_playing!
-/// Roc signature: Resource.Handle(Host.SoundResource) => Bool
+/// Roc signature: Handle(Host.SoundResource) => Bool
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_is_playing_raw(arg0: *u64) callconv(.c) bool;
 
 /// Hosted symbol for Host.audio_set_sound_volume!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_sound_pitch!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_sound_pan!
-/// Roc signature: Resource.Handle(Host.SoundResource), F32 => {}
+/// Roc signature: Handle(Host.SoundResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_play_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_play_music_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_stop_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_stop_music_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_pause_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_pause_music_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_resume_music!
-/// Roc signature: Resource.Handle(Host.MusicResource) => {}
+/// Roc signature: Handle(Host.MusicResource) => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_resume_music_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_music_volume!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_music_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_music_pitch!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_music_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_music_pan!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_music_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_set_music_looping!
-/// Roc signature: Resource.Handle(Host.MusicResource), Bool => {}
+/// Roc signature: Handle(Host.MusicResource), Bool => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_set_music_looping_raw(arg0: *u64, arg1: bool) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_is_music_playing!
-/// Roc signature: Resource.Handle(Host.MusicResource) => Bool
+/// Roc signature: Handle(Host.MusicResource) => Bool
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_is_music_playing_raw(arg0: *u64) callconv(.c) bool;
 
 /// Hosted symbol for Host.audio_seek_music!
-/// Roc signature: Resource.Handle(Host.MusicResource), F32 => {}
+/// Roc signature: Handle(Host.MusicResource), F32 => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_seek_music_raw(arg0: *u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_music_length!
-/// Roc signature: Resource.Handle(Host.MusicResource) => F32
+/// Roc signature: Handle(Host.MusicResource) => F32
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_music_length_raw(arg0: *u64) callconv(.c) f32;
 
 /// Hosted symbol for Host.audio_music_time_played!
-/// Roc signature: Resource.Handle(Host.MusicResource) => F32
+/// Roc signature: Handle(Host.MusicResource) => F32
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14462,7 +14462,7 @@ pub extern fn roc_draw_line_raw(arg0: HostDraw_lineArgs) callconv(.c) void;
 pub extern fn roc_text_load_font_raw(arg0: HostText_load_fontArgs) callconv(.c) HostText_load_fontResult;
 
 /// Hosted symbol for Host.text_load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Resource.Handle(Host.StoreResource) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
+/// Roc signature: { path : Str, size : I32, store : Handle(Host.StoreResource) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14470,7 +14470,7 @@ pub extern fn roc_text_load_font_raw(arg0: HostText_load_fontArgs) callconv(.c) 
 pub extern fn roc_text_load_store_font_raw(arg0: HostText_load_store_fontArgs) callconv(.c) HostText_load_store_fontResult;
 
 /// Hosted symbol for Host.text_prepare!
-/// Roc signature: { font : Resource.Handle(Font.FontResource), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle(Host.PreparedTextResource), width : F32 }, [InvalidResource, ResourceLimit])
+/// Roc signature: { font : Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Handle(Host.PreparedTextResource), width : F32 }, [InvalidResource, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14478,7 +14478,7 @@ pub extern fn roc_text_load_store_font_raw(arg0: HostText_load_store_fontArgs) c
 pub extern fn roc_text_prepare_raw(arg0: HostText_prepareArgs) callconv(.c) HostText_prepareResult;
 
 /// Hosted symbol for Host.draw_draw_prepared_text!
-/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle(Host.PreparedTextResource) } => {}
+/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Handle(Host.PreparedTextResource) } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14523,7 +14523,7 @@ pub extern fn roc_draw_rounded_rectangle_lines_raw(arg0: HostDraw_rounded_rectan
 pub extern fn roc_draw_rounded_rectangle_raw(arg0: HostDraw_rounded_rectangleArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.draw_text!
-/// Roc signature: { color : Color.Rgba, font : Resource.Handle(Font.FontResource), pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : Handle([FontResource]), pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14773,7 +14773,7 @@ pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) u8;
 pub extern fn roc_draw_begin_render_texture_raw(arg0: Texture) callconv(.c) u8;
 
 /// Hosted symbol for Host.draw_begin_shader!
-/// Roc signature: Resource.Handle(Host.ShaderResource) => U8
+/// Roc signature: Handle(Host.ShaderResource) => U8
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14801,7 +14801,7 @@ pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
 pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) HostTexture_load_render_targetResult;
 
 /// Hosted symbol for Host.shader_load_source!
-/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Resource.Handle(Host.ShaderResource), [ResourceLimit, ShaderLoadFailed])
+/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Handle(Host.ShaderResource), [ResourceLimit, ShaderLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14809,7 +14809,7 @@ pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_t
 pub extern fn roc_shader_load_source_raw(arg0: HostShader_load_sourceArgs) callconv(.c) HostShader_load_sourceResult;
 
 /// Hosted symbol for Host.shader_load_store!
-/// Roc signature: { fragment_path : Str, store : Resource.Handle(Host.StoreResource), vertex_path : Str } => Try(Resource.Handle(Host.ShaderResource), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
+/// Roc signature: { fragment_path : Str, store : Handle(Host.StoreResource), vertex_path : Str } => Try(Handle(Host.ShaderResource), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14817,49 +14817,49 @@ pub extern fn roc_shader_load_source_raw(arg0: HostShader_load_sourceArgs) callc
 pub extern fn roc_shader_load_store_raw(arg0: HostShader_load_storeArgs) callconv(.c) HostShader_load_storeResult;
 
 /// Hosted symbol for Host.shader_location!
-/// Roc signature: { name : Str, shader : Resource.Handle(Host.ShaderResource) } => I32
+/// Roc signature: { name : Str, shader : Handle(Host.ShaderResource) } => I32
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_location_raw(arg0: HostShader_locationArgs) callconv(.c) i32;
 
 /// Hosted symbol for Host.shader_set_float!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : F32 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : F32 } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_float_raw(arg0: HostShader_set_floatArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.shader_set_int!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : I32 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : I32 } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_int_raw(arg0: HostShader_set_intArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.shader_set_texture!
-/// Roc signature: { texture : Texture, uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) } } => {}
+/// Roc signature: { texture : Texture, uniform : { location : I32, shader : Handle(Host.ShaderResource) } } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_texture_raw(arg0: HostShader_set_textureArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.shader_set_vec2!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : Math.Vec2 } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : Math.Vec2 } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_vec2_raw(arg0: HostShader_set_vec2Args) callconv(.c) void;
 
 /// Hosted symbol for Host.shader_set_vec3!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : { x : F32, y : F32, z : F32 } } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : { x : F32, y : F32, z : F32 } } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_vec3_raw(arg0: HostShader_set_vec3Args) callconv(.c) void;
 
 /// Hosted symbol for Host.shader_set_vec4!
-/// Roc signature: { uniform : { location : I32, shader : Resource.Handle(Host.ShaderResource) }, value : { w : F32, x : F32, y : F32, z : F32 } } => {}
+/// Roc signature: { uniform : { location : I32, shader : Handle(Host.ShaderResource) }, value : { w : F32, x : F32, y : F32, z : F32 } } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14899,7 +14899,7 @@ pub extern fn roc_stdio_write_line(arg0: u8, arg1: RocStr) callconv(.c) u8;
 pub extern fn roc_stdio_write_bytes(arg0: u8, arg1: RocListWith(u8, false)) callconv(.c) u8;
 
 /// Hosted symbol for Host.udp_bind!
-/// Roc signature: { ip : Str, port : U16 } => { err : U8, handle : Resource.Handle(Host.UdpSocketResource), ip : U32, port : U16 }
+/// Roc signature: { ip : Str, port : U16 } => { err : U8, handle : Handle(Host.UdpSocketResource), ip : U32, port : U16 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14907,14 +14907,14 @@ pub extern fn roc_stdio_write_bytes(arg0: u8, arg1: RocListWith(u8, false)) call
 pub extern fn roc_udp_bind(arg0: HostUdp_bindArgs) callconv(.c) __AnonStruct_c53c193ad2a36104;
 
 /// Hosted symbol for Host.udp_send!
-/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle(Host.UdpSocketResource) } => U8
+/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Handle(Host.UdpSocketResource) } => U8
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_udp_send(arg0: HostUdp_sendArgs) callconv(.c) u8;
 
 /// Hosted symbol for Host.udp_receive!
-/// Roc signature: { max_datagrams : U32, socket : Resource.Handle(Host.UdpSocketResource), timeout_ms : U64 } => { err : U8, payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }
+/// Roc signature: { max_datagrams : U32, socket : Handle(Host.UdpSocketResource), timeout_ms : U64 } => { err : U8, payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14922,7 +14922,7 @@ pub extern fn roc_udp_send(arg0: HostUdp_sendArgs) callconv(.c) u8;
 pub extern fn roc_udp_receive(arg0: HostUdp_receiveArgs) callconv(.c) __AnonStruct_c44117854a91f9a7;
 
 /// Hosted symbol for Host.sqlite_open!
-/// Roc signature: Str, U8, U64, U64 => { db : Resource.Handle(Host.SqliteDbResource), err : I64, message : Str }
+/// Roc signature: Str, U8, U64, U64 => { db : Handle(Host.SqliteDbResource), err : I64, message : Str }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -14930,7 +14930,7 @@ pub extern fn roc_udp_receive(arg0: HostUdp_receiveArgs) callconv(.c) __AnonStru
 pub extern fn roc_sqlite_open(arg0: RocStr, arg1: u8, arg2: u64, arg3: u64) callconv(.c) __AnonStruct_d1ff90659ed42132;
 
 /// Hosted symbol for Host.sqlite_close!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource) => { err : I64, message : Str }
+/// Roc signature: Handle(Host.SqliteDbResource) => { err : I64, message : Str }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14938,7 +14938,7 @@ pub extern fn roc_sqlite_open(arg0: RocStr, arg1: u8, arg2: u64, arg3: u64) call
 pub extern fn roc_sqlite_close(arg0: *u64) callconv(.c) __AnonStruct_e7ff50a9dfab1a8d;
 
 /// Hosted symbol for Host.sqlite_prepare!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str => { err : I64, message : Str, stmt : Resource.Handle(Host.SqliteStmtResource) }
+/// Roc signature: Handle(Host.SqliteDbResource), Str => { err : I64, message : Str, stmt : Handle(Host.SqliteStmtResource) }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14947,7 +14947,7 @@ pub extern fn roc_sqlite_close(arg0: *u64) callconv(.c) __AnonStruct_e7ff50a9dfa
 pub extern fn roc_sqlite_prepare(arg0: *u64, arg1: RocStr) callconv(.c) __AnonStruct_cff0e6766f0cb5bf;
 
 /// Hosted symbol for Host.sqlite_run_stmt!
-/// Roc signature: Resource.Handle(Host.SqliteStmtResource), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Roc signature: Handle(Host.SqliteStmtResource), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14956,7 +14956,7 @@ pub extern fn roc_sqlite_prepare(arg0: *u64, arg1: RocStr) callconv(.c) __AnonSt
 pub extern fn roc_sqlite_run_stmt(arg0: *u64, arg1: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) __AnonStruct_4bc5d3695423e2f1;
 
 /// Hosted symbol for Host.sqlite_run_once!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Roc signature: Handle(Host.SqliteDbResource), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
@@ -14966,7 +14966,7 @@ pub extern fn roc_sqlite_run_stmt(arg0: *u64, arg1: RocList(__AnonStruct_90c9f98
 pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) __AnonStruct_4bc5d3695423e2f1;
 
 /// Hosted symbol for Host.sqlite_exec_script!
-/// Roc signature: Resource.Handle(Host.SqliteDbResource), Str => { err : I64, message : Str }
+/// Roc signature: Handle(Host.SqliteDbResource), Str => { err : I64, message : Str }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);

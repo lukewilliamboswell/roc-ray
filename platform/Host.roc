@@ -222,16 +222,19 @@ Host := [].{
 	## Texture uniform value.
 	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
 
-	## Loaded shader or error.
-	ShaderResult : { shader : Shader, err : U8 }
+	## Failures while compiling shader source strings.
+	ShaderLoadSourceError : [ResourceLimit, ShaderLoadFailed]
+
+	## Failures while reading and compiling shaders from an asset store.
+	ShaderLoadStoreError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed]
 
 	## Load a shader from source strings.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_load_source! : ShaderLoadSource => ShaderResult
+	shader_load_source! : ShaderLoadSource => Try(Shader, ShaderLoadSourceError)
 
 	## Load a shader from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	shader_load_store! : ShaderLoadStore => ShaderResult
+	shader_load_store! : ShaderLoadStore => Try(Shader, ShaderLoadStoreError)
 
 	## Get a shader uniform location.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

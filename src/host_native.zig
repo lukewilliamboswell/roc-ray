@@ -105,11 +105,6 @@ const STORE_ERR_CONTENT_HASH_MISMATCH: u8 = 12;
 const STORE_ERR_LIMIT: u8 = 13;
 /// Store-loader results.  These remain separate from store-open errors so an
 /// application can say whether its installation or one optional asset failed.
-const STORE_LOAD_ERR_PATH: u8 = 1;
-const STORE_LOAD_ERR_NOT_FOUND: u8 = 2;
-const STORE_LOAD_ERR_READ: u8 = 3;
-const STORE_LOAD_ERR_DECODE: u8 = 4;
-const STORE_LOAD_ERR_LIMIT: u8 = 5;
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_ASSET_MANIFEST_BYTES: usize = 1024 * 1024;
 /// The largest file `Audio.load_sound!` and `Audio.load_music!` will read. It
@@ -5024,7 +5019,8 @@ test "resource-free draw handles are inert, and leave real resources alone" {
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
         });
-        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_shader.err);
+        try std.testing.expectEqual(abi.HostShader_load_storeResultTag.Err, store_shader.tag);
+        try std.testing.expectEqual(abi.HostShader_load_storeErr.read_failed, store_shader.payload_err());
 
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         try std.testing.expectEqual(@as(usize, 0), font_heap.active());
@@ -5428,10 +5424,12 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var shaders: [32]*u64 = undefined;
     for (&shaders) |*shader| shader.* = storeShader(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedShaderLoadSourceRaw(&roc_host, .{
+    const refused_shader = hostedShaderLoadSourceRaw(&roc_host, .{
         .fragment_source = abi.RocStr.fromSlice("shader", &roc_host),
         .vertex_source = abi.RocStr.empty(),
-    }).err);
+    });
+    try std.testing.expectEqual(abi.HostShader_load_sourceResultTag.Err, refused_shader.tag);
+    try std.testing.expectEqual(abi.HostShader_load_sourceErr.resource_limit, refused_shader.payload_err());
     for (shaders) |shader| releaseResourceBox(&roc_host, shader);
 
     var fonts: [32]*u64 = undefined;
@@ -6456,7 +6454,9 @@ fn hostedTextureLoadRenderTargetRaw(args: abi.HostTexture_load_render_targetArgs
     return .{ .target = .{ .handle = stored, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
 }
 
-fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceRetRecord {
+fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceResult {
+    const Result = abi.HostShader_load_sourceResult;
+    const Error = abi.HostShader_load_sourceErr;
     enforcePhase("Draw.Shader.from_source!", during_load);
     const effect = EffectScope.begin("Draw.Shader.from_source!", args.fragment_source.asSlice().len);
     defer effect.end();
@@ -6464,25 +6464,25 @@ fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArg
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
     const fragment_slice = args.fragment_source.asSlice();
-    if (vertex_slice.len == 0 and fragment_slice.len == 0) return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    if (vertex_slice.len == 0 and fragment_slice.len == 0) return abiTryErr(Result, Error.shader_load_failed);
     if (headlessMode()) {
-        const shader = storeShader(.headless) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .shader = shader, .err = RESOURCE_ERR_NONE };
+        const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, shader);
     }
 
     const allocator = allocatorFromHost(host);
     var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var vertex = OptionalTempCString.init(allocator, &vertex_stack, vertex_slice) catch return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    var vertex = OptionalTempCString.init(allocator, &vertex_stack, vertex_slice) catch return abiTryErr(Result, Error.shader_load_failed);
     defer vertex.deinit();
-    var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return abiTryErr(Result, Error.shader_load_failed);
     defer fragment.deinit();
-    const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeShader(.{ .native = shader }) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .shader = stored, .err = RESOURCE_ERR_NONE };
+    const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
+    const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, stored);
 }
 
-fn exportedShaderLoadSourceRaw(args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceRetRecord {
+fn exportedShaderLoadSourceRaw(args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceResult {
     return hostedShaderLoadSourceRaw(activeHost(), args);
 }
 
@@ -6490,7 +6490,9 @@ fn exportedShaderLoadSourceRaw(args: abi.HostShader_load_sourceArgs) callconv(.c
 ///
 /// Reading the sources waits -- it parks a task and blocks `init!` -- and the
 /// compile runs on the frame thread once both reads have answered.
-fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeRetRecord {
+fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeResult {
+    const Result = abi.HostShader_load_storeResult;
+    const Error = abi.HostShader_load_storeErr;
     enforcePhase("Draw.Shader.from_store!", during_wait);
     const effect = EffectScope.begin("Draw.Shader.from_store!", 0);
     defer effect.end();
@@ -6499,44 +6501,44 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
     defer releaseResourceBox(host, args.store);
     const vertex_path = args.vertex_path.asSlice();
     const fragment_path = args.fragment_path.asSlice();
-    if (vertex_path.len == 0 and fragment_path.len == 0) return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH };
-    const store = store_heap.get(args.store.*) orelse return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ };
+    if (vertex_path.len == 0 and fragment_path.len == 0) return abiTryErr(Result, Error.path_invalid);
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
 
     const vertex_read = if (vertex_path.len == 0) null else readStoreAsset(allocator, store, vertex_path);
     const vertex_bytes = if (vertex_read) |result| switch (result) {
-        .path_invalid => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH },
-        .not_found => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_NOT_FOUND },
-        .failed => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ },
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
         .bytes => |bytes| bytes,
     } else null;
     defer if (vertex_bytes) |bytes| allocator.free(bytes);
 
     const fragment_read = if (fragment_path.len == 0) null else readStoreAsset(allocator, store, fragment_path);
     const fragment_bytes = if (fragment_read) |result| switch (result) {
-        .path_invalid => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_PATH },
-        .not_found => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_NOT_FOUND },
-        .failed => return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ },
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
         .bytes => |bytes| bytes,
     } else null;
     defer if (fragment_bytes) |bytes| allocator.free(bytes);
 
     if (headlessMode()) {
-        const shader = storeShader(.headless) orelse return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
-        return .{ .shader = shader, .err = STORE_ERR_NONE };
+        const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, shader);
     }
     var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var vertex = if (vertex_bytes) |bytes| OptionalTempCString.init(allocator, &vertex_stack, bytes) catch return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ } else OptionalTempCString{ .value = null };
+    var vertex = if (vertex_bytes) |bytes| OptionalTempCString.init(allocator, &vertex_stack, bytes) catch return abiTryErr(Result, Error.read_failed) else OptionalTempCString{ .value = null };
     defer vertex.deinit();
-    var fragment = if (fragment_bytes) |bytes| OptionalTempCString.init(allocator, &fragment_stack, bytes) catch return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_READ } else OptionalTempCString{ .value = null };
+    var fragment = if (fragment_bytes) |bytes| OptionalTempCString.init(allocator, &fragment_stack, bytes) catch return abiTryErr(Result, Error.read_failed) else OptionalTempCString{ .value = null };
     defer fragment.deinit();
-    const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
-    const stored = storeShader(.{ .native = shader }) orelse return .{ .shader = invalidResourceHandle(), .err = STORE_LOAD_ERR_LIMIT };
-    return .{ .shader = stored, .err = STORE_ERR_NONE };
+    const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
+    const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, stored);
 }
 
-fn exportedShaderLoadStoreRaw(args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeRetRecord {
+fn exportedShaderLoadStoreRaw(args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeResult {
     return hostedShaderLoadStoreRaw(activeHost(), args);
 }
 
@@ -7098,8 +7100,8 @@ test "the store-backed font and shader loaders wait rather than load" {
         .vertex_path = abi.RocStr.empty(),
         .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
     });
-    try std.testing.expectEqual(STORE_ERR_NONE, shader.err);
-    releaseResourceBox(&roc_host, shader.shader);
+    try std.testing.expectEqual(abi.HostShader_load_storeResultTag.Ok, shader.tag);
+    releaseResourceBox(&roc_host, shader.payload_ok());
     try std.testing.expect(last_phase_violation == null);
 }
 

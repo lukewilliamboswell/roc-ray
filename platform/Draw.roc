@@ -594,10 +594,13 @@ Draw := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-		from_source! = |cfg| {
-			result = Host.shader_load_source!(cfg)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
-		}
+		from_source! = |cfg|
+		# closed error union to open error union
+			match Host.shader_load_source!(cfg) {
+				Ok(shader) => Ok(Shader.(shader))
+				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
+			}
 
 		## Compile shader stage files resolved through an explicit asset store.
 		##
@@ -607,22 +610,16 @@ Draw := [].{
 		## compile from `update!`, use `from_source!` with strings the app
 		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
-		from_store! = |store, cfg| {
-			result = Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
-			if result.err == 1 {
-				Err(PathInvalid)
-			} else if result.err == 2 {
-				Err(NotFound)
-			} else if result.err == 3 {
-				Err(ReadFailed)
-			} else if result.err == 4 {
-				Err(ShaderLoadFailed)
-			} else if result.err != 0 {
-				Err(ResourceLimit)
-			} else {
-				Ok(Shader.(result.shader))
+		from_store! = |store, cfg|
+		# closed error union to open error union
+			match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
+				Ok(shader) => Ok(Shader.(shader))
+				Err(PathInvalid) => Err(PathInvalid)
+				Err(NotFound) => Err(NotFound)
+				Err(ReadFailed) => Err(ReadFailed)
+				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
 			}
-		}
 
 		## Resolve a scalar floating-point uniform once.
 		##

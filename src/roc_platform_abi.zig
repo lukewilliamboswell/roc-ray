@@ -1503,48 +1503,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_f2d5cefe489fb3f6
-pub const __AnonStruct_f2d5cefe489fb3f6 = if (@sizeOf(usize) == 4) extern struct {
-    shader: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-    }
-} else extern struct {
-    shader: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_f2d5cefe489fb3f6) != 16) @compileError("__AnonStruct_f2d5cefe489fb3f6 size mismatch");
-        if (@alignOf(__AnonStruct_f2d5cefe489fb3f6) != 8) @compileError("__AnonStruct_f2d5cefe489fb3f6 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_f2d5cefe489fb3f6) != 8) @compileError("__AnonStruct_f2d5cefe489fb3f6 size mismatch");
-        if (@alignOf(__AnonStruct_f2d5cefe489fb3f6) != 4) @compileError("__AnonStruct_f2d5cefe489fb3f6 alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_c813cb81fdeac2dc
 pub const __AnonStruct_c813cb81fdeac2dc = if (@sizeOf(usize) == 4) extern struct {
     fragment_source: RocStr,
@@ -7279,6 +7237,197 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostShader_load_sourceResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostShader_load_sourceResultPayload = extern union {
+    err: ResourceLimitOrShaderLoadFailed,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostShader_load_sourceResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostShader_load_sourceResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrShaderLoadFailed {
+        const ptr: *const ResourceLimitOrShaderLoadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostShader_load_sourceResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostShader_load_sourceResult(self, amount);
+    }
+} else extern struct {
+    payload: HostShader_load_sourceResultPayload,
+    tag: HostShader_load_sourceResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrShaderLoadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostShader_load_sourceResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostShader_load_sourceResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostShader_load_sourceResult) != 16) @compileError("HostShader_load_sourceResult size mismatch");
+        if (@alignOf(HostShader_load_sourceResult) != 8) @compileError("HostShader_load_sourceResult alignment mismatch");
+        if (@offsetOf(HostShader_load_sourceResult, "tag") != 8) @compileError("HostShader_load_sourceResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostShader_load_sourceResult) != 8) @compileError("HostShader_load_sourceResult size mismatch");
+        if (@alignOf(HostShader_load_sourceResult) != 4) @compileError("HostShader_load_sourceResult alignment mismatch");
+        if (@offsetOf(HostShader_load_sourceResult, "tag") != 4) @compileError("HostShader_load_sourceResult tag offset mismatch");
+    }
+}
+
+/// Tag union: ResourceLimitOrShaderLoadFailed
+pub const ResourceLimitOrShaderLoadFailed = enum(u8) {
+    resource_limit = 0,
+    shader_load_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ResourceLimitOrShaderLoadFailed) != 1) @compileError("ResourceLimitOrShaderLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrShaderLoadFailed) != 1) @compileError("ResourceLimitOrShaderLoadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ResourceLimitOrShaderLoadFailed) != 1) @compileError("ResourceLimitOrShaderLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrShaderLoadFailed) != 1) @compileError("ResourceLimitOrShaderLoadFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostShader_load_storeResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostShader_load_storeResultPayload = extern union {
+    err: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostShader_load_storeResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostShader_load_storeResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed {
+        const ptr: *const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostShader_load_storeResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostShader_load_storeResult(self, amount);
+    }
+} else extern struct {
+    payload: HostShader_load_storeResultPayload,
+    tag: HostShader_load_storeResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostShader_load_storeResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostShader_load_storeResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostShader_load_storeResult) != 16) @compileError("HostShader_load_storeResult size mismatch");
+        if (@alignOf(HostShader_load_storeResult) != 8) @compileError("HostShader_load_storeResult alignment mismatch");
+        if (@offsetOf(HostShader_load_storeResult, "tag") != 8) @compileError("HostShader_load_storeResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostShader_load_storeResult) != 8) @compileError("HostShader_load_storeResult size mismatch");
+        if (@alignOf(HostShader_load_storeResult) != 4) @compileError("HostShader_load_storeResult alignment mismatch");
+        if (@offsetOf(HostShader_load_storeResult, "tag") != 4) @compileError("HostShader_load_storeResult tag offset mismatch");
+    }
+}
+
+/// Tag union: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed
+pub const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed = enum(u8) {
+    not_found = 0,
+    path_invalid = 1,
+    read_failed = 2,
+    resource_limit = 3,
+    shader_load_failed = 4,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostApp_read_envResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -8146,48 +8295,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostTexture_load_render_targetRetRecord) != 16) @compileError("HostTexture_load_render_targetRetRecord size mismatch");
         if (@alignOf(HostTexture_load_render_targetRetRecord) != 4) @compileError("HostTexture_load_render_targetRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.shader_load_source!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostShader_load_sourceRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    shader: *u64,
-    err: u8,
-} else extern struct {
-    shader: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostShader_load_sourceRetRecord) != 16) @compileError("HostShader_load_sourceRetRecord size mismatch");
-        if (@alignOf(HostShader_load_sourceRetRecord) != 8) @compileError("HostShader_load_sourceRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostShader_load_sourceRetRecord) != 8) @compileError("HostShader_load_sourceRetRecord size mismatch");
-        if (@alignOf(HostShader_load_sourceRetRecord) != 4) @compileError("HostShader_load_sourceRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.shader_load_store!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostShader_load_storeRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    shader: *u64,
-    err: u8,
-} else extern struct {
-    shader: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostShader_load_storeRetRecord) != 16) @compileError("HostShader_load_storeRetRecord size mismatch");
-        if (@alignOf(HostShader_load_storeRetRecord) != 8) @compileError("HostShader_load_storeRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostShader_load_storeRetRecord) != 8) @compileError("HostShader_load_storeRetRecord size mismatch");
-        if (@alignOf(HostShader_load_storeRetRecord) != 4) @compileError("HostShader_load_storeRetRecord alignment mismatch");
     }
 }
 
@@ -11344,7 +11451,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_load_source!
-/// Roc signature: { fragment_source : Str, vertex_source : Str } => { err : U8, shader : Box(U64) }
+/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Box(U64), [ResourceLimit, ShaderLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_load_sourceArgs = if (@sizeOf(usize) == 4) extern struct {
     fragment_source: RocStr,
@@ -11392,7 +11499,7 @@ comptime {
 }
 
 /// Arguments for Host.shader_load_store!
-/// Roc signature: { fragment_path : Str, store : Box(U64), vertex_path : Str } => { err : U8, shader : Box(U64) }
+/// Roc signature: { fragment_path : Str, store : Box(U64), vertex_path : Str } => Try(Box(U64), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
     fragment_path: RocStr,
@@ -12268,9 +12375,9 @@ pub const HostTilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
 pub const HostTexture_load_render_targetArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostTexture_load_render_target = __AnonStruct_62cff3ac2b7521b9;
 pub const HostShader_load_sourceArg0 = __AnonStruct_c813cb81fdeac2dc;
-pub const HostShader_load_source = __AnonStruct_f2d5cefe489fb3f6;
+pub const HostShader_load_sourceErr = ResourceLimitOrShaderLoadFailed;
 pub const HostShader_load_storeArg0 = __AnonStruct_3e85b4e878c74d96;
-pub const HostShader_load_store = __AnonStruct_f2d5cefe489fb3f6;
+pub const HostShader_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrShaderLoadFailed;
 pub const HostShader_locationArg0 = __AnonStruct_71c7986c66c89ace;
 pub const HostShader_set_floatArg0 = __AnonStruct_408b2f33e30873ce;
 pub const HostShader_set_floatArg0Uniform = __AnonStruct_5977b9984ceff2ca;
@@ -12595,14 +12702,64 @@ pub const __AnonStruct_7f4d6dac6c3eef5eRelease = struct {
     }
 };
 
-pub const __AnonStruct_f2d5cefe489fb3f6Release = struct {
-    pub fn release(value: __AnonStruct_f2d5cefe489fb3f6, roc_host: *RocHost) void {
+fn decrefHostShader_load_sourceResult(value: HostShader_load_sourceResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostShader_load_sourceResult(value: HostShader_load_sourceResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostShader_load_sourceResultRelease = struct {
+    pub fn release(value: HostShader_load_sourceResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
 
 pub const __AnonStruct_c813cb81fdeac2dcRelease = struct {
     pub fn release(value: __AnonStruct_c813cb81fdeac2dc, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostShader_load_storeResult(value: HostShader_load_storeResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostShader_load_storeResult(value: HostShader_load_storeResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostShader_load_storeResultRelease = struct {
+    pub fn release(value: HostShader_load_storeResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13481,8 +13638,9 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_80c864420ea33e1e) return __AnonStruct_80c864420ea33e1eRelease;
     if (T == __AnonStruct_2a39039201b5023d) return __AnonStruct_2a39039201b5023dRelease;
     if (T == __AnonStruct_7f4d6dac6c3eef5e) return __AnonStruct_7f4d6dac6c3eef5eRelease;
-    if (T == __AnonStruct_f2d5cefe489fb3f6) return __AnonStruct_f2d5cefe489fb3f6Release;
+    if (T == HostShader_load_sourceResult) return HostShader_load_sourceResultRelease;
     if (T == __AnonStruct_c813cb81fdeac2dc) return __AnonStruct_c813cb81fdeac2dcRelease;
+    if (T == HostShader_load_storeResult) return HostShader_load_storeResultRelease;
     if (T == __AnonStruct_3e85b4e878c74d96) return __AnonStruct_3e85b4e878c74d96Release;
     if (T == __AnonStruct_71c7986c66c89ace) return __AnonStruct_71c7986c66c89aceRelease;
     if (T == __AnonStruct_408b2f33e30873ce) return __AnonStruct_408b2f33e30873ceRelease;
@@ -14238,20 +14396,20 @@ pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
 pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) __AnonStruct_62cff3ac2b7521b9;
 
 /// Hosted symbol for Host.shader_load_source!
-/// Roc signature: { fragment_source : Str, vertex_source : Str } => { err : U8, shader : Box(U64) }
+/// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Box(U64), [ResourceLimit, ShaderLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_shader_load_source_raw(arg0: HostShader_load_sourceArgs) callconv(.c) __AnonStruct_f2d5cefe489fb3f6;
+pub extern fn roc_shader_load_source_raw(arg0: HostShader_load_sourceArgs) callconv(.c) HostShader_load_sourceResult;
 
 /// Hosted symbol for Host.shader_load_store!
-/// Roc signature: { fragment_path : Str, store : Box(U64), vertex_path : Str } => { err : U8, shader : Box(U64) }
+/// Roc signature: { fragment_path : Str, store : Box(U64), vertex_path : Str } => Try(Box(U64), [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_shader_load_store_raw(arg0: HostShader_load_storeArgs) callconv(.c) __AnonStruct_f2d5cefe489fb3f6;
+pub extern fn roc_shader_load_store_raw(arg0: HostShader_load_storeArgs) callconv(.c) HostShader_load_storeResult;
 
 /// Hosted symbol for Host.shader_location!
 /// Roc signature: { name : Str, shader : Box(U64) } => I32

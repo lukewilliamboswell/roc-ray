@@ -671,13 +671,6 @@ Host := [].{
 	## Zero-sized startup authority minted by the adapter.
 	AppStartup : {}
 
-	## Startup file contents, or `1` for missing and another code for failure.
-	AppReadFileResult : {
-		ok : Bool,
-		err : U8,
-		contents : Str,
-	}
-
 	## Stop after `init!` returns.
 	## Legal only in `init!`.
 	app_exit! : I32 => {}
@@ -692,7 +685,7 @@ Host := [].{
 
 	## Read a whole UTF-8 file during startup.
 	## Legal only in `init!`.
-	app_read_file! : Str => AppReadFileResult
+	app_read_text! : Str => Try(Str, [NotFound, ReadFailed])
 
 	## Random interface
 	## Draw from operating-system entropy.

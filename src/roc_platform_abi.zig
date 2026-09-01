@@ -3227,50 +3227,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_1504326a3d41a158
-pub const __AnonStruct_1504326a3d41a158 = if (@sizeOf(usize) == 4) extern struct {
-    contents: RocStr,
-    err: u8,
-    ok: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.contents.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.contents.incref(amount);
-    }
-} else extern struct {
-    contents: RocStr,
-    err: u8,
-    ok: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.contents.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.contents.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_1504326a3d41a158) != 32) @compileError("__AnonStruct_1504326a3d41a158 size mismatch");
-        if (@alignOf(__AnonStruct_1504326a3d41a158) != 8) @compileError("__AnonStruct_1504326a3d41a158 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_1504326a3d41a158) != 16) @compileError("__AnonStruct_1504326a3d41a158 size mismatch");
-        if (@alignOf(__AnonStruct_1504326a3d41a158) != 4) @compileError("__AnonStruct_1504326a3d41a158 alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_2818a50bdccefb1e
 pub const __AnonStruct_2818a50bdccefb1e = if (@sizeOf(usize) == 4) extern struct {
     x: f32,
@@ -7182,6 +7138,100 @@ comptime {
     }
 }
 
+/// Tag discriminant for Try.
+pub const HostApp_read_textResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostApp_read_textResultPayload = extern union {
+    err: NotFoundOrReadFailed,
+    ok: RocStr,
+};
+
+/// Tag union: Try
+pub const HostApp_read_textResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostApp_read_textResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrReadFailed {
+        const ptr: *const NotFoundOrReadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostApp_read_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostApp_read_textResult(self, amount);
+    }
+} else extern struct {
+    payload: HostApp_read_textResultPayload,
+    tag: HostApp_read_textResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrReadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostApp_read_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostApp_read_textResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostApp_read_textResult) != 32) @compileError("HostApp_read_textResult size mismatch");
+        if (@alignOf(HostApp_read_textResult) != 8) @compileError("HostApp_read_textResult alignment mismatch");
+        if (@offsetOf(HostApp_read_textResult, "tag") != 24) @compileError("HostApp_read_textResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostApp_read_textResult) != 16) @compileError("HostApp_read_textResult size mismatch");
+        if (@alignOf(HostApp_read_textResult) != 4) @compileError("HostApp_read_textResult alignment mismatch");
+        if (@offsetOf(HostApp_read_textResult, "tag") != 12) @compileError("HostApp_read_textResult tag offset mismatch");
+    }
+}
+
+/// Tag union: NotFoundOrReadFailed
+pub const NotFoundOrReadFailed = enum(u8) {
+    not_found = 0,
+    read_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(NotFoundOrReadFailed) != 1) @compileError("NotFoundOrReadFailed size mismatch");
+        if (@alignOf(NotFoundOrReadFailed) != 1) @compileError("NotFoundOrReadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(NotFoundOrReadFailed) != 1) @compileError("NotFoundOrReadFailed size mismatch");
+        if (@alignOf(NotFoundOrReadFailed) != 1) @compileError("NotFoundOrReadFailed alignment mismatch");
+    }
+}
+
 /// Tag union: Try
 pub const HostWindow_suggest_sizeResult = enum(u8) {
     err = 0,
@@ -7822,29 +7872,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostCapture_read_regionRetRecord) != 16) @compileError("HostCapture_read_regionRetRecord size mismatch");
         if (@alignOf(HostCapture_read_regionRetRecord) != 4) @compileError("HostCapture_read_regionRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.app_read_file!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostApp_read_fileRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    contents: RocStr,
-    err: u8,
-    ok: bool,
-} else extern struct {
-    contents: RocStr,
-    err: u8,
-    ok: bool,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostApp_read_fileRetRecord) != 32) @compileError("HostApp_read_fileRetRecord size mismatch");
-        if (@alignOf(HostApp_read_fileRetRecord) != 8) @compileError("HostApp_read_fileRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostApp_read_fileRetRecord) != 16) @compileError("HostApp_read_fileRetRecord size mismatch");
-        if (@alignOf(HostApp_read_fileRetRecord) != 4) @compileError("HostApp_read_fileRetRecord alignment mismatch");
     }
 }
 
@@ -10670,10 +10697,10 @@ pub const HostApp_read_envArgs = extern struct {
     arg0: RocStr,
 };
 
-/// Arguments for Host.app_read_file!
-/// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
+/// Arguments for Host.app_read_text!
+/// Roc signature: Str => Try(Str, [NotFound, ReadFailed])
 /// Refcounted fields are owned by the hosted function.
-pub const HostApp_read_fileArgs = extern struct {
+pub const HostApp_read_textArgs = extern struct {
     arg0: RocStr,
 };
 
@@ -12025,7 +12052,7 @@ pub const HostCapture_pixel_at = __AnonStruct_50fe0879143e3c18;
 pub const HostCapture_read_regionArg0 = __AnonStruct_7ea2de5aa3c18166;
 pub const HostCapture_read_regionArg0Source = __AnonStruct_29524f9bb2f9574c;
 pub const HostCapture_read_region = __AnonStruct_5b08b74ffdd2f118;
-pub const HostApp_read_file = __AnonStruct_1504326a3d41a158;
+pub const HostApp_read_textErr = NotFoundOrReadFailed;
 pub const HostWindow_read_clipboard = __AnonStruct_e98c7d72bcd7a610;
 pub const HostWindow_suggest_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
@@ -12529,8 +12556,30 @@ pub const HostApp_read_envResultRelease = struct {
     }
 };
 
-pub const __AnonStruct_1504326a3d41a158Release = struct {
-    pub fn release(value: __AnonStruct_1504326a3d41a158, roc_host: *RocHost) void {
+fn decrefHostApp_read_textResult(value: HostApp_read_textResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostApp_read_textResult(value: HostApp_read_textResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostApp_read_textResultRelease = struct {
+    pub fn release(value: HostApp_read_textResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13167,7 +13216,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == RocListWith(__AnonStruct_4dd3180405b3f44f, false)) return RocListSpineRelease(RocListWith(__AnonStruct_4dd3180405b3f44f, false));
     if (T == __AnonStruct_3d573c3bcb10a375) return __AnonStruct_3d573c3bcb10a375Release;
     if (T == HostApp_read_envResult) return HostApp_read_envResultRelease;
-    if (T == __AnonStruct_1504326a3d41a158) return __AnonStruct_1504326a3d41a158Release;
+    if (T == HostApp_read_textResult) return HostApp_read_textResultRelease;
     if (T == RocList(__AnonStruct_dae0ce24e748c0cf)) return RocListRelease(RocList(__AnonStruct_dae0ce24e748c0cf), __AnonStruct_dae0ce24e748c0cfRelease);
     if (T == __AnonStruct_dae0ce24e748c0cf) return __AnonStruct_dae0ce24e748c0cfRelease;
     if (T == __AnonStruct_69c51f74695a8340) return __AnonStruct_69c51f74695a8340Release;
@@ -13750,13 +13799,13 @@ pub extern fn roc_app_args() callconv(.c) RocList(RocStr);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_app_read_env(arg0: RocStr) callconv(.c) HostApp_read_envResult;
 
-/// Hosted symbol for Host.app_read_file!
-/// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
+/// Hosted symbol for Host.app_read_text!
+/// Roc signature: Str => Try(Str, [NotFound, ReadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_app_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct_1504326a3d41a158;
+pub extern fn roc_app_read_text_raw(arg0: RocStr) callconv(.c) HostApp_read_textResult;
 
 /// Hosted symbol for Host.random_entropy!
 /// Roc signature: {} => U64

@@ -154,7 +154,7 @@ platform ""
 		"roc_app_exit": Host.app_exit!,
 		"roc_app_args": Host.app_args!,
 		"roc_app_read_env": Host.app_read_env!,
-		"roc_app_read_file_raw": Host.app_read_file!,
+		"roc_app_read_text_raw": Host.app_read_text!,
 		"roc_random_entropy": Host.random_entropy!,
 		"roc_random_i32": Host.random_i32!,
 		"roc_keys_set_exit_key": Host.keys_set_exit_key!,

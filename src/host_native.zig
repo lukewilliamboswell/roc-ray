@@ -61,7 +61,7 @@ const FontMetrics = abi.FontMetrics;
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const Color = abi.ColorRgba;
 const AppReadEnvResult = abi.HostApp_read_envResult;
-const AppReadFileResult = abi.HostApp_read_fileRetRecord;
+const AppReadTextResult = abi.HostApp_read_textResult;
 const TilemapLoadTmxRawResult = abi.HostTilemap_load_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
 // One cycle of observations handed to update. Unions do not cross this
@@ -85,8 +85,6 @@ const TilemapRawProperty = abi.HostTilemap_load_tmxMapProperties;
 const TilemapRawTileProperties = abi.HostTilemap_load_tmxMapTileProperties;
 const TilemapRawTileset = abi.HostTilemap_load_tmxMapTilesets;
 
-const HOST_ERR_NOT_FOUND: u8 = 1;
-const HOST_ERR_READ_FAILED: u8 = 2;
 const TILEMAP_ERR_NOT_FOUND: u8 = 1;
 const TILEMAP_ERR_READ_FAILED: u8 = 2;
 const TILEMAP_ERR_PARSE_FAILED: u8 = 3;
@@ -3931,8 +3929,28 @@ fn mainThreadIo() std.Io {
     }
 }
 
-fn emptyAppReadFileResult() AppReadFileResult {
-    return .{ .contents = abi.RocStr.empty(), .err = 0, .ok = false };
+fn appReadTextResultOk(contents: abi.RocStr) AppReadTextResult {
+    var result: AppReadTextResult = undefined;
+    result.tag = .Ok;
+    if (@sizeOf(usize) == 4) {
+        const payload: *abi.RocStr = @ptrCast(@alignCast(&result.payload));
+        payload.* = contents;
+    } else {
+        result.payload.ok = contents;
+    }
+    return result;
+}
+
+fn appReadTextResultErr(err: abi.HostApp_read_textErr) AppReadTextResult {
+    var result: AppReadTextResult = undefined;
+    result.tag = .Err;
+    if (@sizeOf(usize) == 4) {
+        const payload: *abi.HostApp_read_textErr = @ptrCast(@alignCast(&result.payload));
+        payload.* = err;
+    } else {
+        result.payload.err = err;
+    }
+    return result;
 }
 
 fn emptyTilemapRawMap() TilemapRawMap {
@@ -7418,33 +7436,55 @@ fn exportedAppReadEnvPosix(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
     return hostedAppReadEnvPosix(activeHost(), key_arg);
 }
 
-fn hostedAppReadFile(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) AppReadFileResult {
-    enforcePhase("App.Startup.read_file!", during_startup);
-    const effect = EffectScope.begin("App.Startup.read_file!", path_arg.asSlice().len);
+fn hostedAppReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) AppReadTextResult {
+    enforcePhase("App.Startup.read_text!", during_startup);
+    const effect = EffectScope.begin("App.Startup.read_text!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
     const path = path_arg.asSlice();
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_FILE_READ_BYTES)) catch |err| {
-        var result = emptyAppReadFileResult();
-        result.err = switch (err) {
-            error.FileNotFound => HOST_ERR_NOT_FOUND,
-            else => HOST_ERR_READ_FAILED,
-        };
-        return result;
+        return appReadTextResultErr(switch (err) {
+            error.FileNotFound => .not_found,
+            else => .read_failed,
+        });
     };
     defer allocator.free(bytes);
 
-    return .{
-        .contents = abi.RocStr.fromSlice(bytes, roc_host),
-        .err = 0,
-        .ok = true,
-    };
+    return appReadTextResultOk(abi.RocStr.fromSlice(bytes, roc_host));
 }
 
-fn exportedAppReadFile(path_arg: abi.RocStr) callconv(.c) AppReadFileResult {
-    return hostedAppReadFile(activeHost(), path_arg);
+fn exportedAppReadText(path_arg: abi.RocStr) callconv(.c) AppReadTextResult {
+    return hostedAppReadText(activeHost(), path_arg);
+}
+
+test "startup text reads return typed success missing and read-failure outcomes" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "startup.txt", .data = "startup contents" });
+
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+
+    var path_buffer: [256]u8 = undefined;
+    const loaded = hostedAppReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "startup.txt"));
+    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Ok, loaded.tag);
+    try std.testing.expectEqualStrings("startup contents", loaded.payload_ok().asSlice());
+    loaded.decref(&roc_host);
+
+    const missing = hostedAppReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "missing.txt"));
+    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, missing.tag);
+    try std.testing.expectEqual(abi.HostApp_read_textErr.not_found, missing.payload_err());
+
+    const directory_path = std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}", .{tmp.sub_path}) catch unreachable;
+    const unreadable = hostedAppReadText(&roc_host, abi.RocStr.fromSlice(directory_path, &roc_host));
+    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, unreadable.tag);
+    try std.testing.expectEqual(abi.HostApp_read_textErr.read_failed, unreadable.payload_err());
 }
 
 /// Read one TMX or TSX file on the waiting path.
@@ -9008,7 +9048,7 @@ comptime {
         @export(&exportedReadClipboard, .{ .name = "roc_window_read_clipboard" });
         @export(&hostedRandomI32, .{ .name = "roc_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedAppReadEnvWindows else &exportedAppReadEnvPosix, .{ .name = "roc_app_read_env" });
-        @export(&exportedAppReadFile, .{ .name = "roc_app_read_file_raw" });
+        @export(&exportedAppReadText, .{ .name = "roc_app_read_text_raw" });
         @export(&exportedSetClipboardText, .{ .name = "roc_window_set_clipboard_text" });
         @export(&hostedSetExitKey, .{ .name = "roc_keys_set_exit_key" });
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });

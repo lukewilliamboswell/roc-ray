@@ -293,21 +293,17 @@ App := [].{
 
 	## Read a UTF-8 text file from disk, blocking until it is read.
 	##
-	## Call as `App.read_file!(startup, path)`. Legal only in `init!`. Use
+	## Call as `App.read_text!(startup, path)`. Legal only in `init!`. Use
 	## `Files.read_text!` inside a task to read a file while the app runs, and
 	## for the fuller error report.
-	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
-	read_file! = |_startup, path| {
-		result = Host.app_read_file!(path)
-		# closed error union to open error union
-		if result.ok {
-			Ok(result.contents)
-		} else if result.err == 1 {
-			Err(NotFound)
-		} else {
-			Err(ReadFailed)
+	read_text! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
+	read_text! = |_startup, path|
+	# closed error union to open error union
+		match Host.app_read_text!(path) {
+			Ok(contents) => Ok(contents)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
 		}
-	}
 
 	## Draw one number from the operating system's entropy source.
 	##

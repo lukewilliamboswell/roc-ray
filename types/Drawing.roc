@@ -3,6 +3,20 @@
 ## Applications obtain the package-owned `Effects` nominal through
 ## `App.effects().render(frame)` on their platform. Rendering packages accept
 ## that handle without importing the platform.
+##
+## ```roc
+## draw_view! : Drawing.Effects, View => Try({}, [ScopeLimit])
+## draw_view! = |draw, view|
+##     draw.with_scissor!(view.bounds, |scoped| {
+##         scoped.rectangle!(view.background)
+##         draw_children!(scoped, view.children)?
+##         Ok({})
+##     })
+## ```
+##
+## A scope callback supplies the handle for that nested target. Propagate it
+## through recursive drawing rather than capturing the outer handle, and do not
+## retain a frame-bound `Effects` after the callback returns.
 import Color
 import Font
 import Math
@@ -178,7 +192,8 @@ Drawing := [].{
 	##
 	## Reusable packages accept this type without depending on RocRay. An
 	## application obtains the identical nominal through
-	## `App.effects().render(frame)`.
+	## `App.effects().render(frame)`. Use it synchronously within the render or
+	## nested drawing scope that supplied it; it is not application state.
 	Effects :: {
 		shape_impl! : Geometry, Paint => {},
 		draw_text_impl! : Text => {},

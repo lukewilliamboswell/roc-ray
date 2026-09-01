@@ -6,6 +6,12 @@
 ## no hosted declarations and cannot create resources or callback authority;
 ## only a handle configured and supplied by the application can reach the host.
 ##
+## A reusable renderer accepts `Drawing.Effects`. A package that needs a
+## waiting effect accepts `App.Effects(frame)` and exposes a task body; the
+## application supplies the configured handle, input witness, and message
+## wrapper. See `docs/package-authors.md` in the RocRay repository for the
+## complete dependency and authority pattern.
+##
 ## ```roc
 ## draw_panel! : Drawing.Effects, Drawing.RoundedRectangle => {}
 ## draw_panel! = |draw, panel| draw.rounded_rectangle!(panel)

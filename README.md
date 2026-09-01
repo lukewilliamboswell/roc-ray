@@ -92,9 +92,22 @@ font = startup.default_font!()?
 `Text.Font` carries both its opaque host handle and an immutable metric
 snapshot, so `font.measure(...)` is pure.
 
+## Building packages on RocRay
+
+Reusable packages can provide higher-level rendering, layout, input, and
+effectful APIs without depending on an application's selected platform. The
+package depends on `roc-ray-types`; the application obtains configured
+authority from `App.effects()` and passes either the root handle or
+`App.effects().render(frame)` into the package.
+
+The [package-author guide](docs/package-authors.md) covers dependency identity,
+shared resources, canonical and alternative rendering APIs, scoped effects,
+waiting work, tasks, phases, and local development.
+
 ## Project links
 
 - [Examples and learning path](examples/README.md)
+- [Building reusable packages](docs/package-authors.md)
 - [API reference](https://lukewilliamboswell.github.io/roc-ray/)
 - [Latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
 - [Architecture](design.md)

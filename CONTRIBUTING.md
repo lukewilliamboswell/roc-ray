@@ -232,6 +232,10 @@ app state from input instead of preserving host storage.
 
 ### Make ownership explicit
 
+The public [package-author guide](docs/package-authors.md) gives the complete
+dependency, rendering, scope, waiting-effect, and task patterns. The rules here
+are repository guardrails for preserving that boundary.
+
 Fonts, textures, prepared text, sounds, music, render textures, and shaders are
 typed host resources with lifetimes driven by Roc references. A final release
 unloads the native value and makes its bounded slot reusable.

@@ -19,6 +19,15 @@
 ## bind a frame with `App.effects().render(frame)` before passing the resulting
 ## `Drawing.Effects` to a reusable renderer.
 ##
+## ```roc
+## program = Toolkit.program(App.effects(), configure, init!, update!, view)
+## ```
+##
+## The toolkit depends on `roc-ray-types`, not this platform. It may retain the
+## root handle because that value contains no frame or input; its `render!`
+## binds the current frame before calling the package renderer. Applications do
+## not add a separate `roc-ray-types` dependency.
+##
 ## Each effect documents its legal phases. Host-state effects are legal in
 ## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
 ## Waiting effects are legal in `init!`, where they block startup, and in tasks,

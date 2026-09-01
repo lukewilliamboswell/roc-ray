@@ -170,6 +170,13 @@ App := [].{
 	## they never add the companion package to their own header. Drawing keeps
 	## its frame explicit until `effects.render(frame)` binds it into the
 	## canonical `Drawing.Effects` handle.
+	##
+	## The root contains configured functions but no frame or input, so an
+	## application may retain it in a package adapter or capture it in a task
+	## body. That does not authorize spawning: the application still supplies
+	## its current `App.Input(msg)` and message wrapper to `Task.spawn_with!`.
+	## Packages with an intentionally different drawing facade may instead take
+	## this root plus the explicit frame and call its low-level receivers.
 	Effects(frame) :: {
 		shape_impl! : frame, Drawing.Geometry, Drawing.Paint => {},
 		draw_text_impl! : frame, Drawing.Text => {},
@@ -186,6 +193,9 @@ App := [].{
 	}.{
 
 		## Bind the current rendering frame into the canonical drawing API.
+		##
+		## Call this inside `render!`, then pass the returned handle to a reusable
+		## renderer. Do not retain the frame-bound result in application state.
 		render : Effects(frame), frame -> Drawing.Effects
 		render = |effects, frame| Drawing.effects_for(effects, frame)
 

@@ -1,5 +1,9 @@
 # Companion types package interop
 
+The public [package-author guide](../../docs/package-authors.md) explains how to
+use this boundary. This document records the compiler, nominal-identity, and
+release-shape details exercised by the fixture.
+
 Tests whether RocRay's public data types can live in an ordinary Roc package
 that both the platform and reusable third-party packages depend on. Without
 this, any pure snapshot-to-framework translation is stuck inside the application,
@@ -47,9 +51,9 @@ by the platform application. The application obtains `App.Effects(frame)`
 through the platform's `App.effects()`, then either binds a frame with
 `effects.render(frame)` or passes the root handle and frame to another package.
 The called host operation still enforces its phase at runtime. Work that waits
-still runs only as a task body the application passes to `Task.spawn!`; the
-package-owned handle merely lets that body call `effects.read_text!`.
-`CONTRIBUTING.md` "Make ownership explicit" spells out the boundary.
+still runs only as a task body the application passes to `Task.spawn!` or
+`Task.spawn_with!`; the package-owned handle merely lets that body call
+`effects.read_text!`.
 
 ## Layout
 
@@ -84,7 +88,8 @@ whole point — `Events.describe` accepts the platform-named value, wraps it in 
 package-owned record, and `Events.retained` gives it back. `init!` does that
 once, `update` does it again every cycle so a *moved* host resource is covered
 and not only a freshly created one, and `render!` hands the result to
-`frame.texture!`, which accepts nothing but the platform's own type.
+the package-owned drawing effect, which accepts the platform's re-export of the
+same type.
 
 That closes the loop the whole re-export rests on: platform → package →
 platform, with a live host resource rather than a stub. Swap the package's

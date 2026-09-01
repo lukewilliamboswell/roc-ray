@@ -5,21 +5,16 @@
 ## it without importing the platform or calling the host. The platform
 ## re-exports this type as `Text.Font`.
 import unicode.Scalar
+import Handle
 
 Font := {
-	handle : Handle,
+	handle : FontHandle,
 	metrics : FontMetrics,
 }.{
 
 	## Opaque native resource identity. Only a host can manufacture a live one,
 	## but applications can compare and hash handles they receive.
-	Handle :: Box(U64).{
-		is_eq : Handle, Handle -> Bool
-		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)
-
-		to_hash : Handle, Hasher -> Hasher
-		to_hash = |Handle.(value), hasher| U64.to_hash(Box.unbox(value), hasher)
-	}
+	FontHandle : Handle([FontResource])
 
 	## Scalar metrics for one glyph, in the atlas's own units.
 	GlyphMetrics : {
@@ -60,7 +55,7 @@ Font := {
 	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: Handle.(Box.box(U64.highest)),
+		handle: Handle.stub,
 		metrics: {
 			base_size: 1,
 			line_spacing: 0,
@@ -274,7 +269,7 @@ expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 3, |item| item.key
 # A key absent from a sorted collection reports NotFound.
 expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 4, |item| item.key) == Err(NotFound)
 
-# Font.Handle
+# Font.FontHandle
 
 # Handle equality and hashing support keyed collections.
 expect Dict.single(Font.stub.handle, 42).get(Font.stub.handle) == Ok(42)

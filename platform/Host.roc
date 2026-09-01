@@ -3,9 +3,10 @@
 ##
 ## This module is the single catalogue of native hosted functions and the wire
 ## values they exchange. It is deliberately not an application API: public
-## modules own application-facing types, validation, decoding, error tags, and
-## phase documentation. `Host` is exposed as `rr.Host` for direct structural
-## interface access.
+## modules own application-facing validation, naming, composition, and phase
+## documentation. A hosted declaration may carry a shared pure type or the
+## same concrete outcome tags its public adapter exposes. `Host` is exposed as
+## `rr.Host` for direct structural interface access.
 ##
 ## Declarations are grouped into interfaces which contain, where applicable:
 ##
@@ -13,8 +14,8 @@
 ## 2. Structural record aliases for hosted arguments and results.
 ## 3. Hosted effectful functions.
 ##
-## Records stay structural and unions cross as scalar codes because `roc glue`
-## generates the corresponding native layouts from these declarations.
+## Records stay structural and unions use concrete, closed rows because `roc
+## glue` generates the corresponding native layouts from these declarations.
 ##
 ## Interface glossary:
 ##
@@ -46,14 +47,17 @@
 ## > `Udp`: bound sockets and bounded datagram send/receive batches.
 ## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
-## Opaque `Box(U64)` values are typed resource tokens resolved
-## and lifetime-checked by the host, never exposing native addresses.
+## Opaque `Handle(resource)` values erase to `Box(U64)` resource
+## tokens resolved and lifetime-checked by the host, never exposing native
+## addresses.
 ## Native pointers, backend objects, public unions, and application policy do
 ## not belong here.
 import rrt.Camera
 import rrt.Color
 import rrt.Font
 import rrt.Math
+import rrt.Handle
+import rrt.Shader
 import rrt.Texture
 
 Host := [].{
@@ -62,8 +66,14 @@ Host := [].{
 	## Store-relative texture path.
 	TextureLoadStore : { store : Store, path : Str }
 
-	## Loaded texture or error.
-	TextureResult : { texture : Texture, err : U8 }
+	## Failures while reading and decoding a texture from an asset store.
+	TextureLoadStoreError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed]
+
+	## Failures while decoding a texture from encoded bytes.
+	TextureLoadBytesError : [ResourceLimit, TextureLoadFailed]
+
+	## Failures while generating a texture.
+	TextureGenerateError : [ResourceLimit, TextureGenerationFailed]
 
 	## Encoded texture bytes and format code.
 	TextureBytes : { format : U8, bytes : List(U8) }
@@ -96,19 +106,19 @@ Host := [].{
 
 	## Load a texture from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	texture_load_store! : TextureLoadStore => TextureResult
+	texture_load_store! : TextureLoadStore => Try(Texture, TextureLoadStoreError)
 
 	## Load a texture from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_load_bytes! : TextureBytes => TextureResult
+	texture_load_bytes! : TextureBytes => Try(Texture, TextureLoadBytesError)
 
 	## Generate a solid-color texture.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_generate_color! : TextureGenerateColor => TextureResult
+	texture_generate_color! : TextureGenerateColor => Try(Texture, TextureGenerateError)
 
 	## Generate a checkerboard texture.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_generate_checked! : TextureGenerateChecked => TextureResult
+	texture_generate_checked! : TextureGenerateChecked => Try(Texture, TextureGenerateError)
 
 	## Replace all texture pixels.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -132,28 +142,29 @@ Host := [].{
 	## Render-target dimensions.
 	TextureRenderTargetSize : { width : I32, height : I32 }
 
-	## Loaded render target or error.
-	TextureRenderTargetResult : { target : TextureRenderTarget, err : U8 }
+	## Failures while loading a render target.
+	TextureRenderTargetError : [ResourceLimit, RenderTextureLoadFailed]
 
 	## Load a render target.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_load_render_target! : TextureRenderTargetSize => TextureRenderTargetResult
+	texture_load_render_target! : TextureRenderTargetSize => Try(TextureRenderTarget, TextureRenderTargetError)
 
 	## Text resource interface
+	FontResource : [FontResource]
+
+	PreparedTextResource := {}
+
 	## Opaque ARC-owned prepared text.
-	TextPrepared : Box(U64)
-
-	## One glyph's layout metrics.
-	TextGlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
-
-	## Font metrics and glyph lookup data.
-	TextFontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(TextGlyphMetric) }
+	TextPrepared : Handle(PreparedTextResource)
 
 	## Text-preparation parameters.
-	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.Handle }
+	TextPrepare : { text : Str, size : F32, spacing : F32, font : Handle(FontResource) }
 
-	## Prepared text, measured size, or error.
-	TextPrepareResult : { prepared : TextPrepared, width : F32, height : F32, err : U8 }
+	## Failures while preparing text.
+	TextPrepareError : [ResourceLimit, InvalidResource]
+
+	## Prepared text and its measured size.
+	TextPreparedResult : { prepared : TextPrepared, width : F32, height : F32 }
 
 	## Font bytes, format, and pixel size.
 	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
@@ -161,36 +172,31 @@ Host := [].{
 	## Store-relative font path and pixel size.
 	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
 
-	## Loaded font or error.
-	TextFontResult : { font : Font.Handle, err : U8 }
+	## Failures while constructing a font from encoded bytes.
+	TextLoadFontError : [FontLoadFailed, ResourceLimit]
 
-	## Get the default font during rendering.
+	## Failures while reading and constructing a font from an asset store.
+	TextLoadStoreFontError : [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit]
+
+	## Snapshot the built-in default font.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_default_font! : () => Font.Handle
+	text_default_font! : () => Font
 
 	## Get the default font during startup.
 	## Legal only in `init!`.
-	text_startup_default_font! : () => TextFontResult
+	text_startup_default_font! : () => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 
 	## Load a font from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_load_font_bytes! : TextLoadFontBytes => TextFontResult
+	text_load_font! : TextLoadFontBytes => Try(Font, TextLoadFontError)
 
 	## Load a font from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	text_load_store_font! : TextLoadStoreFont => TextFontResult
-
-	## Get font and glyph metrics.
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_font_metrics! : Font.Handle => TextFontMetrics
+	text_load_store_font! : TextLoadStoreFont => Try(Font, TextLoadStoreFontError)
 
 	## Shape and measure text for repeated drawing.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_prepare! : TextPrepare => TextPrepareResult
-
-	## Shader resource interface
-	## Opaque ARC-owned shader.
-	Shader : Box(U64)
+	text_prepare! : TextPrepare => Try(TextPreparedResult, TextPrepareError)
 
 	## Located shader uniform.
 	ShaderUniform : { shader : Shader, location : I32 }
@@ -222,16 +228,19 @@ Host := [].{
 	## Texture uniform value.
 	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
 
-	## Loaded shader or error.
-	ShaderResult : { shader : Shader, err : U8 }
+	## Failures while compiling shader source strings.
+	ShaderLoadSourceError : [ResourceLimit, ShaderLoadFailed]
+
+	## Failures while reading and compiling shaders from an asset store.
+	ShaderLoadStoreError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed]
 
 	## Load a shader from source strings.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_load_source! : ShaderLoadSource => ShaderResult
+	shader_load_source! : ShaderLoadSource => Try(Shader, ShaderLoadSourceError)
 
 	## Load a shader from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	shader_load_store! : ShaderLoadStore => ShaderResult
+	shader_load_store! : ShaderLoadStore => Try(Shader, ShaderLoadStoreError)
 
 	## Get a shader uniform location.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -262,8 +271,10 @@ Host := [].{
 	shader_set_texture! : ShaderTexture => {}
 
 	## Store resource interface
+	StoreResource := {}
+
 	## Opaque ARC-owned directory store; copies keep it open.
-	Store : Box(U64)
+	Store : Handle(StoreResource)
 
 	## Parameters for opening a confined asset store.
 	StoreOpen : {
@@ -277,12 +288,12 @@ Host := [].{
 		content_hash : Str,
 	}
 
-	## Open asset store or error.
-	StoreOpenResult : { store : Store, err : U8 }
+	## Failures while opening and validating an asset store.
+	StoreOpenError : [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	store_open! : StoreOpen => StoreOpenResult
+	store_open! : StoreOpen => Try(Store, StoreOpenError)
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
@@ -353,17 +364,23 @@ Host := [].{
 	}
 
 	## Audio interface
+	SoundResource := {}
+	MusicResource := {}
+
 	## Opaque ARC-owned sound.
-	AudioSound : Box(U64)
+	AudioSound : Handle(SoundResource)
 
 	## Opaque ARC-owned music stream.
-	AudioMusic : Box(U64)
+	AudioMusic : Handle(MusicResource)
 
-	## Loaded sound or error.
-	AudioSoundResult : { sound : AudioSound, err : U8 }
+	## Failures while generating a sound.
+	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
 
-	## Loaded music stream or error.
-	AudioMusicResult : { music : AudioMusic, err : U8 }
+	## Failures while loading a sound.
+	AudioLoadSoundError : [ResourceLimit, SoundLoadFailed]
+
+	## Failures while loading a music stream.
+	AudioLoadMusicError : [MusicLoadFailed, ResourceLimit]
 
 	## Parameters for a generated sound envelope.
 	AudioGenSound : {
@@ -380,19 +397,19 @@ Host := [].{
 
 	## Generate a tone.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_tone! : { freq : F32, ms : I32 } => AudioSoundResult
+	audio_gen_tone! : { freq : F32, ms : I32 } => Try(AudioSound, AudioGenerateSoundError)
 
 	## Generate a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_sound! : AudioGenSound => AudioSoundResult
+	audio_gen_sound! : AudioGenSound => Try(AudioSound, AudioGenerateSoundError)
 
 	## Load a sound from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Str => AudioSoundResult
+	audio_load_sound! : Str => Try(AudioSound, AudioLoadSoundError)
 
 	## Load a music stream from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Str => AudioMusicResult
+	audio_load_music! : Str => Try(AudioMusic, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -620,8 +637,10 @@ Host := [].{
 	stdio_write_bytes! : U8, List(U8) => U8
 
 	## Udp interface
+	UdpSocketResource := {}
+
 	## Opaque ARC-owned bound socket.
-	UdpHandle : Box(U64)
+	UdpHandle : Handle(UdpSocketResource)
 
 	## Bind a dotted-quad IPv4 literal; port `0` requests an assigned port.
 	UdpBindArgs : {
@@ -683,13 +702,6 @@ Host := [].{
 	## Zero-sized startup authority minted by the adapter.
 	AppStartup : {}
 
-	## Startup file contents, or `1` for missing and another code for failure.
-	AppReadFileResult : {
-		ok : Bool,
-		err : U8,
-		contents : Str,
-	}
-
 	## Stop after `init!` returns.
 	## Legal only in `init!`.
 	app_exit! : I32 => {}
@@ -704,7 +716,7 @@ Host := [].{
 
 	## Read a whole UTF-8 file during startup.
 	## Legal only in `init!`.
-	app_read_file! : Str => AppReadFileResult
+	app_read_text! : Str => Try(Str, [NotFound, ReadFailed])
 
 	## Random interface
 	## Draw from operating-system entropy.
@@ -848,8 +860,6 @@ Host := [].{
 		properties : List(TilemapProperty),
 	}
 
-	TilemapLoadResult : { ok : Bool, err : U8, map : TilemapMap }
-
 	## Layer metadata borrowed by one batched draw.
 	TilemapRenderLayer : {
 		width : U64,
@@ -888,17 +898,20 @@ Host := [].{
 	}
 
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	tilemap_load_tmx! : Str => TilemapLoadResult
+	tilemap_load_tmx! : Str => Try(TilemapMap, [NotFound, ParseFailed, ReadFailed, Unsupported])
 
 	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}
 
 	## Sqlite interface
+	SqliteDbResource := {}
+	SqliteStmtResource := {}
+
 	## Opaque ARC-owned database connection.
-	SqliteDb : Box(U64)
+	SqliteDb : Handle(SqliteDbResource)
 
 	## Opaque statement that retains its connection.
-	SqliteStmt : Box(U64)
+	SqliteStmt : Handle(SqliteStmtResource)
 
 	## One row-major query cell.
 	##
@@ -1027,7 +1040,7 @@ Host := [].{
 	DrawFps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 
 	## Text-drawing parameters.
-	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.Handle }
+	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Handle(FontResource) }
 
 	## Prepared-text drawing parameters.
 	DrawPreparedTextDraw : { prepared : TextPrepared, pos : Math.Vec2, color : Color.Rgba }

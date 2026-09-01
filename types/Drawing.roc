@@ -4,9 +4,9 @@
 ## `Drawable`, which is implemented by `Draw.Frame` and by compatible test or
 ## recording frames.
 import Color
-import Font
+import resources/Font as Font
 import Math
-import Texture
+import resources/Texture as Texture
 
 frame.Drawable :
 	where [

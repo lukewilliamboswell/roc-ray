@@ -50,6 +50,7 @@
 ## privileges, and report `PermissionDenied` when they are missing. Broadcast
 ## and multicast are not enabled.
 import Host
+import rrt.Handle
 
 Udp := [].{
 
@@ -216,7 +217,7 @@ Udp := [].{
 		## a pure `expect` build that model. Do not use it to test delivery or
 		## resource lifetime.
 		stub : Socket
-		stub = Socket.({ handle: Box.box(U64.highest), local: { ip: "0.0.0.0", port: 0 } })
+		stub = Socket.({ handle: Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
 }
 

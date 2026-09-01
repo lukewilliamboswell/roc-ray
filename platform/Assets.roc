@@ -38,6 +38,7 @@
 ## Release textures the app no longer needs before loading more.
 import Color
 import Host
+import rrt.Handle
 import rrt.Texture as RrtTexture
 
 Assets := [].{
@@ -87,25 +88,23 @@ Assets := [].{
 		## only. Nothing walks or hashes the loose files, so opening a store
 		## stays constant-time in the number of assets.
 		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
-		open! = |cfg| {
-			result = Host.store_open!(store_open_config(cfg))
-			match result.err {
-				0 => Ok(Store.(result.store))
-				1 => Err(RootNotFound)
-				2 => Err(RootNotDirectory)
-				3 => Err(RootUnreadable)
-				4 => Err(InvalidRootPath)
-				5 => Err(InvalidExpectedContentHash)
-				6 => Err(ManifestMissing)
-				7 => Err(ManifestUnreadable)
-				8 => Err(ManifestMalformed)
-				9 => Err(AssetSetMismatch)
-				10 => Err(SchemaMismatch)
-				11 => Err(ContentVersionMismatch)
-				12 => Err(ContentHashMismatch)
-				_ => Err(ResourceLimit)
+		open! = |cfg|
+			match Host.store_open!(store_open_config(cfg)) {
+				Ok(store) => Ok(Store.(store))
+				Err(RootNotFound) => Err(RootNotFound)
+				Err(RootNotDirectory) => Err(RootNotDirectory)
+				Err(RootUnreadable) => Err(RootUnreadable)
+				Err(InvalidRootPath) => Err(InvalidRootPath)
+				Err(InvalidExpectedContentHash) => Err(InvalidExpectedContentHash)
+				Err(ManifestMissing) => Err(ManifestMissing)
+				Err(ManifestUnreadable) => Err(ManifestUnreadable)
+				Err(ManifestMalformed) => Err(ManifestMalformed)
+				Err(AssetSetMismatch) => Err(AssetSetMismatch)
+				Err(SchemaMismatch) => Err(SchemaMismatch)
+				Err(ContentVersionMismatch) => Err(ContentVersionMismatch)
+				Err(ContentHashMismatch) => Err(ContentHashMismatch)
+				Err(ResourceLimit) => Err(ResourceLimit)
 			}
-		}
 
 		## Resource-free store value for pure tests.
 		##
@@ -119,7 +118,7 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(Box.box(U64.highest))
+		stub = Store.(Handle.stub)
 
 		## Internal bridge for platform operations that also use an asset store.
 		for_host : Store -> Host.Store
@@ -245,50 +244,53 @@ Assets := [].{
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
 	## would not decode as an image.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit, ..])
-	load_texture! = |Store.(store), path| {
-		result = Host.texture_load_store!({ store, path })
-		if result.err == 1 {
-			Err(PathInvalid)
-		} else if result.err == 2 {
-			Err(NotFound)
-		} else if result.err == 3 {
-			Err(ReadFailed)
-		} else if result.err == 4 {
-			Err(TextureLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			Ok(result.texture)
+	load_texture! = |Store.(store), path|
+	# closed error union to open error union
+		match Host.texture_load_store!({ store, path }) {
+			Ok(texture) => Ok(texture)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Decode an authored image embedded with a compile-time file import.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-	texture_from_bytes! = |cfg| {
-		result = Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
-	}
+	texture_from_bytes! = |cfg|
+	# closed error union to open error union
+		match Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes }) {
+			Ok(texture) => Ok(texture)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_color_texture! = |cfg| {
-		result = Host.texture_generate_color!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_color_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_color!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a checkerboard GPU texture without retaining a CPU image.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_checked_texture! = |cfg| {
-		result = Host.texture_generate_checked!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_checked_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_checked!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Replace every pixel. The row-major RGBA list must exactly match the texture
 	## dimensions and is borrowed only for this host call.

@@ -24,6 +24,7 @@ import Draw
 import Host
 import Math
 import rrt.Font as RrtFont
+import rrt.Handle
 
 Text := [].{
 
@@ -44,7 +45,7 @@ Text := [].{
 	## A measured width and height, in the same logical units as every drawing
 	## call. This is `Draw.TextSize` and the types package's `Font.Size` under a
 	## third name; they are one type.
-	Size : RrtFont.Size
+	Size : { width : F32, height : F32 }
 
 	## Resource-free synthetic monospace font for pure layout tests.
 	font_stub : Font
@@ -170,7 +171,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: Box.box(U64.highest),
+				resource: Handle.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)
@@ -202,19 +203,18 @@ Text := [].{
 			spacing: builder.spacing,
 			font: builder.font.handle,
 		})
-		if result.err == 2 {
-			Err(ResourceLimit)
-		} else if result.err != 0 {
-			crash "prepared text host invariant failed"
-		} else {
-			Ok(
+		match result {
+			# closed error union to open error union
+			Ok(prepared_result) => Ok(
 				Prepared.(
 					{
-						resource: result.prepared,
-						measured: { width: result.width, height: result.height },
+						resource: prepared_result.prepared,
+						measured: { width: prepared_result.width, height: prepared_result.height },
 					},
 				),
 			)
+			Err(ResourceLimit) => Err(ResourceLimit)
+			Err(InvalidResource) => crash "prepared text host invariant failed"
 		}
 	}
 

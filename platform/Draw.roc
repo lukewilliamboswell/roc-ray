@@ -37,6 +37,7 @@ import Camera
 import Color
 import Host
 import rrt.Font
+import rrt.Shader as RrtShader
 import Math
 
 TextureDrawConfig : {
@@ -362,10 +363,17 @@ Draw := [].{
 	}
 
 	## Scalar metrics for one glyph, shared with platform-independent packages.
-	GlyphMetrics : Font.GlyphMetrics
+	GlyphMetrics : {
+		codepoint : U32,
+		advance_x : F32,
+		offset_x : F32,
+		offset_y : F32,
+		width : F32,
+		height : F32,
+	}
 
 	## Text measurement result.
-	TextSize : Font.Size
+	TextSize : { width : F32, height : F32 }
 
 	## Fully configured text draw at a resolved top-left origin.
 	Text : {
@@ -548,10 +556,13 @@ Draw := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
-		load! = |size| {
-			result = Host.texture_load_render_target!(size)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(RenderTexture.(result.target))
-		}
+		load! = |size|
+			match Host.texture_load_render_target!(size) {
+				# closed error union to open error union
+				Ok(target) => Ok(RenderTexture.(target))
+				Err(RenderTextureLoadFailed) => Err(RenderTextureLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
+			}
 
 		## Read-only view of this render target's color attachment.
 		texture : RenderTexture -> Texture
@@ -588,16 +599,19 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: Host.Shader.{
+	Shader :: RrtShader.Shader.{
 
 		## Compile shader stages from source strings.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-		from_source! = |cfg| {
-			result = Host.shader_load_source!(cfg)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
-		}
+		from_source! = |cfg|
+		# closed error union to open error union
+			match Host.shader_load_source!(cfg) {
+				Ok(shader) => Ok(Shader.(shader))
+				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
+			}
 
 		## Compile shader stage files resolved through an explicit asset store.
 		##
@@ -607,22 +621,16 @@ Draw := [].{
 		## compile from `update!`, use `from_source!` with strings the app
 		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
-		from_store! = |store, cfg| {
-			result = Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
-			if result.err == 1 {
-				Err(PathInvalid)
-			} else if result.err == 2 {
-				Err(NotFound)
-			} else if result.err == 3 {
-				Err(ReadFailed)
-			} else if result.err == 4 {
-				Err(ShaderLoadFailed)
-			} else if result.err != 0 {
-				Err(ResourceLimit)
-			} else {
-				Ok(Shader.(result.shader))
+		from_store! = |store, cfg|
+		# closed error union to open error union
+			match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
+				Ok(shader) => Ok(Shader.(shader))
+				Err(PathInvalid) => Err(PathInvalid)
+				Err(NotFound) => Err(NotFound)
+				Err(ReadFailed) => Err(ReadFailed)
+				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
+				Err(ResourceLimit) => Err(ResourceLimit)
 			}
-		}
 
 		## Resolve a scalar floating-point uniform once.
 		##
@@ -680,7 +688,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Box.box(U64.highest))
+		stub = Shader.(RrtShader.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -867,7 +875,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || font_from_host!(Host.text_default_font!())
+	default_font! = || Host.text_default_font!()
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -1017,22 +1025,15 @@ Draw := [].{
 	## frame thread and rasterized when the bytes are back. To load a font from
 	## `update!`, use `font_from_bytes!` with bytes the app already holds.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
-	load_store_font! = |store, cfg| {
-		result = Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size })
-		if result.err == 1 {
-			Err(PathInvalid)
-		} else if result.err == 2 {
-			Err(NotFound)
-		} else if result.err == 3 {
-			Err(ReadFailed)
-		} else if result.err == 4 {
-			Err(FontLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			Ok(font_from_host!(result.font))
+	load_store_font! = |store, cfg|
+		match Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size }) {
+			Ok(font) => Ok(font)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(FontLoadFailed) => Err(FontLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Decode an authored, compile-time embedded font.
 	##
@@ -1040,10 +1041,12 @@ Draw := [].{
 	## Roc payload-sized buffer is created. Legal in `init!`, `update!`, and
 	## tasks; refused in `render!`.
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	font_from_bytes! = |cfg| {
-		result = Host.text_load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(result.font))
-	}
+	font_from_bytes! = |cfg|
+		match Host.text_load_font!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size }) {
+			Ok(font) => Ok(font)
+			Err(FontLoadFailed) => Err(FontLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Texture -> TextureDraw
@@ -1322,18 +1325,6 @@ Draw := [].{
 
 }
 
-## Take the metric snapshot a font value carries.
-##
-## This is the one impure step in a font's life: it asks the host for the atlas
-## metrics once, when the font loads, so that every reader afterwards -- here,
-## in an app, or in a package that never heard of this platform -- is pure.
-## Private, because minting a live `Font` is the host's business.
-font_from_host! : Font.Handle => Font
-font_from_host! = |handle| {
-	metrics = Host.text_font_metrics!(handle)
-	{ handle, metrics }
-}
-
 blend_mode_code : Draw.BlendMode -> U8
 blend_mode_code = |mode|
 	match mode {
@@ -1358,7 +1349,7 @@ scope_ok = 0
 scope_limit : U8
 scope_limit = 2
 
-uniform_host! : Host.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : RrtShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	location = Host.shader_location!({ shader, name })
 	if location < 0 {

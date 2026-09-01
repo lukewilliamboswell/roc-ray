@@ -245,50 +245,53 @@ Assets := [].{
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
 	## would not decode as an image.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit, ..])
-	load_texture! = |Store.(store), path| {
-		result = Host.texture_load_store!({ store, path })
-		if result.err == 1 {
-			Err(PathInvalid)
-		} else if result.err == 2 {
-			Err(NotFound)
-		} else if result.err == 3 {
-			Err(ReadFailed)
-		} else if result.err == 4 {
-			Err(TextureLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			Ok(result.texture)
+	load_texture! = |Store.(store), path|
+	# closed error union to open error union
+		match Host.texture_load_store!({ store, path }) {
+			Ok(texture) => Ok(texture)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Decode an authored image embedded with a compile-time file import.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-	texture_from_bytes! = |cfg| {
-		result = Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
-	}
+	texture_from_bytes! = |cfg|
+	# closed error union to open error union
+		match Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes }) {
+			Ok(texture) => Ok(texture)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_color_texture! = |cfg| {
-		result = Host.texture_generate_color!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_color_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_color!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a checkerboard GPU texture without retaining a CPU image.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_checked_texture! = |cfg| {
-		result = Host.texture_generate_checked!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_checked_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_checked!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Replace every pixel. The row-major RGBA list must exactly match the texture
 	## dimensions and is borrowed only for this host call.

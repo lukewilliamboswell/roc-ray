@@ -63,8 +63,14 @@ Host := [].{
 	## Store-relative texture path.
 	TextureLoadStore : { store : Store, path : Str }
 
-	## Loaded texture or error.
-	TextureResult : { texture : Texture, err : U8 }
+	## Failures while reading and decoding a texture from an asset store.
+	TextureLoadStoreError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed]
+
+	## Failures while decoding a texture from encoded bytes.
+	TextureLoadBytesError : [ResourceLimit, TextureLoadFailed]
+
+	## Failures while generating a texture.
+	TextureGenerateError : [ResourceLimit, TextureGenerationFailed]
 
 	## Encoded texture bytes and format code.
 	TextureBytes : { format : U8, bytes : List(U8) }
@@ -97,19 +103,19 @@ Host := [].{
 
 	## Load a texture from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	texture_load_store! : TextureLoadStore => TextureResult
+	texture_load_store! : TextureLoadStore => Try(Texture, TextureLoadStoreError)
 
 	## Load a texture from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_load_bytes! : TextureBytes => TextureResult
+	texture_load_bytes! : TextureBytes => Try(Texture, TextureLoadBytesError)
 
 	## Generate a solid-color texture.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_generate_color! : TextureGenerateColor => TextureResult
+	texture_generate_color! : TextureGenerateColor => Try(Texture, TextureGenerateError)
 
 	## Generate a checkerboard texture.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_generate_checked! : TextureGenerateChecked => TextureResult
+	texture_generate_checked! : TextureGenerateChecked => Try(Texture, TextureGenerateError)
 
 	## Replace all texture pixels.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

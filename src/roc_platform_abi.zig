@@ -701,48 +701,6 @@ pub const RocEnv = struct {
     roc_io: RocIo,
 };
 
-/// Element type for __AnonStruct_4954456148c33ae5
-pub const __AnonStruct_4954456148c33ae5 = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.texture.incref(amount);
-    }
-} else extern struct {
-    texture: Texture,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.texture.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_4954456148c33ae5) != 24) @compileError("__AnonStruct_4954456148c33ae5 size mismatch");
-        if (@alignOf(__AnonStruct_4954456148c33ae5) != 8) @compileError("__AnonStruct_4954456148c33ae5 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_4954456148c33ae5) != 16) @compileError("__AnonStruct_4954456148c33ae5 size mismatch");
-        if (@alignOf(__AnonStruct_4954456148c33ae5) != 4) @compileError("__AnonStruct_4954456148c33ae5 alignment mismatch");
-    }
-}
-
 /// Element type for Texture
 pub const Texture = if (@sizeOf(usize) == 4) extern struct {
     handle: *u64,
@@ -6748,6 +6706,291 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostTexture_load_storeResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostTexture_load_storeResultPayload = extern union {
+    err: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed,
+    ok: Texture,
+};
+
+/// Tag union: Try
+pub const HostTexture_load_storeResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostTexture_load_storeResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed {
+        const ptr: *const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        const ptr: *const Texture = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_storeResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_storeResult(self, amount);
+    }
+} else extern struct {
+    payload: HostTexture_load_storeResultPayload,
+    tag: HostTexture_load_storeResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_storeResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_storeResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_storeResult) != 24) @compileError("HostTexture_load_storeResult size mismatch");
+        if (@alignOf(HostTexture_load_storeResult) != 8) @compileError("HostTexture_load_storeResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_storeResult, "tag") != 16) @compileError("HostTexture_load_storeResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_storeResult) != 16) @compileError("HostTexture_load_storeResult size mismatch");
+        if (@alignOf(HostTexture_load_storeResult) != 4) @compileError("HostTexture_load_storeResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_storeResult, "tag") != 12) @compileError("HostTexture_load_storeResult tag offset mismatch");
+    }
+}
+
+/// Tag union: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed
+pub const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed = enum(u8) {
+    not_found = 0,
+    path_invalid = 1,
+    read_failed = 2,
+    resource_limit = 3,
+    texture_load_failed = 4,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostTexture_load_bytesResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostTexture_load_bytesResultPayload = extern union {
+    err: ResourceLimitOrTextureLoadFailed,
+    ok: Texture,
+};
+
+/// Tag union: Try
+pub const HostTexture_load_bytesResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostTexture_load_bytesResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrTextureLoadFailed {
+        const ptr: *const ResourceLimitOrTextureLoadFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        const ptr: *const Texture = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_bytesResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_bytesResult(self, amount);
+    }
+} else extern struct {
+    payload: HostTexture_load_bytesResultPayload,
+    tag: HostTexture_load_bytesResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrTextureLoadFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_load_bytesResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_load_bytesResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_bytesResult) != 24) @compileError("HostTexture_load_bytesResult size mismatch");
+        if (@alignOf(HostTexture_load_bytesResult) != 8) @compileError("HostTexture_load_bytesResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_bytesResult, "tag") != 16) @compileError("HostTexture_load_bytesResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_bytesResult) != 16) @compileError("HostTexture_load_bytesResult size mismatch");
+        if (@alignOf(HostTexture_load_bytesResult) != 4) @compileError("HostTexture_load_bytesResult alignment mismatch");
+        if (@offsetOf(HostTexture_load_bytesResult, "tag") != 12) @compileError("HostTexture_load_bytesResult tag offset mismatch");
+    }
+}
+
+/// Tag union: ResourceLimitOrTextureLoadFailed
+pub const ResourceLimitOrTextureLoadFailed = enum(u8) {
+    resource_limit = 0,
+    texture_load_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ResourceLimitOrTextureLoadFailed) != 1) @compileError("ResourceLimitOrTextureLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrTextureLoadFailed) != 1) @compileError("ResourceLimitOrTextureLoadFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ResourceLimitOrTextureLoadFailed) != 1) @compileError("ResourceLimitOrTextureLoadFailed size mismatch");
+        if (@alignOf(ResourceLimitOrTextureLoadFailed) != 1) @compileError("ResourceLimitOrTextureLoadFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostTexture_generate_colorResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostTexture_generate_colorResultPayload = extern union {
+    err: ResourceLimitOrTextureGenerationFailed,
+    ok: Texture,
+};
+
+/// Tag union: Try
+pub const HostTexture_generate_colorResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostTexture_generate_colorResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrTextureGenerationFailed {
+        const ptr: *const ResourceLimitOrTextureGenerationFailed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        const ptr: *const Texture = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_generate_colorResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_generate_colorResult(self, amount);
+    }
+} else extern struct {
+    payload: HostTexture_generate_colorResultPayload,
+    tag: HostTexture_generate_colorResultTag,
+    pub fn payload_err(self: *const @This()) ResourceLimitOrTextureGenerationFailed {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) Texture {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTexture_generate_colorResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTexture_generate_colorResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_generate_colorResult) != 24) @compileError("HostTexture_generate_colorResult size mismatch");
+        if (@alignOf(HostTexture_generate_colorResult) != 8) @compileError("HostTexture_generate_colorResult alignment mismatch");
+        if (@offsetOf(HostTexture_generate_colorResult, "tag") != 16) @compileError("HostTexture_generate_colorResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_generate_colorResult) != 16) @compileError("HostTexture_generate_colorResult size mismatch");
+        if (@alignOf(HostTexture_generate_colorResult) != 4) @compileError("HostTexture_generate_colorResult alignment mismatch");
+        if (@offsetOf(HostTexture_generate_colorResult, "tag") != 12) @compileError("HostTexture_generate_colorResult tag offset mismatch");
+    }
+}
+
+/// Tag union: ResourceLimitOrTextureGenerationFailed
+pub const ResourceLimitOrTextureGenerationFailed = enum(u8) {
+    resource_limit = 0,
+    texture_generation_failed = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ResourceLimitOrTextureGenerationFailed) != 1) @compileError("ResourceLimitOrTextureGenerationFailed size mismatch");
+        if (@alignOf(ResourceLimitOrTextureGenerationFailed) != 1) @compileError("ResourceLimitOrTextureGenerationFailed alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ResourceLimitOrTextureGenerationFailed) != 1) @compileError("ResourceLimitOrTextureGenerationFailed size mismatch");
+        if (@alignOf(ResourceLimitOrTextureGenerationFailed) != 1) @compileError("ResourceLimitOrTextureGenerationFailed alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostText_startup_default_fontResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -7531,90 +7774,6 @@ comptime {
     }
 }
 
-/// Return type record for Host.texture_load_store!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTexture_load_storeRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    err: u8,
-} else extern struct {
-    texture: Texture,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_storeRetRecord) != 24) @compileError("HostTexture_load_storeRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_storeRetRecord) != 8) @compileError("HostTexture_load_storeRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_storeRetRecord) != 16) @compileError("HostTexture_load_storeRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_storeRetRecord) != 4) @compileError("HostTexture_load_storeRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.texture_load_bytes!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTexture_load_bytesRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    err: u8,
-} else extern struct {
-    texture: Texture,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_bytesRetRecord) != 24) @compileError("HostTexture_load_bytesRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_bytesRetRecord) != 8) @compileError("HostTexture_load_bytesRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_bytesRetRecord) != 16) @compileError("HostTexture_load_bytesRetRecord size mismatch");
-        if (@alignOf(HostTexture_load_bytesRetRecord) != 4) @compileError("HostTexture_load_bytesRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.texture_generate_color!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTexture_generate_colorRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    err: u8,
-} else extern struct {
-    texture: Texture,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_generate_colorRetRecord) != 24) @compileError("HostTexture_generate_colorRetRecord size mismatch");
-        if (@alignOf(HostTexture_generate_colorRetRecord) != 8) @compileError("HostTexture_generate_colorRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_generate_colorRetRecord) != 16) @compileError("HostTexture_generate_colorRetRecord size mismatch");
-        if (@alignOf(HostTexture_generate_colorRetRecord) != 4) @compileError("HostTexture_generate_colorRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.texture_generate_checked!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTexture_generate_checkedRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    err: u8,
-} else extern struct {
-    texture: Texture,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_generate_checkedRetRecord) != 24) @compileError("HostTexture_generate_checkedRetRecord size mismatch");
-        if (@alignOf(HostTexture_generate_checkedRetRecord) != 8) @compileError("HostTexture_generate_checkedRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_generate_checkedRetRecord) != 16) @compileError("HostTexture_generate_checkedRetRecord size mismatch");
-        if (@alignOf(HostTexture_generate_checkedRetRecord) != 4) @compileError("HostTexture_generate_checkedRetRecord alignment mismatch");
-    }
-}
-
 /// Return type record for Host.audio_gen_tone!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const HostAudio_gen_toneRetRecord = if (@sizeOf(usize) == 4) extern struct {
@@ -8376,7 +8535,7 @@ comptime {
 }
 
 /// Arguments for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Box(U64) } => { err : U8, texture : Texture }
+/// Roc signature: { path : Str, store : Box(U64) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
@@ -8424,7 +8583,7 @@ comptime {
 }
 
 /// Arguments for Host.texture_load_bytes!
-/// Roc signature: { bytes : List(U8), format : U8 } => { err : U8, texture : Texture }
+/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_load_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
@@ -8468,7 +8627,7 @@ comptime {
 }
 
 /// Arguments for Host.texture_generate_color!
-/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
+/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_generate_colorArgs = if (@sizeOf(usize) == 4) extern struct {
     height: i32,
@@ -8514,7 +8673,7 @@ comptime {
 }
 
 /// Arguments for Host.texture_generate_checked!
-/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
+/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTexture_generate_checkedArgs = if (@sizeOf(usize) == 4) extern struct {
     checks_x: i32,
@@ -12012,13 +12171,20 @@ pub const HostTrace_sample_f64Args = extern struct {
 pub const HostStore_openArg0 = __AnonStruct_8f4b2816fd84fce2;
 pub const HostStore_open = __AnonStruct_e6ed6936affe2edb;
 pub const HostTexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
-pub const HostTexture_load_store = __AnonStruct_4954456148c33ae5;
+pub const HostTexture_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed;
+pub const HostTexture_load_storeOk = Texture;
 pub const HostTexture_load_bytesArg0 = __AnonStruct_ff17f03b4409100d;
-pub const HostTexture_load_bytes = __AnonStruct_4954456148c33ae5;
+pub const HostTexture_load_bytesErr = ResourceLimitOrTextureLoadFailed;
+pub const HostTexture_load_bytesOk = Texture;
 pub const HostTexture_generate_colorArg0 = __AnonStruct_261d7d093f4d74f0;
-pub const HostTexture_generate_color = __AnonStruct_4954456148c33ae5;
+pub const HostTexture_generate_colorErr = ResourceLimitOrTextureGenerationFailed;
+pub const HostTexture_generate_colorOk = Texture;
 pub const HostTexture_generate_checkedArg0 = __AnonStruct_8ffafd56eb173f8d;
-pub const HostTexture_generate_checked = __AnonStruct_4954456148c33ae5;
+pub const HostTexture_generate_checkedResult = HostTexture_generate_colorResult;
+pub const HostTexture_generate_checkedResultPayload = HostTexture_generate_colorResultPayload;
+pub const HostTexture_generate_checkedResultTag = HostTexture_generate_colorResultTag;
+pub const HostTexture_generate_checkedErr = ResourceLimitOrTextureGenerationFailed;
+pub const HostTexture_generate_checkedOk = Texture;
 pub const HostTexture_updateArg0 = __AnonStruct_8e0d47be14ad0be3;
 pub const HostTexture_updateArg0Pixels = ColorRgba;
 pub const HostTexture_update_regionArg0 = __AnonStruct_307d51efe2380633;
@@ -12159,8 +12325,30 @@ pub const Update_for_hostArg1WindowSize = __AnonStruct_bc8fa73ca49a5ac0;
 
 // Generated Refcount Helpers
 
-pub const __AnonStruct_4954456148c33ae5Release = struct {
-    pub fn release(value: __AnonStruct_4954456148c33ae5, roc_host: *RocHost) void {
+fn decrefHostTexture_load_storeResult(value: HostTexture_load_storeResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostTexture_load_storeResult(value: HostTexture_load_storeResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostTexture_load_storeResultRelease = struct {
+    pub fn release(value: HostTexture_load_storeResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12177,8 +12365,64 @@ pub const __AnonStruct_e6634fb4c190c214Release = struct {
     }
 };
 
+fn decrefHostTexture_load_bytesResult(value: HostTexture_load_bytesResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostTexture_load_bytesResult(value: HostTexture_load_bytesResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostTexture_load_bytesResultRelease = struct {
+    pub fn release(value: HostTexture_load_bytesResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
 pub const __AnonStruct_ff17f03b4409100dRelease = struct {
     pub fn release(value: __AnonStruct_ff17f03b4409100d, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostTexture_generate_colorResult(value: HostTexture_generate_colorResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostTexture_generate_colorResult(value: HostTexture_generate_colorResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostTexture_generate_colorResultRelease = struct {
+    pub fn release(value: HostTexture_generate_colorResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13215,12 +13459,14 @@ pub fn decrefListOf__AnonStruct_3e6f83279dfc8d12(value: RocList(__AnonStruct_3e6
 
 fn rocReleasePolicy(comptime T: type) type {
     if (T == RocStr) return RocStrRelease;
-    if (T == __AnonStruct_4954456148c33ae5) return __AnonStruct_4954456148c33ae5Release;
+    if (T == HostTexture_load_storeResult) return HostTexture_load_storeResultRelease;
     if (T == Texture) return TextureRelease;
     if (T == *u64) return RocBoxSpineRelease(*u64, u64);
     if (T == __AnonStruct_e6634fb4c190c214) return __AnonStruct_e6634fb4c190c214Release;
+    if (T == HostTexture_load_bytesResult) return HostTexture_load_bytesResultRelease;
     if (T == __AnonStruct_ff17f03b4409100d) return __AnonStruct_ff17f03b4409100dRelease;
     if (T == RocListWith(u8, false)) return RocListSpineRelease(RocListWith(u8, false));
+    if (T == HostTexture_generate_colorResult) return HostTexture_generate_colorResultRelease;
     if (T == __AnonStruct_8e0d47be14ad0be3) return __AnonStruct_8e0d47be14ad0be3Release;
     if (T == RocListWith(ColorRgba, false)) return RocListSpineRelease(RocListWith(ColorRgba, false));
     if (T == __AnonStruct_307d51efe2380633) return __AnonStruct_307d51efe2380633Release;
@@ -13351,30 +13597,30 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_store_open_raw(arg0: HostStore_openArgs) callconv(.c) __AnonStruct_e6ed6936affe2edb;
 
 /// Hosted symbol for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Box(U64) } => { err : U8, texture : Texture }
+/// Roc signature: { path : Str, store : Box(U64) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_store_raw(arg0: HostTexture_load_storeArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_load_store_raw(arg0: HostTexture_load_storeArgs) callconv(.c) HostTexture_load_storeResult;
 
 /// Hosted symbol for Host.texture_load_bytes!
-/// Roc signature: { bytes : List(U8), format : U8 } => { err : U8, texture : Texture }
+/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_bytes_raw(arg0: HostTexture_load_bytesArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_load_bytes_raw(arg0: HostTexture_load_bytesArgs) callconv(.c) HostTexture_load_bytesResult;
 
 /// Hosted symbol for Host.texture_generate_color!
-/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
+/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_generate_color_raw(arg0: HostTexture_generate_colorArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_generate_color_raw(arg0: HostTexture_generate_colorArgs) callconv(.c) HostTexture_generate_colorResult;
 
 /// Hosted symbol for Host.texture_generate_checked!
-/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => { err : U8, texture : Texture }
+/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_generate_checked_raw(arg0: HostTexture_generate_checkedArgs) callconv(.c) __AnonStruct_4954456148c33ae5;
+pub extern fn roc_texture_generate_checked_raw(arg0: HostTexture_generate_checkedArgs) callconv(.c) HostTexture_generate_colorResult;
 
 /// Hosted symbol for Host.texture_update!
 /// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => U8

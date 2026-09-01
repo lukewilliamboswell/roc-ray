@@ -5008,7 +5008,8 @@ test "resource-free draw handles are inert, and leave real resources alone" {
             .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("atlas.png", &roc_host),
         });
-        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_texture.err);
+        try std.testing.expectEqual(abi.HostTexture_load_storeResultTag.Err, store_texture.tag);
+        try std.testing.expectEqual(abi.HostTexture_load_storeErr.read_failed, store_texture.payload_err());
 
         const store_font = hostedTextLoadStoreFontRaw(&roc_host, .{
             .store = allocateTestResourceStub(&roc_host),
@@ -5411,11 +5412,13 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var textures: [128]*u64 = undefined;
     for (&textures) |*texture| texture.* = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedTextureGenerateColorRaw(.{
+    const generated_texture = hostedTextureGenerateColorRaw(.{
         .height = 1,
         .width = 1,
         .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 },
-    }).err);
+    });
+    try std.testing.expectEqual(abi.HostTexture_generate_colorResultTag.Err, generated_texture.tag);
+    try std.testing.expectEqual(abi.HostTexture_generate_colorErr.resource_limit, generated_texture.payload_err());
     for (textures) |texture| releaseResourceBox(&roc_host, texture);
 
     var targets: [32]*u64 = undefined;
@@ -5585,10 +5588,6 @@ fn storeTexture(resource: TextureResource) ?*u64 {
         destroyTexture(&rejected);
         return null;
     };
-}
-
-fn invalidTexture() abi.Texture {
-    return .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 };
 }
 
 fn texturePixelCount(width: i32, height: i32) ?usize {
@@ -6098,9 +6097,9 @@ test "opening a store and loading a texture from it wait rather than load" {
         .store = opened.store,
         .path = abi.RocStr.fromSlice("logo.png", &roc_host),
     });
-    try std.testing.expectEqual(STORE_ERR_NONE, loaded.err);
+    try std.testing.expectEqual(abi.HostTexture_load_storeResultTag.Ok, loaded.tag);
     try std.testing.expect(last_phase_violation == null);
-    loaded.texture.decref(&roc_host);
+    loaded.payload_ok().decref(&roc_host);
 }
 
 fn byteListRefcount(list: abi.RocListWith(u8, false)) *isize {
@@ -6124,15 +6123,17 @@ test "embedded texture and font bytes are consumed exactly once" {
     const texture_rc = byteListRefcount(texture_bytes);
     try std.testing.expectEqual(@as(isize, 2), texture_rc.*);
     const texture = hostedTextureLoadBytesRaw(&roc_host, .{ .bytes = texture_bytes, .format = 0 });
-    try std.testing.expectEqual(RESOURCE_ERR_NONE, texture.err);
+    try std.testing.expectEqual(abi.HostTexture_load_bytesResultTag.Ok, texture.tag);
     try std.testing.expectEqual(@as(isize, 1), texture_rc.*);
-    texture.texture.decref(&roc_host);
+    texture.payload_ok().decref(&roc_host);
     texture_bytes.decref(&roc_host);
 
     const bad_texture_bytes = abi.RocListWith(u8, false).fromSlice("bad format", &roc_host);
     bad_texture_bytes.incref(1);
     const bad_texture_rc = byteListRefcount(bad_texture_bytes);
-    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedTextureLoadBytesRaw(&roc_host, .{ .bytes = bad_texture_bytes, .format = 99 }).err);
+    const bad_texture = hostedTextureLoadBytesRaw(&roc_host, .{ .bytes = bad_texture_bytes, .format = 99 });
+    try std.testing.expectEqual(abi.HostTexture_load_bytesResultTag.Err, bad_texture.tag);
+    try std.testing.expectEqual(abi.HostTexture_load_bytesErr.texture_load_failed, bad_texture.payload_err());
     try std.testing.expectEqual(@as(isize, 1), bad_texture_rc.*);
     bad_texture_bytes.decref(&roc_host);
 
@@ -6224,32 +6225,34 @@ fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []c
 /// The read waits -- it parks a task and blocks `init!` -- and the decode and
 /// the GPU upload happen on the frame thread afterwards, with the bytes back
 /// in hand.
-fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostTexture_load_storeArgs) callconv(.c) abi.HostTexture_load_storeRetRecord {
+fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostTexture_load_storeArgs) callconv(.c) abi.HostTexture_load_storeResult {
+    const Result = abi.HostTexture_load_storeResult;
+    const Error = abi.HostTexture_load_storeErr;
     enforcePhase("Assets.load_texture!", during_wait);
     const effect = EffectScope.begin("Assets.load_texture!", 0);
     defer effect.end();
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
-    const store = store_heap.get(args.store.*) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ };
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
     const source = readStoreAsset(allocator, store, args.path.asSlice());
     const bytes = switch (source) {
-        .path_invalid => return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_PATH },
-        .not_found => return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_NOT_FOUND },
-        .failed => return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ },
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
         .bytes => |value| value,
     };
     defer allocator.free(bytes);
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }) orelse
-            return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_LIMIT };
-        return .{ .texture = .{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE }, .err = STORE_ERR_NONE };
+            return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, abi.Texture{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE });
     }
-    const file_type = imageFileTypeFromPath(args.path.asSlice()) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_DECODE };
-    const texture = raylib.loadTextureFromMemory(file_type, bytes) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_DECODE };
+    const file_type = imageFileTypeFromPath(args.path.asSlice()) orelse return abiTryErr(Result, Error.texture_load_failed);
+    const texture = raylib.loadTextureFromMemory(file_type, bytes) orelse return abiTryErr(Result, Error.texture_load_failed);
     const stored = storeTexture(.{ .native = texture }) orelse
-        return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_LIMIT };
-    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = STORE_ERR_NONE };
+        return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
 fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
@@ -6263,62 +6266,68 @@ fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
     return null;
 }
 
-fn exportedTextureLoadStoreRaw(args: abi.HostTexture_load_storeArgs) callconv(.c) abi.HostTexture_load_storeRetRecord {
+fn exportedTextureLoadStoreRaw(args: abi.HostTexture_load_storeArgs) callconv(.c) abi.HostTexture_load_storeResult {
     return hostedTextureLoadStoreRaw(activeHost(), args);
 }
 
-fn hostedTextureLoadBytesRaw(host: *RocHost, args: abi.HostTexture_load_bytesArgs) callconv(.c) abi.HostTexture_load_bytesRetRecord {
+fn hostedTextureLoadBytesRaw(host: *RocHost, args: abi.HostTexture_load_bytesArgs) callconv(.c) abi.HostTexture_load_bytesResult {
+    const Result = abi.HostTexture_load_bytesResult;
+    const Error = abi.HostTexture_load_bytesErr;
     enforcePhase("Assets.texture_from_bytes!", during_load);
     const effect = EffectScope.begin("Assets.texture_from_bytes!", args.bytes.items().len);
     defer effect.end();
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
-    if (bytes.len == 0 or imageFileType(args.format) == null) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    if (bytes.len == 0 or imageFileType(args.format) == null) return abiTryErr(Result, Error.texture_load_failed);
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }) orelse
-            return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE }, .err = RESOURCE_ERR_NONE };
+            return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, abi.Texture{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE });
     }
-    const texture = raylib.loadTextureFromMemory(imageFileType(args.format).?, bytes) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    const texture = raylib.loadTextureFromMemory(imageFileType(args.format).?, bytes) orelse return abiTryErr(Result, Error.texture_load_failed);
     const stored = storeTexture(.{ .native = texture }) orelse
-        return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
+        return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
-fn exportedTextureLoadBytesRaw(args: abi.HostTexture_load_bytesArgs) callconv(.c) abi.HostTexture_load_bytesRetRecord {
+fn exportedTextureLoadBytesRaw(args: abi.HostTexture_load_bytesArgs) callconv(.c) abi.HostTexture_load_bytesResult {
     return hostedTextureLoadBytesRaw(activeHost(), args);
 }
 
-fn hostedTextureGenerateColorRaw(args: abi.HostTexture_generate_colorArgs) callconv(.c) abi.HostTexture_generate_colorRetRecord {
+fn hostedTextureGenerateColorRaw(args: abi.HostTexture_generate_colorArgs) callconv(.c) abi.HostTexture_generate_colorResult {
+    const Result = abi.HostTexture_generate_colorResult;
+    const Error = abi.HostTexture_generate_colorErr;
     enforcePhase("Assets.generate_color_texture!", during_load);
     const effect = EffectScope.begin("Assets.generate_color_texture!", 0);
     defer effect.end();
-    if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    if (args.width <= 0 or args.height <= 0) return abiTryErr(Result, Error.texture_generation_failed);
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
-            return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
+            return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, abi.Texture{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) });
     }
-    const texture = raylib.generateColorTexture(args.width, args.height, args.color) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    const texture = raylib.generateColorTexture(args.width, args.height, args.color) orelse return abiTryErr(Result, Error.texture_generation_failed);
     const stored = storeTexture(.{ .native = texture }) orelse
-        return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
+        return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
-fn hostedTextureGenerateCheckedRaw(args: abi.HostTexture_generate_checkedArgs) callconv(.c) abi.HostTexture_generate_checkedRetRecord {
+fn hostedTextureGenerateCheckedRaw(args: abi.HostTexture_generate_checkedArgs) callconv(.c) abi.HostTexture_generate_checkedResult {
+    const Result = abi.HostTexture_generate_checkedResult;
+    const Error = abi.HostTexture_generate_checkedErr;
     enforcePhase("Assets.generate_checked_texture!", during_load);
     const effect = EffectScope.begin("Assets.generate_checked_texture!", 0);
     defer effect.end();
-    if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return abiTryErr(Result, Error.texture_generation_failed);
     if (active_headless) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
-            return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
+            return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, abi.Texture{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) });
     }
-    const texture = raylib.generateCheckedTexture(args) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
+    const texture = raylib.generateCheckedTexture(args) orelse return abiTryErr(Result, Error.texture_generation_failed);
     const stored = storeTexture(.{ .native = texture }) orelse
-        return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
+        return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
 fn hostedTextureUpdateRaw(host: *RocHost, args: abi.HostTexture_updateArgs) callconv(.c) u8 {

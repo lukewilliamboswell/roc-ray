@@ -442,8 +442,9 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(field_bottom)
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
 	draw_hud!(frame, model)
 	draw_board!(frame)
 	draw_snake_cells!(frame, model.snake)
@@ -455,7 +456,7 @@ render! = |model, frame| {
 		|glow_frame| {
 			draw_food!(glow_frame, model)
 			head_rect = cell_rect(head_of(model.snake))
-			glow_frame.circle_gradient!({
+			App.effects().render(glow_frame).circle_gradient!({
 				center: Math.center(head_rect),
 				radius: cell_size * 1.5,
 				color_inner: Color.with_alpha(snake_head, 90),
@@ -482,8 +483,9 @@ cell_rect = |cell| {
 
 draw_cell! : Draw.Frame, Cell, Color.Rgba, Color.Rgba => {}
 draw_cell! = |frame, cell, fill, outline| {
+	draw = App.effects().render(frame)
 	rect = cell_rect(cell)
-	frame.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 0.35, segments: 6, style: Draw.filled_and_outlined(fill, outline, 1) })
+	draw.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 0.35, segments: 6, style: Draw.filled_and_outlined(fill, outline, 1) })
 }
 
 # The apple breathes: one sine of the model's own clock drives both the halo
@@ -493,8 +495,9 @@ food_pulse = |model| 0.5 + 0.5 * F32.sin(model.elapsed * 3.4)
 
 draw_food! : Draw.Frame, Model => {}
 draw_food! = |frame, model| {
+	draw = App.effects().render(frame)
 	pulse = food_pulse(model)
-	frame.circle_gradient!({
+	draw.circle_gradient!({
 		center: Math.center(cell_rect(model.food)),
 		radius: cell_size * (1.0 + 0.5 * pulse),
 		color_inner: Color.with_alpha(food_neon, F32.to_u8_wrap(70 + 60 * pulse)),
@@ -504,10 +507,11 @@ draw_food! = |frame, model| {
 
 draw_food_body! : Draw.Frame, Model => {}
 draw_food_body! = |frame, model| {
+	draw = App.effects().render(frame)
 	center = Math.center(cell_rect(model.food))
 	radius = cell_size * (0.3 + 0.04 * food_pulse(model))
-	frame.circle!({ center: center, radius: radius, style: Draw.filled(food_neon) })
-	frame.circle!({ center: { x: center.x - radius * 0.3, y: center.y - radius * 0.35 }, radius: radius * 0.32, style: Draw.filled(Color.with_alpha(Color.white, 190)) })
+	draw.circle!({ center: center, radius: radius, style: Draw.filled(food_neon) })
+	draw.circle!({ center: { x: center.x - radius * 0.3, y: center.y - radius * 0.35 }, radius: radius * 0.32, style: Draw.filled(Color.with_alpha(Color.white, 190)) })
 }
 
 # The body fades from head to tail. Mixing the two palette colors by position
@@ -530,16 +534,17 @@ draw_snake_cells! = |frame, snake| {
 
 draw_board! : Draw.Frame => {}
 draw_board! = |frame| {
+	draw = App.effects().render(frame)
 	board_w = I32.to_f32(grid_cols) * cell_size
 	board_h = I32.to_f32(grid_rows) * cell_size
-	frame.rounded_rectangle!({ x: board_x - 8, y: board_y - 8, width: board_w + 16, height: board_h + 16, radius: 0.06, segments: 8, style: Draw.filled_and_outlined(board_fill, Color.from_hex_rgb(0x2a3566), 2) })
+	draw.rounded_rectangle!({ x: board_x - 8, y: board_y - 8, width: board_w + 16, height: board_h + 16, radius: 0.06, segments: 8, style: Draw.filled_and_outlined(board_fill, Color.from_hex_rgb(0x2a3566), 2) })
 
 	# A faint lattice, so a cell is a place rather than an empty field.
 	for column in List.map_with_index(List.repeat({}, grid_cols_count + 1), |_unit, index| board_x + U64.to_f32(index) * cell_size) {
-		frame.line!({ start: { x: column, y: board_y }, end: { x: column, y: board_y + board_h }, stroke: Draw.stroke(grid_line, 1) })
+		draw.line!({ start: { x: column, y: board_y }, end: { x: column, y: board_y + board_h }, stroke: Draw.stroke(grid_line, 1) })
 	}
 	for row in List.map_with_index(List.repeat({}, grid_rows_count + 1), |_unit, index| board_y + U64.to_f32(index) * cell_size) {
-		frame.line!({ start: { x: board_x, y: row }, end: { x: board_x + board_w, y: row }, stroke: Draw.stroke(grid_line, 1) })
+		draw.line!({ start: { x: board_x, y: row }, end: { x: board_x + board_w, y: row }, stroke: Draw.stroke(grid_line, 1) })
 	}
 }
 
@@ -558,7 +563,7 @@ draw_game_over! = |frame, model|
 		Playing => {}
 		GameOver => {
 			board_w = I32.to_f32(grid_cols) * cell_size
-			frame.rectangle!({ x: board_x - 8, y: 236, width: board_w + 16, height: 140, style: Draw.filled(Color.with_alpha(field_bottom, 225)) })
+			App.effects().render(frame).rectangle!({ x: board_x - 8, y: 236, width: board_w + 16, height: 140, style: Draw.filled(Color.with_alpha(field_bottom, 225)) })
 			model.over_title.draw!(frame, { pos: { x: screen_w * 0.5, y: 282 }, color: food_neon, align: (Middle, Center) })
 			# The prompt breathes on the same clock as the food, so a waiting
 			# screen still has a heartbeat.

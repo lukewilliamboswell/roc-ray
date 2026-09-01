@@ -17,8 +17,10 @@ Msg : []
 program = { init!, update!, render! }
 
 init! : App.Init(Model, Msg)
-init! = App.init(App.default.with_title("Observatory performance probe"), |_startup|
-	Ok({ cycle: 0, values: List.repeat(0, 64) }),
+init! = App.init(
+	App.default.with_title("Observatory performance probe"),
+	|_startup|
+		Ok({ cycle: 0, values: List.repeat(0, 64) }),
 )
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
@@ -37,15 +39,16 @@ update! = |model, _input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(Color.from_hex_rgb(0x080c14))
-	frame.rectangle!({
+	draw.rectangle!({
 		x: 24,
 		y: 24,
 		width: 120,
 		height: 48,
 		style: Draw.filled(Color.from_hex_rgb(0x4c5ab4)),
 	})
-	frame.circle!({
+	draw.circle!({
 		center: { x: 180, y: 48 },
 		radius: 18,
 		style: Draw.outlined(Color.white, 2),

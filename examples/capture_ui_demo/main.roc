@@ -278,13 +278,14 @@ expect typed_char(0) == ""
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	over_increment = inside(model.mouse, increment_button)
 	over_toggle = inside(model.mouse, toggle_button)
 
 	frame.clear!(theme.bg)
 	model.title.draw!(frame, { pos: { x: 40, y: 22 }, color: theme.ink })
-	frame.text_at!({ pos: { x: 40, y: 54 }, text: "A scripted pointer and keyboard on the real input path", size: 13, color: theme.muted })
-	frame.rounded_rectangle!({ x: widget_panel.x, y: widget_panel.y, width: widget_panel.width, height: widget_panel.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	draw.text_at!({ pos: { x: 40, y: 54 }, text: "A scripted pointer and keyboard on the real input path", size: 13, color: theme.muted })
+	draw.rounded_rectangle!({ x: widget_panel.x, y: widget_panel.y, width: widget_panel.width, height: widget_panel.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 
 	draw_button!(frame, increment_button, over_increment, model.held and over_increment, model.increment_label)
 	draw_button!(frame, toggle_button, over_toggle, model.toggled, model.toggle_label)
@@ -295,7 +296,7 @@ render! = |model, frame| {
 		Ok(label) => {
 			label.draw!(frame, { pos: field_text_origin, color: theme.ink })
 			if model.focused and caret_visible(model.frame) {
-				draw_caret!(frame, field_text_origin.x + label.bounds().width + 3)
+				draw_caret!(draw, field_text_origin.x + label.bounds().width + 3)
 			}
 		}
 
@@ -307,7 +308,7 @@ render! = |model, frame| {
 		Err(_) => {}
 	}
 
-	frame.text_at!({ pos: { x: 40, y: 364 }, text: "Recording captures/ui_demo.gif", size: 11, color: theme.faint })
+	draw.text_at!({ pos: { x: 40, y: 364 }, text: "Recording captures/ui_demo.gif", size: 11, color: theme.faint })
 
 	Ok({})
 }
@@ -407,6 +408,7 @@ widget_panel = { x: 40, y: 126, width: 410, height: 232 }
 
 draw_button! : Draw.Frame, { x : F32, y : F32, width : F32, height : F32 }, Bool, Bool, Text.Prepared => {}
 draw_button! = |frame, box, hovered, active, label| {
+	draw = App.effects().render(frame)
 	fill =
 		if active {
 			theme.accent
@@ -416,7 +418,7 @@ draw_button! = |frame, box, hovered, active, label| {
 			theme.control
 		}
 
-	frame.rounded_rectangle!({
+	draw.rounded_rectangle!({
 		x: box.x,
 		y: box.y,
 		width: box.width,
@@ -443,8 +445,9 @@ field_text_origin = { x: text_field.x + 14, y: text_field.y + 12 }
 ## one is anywhere else, so the recording shows the keyboard's whereabouts.
 draw_field_box! : Draw.Frame, Bool => {}
 draw_field_box! = |frame, focused| {
+	draw = App.effects().render(frame)
 	outline = if focused theme.accent else theme.edge
-	frame.rounded_rectangle!({
+	draw.rounded_rectangle!({
 		x: text_field.x,
 		y: text_field.y,
 		width: text_field.width,
@@ -456,9 +459,9 @@ draw_field_box! = |frame, focused| {
 }
 
 ## Draw the insertion caret at an x within the field.
-draw_caret! : Draw.Frame, F32 => {}
-draw_caret! = |frame, x|
-	frame.rectangle!({
+draw_caret! : Draw.Effects, F32 => {}
+draw_caret! = |draw, x|
+	draw.rectangle!({
 		x,
 		y: field_text_origin.y,
 		width: 2,
@@ -468,7 +471,8 @@ draw_caret! = |frame, x|
 
 draw_slider! : Draw.Frame, F32 => {}
 draw_slider! = |frame, value| {
-	frame.rounded_rectangle!({
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({
 		x: slider_track.x,
 		y: slider_track.y,
 		width: slider_track.width,
@@ -477,7 +481,7 @@ draw_slider! = |frame, value| {
 		segments: 6,
 		style: Draw.filled(theme.control),
 	})
-	frame.rounded_rectangle!({
+	draw.rounded_rectangle!({
 		x: slider_track.x,
 		y: slider_track.y,
 		width: slider_track.width * value,
@@ -486,7 +490,7 @@ draw_slider! = |frame, value| {
 		segments: 6,
 		style: Draw.filled(theme.accent),
 	})
-	frame.circle!({
+	draw.circle!({
 		center: { x: slider_track.x + slider_track.width * value, y: slider_track.y + slider_track.height / 2 },
 		radius: 11,
 		style: Draw.filled_and_outlined(Color.white, theme.edge, 2),

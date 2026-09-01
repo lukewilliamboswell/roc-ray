@@ -539,9 +539,10 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	game = model.game
 	frame.clear!(field_bottom)
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
 	draw_hud!(frame, model)
 	draw_bricks!(frame, game.bricks)
 
@@ -551,8 +552,9 @@ render! = |model, frame| {
 		Draw.additive_blend,
 		|glow_frame| {
 			paddle = paddle_rect(game.paddle_x)
-			glow_frame.circle_gradient!({ center: Math.center(paddle), radius: 90, color_inner: Color.with_alpha(paddle_neon, 95), color_outer: Color.with_alpha(paddle_neon, 0) })
-			glow_frame.circle_gradient!({ center: game.ball.pos, radius: 46, color_inner: Color.with_alpha(ball_neon, 95), color_outer: Color.with_alpha(ball_neon, 0) })
+			glow_draw = App.effects().render(glow_frame)
+			glow_draw.circle_gradient!({ center: Math.center(paddle), radius: 90, color_inner: Color.with_alpha(paddle_neon, 95), color_outer: Color.with_alpha(paddle_neon, 0) })
+			glow_draw.circle_gradient!({ center: game.ball.pos, radius: 46, color_inner: Color.with_alpha(ball_neon, 95), color_outer: Color.with_alpha(ball_neon, 0) })
 			Ok({})
 		},
 	)?
@@ -567,8 +569,9 @@ render! = |model, frame| {
 # is what keeps a flat rectangle from reading as a flat rectangle.
 draw_brick! : Draw.Frame, Brick => {}
 draw_brick! = |frame, brick| {
-	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 0.28, segments: 6, style: Draw.filled(Color.with_alpha(brick.color, 235)) })
-	frame.rectangle!({ x: brick.rect.x + 5, y: brick.rect.y + 3, width: brick.rect.width - 10, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 110)) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 0.28, segments: 6, style: Draw.filled(Color.with_alpha(brick.color, 235)) })
+	draw.rectangle!({ x: brick.rect.x + 5, y: brick.rect.y + 3, width: brick.rect.width - 10, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 110)) })
 }
 
 draw_bricks! : Draw.Frame, List(Brick) => {}
@@ -580,20 +583,22 @@ draw_bricks! = |frame, bricks| {
 
 draw_bodies! : Draw.Frame, Game => {}
 draw_bodies! = |frame, game| {
+	draw = App.effects().render(frame)
 	paddle = paddle_rect(game.paddle_x)
-	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 0.5, segments: 8, style: Draw.filled(paddle_neon) })
-	frame.rectangle!({ x: paddle.x + 8, y: paddle.y + 3, width: paddle.width - 16, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 150)) })
-	frame.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled(ball_neon) })
-	frame.circle!({ center: { x: game.ball.pos.x - 2, y: game.ball.pos.y - 2 }, radius: ball_radius * 0.4, style: Draw.filled(Color.with_alpha(Color.white, 210)) })
+	draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 0.5, segments: 8, style: Draw.filled(paddle_neon) })
+	draw.rectangle!({ x: paddle.x + 8, y: paddle.y + 3, width: paddle.width - 16, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 150)) })
+	draw.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled(ball_neon) })
+	draw.circle!({ center: { x: game.ball.pos.x - 2, y: game.ball.pos.y - 2 }, radius: ball_radius * 0.4, style: Draw.filled(Color.with_alpha(Color.white, 210)) })
 }
 
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
+	draw = App.effects().render(frame)
 	model.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon })
-	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
-	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
-	if model.demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
-	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
+	draw.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
+	draw.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font })
+	if model.demo {} else draw.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
+	draw.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
 	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: (Middle, Center) })
 }
 
@@ -614,7 +619,8 @@ draw_state_overlay! = |frame, model|
 
 draw_banner! : Draw.Frame, Model, Text.Prepared, Color.Rgba => {}
 draw_banner! = |frame, model, line, accent| {
-	frame.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
 	line.draw!(frame, { pos: { x: screen_w * 0.5, y: 318 }, color: accent, align: (Middle, Center) })
 	model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 362 }, color: Color.with_alpha(hint_color, prompt_alpha(model)), align: (Middle, Center) })
 }

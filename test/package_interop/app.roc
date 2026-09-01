@@ -167,16 +167,16 @@ render! = |model, frame| {
 		Ok({}) => {
 			DrawingAdapter.Alternative.from_effects(effects, frame).panel!(model.font)
 
-			frame.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font })
-			frame.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
-			frame.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
+			draw.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font })
+			draw.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
+			draw.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
 
 			# The last step of the round trip: a texture that has been through a
 			# package-typed function every cycle since `init!` goes back to the host,
 			# through a platform call that accepts nothing but the platform's own type.
-			frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
-			frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
-			frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
+			draw.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
+			draw.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
+			draw.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
 			Ok({})
 		}
 	}

@@ -15,6 +15,7 @@ import Drawing
 import Files
 import Math
 import Time
+import Texture
 import Window
 
 App := [].{
@@ -172,6 +173,14 @@ App := [].{
 	Effects(frame) :: {
 		shape_impl! : frame, Drawing.Geometry, Drawing.Paint => {},
 		draw_text_impl! : frame, Drawing.Text => {},
+		rectangle_gradient_v_impl! : frame, Drawing.RectangleGradientV => {},
+		rectangle_gradient_h_impl! : frame, Drawing.RectangleGradientH => {},
+		circle_gradient_impl! : frame, Drawing.CircleGradient => {},
+		fps_impl! : frame, Drawing.Fps => {},
+		line_impl! : frame, Drawing.Line => {},
+		texture_impl! : frame, Drawing.TextureDraw => {},
+		texture_instances_impl! : frame, Texture, List(Drawing.TextureInstance) => {},
+		projective_texture_impl! : frame, Drawing.ProjectiveTexture => {},
 		with_scissor_impl! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 		read_text_impl! : Str => Try(Str, Files.ReadTextError),
 	}.{
@@ -189,6 +198,30 @@ App := [].{
 		draw_text! : Effects(frame), frame, Drawing.Text => {}
 		draw_text! = |Effects.(implementation), frame, text|
 			(implementation.draw_text_impl!)(frame, text)
+
+		rectangle_gradient_v! : Effects(frame), frame, Drawing.RectangleGradientV => {}
+		rectangle_gradient_v! = |Effects.(implementation), frame, cfg| (implementation.rectangle_gradient_v_impl!)(frame, cfg)
+
+		rectangle_gradient_h! : Effects(frame), frame, Drawing.RectangleGradientH => {}
+		rectangle_gradient_h! = |Effects.(implementation), frame, cfg| (implementation.rectangle_gradient_h_impl!)(frame, cfg)
+
+		circle_gradient! : Effects(frame), frame, Drawing.CircleGradient => {}
+		circle_gradient! = |Effects.(implementation), frame, cfg| (implementation.circle_gradient_impl!)(frame, cfg)
+
+		fps! : Effects(frame), frame, Drawing.Fps => {}
+		fps! = |Effects.(implementation), frame, cfg| (implementation.fps_impl!)(frame, cfg)
+
+		line! : Effects(frame), frame, Drawing.Line => {}
+		line! = |Effects.(implementation), frame, cfg| (implementation.line_impl!)(frame, cfg)
+
+		texture! : Effects(frame), frame, Drawing.TextureDraw => {}
+		texture! = |Effects.(implementation), frame, cfg| (implementation.texture_impl!)(frame, cfg)
+
+		texture_instances! : Effects(frame), frame, Texture, List(Drawing.TextureInstance) => {}
+		texture_instances! = |Effects.(implementation), frame, texture, instances| (implementation.texture_instances_impl!)(frame, texture, instances)
+
+		projective_texture! : Effects(frame), frame, Drawing.ProjectiveTexture => {}
+		projective_texture! = |Effects.(implementation), frame, cfg| (implementation.projective_texture_impl!)(frame, cfg)
 
 		## Low-level scissor scope used by canonical and alternative drawing APIs.
 		with_scissor! : Effects(frame), frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
@@ -211,6 +244,14 @@ App := [].{
 		where [
 			provider.shape! : provider, frame, Drawing.Geometry, Drawing.Paint => {},
 			provider.draw_text! : provider, frame, Drawing.Text => {},
+			provider.rectangle_gradient_v! : provider, frame, Drawing.RectangleGradientV => {},
+			provider.rectangle_gradient_h! : provider, frame, Drawing.RectangleGradientH => {},
+			provider.circle_gradient! : provider, frame, Drawing.CircleGradient => {},
+			provider.fps! : provider, frame, Drawing.Fps => {},
+			provider.line! : provider, frame, Drawing.Line => {},
+			provider.texture! : provider, frame, Drawing.TextureDraw => {},
+			provider.texture_instances! : provider, frame, Texture, List(Drawing.TextureInstance) => {},
+			provider.projective_texture! : provider, frame, Drawing.ProjectiveTexture => {},
 			provider.with_scissor! : provider, frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 			provider.read_text! : provider, Str => Try(Str, Files.ReadTextError),
 		]
@@ -219,6 +260,14 @@ App := [].{
 			{
 				shape_impl!: |frame, geometry, paint| provider.shape!(frame, geometry, paint),
 				draw_text_impl!: |frame, text| provider.draw_text!(frame, text),
+				rectangle_gradient_v_impl!: |frame, cfg| provider.rectangle_gradient_v!(frame, cfg),
+				rectangle_gradient_h_impl!: |frame, cfg| provider.rectangle_gradient_h!(frame, cfg),
+				circle_gradient_impl!: |frame, cfg| provider.circle_gradient!(frame, cfg),
+				fps_impl!: |frame, cfg| provider.fps!(frame, cfg),
+				line_impl!: |frame, cfg| provider.line!(frame, cfg),
+				texture_impl!: |frame, cfg| provider.texture!(frame, cfg),
+				texture_instances_impl!: |frame, texture, instances| provider.texture_instances!(frame, texture, instances),
+				projective_texture_impl!: |frame, cfg| provider.projective_texture!(frame, cfg),
 				with_scissor_impl!: |frame, bounds, callback|
 					provider.with_scissor!(frame, bounds, callback),
 				read_text_impl!: |path| provider.read_text!(path),

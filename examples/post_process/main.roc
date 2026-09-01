@@ -73,7 +73,7 @@ render! = |model, frame| {
 			# is the 800x600 framebuffer these coordinates are relative to.
 			offscreen = target_frame.size!()
 			center = { x: offscreen.width * 0.5, y: offscreen.height * 0.62 }
-			target_frame.rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
+			App.effects().render(target_frame).rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
 			model.title.draw!(target_frame, { pos: { x: center.x, y: 96 }, color: Color.ray_white, align: (Middle, Center) })
 			model.hint.draw!(target_frame, { pos: { x: center.x, y: 152 }, color: Color.from_hex_rgb(0x9d8fd0), align: (Middle, Center) })
 			target_frame.with_blend_mode!(
@@ -111,7 +111,7 @@ render! = |model, frame| {
 			# Inside the scope and before the draw it applies to, which is the
 			# whole reason this is here rather than in `update!`.
 			model.time_uniform.set!(model.seconds)
-			shader_frame.texture!(target_draw)
+			App.effects().render(shader_frame).texture!(target_draw)
 			Ok({})
 		},
 	)?
@@ -123,7 +123,8 @@ render! = |model, frame| {
 ## fall off smoothly instead of banding at a hard circle edge.
 lobe! : Draw.Frame, Math.Vec2, F32, F32, Color.Rgba => {}
 lobe! = |frame, center, seconds, phase, color| {
+	draw = App.effects().render(frame)
 	angle = seconds * 0.7 + phase
 	pos = { x: center.x + 110 * F32.cos(angle), y: center.y + 70 * F32.sin(angle * 1.3) }
-	frame.circle_gradient!({ center: pos, radius: 150, color_inner: Color.with_alpha(color, 170), color_outer: Color.with_alpha(color, 0) })
+	draw.circle_gradient!({ center: pos, radius: 150, color_inner: Color.with_alpha(color, 170), color_outer: Color.with_alpha(color, 0) })
 }

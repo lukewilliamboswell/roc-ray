@@ -1207,11 +1207,12 @@ shaken_target = |world| {
 
 draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, World, Math.Rect, Text.Font => {}
 draw_world! = |frame, level, characters, tiles, world, viewport, font| {
-	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
+	draw = App.effects().render(frame)
+	draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
 	draw_hazard_lanes!(frame, level, world.phase)
 	draw_props!(frame, level, tiles, viewport)
-	frame.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
+	draw.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
 	draw_spawn!(frame, level, font)
 	draw_exit!(frame, level, world, font)
@@ -1269,8 +1270,9 @@ draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(til
 
 draw_spawn! : Draw.Frame, Level, Text.Font => {}
 draw_spawn! = |frame, level, font| {
-	frame.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
-	frame.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
+	draw = App.effects().render(frame)
+	draw.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
+	draw.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
 	Text.from("START", font)
 		.size(18)
 		.draw!(frame, { pos: { x: level.spawn.x, y: level.spawn.y + 63 }, color: Color.with_alpha(Color.white, 190), align: (Top, Center) })
@@ -1278,11 +1280,12 @@ draw_spawn! = |frame, level, font| {
 
 draw_exit! : Draw.Frame, Level, World, Text.Font => {}
 draw_exit! = |frame, level, world, font| {
+	draw = App.effects().render(frame)
 	is_open = gate_is_open(world.gate)
 	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
 	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
-	frame.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
-	frame.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
+	draw.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
+	draw.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
 	Text.from(if is_open "EXIT OPEN" else "LOCKED EXIT", font)
 		.size(19)
 		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: (Top, Center) })
@@ -1290,8 +1293,9 @@ draw_exit! = |frame, level, world, font| {
 
 draw_obstacle! : Draw.Frame, Draw.Texture, World.Obstacle => {}
 draw_obstacle! = |frame, tiles, obstacle| {
+	draw = App.effects().render(frame)
 	rect = obstacle.rect
-	frame.rounded_rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
+	draw.rounded_rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
 	draw_tile_centered!(frame, tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
 }
 
@@ -1317,11 +1321,12 @@ draw_props! = |frame, level, tiles, viewport| {
 
 draw_spark! : Draw.Frame, Draw.Texture, World.Spark, F32 => {}
 draw_spark! = |frame, tiles, spark, phase| {
+	draw = App.effects().render(frame)
 	tile = if spark.id % 2 == 0 TileSparkA else TileSparkB
 	rotation = phase * 160 + U64.to_f32(spark.id) * 19
 	pulse = 1 + ping_pong(wrap_unit(phase * 2 + U64.to_f32(spark.id) * 0.09)) * 0.1
-	frame.circle_gradient!({ center: spark.pos, radius: spark_radius * 2 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 0) })
-	frame.circle!({ center: spark.pos, radius: spark_radius + 4 * pulse, style: Draw.outlined(Color.with_alpha(Color.white, 110), 3) })
+	draw.circle_gradient!({ center: spark.pos, radius: spark_radius * 2 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 0) })
+	draw.circle!({ center: spark.pos, radius: spark_radius + 4 * pulse, style: Draw.outlined(Color.with_alpha(Color.white, 110), 3) })
 	draw_tile_centered!(frame, tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
@@ -1336,10 +1341,11 @@ draw_sparks! = |frame, tiles, sparks, phase, viewport| {
 
 draw_hazard_lanes! : Draw.Frame, Level, F32 => {}
 draw_hazard_lanes! = |frame, level, phase| {
+	draw = App.effects().render(frame)
 	for hazard in level.hazards {
 		pos = hazard.pos(phase)
-		frame.line!({ start: hazard.lane_start(), end: hazard.lane_end(), stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
-		frame.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
+		draw.line!({ start: hazard.lane_start(), end: hazard.lane_end(), stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
+		draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
 	}
 }
 
@@ -1348,6 +1354,7 @@ robot_source = Math.rect(458, 88, 33, 43)
 
 draw_hazard! : Draw.Frame, Draw.Texture, World.Hazard, F32 => {}
 draw_hazard! = |frame, characters, hazard, phase| {
+	draw = App.effects().render(frame)
 	pos = hazard.pos(phase)
 	sprite = Sprite.from_texture(characters)
 		.source(
@@ -1362,7 +1369,7 @@ draw_hazard! = |frame, characters, hazard, phase| {
 		.centered()
 
 	sprite.draw!(frame)
-	frame.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
+	draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
 draw_hazards! : Draw.Frame, Level, Draw.Texture, F32, Math.Rect => {}
@@ -1390,6 +1397,7 @@ burst_dir = |index|
 
 draw_burst_particle! : Draw.Frame, World, U64 => {}
 draw_burst_particle! = |frame, world, index| {
+	draw = App.effects().render(frame)
 	if index >= 6 or world.burst_timer <= 0 {
 		{}
 	} else {
@@ -1397,7 +1405,7 @@ draw_burst_particle! = |frame, world, index| {
 		dir = burst_dir(index)
 		pos = Math.add(world.burst_pos, Math.scale(dir, 18 + progress * 58))
 		size = 6 + ping_pong(wrap_unit(world.phase * 5 + U64.to_f32(index) * 0.11)) * 3
-		frame.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
+		draw.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
 		draw_burst_particle!(frame, world, index + 1)
 	}
 }
@@ -1410,6 +1418,7 @@ player_source = Math.rect(0, 0, 52, 43)
 
 draw_player! : Draw.Frame, Draw.Texture, World.Player => {}
 draw_player! = |frame, characters, player| {
+	draw = App.effects().render(frame)
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
 	scale = if player.dash_active() 1.3 else 1.22
 	sprite = Sprite.from_texture(characters)
@@ -1430,40 +1439,42 @@ draw_player! = |frame, characters, player| {
 			tint,
 		)
 
-	frame.circle!({ center: { x: player.pos.x + 5, y: player.pos.y + 7 }, radius: player_radius + 6, style: Draw.filled(Color.with_alpha(Color.black, 85)) })
+	draw.circle!({ center: { x: player.pos.x + 5, y: player.pos.y + 7 }, radius: player_radius + 6, style: Draw.filled(Color.with_alpha(Color.black, 85)) })
 	if player.dash_active() {
 		trail_center = Math.add(player.pos, Math.scale(player.facing_dir(), -38))
-		frame.circle_gradient!({ center: trail_center, radius: 44, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
-		frame.circle_gradient!({ center: player.pos, radius: 54, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 70), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
+		draw.circle_gradient!({ center: trail_center, radius: 44, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
+		draw.circle_gradient!({ center: player.pos, radius: 54, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 70), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
 	} else {
 		{}
 	}
 	sprite.draw!(frame)
-	frame.circle!({ center: player.pos, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
+	draw.circle!({ center: player.pos, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
 }
 
 draw_bar! : Draw.Frame, F32, F32, F32, F32, F32, Color.Rgba => {}
 draw_bar! = |frame, x, y, width, height, amount, color| {
-	frame.rounded_rectangle!({ x, y, width, height, radius: 5, segments: 6, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
-	frame.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
+	draw = App.effects().render(frame)
+	draw.rounded_rectangle!({ x, y, width, height, radius: 5, segments: 6, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
+	draw.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
 }
 
 draw_hud! : Draw.Frame, Level, World, Text.Font => {}
 draw_hud! = |frame, level, world, font| {
+	draw = App.effects().render(frame)
 	is_open = gate_is_open(world.gate)
 
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
-	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font })
-	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
-	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
+	draw.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
+	draw.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font })
+	draw.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	draw.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
+	draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 	draw_bar!(frame, 196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
 	draw_bar!(frame, 510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
-	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	draw.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
 
 	if world.flash > 0 {
-		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })
+		draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })
 	} else {
 		{}
 	}
@@ -1477,8 +1488,9 @@ draw_hud! = |frame, level, world, font| {
 
 draw_modal! : Draw.Frame, Text.Font, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, font, title, subtitle, accent| {
-	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
-	frame.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
+	draw = App.effects().render(frame)
+	draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
+	draw.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
 	Text.from(title, font).size(30).draw!(frame, { pos: { x: screen_w * 0.5, y: 276 }, color: Color.white, align: (Middle, Center) })
 	Text.from(subtitle, font).size(21).draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: Color.light_gray, align: (Middle, Center) })
 }

@@ -234,20 +234,21 @@ expect status_color(Refused("x")) == theme.warn
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(theme.bg)
 	model.title.draw!(frame, { pos: { x: 40, y: 34 }, color: theme.ink })
 	model.subtitle.draw!(frame, { pos: { x: 40, y: 70 }, color: theme.muted })
 
 	# The drop target: a card first, an outline second, so an empty viewer still
 	# looks like a place a file is meant to go.
-	frame.rounded_rectangle!({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 2) })
+	draw.rounded_rectangle!({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 2) })
 
 	match model.image {
 		NoImage =>
 			model.empty_hint.draw!(frame, { pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, color: theme.faint, align: (Middle, Center) })
 
 		Shown(texture) =>
-			frame.texture!({
+			draw.texture!({
 				texture,
 				source: Math.rect(0, 0, texture.width, texture.height),
 				dest: fit({ width: texture.width, height: texture.height }, canvas),
@@ -258,8 +259,8 @@ render! = |model, frame| {
 		}
 
 	# A lit dot carries the state; the words carry the detail.
-	frame.circle!({ center: { x: 47, y: 105 }, radius: 5, style: Draw.filled(status_color(model.status)) })
-	frame.text_at!({ pos: { x: 62, y: 96 }, text: describe(model.status), size: 17, color: theme.ink })
+	draw.circle!({ center: { x: 47, y: 105 }, radius: 5, style: Draw.filled(status_color(model.status)) })
+	draw.text_at!({ pos: { x: 62, y: 96 }, text: describe(model.status), size: 17, color: theme.ink })
 	if model.partial_drop {
 		model.overflow_hint.draw!(frame, { pos: { x: 40, y: window_height - 74 }, color: theme.warn })
 	} else {}

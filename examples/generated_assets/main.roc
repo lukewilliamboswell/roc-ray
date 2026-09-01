@@ -280,6 +280,7 @@ swatch_bounds = |index| Math.rect(610, 180 + U64.to_f32(index) * 70, 118, 50)
 
 draw_swatch! : Draw.Frame, Text.Font, U64, U64, Math.Vec2 => {}
 draw_swatch! = |frame, font, index, selected, mouse| {
+	draw = App.effects().render(frame)
 	bounds = swatch_bounds(index)
 	chosen = index == selected
 	hovered = bounds.contains(mouse)
@@ -287,9 +288,9 @@ draw_swatch! = |frame, font, index, selected, mouse| {
 	# The selected swatch gets a lit ring outside it as well as a bright edge,
 	# so which colour the brush carries survives a glance.
 	if chosen {
-		frame.rounded_rectangle!({ x: bounds.x - 5, y: bounds.y - 5, width: bounds.width + 10, height: bounds.height + 10, radius: 11, segments: 8, style: Draw.outlined(theme.accent, 2) })
+		draw.rounded_rectangle!({ x: bounds.x - 5, y: bounds.y - 5, width: bounds.width + 10, height: bounds.height + 10, radius: 11, segments: 8, style: Draw.outlined(theme.accent, 2) })
 	}
-	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
+	draw.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
 	Text.from(U64.to_str(index + 1), font)
 		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if chosen theme.ink else theme.faint, align: (Middle, Center) })
 }
@@ -354,16 +355,17 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	ui = Box.unbox(model.ui)
 
 	frame.clear!(theme.bg)
 	ui.title.draw!(frame, { pos: { x: canvas_x, y: 12 }, color: theme.ink })
-	frame.text_at!({ pos: { x: canvas_x, y: 42 }, text: "Canvas, palette and brush sound all generated at startup", size: 13, color: theme.muted })
+	draw.text_at!({ pos: { x: canvas_x, y: 42 }, text: "Canvas, palette and brush sound all generated at startup", size: 13, color: theme.muted })
 
 	# A card under the canvas, so the pixel art sits on a surface instead of
 	# floating on the background.
-	frame.rounded_rectangle!({ x: canvas_bounds.x - 14, y: canvas_bounds.y - 14, width: canvas_bounds.width + 28, height: canvas_bounds.height + 28, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
-	frame.texture!({
+	draw.rounded_rectangle!({ x: canvas_bounds.x - 14, y: canvas_bounds.y - 14, width: canvas_bounds.width + 28, height: canvas_bounds.height + 28, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	draw.texture!({
 		texture: model.texture,
 		source: { x: 0, y: 0, width: model.texture.width, height: model.texture.height },
 		dest: canvas_bounds,
@@ -371,18 +373,18 @@ render! = |model, frame| {
 		rotation: 0,
 		tint: Color.white,
 	})
-	frame.rectangle!({ x: canvas_bounds.x - 2, y: canvas_bounds.y - 2, width: canvas_bounds.width + 4, height: canvas_bounds.height + 4, style: Draw.outlined(theme.edge, 2) })
+	draw.rectangle!({ x: canvas_bounds.x - 2, y: canvas_bounds.y - 2, width: canvas_bounds.width + 4, height: canvas_bounds.height + 4, style: Draw.outlined(theme.edge, 2) })
 
 	match cell_at(model.mouse) {
 		Err(_) => {}
 		Ok(index) => {
 			col = index % grid_side
 			row = index // grid_side
-			frame.rectangle!({ x: canvas_x + U64.to_f32(col) * cell_size, y: canvas_y + U64.to_f32(row) * cell_size, width: cell_size, height: cell_size, style: Draw.outlined(Color.white, 2) })
+			draw.rectangle!({ x: canvas_x + U64.to_f32(col) * cell_size, y: canvas_y + U64.to_f32(row) * cell_size, width: cell_size, height: cell_size, style: Draw.outlined(Color.white, 2) })
 		}
 	}
 
-	frame.rounded_rectangle!({ x: 594, y: 108, width: 150, height: 348, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	draw.rounded_rectangle!({ x: 594, y: 108, width: 150, height: 348, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: theme.ink })
 	draw_swatch!(frame, model.font, 0, model.palette, model.mouse)
 	draw_swatch!(frame, model.font, 1, model.palette, model.mouse)

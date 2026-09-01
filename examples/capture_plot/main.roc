@@ -83,15 +83,16 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
 
 	model.title.draw!(frame, { pos: { x: 32, y: 26 }, color: ink })
 
 	# A recording indicator that reads at a glance in the finished file: the
 	# dot pulses on the same fixed step the frames are captured on.
 	pulse = 4 + 2 * F32.sin(model.elapsed * 6)
-	frame.circle!({ center: { x: 38, y: 66 }, radius: pulse, style: Draw.filled(rec) })
+	draw.circle!({ center: { x: 38, y: 66 }, radius: pulse, style: Draw.filled(rec) })
 	model.status.draw!(frame, { pos: { x: 52, y: 58 }, color: muted })
 
 	draw_progress!(frame, { x: size.width - 232, y: 34, width: 200 }, model.frames)
@@ -103,25 +104,27 @@ render! = |model, frame| {
 ## from `input.capture`, so this is the host's number rather than a guess.
 draw_progress! : Draw.Frame, { x : F32, y : F32, width : F32 }, U64 => {}
 draw_progress! = |frame, at, frames| {
+	draw = App.effects().render(frame)
 	share = F32.min(U64.to_f32(frames) / U64.to_f32(recorded_frames), 1)
-	frame.text_at!({ pos: { x: at.x, y: at.y }, text: "${U64.to_str(frames)} / ${U64.to_str(recorded_frames)} frames", size: 13, color: muted })
-	frame.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width, height: 6, radius: 0.5, segments: 6, style: Draw.filled(track) })
+	draw.text_at!({ pos: { x: at.x, y: at.y }, text: "${U64.to_str(frames)} / ${U64.to_str(recorded_frames)} frames", size: 13, color: muted })
+	draw.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width, height: 6, radius: 0.5, segments: 6, style: Draw.filled(track) })
 	if share > 0 {
-		frame.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width * share, height: 6, radius: 0.5, segments: 6, style: Draw.filled(rec) })
+		draw.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width * share, height: 6, radius: 0.5, segments: 6, style: Draw.filled(rec) })
 	}
 }
 
 draw_bars! : Draw.Frame, F32, Draw.FrameSize => {}
 draw_bars! = |frame, elapsed, size| {
+	draw = App.effects().render(frame)
 	baseline = size.height - 44
 
 	# Four gridlines behind the bars, so the wave has something to be measured
 	# against and a duplicated frame is easier to spot.
 	List.for_each!(
 		List.map_with_index(List.repeat({}, 4), |_unit, index| U64.to_f32(index + 1) * 42),
-		|step| frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) }),
+		|step| draw.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) }),
 	)
-	frame.line!({ start: { x: 32, y: baseline }, end: { x: size.width - 32, y: baseline }, stroke: Stroke({ color: axis, thickness: 1.5 }) })
+	draw.line!({ start: { x: 32, y: baseline }, end: { x: size.width - 32, y: baseline }, stroke: Stroke({ color: axis, thickness: 1.5 }) })
 
 	List.repeat({}, bar_count)
 		|> List.map_with_index(|_, index| U64.to_f32(index))
@@ -135,9 +138,9 @@ draw_bars! = |frame, elapsed, size| {
 				top = baseline - height
 				# The gradient runs the bar's own length rather than the
 				# window's, so a tall bar is brighter than a short one.
-				frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
-				frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
-				frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
+				draw.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
+				draw.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
+				draw.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
 			},
 		)
 }

@@ -178,9 +178,10 @@ apply = |state, message, current, waited|
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	size = frame.size!()
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
-	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
+	draw.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
 
 	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink })
 	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted })
@@ -189,47 +190,52 @@ render! = |model, frame| {
 	accent = state_color(model.state)
 
 	# The request card: what was asked for, and where the answer has got to.
-	frame.rounded_rectangle!({ x: 44, y: 112, width: width, height: 88, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
-	frame.rounded_rectangle!({ x: 44, y: 124, width: 4, height: 64, radius: 1, segments: 4, style: Draw.filled(accent) })
-	frame.rounded_rectangle!({ x: 68, y: 130, width: 46, height: 22, radius: 0.5, segments: 8, style: Draw.filled(Color.with_alpha(accent_url, 45)) })
-	frame.text_at!({ pos: { x: 80, y: 133 }, text: "GET", size: 14, color: accent_url })
-	frame.text_at!({ pos: { x: 128, y: 132 }, text: model.url, size: 16, color: ink })
-	frame.text_at!({ pos: { x: 68, y: 164 }, text: headline(model.state), size: 15, color: accent })
+	draw.rounded_rectangle!({ x: 44, y: 112, width: width, height: 88, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	draw.rounded_rectangle!({ x: 44, y: 124, width: 4, height: 64, radius: 1, segments: 4, style: Draw.filled(accent) })
+	draw.rounded_rectangle!({ x: 68, y: 130, width: 46, height: 22, radius: 0.5, segments: 8, style: Draw.filled(Color.with_alpha(accent_url, 45)) })
+	draw.text_at!({ pos: { x: 80, y: 133 }, text: "GET", size: 14, color: accent_url })
+	draw.text_at!({ pos: { x: 128, y: 132 }, text: model.url, size: 16, color: ink })
+	draw.text_at!({ pos: { x: 68, y: 164 }, text: headline(model.state), size: 15, color: accent })
 	draw_indicator!(frame, { x: 44 + width - 44, y: 156 }, model.state, model.elapsed)
 
 	# The body preview, in a panel of its own so a long line is clipped by the
 	# panel rather than running off the window.
 	panel_top = 224
 	panel_height = size.height - panel_top - 64
-	frame.rounded_rectangle!({ x: 44, y: panel_top, width: width, height: panel_height, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
-	frame.text_at!({ pos: { x: 68, y: panel_top + 14 }, text: "first ${U64.to_str(preview_lines)} lines of the body", size: 13, color: faint })
-	frame.line!({ start: { x: 44, y: panel_top + 40 }, end: { x: 44 + width, y: panel_top + 40 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
+	draw.rounded_rectangle!({ x: 44, y: panel_top, width: width, height: panel_height, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
+	draw.text_at!({ pos: { x: 68, y: panel_top + 14 }, text: "first ${U64.to_str(preview_lines)} lines of the body", size: 13, color: faint })
+	draw.line!({ start: { x: 44, y: panel_top + 40 }, end: { x: 44 + width, y: panel_top + 40 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
 
-	frame.with_scissor!(
+	match draw.with_scissor!(
 		Math.rect(44, panel_top + 40, width, panel_height - 40),
 		|clipped| {
 			draw_body!(clipped, model.state, panel_top + 54)
 			Ok({})
 		},
-	)?
+	) {
+		Err(ScopeLimit) => Err(ScopeLimit)
+		Ok({}) => {
+			model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
+			Ok({})
+		}
+	}
 
-	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
-	Ok({})
 }
 
 ## In flight: a comet of fading dots turning on wall-clock elapsed time, so a
 ## stalled frame loop would show. Settled: a dot resting in a quiet ring.
 draw_indicator! : Draw.Frame, { x : F32, y : F32 }, State, F32 => {}
 draw_indicator! = |frame, center, state, elapsed| {
+	draw = App.effects().render(frame)
 	color = state_color(state)
-	frame.circle!({ center: center, radius: 20, style: Draw.outlined(Color.with_alpha(color, 55), 1.5) })
+	draw.circle!({ center: center, radius: 20, style: Draw.outlined(Color.with_alpha(color, 55), 1.5) })
 	match state {
 		Waiting =>
 			List.for_each!(
 				spinner_dots,
 				|dot| {
 					angle = elapsed * 3.6 - dot.lag
-					frame.circle!({
+					draw.circle!({
 						center: { x: center.x + 20 * F32.cos(angle), y: center.y + 20 * F32.sin(angle) },
 						radius: dot.radius,
 						style: Draw.filled(Color.with_alpha(color, dot.alpha)),
@@ -237,29 +243,29 @@ draw_indicator! = |frame, center, state, elapsed| {
 				},
 			)
 
-		_ => frame.circle!({ center: center, radius: 6, style: Draw.filled(color) })
+		_ => draw.circle!({ center: center, radius: 6, style: Draw.filled(color) })
 	}
 }
 
 ## What the panel holds, clipped to it: the preview, or why there is none.
-draw_body! : Draw.Frame, State, F32 => {}
-draw_body! = |frame, state, top|
+draw_body! : Draw.Effects, State, F32 => {}
+draw_body! = |draw, state, top|
 	match state {
-		Loaded({ lines, status: _, bytes: _, waited_ms: _ }) => draw_lines!(frame, lines, top)
-		Waiting => frame.text_at!({ pos: { x: 68, y: top + 6 }, text: "waiting for the server...", size: 15, color: muted })
-		Failed(_) => frame.text_at!({ pos: { x: 68, y: top + 6 }, text: "nothing to show", size: 15, color: faint })
+		Loaded({ lines, status: _, bytes: _, waited_ms: _ }) => draw_lines!(draw, lines, top)
+		Waiting => draw.text_at!({ pos: { x: 68, y: top + 6 }, text: "waiting for the server...", size: 15, color: muted })
+		Failed(_) => draw.text_at!({ pos: { x: 68, y: top + 6 }, text: "nothing to show", size: 15, color: faint })
 	}
 
 ## Draw the body preview, one line per row, banded so long rows stay readable.
-draw_lines! : Draw.Frame, List(Str), F32 => {}
-draw_lines! = |frame, lines, top| {
+draw_lines! : Draw.Effects, List(Str), F32 => {}
+draw_lines! = |draw, lines, top| {
 	var $row = 0
 	for line in lines {
 		y = top + 22 * U64.to_f32($row)
 		if $row % 2 == 1 {
-			frame.rectangle!({ x: 44, y: y - 3, width: 4000, height: 22, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
+			draw.rectangle!({ x: 44, y: y - 3, width: 4000, height: 22, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
 		}
-		frame.text_at!({ pos: { x: 68, y: y }, text: line, size: 15, color: body_ink })
+		draw.text_at!({ pos: { x: 68, y: y }, text: line, size: 15, color: body_ink })
 		$row = $row + 1
 	}
 }

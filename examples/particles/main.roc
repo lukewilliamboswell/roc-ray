@@ -215,8 +215,9 @@ update! = |model, program_input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
+	draw = App.effects().render(frame)
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
-	frame.texture_instances!(model.sprite, model.instances)
+	draw.texture_instances!(model.sprite, model.instances)
 	model.hud.draw!(frame, { pos: { x: 24, y: 24 }, color: Color.from_hex_rgb(0xa8b4cc) })
 
 	Ok({})

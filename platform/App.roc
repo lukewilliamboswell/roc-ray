@@ -78,6 +78,30 @@ AppEffectsProvider :: {}.{
 	draw_text! : AppEffectsProvider, Draw.Frame, Draw.Text => {}
 	draw_text! = |_provider, frame, text| frame.text!(text)
 
+	rectangle_gradient_v! : AppEffectsProvider, Draw.Frame, Draw.RectangleGradientV => {}
+	rectangle_gradient_v! = |_provider, frame, cfg| frame.rectangle_gradient_v!(cfg)
+
+	rectangle_gradient_h! : AppEffectsProvider, Draw.Frame, Draw.RectangleGradientH => {}
+	rectangle_gradient_h! = |_provider, frame, cfg| frame.rectangle_gradient_h!(cfg)
+
+	circle_gradient! : AppEffectsProvider, Draw.Frame, Draw.CircleGradient => {}
+	circle_gradient! = |_provider, frame, cfg| frame.circle_gradient!(cfg)
+
+	fps! : AppEffectsProvider, Draw.Frame, Draw.Fps => {}
+	fps! = |_provider, frame, cfg| frame.fps!(cfg)
+
+	line! : AppEffectsProvider, Draw.Frame, Draw.Line => {}
+	line! = |_provider, frame, cfg| frame.line!(cfg)
+
+	texture! : AppEffectsProvider, Draw.Frame, Draw.TextureDraw => {}
+	texture! = |_provider, frame, cfg| frame.texture!(cfg)
+
+	texture_instances! : AppEffectsProvider, Draw.Frame, Draw.Texture, List(Draw.TextureInstance) => {}
+	texture_instances! = |_provider, frame, texture, instances| frame.texture_instances!(texture, instances)
+
+	projective_texture! : AppEffectsProvider, Draw.Frame, Draw.ProjectiveTexture => {}
+	projective_texture! = |_provider, frame, cfg| frame.projective_texture!(cfg)
+
 	with_scissor! : AppEffectsProvider, Draw.Frame, Draw.Rect, (Draw.Frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit])
 	with_scissor! = |_provider, frame, bounds, callback|
 		frame.with_scissor!(bounds, callback)

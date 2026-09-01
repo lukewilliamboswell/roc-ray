@@ -42,7 +42,7 @@
 ## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 ## render! = |_model, frame| {
 ##     frame.clear!(Color.black)
-##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+##     App.effects().render(frame).circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
 ##     Ok({})
 ## }
 ## ```

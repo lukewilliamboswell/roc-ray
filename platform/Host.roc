@@ -156,6 +156,12 @@ Host := [].{
 	## Store-relative font path and pixel size.
 	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
 
+	## Failures while constructing a font from encoded bytes.
+	TextLoadFontError : [FontLoadFailed, ResourceLimit]
+
+	## Failures while reading and constructing a font from an asset store.
+	TextLoadStoreFontError : [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit]
+
 	## Snapshot the built-in default font.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_default_font! : () => Font
@@ -166,11 +172,11 @@ Host := [].{
 
 	## Load a font from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	text_load_font! : TextLoadFontBytes => Try(Font, [FontLoadFailed, ResourceLimit])
+	text_load_font! : TextLoadFontBytes => Try(Font, TextLoadFontError)
 
 	## Load a font from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	text_load_store_font! : TextLoadStoreFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit])
+	text_load_store_font! : TextLoadStoreFont => Try(Font, TextLoadStoreFontError)
 
 	## Shape and measure text for repeated drawing.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -829,8 +835,6 @@ Host := [].{
 		properties : List(TilemapProperty),
 	}
 
-	TilemapLoadResult : { ok : Bool, err : U8, map : TilemapMap }
-
 	## Layer metadata borrowed by one batched draw.
 	TilemapRenderLayer : {
 		width : U64,
@@ -869,7 +873,7 @@ Host := [].{
 	}
 
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	tilemap_load_tmx! : Str => TilemapLoadResult
+	tilemap_load_tmx! : Str => Try(TilemapMap, [NotFound, ParseFailed, ReadFailed, Unsupported])
 
 	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}

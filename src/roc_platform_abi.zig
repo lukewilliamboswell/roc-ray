@@ -3371,50 +3371,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_69c51f74695a8340
-pub const __AnonStruct_69c51f74695a8340 = if (@sizeOf(usize) == 4) extern struct {
-    map: __AnonStruct_831cf812524287ed,
-    err: u8,
-    ok: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.map.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.map.incref(amount);
-    }
-} else extern struct {
-    map: __AnonStruct_831cf812524287ed,
-    err: u8,
-    ok: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.map.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.map.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_69c51f74695a8340) != 216) @compileError("__AnonStruct_69c51f74695a8340 size mismatch");
-        if (@alignOf(__AnonStruct_69c51f74695a8340) != 8) @compileError("__AnonStruct_69c51f74695a8340 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_69c51f74695a8340) != 136) @compileError("__AnonStruct_69c51f74695a8340 size mismatch");
-        if (@alignOf(__AnonStruct_69c51f74695a8340) != 8) @compileError("__AnonStruct_69c51f74695a8340 alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_831cf812524287ed
 pub const __AnonStruct_831cf812524287ed = if (@sizeOf(usize) == 4) extern struct {
     height: u64,
@@ -7261,6 +7217,102 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostTilemap_load_tmxResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostTilemap_load_tmxResultPayload = extern union {
+    err: NotFoundOrParseFailedOrReadFailedOrUnsupported,
+    ok: __AnonStruct_831cf812524287ed,
+};
+
+/// Tag union: Try
+pub const HostTilemap_load_tmxResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [128]u8 align(8),
+    tag: HostTilemap_load_tmxResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrReadFailedOrUnsupported {
+        const ptr: *const NotFoundOrParseFailedOrReadFailedOrUnsupported = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) __AnonStruct_831cf812524287ed {
+        const ptr: *const __AnonStruct_831cf812524287ed = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTilemap_load_tmxResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTilemap_load_tmxResult(self, amount);
+    }
+} else extern struct {
+    payload: HostTilemap_load_tmxResultPayload,
+    tag: HostTilemap_load_tmxResultTag,
+    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrReadFailedOrUnsupported {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) __AnonStruct_831cf812524287ed {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostTilemap_load_tmxResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostTilemap_load_tmxResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTilemap_load_tmxResult) != 216) @compileError("HostTilemap_load_tmxResult size mismatch");
+        if (@alignOf(HostTilemap_load_tmxResult) != 8) @compileError("HostTilemap_load_tmxResult alignment mismatch");
+        if (@offsetOf(HostTilemap_load_tmxResult, "tag") != 208) @compileError("HostTilemap_load_tmxResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTilemap_load_tmxResult) != 136) @compileError("HostTilemap_load_tmxResult size mismatch");
+        if (@alignOf(HostTilemap_load_tmxResult) != 8) @compileError("HostTilemap_load_tmxResult alignment mismatch");
+        if (@offsetOf(HostTilemap_load_tmxResult, "tag") != 128) @compileError("HostTilemap_load_tmxResult tag offset mismatch");
+    }
+}
+
+/// Tag union: NotFoundOrParseFailedOrReadFailedOrUnsupported
+pub const NotFoundOrParseFailedOrReadFailedOrUnsupported = enum(u8) {
+    not_found = 0,
+    parse_failed = 1,
+    read_failed = 2,
+    unsupported = 3,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(NotFoundOrParseFailedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrReadFailedOrUnsupported size mismatch");
+        if (@alignOf(NotFoundOrParseFailedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrReadFailedOrUnsupported alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(NotFoundOrParseFailedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrReadFailedOrUnsupported size mismatch");
+        if (@alignOf(NotFoundOrParseFailedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrReadFailedOrUnsupported alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const Init_for_hostResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -7914,29 +7966,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
         if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
-    }
-}
-
-/// Return type record for Host.tilemap_load_tmx!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostTilemap_load_tmxRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    map: __AnonStruct_831cf812524287ed,
-    err: u8,
-    ok: bool,
-} else extern struct {
-    map: __AnonStruct_831cf812524287ed,
-    err: u8,
-    ok: bool,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTilemap_load_tmxRetRecord) != 216) @compileError("HostTilemap_load_tmxRetRecord size mismatch");
-        if (@alignOf(HostTilemap_load_tmxRetRecord) != 8) @compileError("HostTilemap_load_tmxRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTilemap_load_tmxRetRecord) != 136) @compileError("HostTilemap_load_tmxRetRecord size mismatch");
-        if (@alignOf(HostTilemap_load_tmxRetRecord) != 8) @compileError("HostTilemap_load_tmxRetRecord alignment mismatch");
     }
 }
 
@@ -10913,7 +10942,7 @@ pub const HostTask_spawnArgs = extern struct {
 };
 
 /// Arguments for Host.tilemap_load_tmx!
-/// Roc signature: Str => { err : U8, map : { gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, ok : Bool }
+/// Roc signature: Str => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, ReadFailed, Unsupported])
 /// Refcounted fields are owned by the hosted function.
 pub const HostTilemap_load_tmxArgs = extern struct {
     arg0: RocStr,
@@ -12059,14 +12088,14 @@ pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostWindow_scale_dpi = __AnonStruct_2818a50bdccefb1e;
 pub const HostWindow_monitors = __AnonStruct_dae0ce24e748c0cf;
 pub const HostWindow_suggest_positionArg0 = __AnonStruct_3560e04f2553d83d;
-pub const HostTilemap_load_tmx = __AnonStruct_69c51f74695a8340;
-pub const HostTilemap_load_tmxMap = __AnonStruct_831cf812524287ed;
-pub const HostTilemap_load_tmxMapLayers = __AnonStruct_1299823ae1663c65;
-pub const HostTilemap_load_tmxMapObjects = __AnonStruct_109c1082e72f7bad;
-pub const HostTilemap_load_tmxMapPoints = __AnonStruct_2818a50bdccefb1e;
-pub const HostTilemap_load_tmxMapProperties = __AnonStruct_f80f1d26742641bb;
-pub const HostTilemap_load_tmxMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
-pub const HostTilemap_load_tmxMapTilesets = __AnonStruct_756aabd194c61573;
+pub const HostTilemap_load_tmxErr = NotFoundOrParseFailedOrReadFailedOrUnsupported;
+pub const HostTilemap_load_tmxOk = __AnonStruct_831cf812524287ed;
+pub const HostTilemap_load_tmxOkLayers = __AnonStruct_1299823ae1663c65;
+pub const HostTilemap_load_tmxOkObjects = __AnonStruct_109c1082e72f7bad;
+pub const HostTilemap_load_tmxOkPoints = __AnonStruct_2818a50bdccefb1e;
+pub const HostTilemap_load_tmxOkProperties = __AnonStruct_f80f1d26742641bb;
+pub const HostTilemap_load_tmxOkTileProperties = __AnonStruct_6ef82b7d80b893b3;
+pub const HostTilemap_load_tmxOkTilesets = __AnonStruct_756aabd194c61573;
 pub const HostTilemap_drawArg0 = __AnonStruct_bcdb8f2e5f1946e1;
 pub const HostTilemap_drawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
 pub const HostTilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
@@ -12624,8 +12653,30 @@ pub const __AnonStruct_3560e04f2553d83dRelease = struct {
     }
 };
 
-pub const __AnonStruct_69c51f74695a8340Release = struct {
-    pub fn release(value: __AnonStruct_69c51f74695a8340, roc_host: *RocHost) void {
+fn decrefHostTilemap_load_tmxResult(value: HostTilemap_load_tmxResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostTilemap_load_tmxResult(value: HostTilemap_load_tmxResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostTilemap_load_tmxResultRelease = struct {
+    pub fn release(value: HostTilemap_load_tmxResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13219,7 +13270,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostApp_read_textResult) return HostApp_read_textResultRelease;
     if (T == RocList(__AnonStruct_dae0ce24e748c0cf)) return RocListRelease(RocList(__AnonStruct_dae0ce24e748c0cf), __AnonStruct_dae0ce24e748c0cfRelease);
     if (T == __AnonStruct_dae0ce24e748c0cf) return __AnonStruct_dae0ce24e748c0cfRelease;
-    if (T == __AnonStruct_69c51f74695a8340) return __AnonStruct_69c51f74695a8340Release;
+    if (T == HostTilemap_load_tmxResult) return HostTilemap_load_tmxResultRelease;
     if (T == __AnonStruct_831cf812524287ed) return __AnonStruct_831cf812524287edRelease;
     if (T == RocListWith(u64, false)) return RocListSpineRelease(RocListWith(u64, false));
     if (T == RocList(__AnonStruct_1299823ae1663c65)) return RocListRelease(RocList(__AnonStruct_1299823ae1663c65), __AnonStruct_1299823ae1663c65Release);
@@ -13880,12 +13931,12 @@ pub extern fn roc_task_sleep(arg0: u64) callconv(.c) void;
 pub extern fn roc_task_spawn(arg0: RocErasedCallable) callconv(.c) void;
 
 /// Hosted symbol for Host.tilemap_load_tmx!
-/// Roc signature: Str => { err : U8, map : { gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, ok : Bool }
+/// Roc signature: Str => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, ReadFailed, Unsupported])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_tilemap_load_tmx_raw(arg0: RocStr) callconv(.c) __AnonStruct_69c51f74695a8340;
+pub extern fn roc_tilemap_load_tmx_raw(arg0: RocStr) callconv(.c) HostTilemap_load_tmxResult;
 
 /// Hosted symbol for Host.tilemap_draw!
 /// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}

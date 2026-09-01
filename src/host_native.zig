@@ -62,7 +62,7 @@ const FontMetrics = abi.FontMetrics;
 const Color = abi.ColorRgba;
 const AppReadEnvResult = abi.HostApp_read_envResult;
 const AppReadTextResult = abi.HostApp_read_textResult;
-const TilemapLoadTmxRawResult = abi.HostTilemap_load_tmxRetRecord;
+const TilemapLoadTmxResult = abi.HostTilemap_load_tmxResult;
 const AppConfig = abi.App_config_for_host;
 // One cycle of observations handed to update. Unions do not cross this
 // boundary, so the recording state arrives as a flat record that Roc decodes.
@@ -77,18 +77,13 @@ const DroppedFile = abi.Update_for_hostArg1Dropped;
 const DroppedPosition = abi.Update_for_hostArg1DroppedPosition;
 /// One input event in the flat shape the types package decodes.
 const InputEventRecord = abi.Update_for_hostArg1DevicesEvents;
-const TilemapRawMap = abi.HostTilemap_load_tmxMap;
-const TilemapRawLayer = abi.HostTilemap_load_tmxMapLayers;
-const TilemapRawObject = abi.HostTilemap_load_tmxMapObjects;
-const TilemapRawPoint = abi.HostTilemap_load_tmxMapPoints;
-const TilemapRawProperty = abi.HostTilemap_load_tmxMapProperties;
-const TilemapRawTileProperties = abi.HostTilemap_load_tmxMapTileProperties;
-const TilemapRawTileset = abi.HostTilemap_load_tmxMapTilesets;
-
-const TILEMAP_ERR_NOT_FOUND: u8 = 1;
-const TILEMAP_ERR_READ_FAILED: u8 = 2;
-const TILEMAP_ERR_PARSE_FAILED: u8 = 3;
-const TILEMAP_ERR_UNSUPPORTED: u8 = 4;
+const TilemapRawMap = abi.HostTilemap_load_tmxOk;
+const TilemapRawLayer = abi.HostTilemap_load_tmxOkLayers;
+const TilemapRawObject = abi.HostTilemap_load_tmxOkObjects;
+const TilemapRawPoint = abi.HostTilemap_load_tmxOkPoints;
+const TilemapRawProperty = abi.HostTilemap_load_tmxOkProperties;
+const TilemapRawTileProperties = abi.HostTilemap_load_tmxOkTileProperties;
+const TilemapRawTileset = abi.HostTilemap_load_tmxOkTilesets;
 const RESOURCE_ERR_NONE: u8 = 0;
 const RESOURCE_ERR_FAILED: u8 = 1;
 const RESOURCE_ERR_LIMIT: u8 = 2;
@@ -3953,35 +3948,44 @@ fn appReadTextResultErr(err: abi.HostApp_read_textErr) AppReadTextResult {
     return result;
 }
 
-fn emptyTilemapRawMap() TilemapRawMap {
-    return .{
-        .gids = abi.RocListWith(u64, false).empty(),
-        .height = 0,
-        .layers = abi.RocListWith(TilemapRawLayer, true).empty(),
-        .map_property_count = 0,
-        .map_property_start = 0,
-        .objects = abi.RocListWith(TilemapRawObject, true).empty(),
-        .points = abi.RocListWith(TilemapRawPoint, false).empty(),
-        .properties = abi.RocListWith(TilemapRawProperty, true).empty(),
-        .tile_properties = abi.RocListWith(TilemapRawTileProperties, false).empty(),
-        .tilesets = abi.RocListWith(TilemapRawTileset, true).empty(),
-        .width = 0,
-        .tile_height = 0,
-        .tile_width = 0,
-    };
+fn tilemapLoadResultOk(map: TilemapRawMap) TilemapLoadTmxResult {
+    var result: TilemapLoadTmxResult = undefined;
+    result.tag = .Ok;
+    if (@sizeOf(usize) == 4) {
+        const payload: *TilemapRawMap = @ptrCast(@alignCast(&result.payload));
+        payload.* = map;
+    } else {
+        result.payload.ok = map;
+    }
+    return result;
 }
 
-fn emptyTilemapLoadResult(err: u8) TilemapLoadTmxRawResult {
-    return .{ .map = emptyTilemapRawMap(), .err = err, .ok = false };
+fn tilemapLoadResultErr(err: abi.HostTilemap_load_tmxErr) TilemapLoadTmxResult {
+    var result: TilemapLoadTmxResult = undefined;
+    result.tag = .Err;
+    if (@sizeOf(usize) == 4) {
+        const payload: *abi.HostTilemap_load_tmxErr = @ptrCast(@alignCast(&result.payload));
+        payload.* = err;
+    } else {
+        result.payload.err = err;
+    }
+    return result;
 }
 
-fn tilemapLoadErrorCode(err: tmx_loader.LoadError) u8 {
+fn tilemapLoadError(err: tmx_loader.LoadError) abi.HostTilemap_load_tmxErr {
     return switch (err) {
-        error.NotFound => TILEMAP_ERR_NOT_FOUND,
-        error.ReadFailed => TILEMAP_ERR_READ_FAILED,
-        error.Unsupported => TILEMAP_ERR_UNSUPPORTED,
-        else => TILEMAP_ERR_PARSE_FAILED,
+        error.NotFound => .not_found,
+        error.ReadFailed => .read_failed,
+        error.Unsupported => .unsupported,
+        else => .parse_failed,
     };
+}
+
+test "tilemap load failures preserve each typed outcome" {
+    try std.testing.expectEqual(abi.HostTilemap_load_tmxErr.not_found, tilemapLoadError(error.NotFound));
+    try std.testing.expectEqual(abi.HostTilemap_load_tmxErr.read_failed, tilemapLoadError(error.ReadFailed));
+    try std.testing.expectEqual(abi.HostTilemap_load_tmxErr.parse_failed, tilemapLoadError(error.ParseFailed));
+    try std.testing.expectEqual(abi.HostTilemap_load_tmxErr.unsupported, tilemapLoadError(error.Unsupported));
 }
 
 fn convertTilemapRawMap(host: *RocHost, raw: tmx_loader.RawMap) TilemapRawMap {
@@ -7504,7 +7508,7 @@ fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []
 ///
 /// Every read waits -- parking a task, blocking `init!` -- and the XML parse
 /// and the conversion into Roc values run on the frame thread between them.
-fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
+fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
     enforcePhase("Tilemap.load_tmx!", during_wait);
     const effect = EffectScope.begin("Tilemap.load_tmx!", path_arg.asSlice().len);
     defer effect.end();
@@ -7513,18 +7517,14 @@ fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     const path = path_arg.asSlice();
     const reader = tmx_loader.FileReader{ .read = readTilemapFileWaiting };
     var map = tmx_loader.load(allocatorFromHost(roc_host), reader, path) catch |err| {
-        return emptyTilemapLoadResult(tilemapLoadErrorCode(err));
+        return tilemapLoadResultErr(tilemapLoadError(err));
     };
     defer map.deinit();
 
-    return .{
-        .map = convertTilemapRawMap(roc_host, map.raw),
-        .err = 0,
-        .ok = true,
-    };
+    return tilemapLoadResultOk(convertTilemapRawMap(roc_host, map.raw));
 }
 
-fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
+fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
     return hostedTilemapLoadTmxRaw(activeHost(), path_arg);
 }
 
@@ -11596,7 +11596,7 @@ test "loading a map from a frame or an update is rejected, and from a task is no
         last_phase_violation = null;
 
         const result = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice("examples/assets/nothing.tmx", &roc_host));
-        try std.testing.expect(!result.ok);
+        try std.testing.expectEqual(abi.HostTilemap_load_tmxResultTag.Err, result.tag);
 
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
         try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
@@ -11633,9 +11633,9 @@ test "loading a map from a frame or an update is rejected, and from a task is no
     defer task.leave();
     last_phase_violation = null;
     const loaded = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
-    try std.testing.expect(loaded.ok);
+    try std.testing.expectEqual(abi.HostTilemap_load_tmxResultTag.Ok, loaded.tag);
     try std.testing.expect(last_phase_violation == null);
-    releaseTilemapRawMap(&roc_host, loaded.map);
+    releaseTilemapRawMap(&roc_host, loaded.payload_ok());
 }
 
 test "a drawing primitive called from update is rejected" {

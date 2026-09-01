@@ -2101,48 +2101,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_e6ed6936affe2edb
-pub const __AnonStruct_e6ed6936affe2edb = if (@sizeOf(usize) == 4) extern struct {
-    store: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.store), amount);
-    }
-} else extern struct {
-    store: *u64,
-    err: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.store), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_e6ed6936affe2edb) != 16) @compileError("__AnonStruct_e6ed6936affe2edb size mismatch");
-        if (@alignOf(__AnonStruct_e6ed6936affe2edb) != 8) @compileError("__AnonStruct_e6ed6936affe2edb alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_e6ed6936affe2edb) != 8) @compileError("__AnonStruct_e6ed6936affe2edb size mismatch");
-        if (@alignOf(__AnonStruct_e6ed6936affe2edb) != 4) @compileError("__AnonStruct_e6ed6936affe2edb alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_8f4b2816fd84fce2
 pub const __AnonStruct_8f4b2816fd84fce2 = if (@sizeOf(usize) == 4) extern struct {
     asset_set: RocStr,
@@ -7428,6 +7386,111 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostStore_openResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostStore_openResultPayload = extern union {
+    err: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch,
+    ok: *u64,
+};
+
+/// Tag union: Try
+pub const HostStore_openResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: HostStore_openResultTag,
+    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
+        const ptr: *const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        const ptr: *const *u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStore_openResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStore_openResult(self, amount);
+    }
+} else extern struct {
+    payload: HostStore_openResultPayload,
+    tag: HostStore_openResultTag,
+    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) *u64 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStore_openResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStore_openResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostStore_openResult) != 16) @compileError("HostStore_openResult size mismatch");
+        if (@alignOf(HostStore_openResult) != 8) @compileError("HostStore_openResult alignment mismatch");
+        if (@offsetOf(HostStore_openResult, "tag") != 8) @compileError("HostStore_openResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostStore_openResult) != 8) @compileError("HostStore_openResult size mismatch");
+        if (@alignOf(HostStore_openResult) != 4) @compileError("HostStore_openResult alignment mismatch");
+        if (@offsetOf(HostStore_openResult, "tag") != 4) @compileError("HostStore_openResult tag offset mismatch");
+    }
+}
+
+/// Tag union: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch
+pub const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = enum(u8) {
+    asset_set_mismatch = 0,
+    content_hash_mismatch = 1,
+    content_version_mismatch = 2,
+    invalid_expected_content_hash = 3,
+    invalid_root_path = 4,
+    manifest_malformed = 5,
+    manifest_missing = 6,
+    manifest_unreadable = 7,
+    resource_limit = 8,
+    root_not_directory = 9,
+    root_not_found = 10,
+    root_unreadable = 11,
+    schema_mismatch = 12,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
+        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
+        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostApp_read_envResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -7899,27 +7962,6 @@ comptime {
         if (@sizeOf(Render_for_hostResult) != 16) @compileError("Render_for_hostResult size mismatch");
         if (@alignOf(Render_for_hostResult) != 8) @compileError("Render_for_hostResult alignment mismatch");
         if (@offsetOf(Render_for_hostResult, "tag") != 8) @compileError("Render_for_hostResult tag offset mismatch");
-    }
-}
-
-/// Return type record for Host.store_open!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostStore_openRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    store: *u64,
-    err: u8,
-} else extern struct {
-    store: *u64,
-    err: u8,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostStore_openRetRecord) != 16) @compileError("HostStore_openRetRecord size mismatch");
-        if (@alignOf(HostStore_openRetRecord) != 8) @compileError("HostStore_openRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostStore_openRetRecord) != 8) @compileError("HostStore_openRetRecord size mismatch");
-        if (@alignOf(HostStore_openRetRecord) != 4) @compileError("HostStore_openRetRecord alignment mismatch");
     }
 }
 
@@ -8578,7 +8620,7 @@ comptime {
 }
 
 /// Arguments for Host.store_open!
-/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => { err : U8, store : Box(U64) }
+/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Box(U64), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Refcounted fields are owned by the hosted function.
 pub const HostStore_openArgs = if (@sizeOf(usize) == 4) extern struct {
     asset_set: RocStr,
@@ -12276,7 +12318,7 @@ pub const HostTrace_sample_f64Args = extern struct {
 // Platform Type Aliases
 
 pub const HostStore_openArg0 = __AnonStruct_8f4b2816fd84fce2;
-pub const HostStore_open = __AnonStruct_e6ed6936affe2edb;
+pub const HostStore_openErr = AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch;
 pub const HostTexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
 pub const HostTexture_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed;
 pub const HostTexture_load_storeOk = Texture;
@@ -12836,8 +12878,30 @@ pub const __AnonStruct_8a37692f15a59a1dRelease = struct {
     }
 };
 
-pub const __AnonStruct_e6ed6936affe2edbRelease = struct {
-    pub fn release(value: __AnonStruct_e6ed6936affe2edb, roc_host: *RocHost) void {
+fn decrefHostStore_openResult(value: HostStore_openResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            decrefBoxWith(@ptrCast(value.payload_ok()), @alignOf(u64), false, null, roc_host);
+        },
+    }
+}
+
+fn increfHostStore_openResult(value: HostStore_openResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const HostStore_openResultRelease = struct {
+    pub fn release(value: HostStore_openResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -13650,7 +13714,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_aaa310b1ecf2d4be) return __AnonStruct_aaa310b1ecf2d4beRelease;
     if (T == __AnonStruct_70e8e55530300f02) return __AnonStruct_70e8e55530300f02Release;
     if (T == __AnonStruct_8a37692f15a59a1d) return __AnonStruct_8a37692f15a59a1dRelease;
-    if (T == __AnonStruct_e6ed6936affe2edb) return __AnonStruct_e6ed6936affe2edbRelease;
+    if (T == HostStore_openResult) return HostStore_openResultRelease;
     if (T == __AnonStruct_8f4b2816fd84fce2) return __AnonStruct_8f4b2816fd84fce2Release;
     if (T == RocErasedCallable) return RocErasedCallableRelease;
     if (T == __AnonStruct_82ca12cef4f5714b) return __AnonStruct_82ca12cef4f5714bRelease;
@@ -13747,12 +13811,12 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // Refcounted arguments are owned by the hosted function.
 
 /// Hosted symbol for Host.store_open!
-/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => { err : U8, store : Box(U64) }
+/// Roc signature: { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Box(U64), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_store_open_raw(arg0: HostStore_openArgs) callconv(.c) __AnonStruct_e6ed6936affe2edb;
+pub extern fn roc_store_open_raw(arg0: HostStore_openArgs) callconv(.c) HostStore_openResult;
 
 /// Hosted symbol for Host.texture_load_store!
 /// Roc signature: { path : Str, store : Box(U64) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])

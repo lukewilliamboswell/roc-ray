@@ -87,25 +87,23 @@ Assets := [].{
 		## only. Nothing walks or hashes the loose files, so opening a store
 		## stays constant-time in the number of assets.
 		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
-		open! = |cfg| {
-			result = Host.store_open!(store_open_config(cfg))
-			match result.err {
-				0 => Ok(Store.(result.store))
-				1 => Err(RootNotFound)
-				2 => Err(RootNotDirectory)
-				3 => Err(RootUnreadable)
-				4 => Err(InvalidRootPath)
-				5 => Err(InvalidExpectedContentHash)
-				6 => Err(ManifestMissing)
-				7 => Err(ManifestUnreadable)
-				8 => Err(ManifestMalformed)
-				9 => Err(AssetSetMismatch)
-				10 => Err(SchemaMismatch)
-				11 => Err(ContentVersionMismatch)
-				12 => Err(ContentHashMismatch)
-				_ => Err(ResourceLimit)
+		open! = |cfg|
+			match Host.store_open!(store_open_config(cfg)) {
+				Ok(store) => Ok(Store.(store))
+				Err(RootNotFound) => Err(RootNotFound)
+				Err(RootNotDirectory) => Err(RootNotDirectory)
+				Err(RootUnreadable) => Err(RootUnreadable)
+				Err(InvalidRootPath) => Err(InvalidRootPath)
+				Err(InvalidExpectedContentHash) => Err(InvalidExpectedContentHash)
+				Err(ManifestMissing) => Err(ManifestMissing)
+				Err(ManifestUnreadable) => Err(ManifestUnreadable)
+				Err(ManifestMalformed) => Err(ManifestMalformed)
+				Err(AssetSetMismatch) => Err(AssetSetMismatch)
+				Err(SchemaMismatch) => Err(SchemaMismatch)
+				Err(ContentVersionMismatch) => Err(ContentVersionMismatch)
+				Err(ContentHashMismatch) => Err(ContentHashMismatch)
+				Err(ResourceLimit) => Err(ResourceLimit)
 			}
-		}
 
 		## Resource-free store value for pure tests.
 		##

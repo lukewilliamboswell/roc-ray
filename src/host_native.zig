@@ -87,22 +87,6 @@ const TilemapRawTileset = abi.HostTilemap_load_tmxOkTilesets;
 const RESOURCE_ERR_NONE: u8 = 0;
 const RESOURCE_ERR_FAILED: u8 = 1;
 const RESOURCE_ERR_LIMIT: u8 = 2;
-/// Store-open results. These are deliberately more specific than the existing
-/// resource loader errors because startup needs actionable diagnostics.
-const STORE_ERR_NONE: u8 = 0;
-const STORE_ERR_ROOT_NOT_FOUND: u8 = 1;
-const STORE_ERR_ROOT_NOT_DIRECTORY: u8 = 2;
-const STORE_ERR_ROOT_UNREADABLE: u8 = 3;
-const STORE_ERR_INVALID_ROOT_PATH: u8 = 4;
-const STORE_ERR_INVALID_EXPECTED_CONTENT_HASH: u8 = 5;
-const STORE_ERR_MANIFEST_MISSING: u8 = 6;
-const STORE_ERR_MANIFEST_UNREADABLE: u8 = 7;
-const STORE_ERR_MANIFEST_MALFORMED: u8 = 8;
-const STORE_ERR_ASSET_SET_MISMATCH: u8 = 9;
-const STORE_ERR_SCHEMA_MISMATCH: u8 = 10;
-const STORE_ERR_CONTENT_VERSION_MISMATCH: u8 = 11;
-const STORE_ERR_CONTENT_HASH_MISMATCH: u8 = 12;
-const STORE_ERR_LIMIT: u8 = 13;
 /// Store-loader results.  These remain separate from store-open errors so an
 /// application can say whether its installation or one optional asset failed.
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
@@ -5703,31 +5687,30 @@ fn openStoreRootRelative(io: std.Io, base: std.Io.Dir, root: []const u8) !std.Io
     return base.openDir(io, root, .{});
 }
 
-fn storeErrorDescription(err: u8) []const u8 {
+fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
-        STORE_ERR_ROOT_NOT_FOUND => "root directory was not found",
-        STORE_ERR_ROOT_NOT_DIRECTORY => "root is not a directory",
-        STORE_ERR_ROOT_UNREADABLE => "root directory is not readable",
-        STORE_ERR_INVALID_ROOT_PATH => "invalid root location",
-        STORE_ERR_INVALID_EXPECTED_CONTENT_HASH => "expected SHA-256 is not 64 hexadecimal characters",
-        STORE_ERR_MANIFEST_MISSING => "required roc-assets.manifest was not found",
-        STORE_ERR_MANIFEST_UNREADABLE => "required roc-assets.manifest could not be read",
-        STORE_ERR_MANIFEST_MALFORMED => "roc-assets.manifest is malformed",
-        STORE_ERR_ASSET_SET_MISMATCH => "manifest asset_set does not match",
-        STORE_ERR_SCHEMA_MISMATCH => "manifest schema does not match",
-        STORE_ERR_CONTENT_VERSION_MISMATCH => "manifest content_version does not match",
-        STORE_ERR_CONTENT_HASH_MISMATCH => "manifest content_sha256 does not match",
-        STORE_ERR_LIMIT => "asset-store resource limit reached",
-        else => "unknown asset-store error",
+        .root_not_found => "root directory was not found",
+        .root_not_directory => "root is not a directory",
+        .root_unreadable => "root directory is not readable",
+        .invalid_root_path => "invalid root location",
+        .invalid_expected_content_hash => "expected SHA-256 is not 64 hexadecimal characters",
+        .manifest_missing => "required roc-assets.manifest was not found",
+        .manifest_unreadable => "required roc-assets.manifest could not be read",
+        .manifest_malformed => "roc-assets.manifest is malformed",
+        .asset_set_mismatch => "manifest asset_set does not match",
+        .schema_mismatch => "manifest schema does not match",
+        .content_version_mismatch => "manifest content_version does not match",
+        .content_hash_mismatch => "manifest content_sha256 does not match",
+        .resource_limit => "asset-store resource limit reached",
     };
 }
 
-fn storeOpenError(error_value: anyerror) u8 {
+fn storeOpenError(error_value: anyerror) abi.HostStore_openErr {
     return switch (error_value) {
-        error.FileNotFound => STORE_ERR_ROOT_NOT_FOUND,
-        error.NotDir => STORE_ERR_ROOT_NOT_DIRECTORY,
-        error.AccessDenied => STORE_ERR_ROOT_UNREADABLE,
-        else => STORE_ERR_ROOT_UNREADABLE,
+        error.FileNotFound => .root_not_found,
+        error.NotDir => .root_not_directory,
+        error.AccessDenied => .root_unreadable,
+        else => .root_unreadable,
     };
 }
 
@@ -5853,14 +5836,14 @@ fn isSha256Hex(value: []const u8) bool {
     return true;
 }
 
-fn matchAssetManifest(manifest: ParsedAssetManifest, asset_set: []const u8, schema: u32, content_version: u32, expected_hash: ?[]const u8) u8 {
-    if (manifest.asset_set == null or !std.mem.eql(u8, manifest.asset_set.?, asset_set)) return STORE_ERR_ASSET_SET_MISMATCH;
-    if (manifest.schema == null or manifest.schema.? != schema) return STORE_ERR_SCHEMA_MISMATCH;
-    if (manifest.content_version == null or manifest.content_version.? != content_version) return STORE_ERR_CONTENT_VERSION_MISMATCH;
+fn matchAssetManifest(manifest: ParsedAssetManifest, asset_set: []const u8, schema: u32, content_version: u32, expected_hash: ?[]const u8) ?abi.HostStore_openErr {
+    if (manifest.asset_set == null or !std.mem.eql(u8, manifest.asset_set.?, asset_set)) return .asset_set_mismatch;
+    if (manifest.schema == null or manifest.schema.? != schema) return .schema_mismatch;
+    if (manifest.content_version == null or manifest.content_version.? != content_version) return .content_version_mismatch;
     if (expected_hash) |hash| {
-        if (manifest.content_hash == null or !std.ascii.eqlIgnoreCase(manifest.content_hash.?, hash)) return STORE_ERR_CONTENT_HASH_MISMATCH;
+        if (manifest.content_hash == null or !std.ascii.eqlIgnoreCase(manifest.content_hash.?, hash)) return .content_hash_mismatch;
     }
-    return STORE_ERR_NONE;
+    return null;
 }
 
 fn expectedManifestHash(args: abi.HostStore_openArgs) union(enum) { any, hash: []const u8, invalid } {
@@ -5872,34 +5855,34 @@ fn expectedManifestHash(args: abi.HostStore_openArgs) union(enum) { any, hash: [
     };
 }
 
-fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.HostStore_openArgs) u8 {
-    if (!args.manifest_required) return STORE_ERR_NONE;
+fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.HostStore_openArgs) ?abi.HostStore_openErr {
+    if (!args.manifest_required) return null;
     const bytes = switch (readDirFileWaiting(allocator, root.*, "roc-assets.manifest", MAX_ASSET_MANIFEST_BYTES)) {
         .failed => |err| return switch (err) {
-            error.FileNotFound => STORE_ERR_MANIFEST_MISSING,
-            else => STORE_ERR_MANIFEST_UNREADABLE,
+            error.FileNotFound => .manifest_missing,
+            else => .manifest_unreadable,
         },
         .bytes => |value| value,
     };
     defer allocator.free(bytes);
-    const manifest = parseAssetManifest(bytes) orelse return STORE_ERR_MANIFEST_MALFORMED;
+    const manifest = parseAssetManifest(bytes) orelse return .manifest_malformed;
     const expected_hash: ?[]const u8 = switch (expectedManifestHash(args)) {
         .any => null,
         .hash => |hash| hash,
-        .invalid => return STORE_ERR_INVALID_EXPECTED_CONTENT_HASH,
+        .invalid => return .invalid_expected_content_hash,
     };
     return matchAssetManifest(manifest, args.asset_set.asSlice(), args.schema, args.content_version, expected_hash);
 }
 
-fn reportStoreOpenFailure(code: u8, configured_root: []const u8, opened_root: ?*const std.Io.Dir) void {
+fn reportStoreOpenFailure(err: abi.HostStore_openErr, configured_root: []const u8, opened_root: ?*const std.Io.Dir) void {
     if (opened_root) |root| {
         var resolved: [std.Io.Dir.max_path_bytes]u8 = undefined;
         if (root.realPath(mainThreadIo(), &resolved)) |length| {
-            std.debug.print("roc-ray: asset store startup validation failed ({s}) at resolved root \"{s}\"\n", .{ storeErrorDescription(code), resolved[0..length] });
+            std.debug.print("roc-ray: asset store startup validation failed ({s}) at resolved root \"{s}\"\n", .{ storeErrorDescription(err), resolved[0..length] });
             return;
         } else |_| {}
     }
-    std.debug.print("roc-ray: asset store startup validation failed ({s}) at configured root \"{s}\"\n", .{ storeErrorDescription(code), configured_root });
+    std.debug.print("roc-ray: asset store startup validation failed ({s}) at configured root \"{s}\"\n", .{ storeErrorDescription(err), configured_root });
 }
 
 test "asset store paths are portable and cannot lexically escape their root" {
@@ -5937,10 +5920,10 @@ test "asset manifests compare declared identity without walking loose files" {
             "content_version = 4\n" ++
             "content_sha256 = \"" ++ hash ++ "\"\n",
     ).?;
-    try std.testing.expectEqual(STORE_ERR_NONE, matchAssetManifest(manifest, "screwbot", 1, 4, hash));
-    try std.testing.expectEqual(STORE_ERR_NONE, matchAssetManifest(manifest, "screwbot", 1, 4, null));
-    try std.testing.expectEqual(STORE_ERR_CONTENT_HASH_MISMATCH, matchAssetManifest(manifest, "screwbot", 1, 4, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
-    try std.testing.expectEqual(STORE_ERR_SCHEMA_MISMATCH, matchAssetManifest(manifest, "screwbot", 2, 4, hash));
+    try std.testing.expectEqual(null, matchAssetManifest(manifest, "screwbot", 1, 4, hash));
+    try std.testing.expectEqual(null, matchAssetManifest(manifest, "screwbot", 1, 4, null));
+    try std.testing.expectEqual(abi.HostStore_openErr.content_hash_mismatch, matchAssetManifest(manifest, "screwbot", 1, 4, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+    try std.testing.expectEqual(abi.HostStore_openErr.schema_mismatch, matchAssetManifest(manifest, "screwbot", 2, 4, hash));
     try std.testing.expect(parseAssetManifest("asset_set = x\nschema = 1\ncontent_version = 4\ncontent_sha256 = invalid\n") == null);
 }
 
@@ -5995,7 +5978,8 @@ test "store startup failures close an untransferred root and successful insertio
 
     // Invalid expected hashes are rejected before trying to open the root.
     const invalid_hash = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, "does-not-exist", false, 1, "not-a-sha"));
-    try std.testing.expectEqual(STORE_ERR_INVALID_EXPECTED_CONTENT_HASH, invalid_hash.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Err, invalid_hash.tag);
+    try std.testing.expectEqual(abi.HostStore_openErr.invalid_expected_content_hash, invalid_hash.payload_err());
     try std.testing.expectEqual(@as(usize, 0), store_heap.active());
 
     var tmp = std.testing.tmpDir(.{});
@@ -6004,17 +5988,18 @@ test "store startup failures close an untransferred root and successful insertio
     var root_path: [256]u8 = undefined;
     const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
     const malformed = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, true, 0, ""));
-    try std.testing.expectEqual(STORE_ERR_MANIFEST_MALFORMED, malformed.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Err, malformed.tag);
+    try std.testing.expectEqual(abi.HostStore_openErr.manifest_malformed, malformed.payload_err());
     // The root was opened to read the manifest, then explicitly closed rather
     // than leaking because this hosted function returns an ABI record.
     try std.testing.expectEqual(@as(usize, 0), store_heap.active());
 
     const opened = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
-    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Ok, opened.tag);
     try std.testing.expectEqual(@as(usize, 1), store_heap.active());
     // This is the one transferred reference. Its final release retires, then
     // closes, exactly one directory resource.
-    const base: *isize = @ptrFromInt(@intFromPtr(opened.store) - @sizeOf(isize));
+    const base: *isize = @ptrFromInt(@intFromPtr(opened.payload_ok()) - @sizeOf(isize));
     base.* = 0;
     try std.testing.expectEqual(host_resource.DeallocRoute.deallocated, store_heap.routeDealloc(base));
     try std.testing.expectEqual(@as(usize, 1), store_heap.retiredCount());
@@ -6029,7 +6014,8 @@ test "store startup failures close an untransferred root and successful insertio
         slot.* = store_heap.insert(0, .{ .root = dir }).?;
     }
     const limited = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
-    try std.testing.expectEqual(STORE_ERR_LIMIT, limited.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Err, limited.tag);
+    try std.testing.expectEqual(abi.HostStore_openErr.resource_limit, limited.payload_err());
     try std.testing.expectEqual(@as(usize, 16), store_heap.active());
     store_heap.deinitAll();
     try std.testing.expectEqual(@as(usize, 0), store_heap.active());
@@ -6073,7 +6059,7 @@ test "opening a store and loading a texture from it wait rather than load" {
     defer task.leave();
     last_phase_violation = null;
     const opened = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
-    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Ok, opened.tag);
     try std.testing.expect(last_phase_violation == null);
 
     {
@@ -6092,7 +6078,7 @@ test "opening a store and loading a texture from it wait rather than load" {
 
     last_phase_violation = null;
     const loaded = hostedTextureLoadStoreRaw(&roc_host, .{
-        .store = opened.store,
+        .store = opened.payload_ok(),
         .path = abi.RocStr.fromSlice("logo.png", &roc_host),
     });
     try std.testing.expectEqual(abi.HostTexture_load_storeResultTag.Ok, loaded.tag);
@@ -6159,7 +6145,9 @@ test "embedded texture and font bytes are consumed exactly once" {
 /// Opening a directory and reading a manifest are both filesystem work, so
 /// this waits: it parks a task and blocks `init!`. The validation that follows
 /// is pure and runs on the frame thread once the read has come back.
-fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openRetRecord {
+fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openResult {
+    const Result = abi.HostStore_openResult;
+    const Error = abi.HostStore_openErr;
     enforcePhase("Assets.Store.open!", during_wait);
     const effect = EffectScope.begin("Assets.Store.open!", 0);
     defer effect.end();
@@ -6170,38 +6158,37 @@ fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c)
     const allocator = allocatorFromHost(host);
     switch (expectedManifestHash(args)) {
         .invalid => {
-            reportStoreOpenFailure(STORE_ERR_INVALID_EXPECTED_CONTENT_HASH, root_path, null);
-            return .{ .store = invalidResourceHandle(), .err = STORE_ERR_INVALID_EXPECTED_CONTENT_HASH };
+            reportStoreOpenFailure(Error.invalid_expected_content_hash, root_path, null);
+            return abiTryErr(Result, Error.invalid_expected_content_hash);
         },
         else => {},
     }
     var root = switch (openStoreDirectoryWaiting(allocator, args.location_kind, root_path)) {
         .failed => |err| {
-            const code: u8 = switch (err) {
-                error.InvalidRootPath => STORE_ERR_INVALID_ROOT_PATH,
+            const open_error: Error = switch (err) {
+                error.InvalidRootPath => .invalid_root_path,
                 else => storeOpenError(err),
             };
-            reportStoreOpenFailure(code, root_path, null);
-            return .{ .store = invalidResourceHandle(), .err = code };
+            reportStoreOpenFailure(open_error, root_path, null);
+            return abiTryErr(Result, open_error);
         },
         .dir => |dir| dir,
     };
     var root_transferred = false;
     defer if (!root_transferred) root.close(mainThreadIo());
-    const manifest_error = validateStoreManifest(allocator, &root, args);
-    if (manifest_error != STORE_ERR_NONE) {
+    if (validateStoreManifest(allocator, &root, args)) |manifest_error| {
         reportStoreOpenFailure(manifest_error, root_path, &root);
-        return .{ .store = invalidResourceHandle(), .err = manifest_error };
+        return abiTryErr(Result, manifest_error);
     }
     const stored = store_heap.insert(0, .{ .root = root }) orelse {
-        reportStoreOpenFailure(STORE_ERR_LIMIT, root_path, &root);
-        return .{ .store = invalidResourceHandle(), .err = STORE_ERR_LIMIT };
+        reportStoreOpenFailure(Error.resource_limit, root_path, &root);
+        return abiTryErr(Result, Error.resource_limit);
     };
     root_transferred = true;
-    return .{ .store = stored, .err = STORE_ERR_NONE };
+    return abiTryOk(Result, stored);
 }
 
-fn exportedStoreOpenRaw(args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openRetRecord {
+fn exportedStoreOpenRaw(args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openResult {
     return hostedStoreOpenRaw(activeHost(), args);
 }
 
@@ -7053,7 +7040,7 @@ test "the store-backed font and shader loaders wait rather than load" {
     const startup = PhaseScope.enter(.startup);
     last_phase_violation = null;
     const opened = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
-    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    try std.testing.expectEqual(abi.HostStore_openResultTag.Ok, opened.tag);
     startup.leave();
 
     {
@@ -7088,7 +7075,7 @@ test "the store-backed font and shader loaders wait rather than load" {
     defer task.leave();
     last_phase_violation = null;
     const font = hostedTextLoadStoreFontRaw(&roc_host, .{
-        .store = retainTestResourceBox(opened.store),
+        .store = retainTestResourceBox(opened.payload_ok()),
         .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
         .size = 16,
     });
@@ -7096,7 +7083,7 @@ test "the store-backed font and shader loaders wait rather than load" {
     font.decref(&roc_host);
 
     const shader = hostedShaderLoadStoreRaw(&roc_host, .{
-        .store = opened.store,
+        .store = opened.payload_ok(),
         .vertex_path = abi.RocStr.empty(),
         .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
     });

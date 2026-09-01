@@ -280,12 +280,12 @@ Host := [].{
 		content_hash : Str,
 	}
 
-	## Open asset store or error.
-	StoreOpenResult : { store : Store, err : U8 }
+	## Failures while opening and validating an asset store.
+	StoreOpenError : [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	store_open! : StoreOpen => StoreOpenResult
+	store_open! : StoreOpen => Try(Store, StoreOpenError)
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.

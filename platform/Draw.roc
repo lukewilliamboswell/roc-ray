@@ -37,6 +37,7 @@ import Camera
 import Color
 import Host
 import rrt.Font
+import rrt.Resource
 import Math
 
 TextureDrawConfig : {
@@ -680,7 +681,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Box.box(U64.highest))
+		stub = Shader.(Resource.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default

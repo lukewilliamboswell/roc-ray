@@ -10,6 +10,7 @@ app [Model, program] {
 import rr.App
 import rr.Draw
 import rrt.Font
+import rrt.Resource
 
 Model : {
 	font : Font,
@@ -21,7 +22,8 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = Font.Handle.(Box.box(0))
+		handle : Font.Handle
+		handle = Resource.Handle.(Box.box(0))
 		Ok({
 			font: { ..Font.stub, handle },
 		})

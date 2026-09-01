@@ -24,6 +24,7 @@ import Draw
 import Host
 import Math
 import rrt.Font as RrtFont
+import rrt.Resource
 
 Text := [].{
 
@@ -170,7 +171,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: Box.box(U64.highest),
+				resource: Resource.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)

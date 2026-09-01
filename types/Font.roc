@@ -5,6 +5,7 @@
 ## it without importing the platform or calling the host. The platform
 ## re-exports this type as `Text.Font`.
 import unicode.Scalar
+import Resource
 
 Font := {
 	handle : Handle,
@@ -13,13 +14,9 @@ Font := {
 
 	## Opaque native resource identity. Only a host can manufacture a live one,
 	## but applications can compare and hash handles they receive.
-	Handle :: Box(U64).{
-		is_eq : Handle, Handle -> Bool
-		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)
+	FontResource := {}
 
-		to_hash : Handle, Hasher -> Hasher
-		to_hash = |Handle.(value), hasher| U64.to_hash(Box.unbox(value), hasher)
-	}
+	Handle : Resource.Handle(FontResource)
 
 	## Scalar metrics for one glyph, in the atlas's own units.
 	GlyphMetrics : {
@@ -60,7 +57,7 @@ Font := {
 	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: Handle.(Box.box(U64.highest)),
+		handle: Resource.stub,
 		metrics: {
 			base_size: 1,
 			line_spacing: 0,

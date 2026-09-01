@@ -4,17 +4,14 @@ app [Model, program] {
 	roc: "nightly-2026-08-23-fb208ba",
 }
 
-# A texture's resource identity is private to the host. Applications can copy a
-# shared texture and alter its descriptive dimensions, but cannot manufacture a
-# handle from a raw integer.
+# The shared handle representation must not let one resource kind stand in for
+# another.
 import rr.App
 import rr.Draw
-import rrt.Resource
+import rrt.Font
 import rrt.Texture
 
-Model : {
-	texture : Texture,
-}
+Model : {}
 
 program = { init!, update!, render! }
 
@@ -22,11 +19,13 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle : Texture.Handle
-		handle = Resource.Handle.(Box.box(0))
-		Ok({ texture: { handle, width: 8, height: 8 } })
+		use_font_handle(Texture.stub.handle)
+		Ok({})
 	},
 )
+
+use_font_handle : Font.Handle -> {}
+use_font_handle = |_handle| {}
 
 Msg : []
 

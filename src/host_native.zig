@@ -4473,8 +4473,8 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_shader = storeShader(.headless).?;
     const inner_shader = storeShader(.headless).?;
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = outer_shader }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = inner_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = outer_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = inner_shader }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_shader_depth);
@@ -4668,8 +4668,8 @@ test "resource scopes report bounded saturation without leaking transferred owne
 
     const shader = storeShader(.headless).?;
     abi.increfBox(@ptrCast(shader), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = shader }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRaw(.{ .handle = shader }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
@@ -4695,7 +4695,7 @@ test "scope kind confusion fails and releases transferred owners" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     const target = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = @ptrCast(target) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .handle = @ptrCast(target) }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
@@ -4742,7 +4742,7 @@ test "last resource references remain live through owning host operations" {
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
     const shader = storeShader(.headless).?;
-    hostedShaderSetFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
+    hostedShaderSetFloatRaw(.{ .uniform = .{ .shader = .{ .handle = shader }, .location = 0 }, .value = 1 });
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
@@ -4750,7 +4750,7 @@ test "last resource references remain live through owning host operations" {
     const sampler_texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
     hostedShaderSetTextureRaw(.{
         .texture = .{ .handle = sampler_texture, .height = 1, .width = 1 },
-        .uniform = .{ .shader = sampler_shader, .location = 0 },
+        .uniform = .{ .shader = .{ .handle = sampler_shader }, .location = 0 },
     });
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
@@ -4980,7 +4980,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A uniform cannot be resolved on a stub shader.
         try std.testing.expectEqual(@as(i32, -1), hostedShaderLocationRaw(&roc_host, .{
-            .shader = allocateTestResourceStub(&roc_host),
+            .shader = .{ .handle = allocateTestResourceStub(&roc_host) },
             .name = abi.RocStr.fromSlice("uTime", &roc_host),
         }));
 
@@ -5019,7 +5019,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A scope cannot be opened on a stub, and reports the same refusal a
         // released resource would. Nothing is leased, so there is no end call.
-        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = allocateTestResourceStub(&roc_host) }));
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .handle = allocateTestResourceStub(&roc_host) }));
         try std.testing.expectEqual(@as(usize, 0), shader_lease_count);
         try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{
             .handle = allocateTestResourceStub(&roc_host),
@@ -5043,7 +5043,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         // the reference each call was given.
         for (0..3) |_| {
             abi.increfBox(@ptrCast(real_shader), 1);
-            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = real_shader }));
+            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = real_shader }));
         }
         try std.testing.expectEqual(@as(u8, 3), headless_shader_depth);
         for (0..3) |_| hostedDrawEndShaderRaw();
@@ -6466,7 +6466,7 @@ fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArg
     if (vertex_slice.len == 0 and fragment_slice.len == 0) return abiTryErr(Result, Error.shader_load_failed);
     if (headlessMode()) {
         const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, shader);
+        return abiTryOk(Result, abi.Shader{ .handle = shader });
     }
 
     const allocator = allocatorFromHost(host);
@@ -6478,7 +6478,7 @@ fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArg
     defer fragment.deinit();
     const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
     const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.Shader{ .handle = stored });
 }
 
 fn exportedShaderLoadSourceRaw(args: abi.HostShader_load_sourceArgs) callconv(.c) abi.HostShader_load_sourceResult {
@@ -6524,7 +6524,7 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
 
     if (headlessMode()) {
         const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, shader);
+        return abiTryOk(Result, abi.Shader{ .handle = shader });
     }
     var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -6534,7 +6534,7 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
     defer fragment.deinit();
     const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
     const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.Shader{ .handle = stored });
 }
 
 fn exportedShaderLoadStoreRaw(args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeResult {
@@ -6621,7 +6621,7 @@ fn hostedDrawBeginShaderRaw(args: abi.HostDraw_begin_shaderArgs) callconv(.c) u8
     const effect = EffectScope.begin("Draw.with_shader!", 0);
     defer effect.end();
     const host = activeHost();
-    const owner = args.arg0;
+    const owner = args.handle;
     if (shader_lease_count == SCOPE_STACK_LIMIT) {
         releaseResourceBox(host, owner);
         return SCOPE_LIMIT;
@@ -6682,8 +6682,8 @@ fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostShader_locationArgs) ca
     const effect = EffectScope.begin("Draw.Shader.uniform_*!", args.name.asSlice().len);
     defer effect.end();
     defer args.name.decref(host);
-    defer releaseResourceBox(host, args.shader);
-    const resource = shader_heap.get(args.shader.*) orelse return -1;
+    defer releaseResourceBox(host, args.shader.handle);
+    const resource = shader_heap.get(args.shader.handle.*) orelse return -1;
     const name_slice = args.name.asSlice();
     if (name_slice.len == 0) return -1;
     switch (resource.*) {
@@ -6709,7 +6709,7 @@ fn hostedShaderSetFloatRaw(args: abi.HostShader_set_floatArgs) callconv(.c) void
     effect.setDrawMetrics(1, @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderFloat(resource.native, args.uniform.location, args.value);
 }
@@ -6721,7 +6721,7 @@ fn hostedShaderSetIntRaw(args: abi.HostShader_set_intArgs) callconv(.c) void {
     effect.setDrawMetrics(1, @sizeOf(i32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderInt(resource.native, args.uniform.location, args.value);
 }
@@ -6733,7 +6733,7 @@ fn hostedShaderSetVec2Raw(args: abi.HostShader_set_vec2Args) callconv(.c) void {
     effect.setDrawMetrics(1, 2 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec2(resource.native, args.uniform.location, .{ args.value.x, args.value.y });
 }
@@ -6745,7 +6745,7 @@ fn hostedShaderSetVec3Raw(args: abi.HostShader_set_vec3Args) callconv(.c) void {
     effect.setDrawMetrics(1, 3 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec3(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z });
 }
@@ -6757,7 +6757,7 @@ fn hostedShaderSetVec4Raw(args: abi.HostShader_set_vec4Args) callconv(.c) void {
     effect.setDrawMetrics(1, 4 * @sizeOf(f32));
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec4(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
 }
@@ -6769,7 +6769,7 @@ fn hostedShaderSetTextureRaw(args: abi.HostShader_set_textureArgs) callconv(.c) 
     defer args.uniform.decref(activeHost());
     defer args.texture.decref(activeHost());
     if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
+    const resource = shader_heap.get(args.uniform.shader.handle.*) orelse return;
     if (resource.* == .headless) return;
     const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
     raylib.setShaderTexture(resource.native, args.uniform.location, texture);
@@ -7100,7 +7100,7 @@ test "the store-backed font and shader loaders wait rather than load" {
         .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
     });
     try std.testing.expectEqual(abi.HostShader_load_storeResultTag.Ok, shader.tag);
-    releaseResourceBox(&roc_host, shader.payload_ok());
+    releaseResourceBox(&roc_host, shader.payload_ok().handle);
     try std.testing.expect(last_phase_violation == null);
 }
 

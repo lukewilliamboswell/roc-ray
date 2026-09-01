@@ -57,6 +57,7 @@ import rrt.Color
 import rrt.Font
 import rrt.Math
 import rrt.Handle
+import rrt.Shader
 import rrt.Texture
 
 Host := [].{
@@ -196,12 +197,6 @@ Host := [].{
 	## Shape and measure text for repeated drawing.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_prepare! : TextPrepare => Try(TextPreparedResult, TextPrepareError)
-
-	## Shader resource interface
-	ShaderResource := {}
-
-	## Opaque ARC-owned shader.
-	Shader : Handle(ShaderResource)
 
 	## Located shader uniform.
 	ShaderUniform : { shader : Shader, location : I32 }

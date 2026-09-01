@@ -37,7 +37,7 @@ import Camera
 import Color
 import Host
 import rrt.Font
-import rrt.Handle
+import rrt.Shader as RrtShader
 import Math
 
 TextureDrawConfig : {
@@ -599,7 +599,7 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: Host.Shader.{
+	Shader :: RrtShader.Shader.{
 
 		## Compile shader stages from source strings.
 		##
@@ -688,7 +688,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Handle.stub)
+		stub = Shader.(RrtShader.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -1349,7 +1349,7 @@ scope_ok = 0
 scope_limit : U8
 scope_limit = 2
 
-uniform_host! : Host.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : RrtShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	location = Host.shader_location!({ shader, name })
 	if location < 0 {

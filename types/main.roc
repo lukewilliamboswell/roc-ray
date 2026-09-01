@@ -26,6 +26,7 @@ package
 		Handle,
 		Font,
 		Texture,
+		Shader,
 		Drawing,
 	]
 	{
@@ -35,3 +36,4 @@ package
 import resources/Handle
 import resources/Font
 import resources/Texture
+import resources/Shader

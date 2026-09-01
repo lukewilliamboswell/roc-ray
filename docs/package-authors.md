@@ -1,188 +1,104 @@
-# Building reusable packages on RocRay
+# Writing a package for RocRay apps
 
-RocRay separates shared API vocabulary from host authority so a reusable Roc
-package can provide layout, rendering, input, asset-planning, or other
-higher-level APIs without depending on its application's platform.
+This guide is for you if you are writing a Roc package that will be used by an
+application running on RocRay—for example, a UI toolkit, renderer, layout
+library, or game framework.
 
-The package depends on `roc-ray-types`. The application depends on RocRay and
-the reusable package. The application supplies any authority the package needs:
+If you are writing a RocRay application, start with the
+[example guide](../examples/README.md). If you are changing RocRay itself, read
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
-```text
-application             reusable package              RocRay host
-App.effects()  ───────► App.Effects(frame)
-       │
-       └─ render(frame) ───────► Drawing.Effects ─────► drawing effects
-```
+## The short version
 
-Importing `roc-ray-types` creates no host authority. It contains vocabulary and
-opaque effect interfaces, but no hosted declarations and no way to mint a live
-frame, resource, startup token, or task. Only a value configured by the
-application's platform can reach the host.
+There are three participants:
 
-## Dependencies and names
+- **Your package** depends on `roc-ray-types`. It defines the higher-level API.
+- **The app using your package** depends on RocRay and your package. It creates
+  resources, starts tasks, and passes effects to your package.
+- **RocRay** owns the window, frame, host resources, scheduling, and platform
+  checks.
 
-A package imports the companion package under a name such as `rrt`:
+Here, an *effect* is simply a call that asks RocRay to do something outside
+pure Roc code, such as draw or read a file.
+
+If your package draws, its rendering function accepts one value:
 
 ```roc
-package [Renderer, Toolkit] {
+draw! : Drawing.Effects, View => {}
+```
+
+The app turns its current frame into that value and passes it to your package:
+
+```roc
+# Inside render!
+draw = App.effects().render(frame)
+Toolkit.draw!(draw, view)
+```
+
+Your package does not import the RocRay platform and cannot access the host
+unless the app passes an effect value to it. If your package also needs to wait
+for work such as reading a file, the optional task section below adds that
+second pattern.
+
+## 1. Add `roc-ray-types` to your package
+
+The package header depends on `roc-ray-types`, commonly named `rrt`:
+
+```roc
+package [Toolkit] {
     rrt: "../../roc-ray/types/main.roc",
 }
 ```
 
-Its modules name shared types through that dependency:
+Your package modules can then import the shared types they use:
 
 ```roc
 import rrt.App
 import rrt.Drawing
+import rrt.Files
 import rrt.Font
 import rrt.Texture
 ```
 
-The application imports only the platform and the reusable package:
+The relative path above is useful while developing beside a RocRay checkout.
+For a published package, use the released `roc-ray-types` bundle that matches
+the RocRay release you support.
 
-```roc
-app [Model, program] {
-    rr: platform "../../roc-ray/platform/main.roc",
-    toolkit: "../package/main.roc",
-    roc: "nightly-2026-08-31-86e69b4",
-}
+## 2. Write your package API
 
-import rr.App
-import rr.Draw
-import rr.Text
-import toolkit.Toolkit
-```
+### A package that draws
 
-Do not add a second `roc-ray-types` dependency to the application. RocRay
-transparently re-exports package-owned types, so the app's `Text.Font`,
-`Draw.Texture`, `Devices.Snapshot`, and `App.Input(msg)` are the same nominal
-types a package names as `rrt.Font`, `rrt.Texture`, `rrt.Devices.Snapshot`, and
-`rrt.App.Input(msg)`.
-
-For a published package, replace the local `rrt` path with the released
-`roc-ray-types` bundle matched by the RocRay release. During sibling-checkout
-development, use the same local `types/main.roc` from which the local platform
-is built. Two look-alike package builds may create different nominal identities.
-
-## Values, resources, and authority
-
-A package can freely accept and retain ordinary package-owned values. This
-includes input snapshots, geometry, colors, cameras, font metrics, textures,
-and other opaque resource handles. The package can use their pure receivers;
-only the platform can construct or mutate host-owned resources.
-
-Prefer pure plans at startup. For example, a toolkit can return a list of asset
-requests, then accept the loaded fonts and textures from the application:
-
-```roc
-required_assets : Theme -> List(AssetRequest)
-
-init : List(Texture), Font -> Toolkit
-```
-
-This keeps `App.Startup`, platform configuration, and loading policy in the
-application. Create long-lived resources once during `init!` and retain them in
-the application or package state rather than loading them per frame.
-
-When a package must call the host synchronously, the application can instead
-inject the configured root effect handle.
-
-## The two effect handles
-
-| Name in a package | Purpose | May be retained? | Who supplies it? |
-| --- | --- | --- | --- |
-| `App.Effects(frame)` | Phase-neutral root containing configured low-level and waiting effects | Yes; it contains no frame or input | The application, from platform `App.effects()` |
-| Platform `Draw.Frame` | Host-minted authority for one active render target | No; use it only in the callback or scope that supplied it | RocRay calls the application's `render!` or a platform drawing scope |
-| `Drawing.Effects` | Canonical drawing API bound to the current frame or nested drawing scope | No; use it synchronously inside that render scope | `effects.render(frame)` or a drawing-scope callback |
-
-The application-side platform alias `App.Effects` fixes the hidden `frame`
-parameter to RocRay's `Draw.Frame`. A reusable package sees the parameterized
-companion-package type because it does not import that platform.
-
-`App.effects()` performs no host work. It returns configured functions and is
-safe to retain or capture in a task body. `effects.render(frame)` binds the
-current explicit frame and produces the narrower drawing-only handle.
-
-## A canonical rendering package
-
-A renderer should normally accept `Drawing.Effects` directly:
+Accept `Drawing.Effects` in the function that renders your package's view:
 
 ```roc
 import rrt.Drawing
 
-Renderer := [].{
-    draw! : Drawing.Effects, View => Try({}, [ScopeLimit])
+View : {
+    panel : Drawing.RoundedRectangle,
+    title : Drawing.Text,
+}
+
+Toolkit := [].{
+    draw! : Drawing.Effects, View => {}
     draw! = |draw, view| {
         draw.rounded_rectangle!(view.panel)
         draw.text!(view.title)
-        Ok({})
     }
 }
 ```
 
-The application-facing adapter accepts the root handle once. It binds each
-frame inside `render!` and hands the resulting drawing capability to the
-renderer:
+This one argument replaces a separate structural `where` constraint for every
+drawing operation. Your package can use the standard shape, gradient, line,
+text, texture, batch, projective-texture, and scissor helpers exposed by
+`Drawing.Effects`.
 
-```roc
-Program := [].{
-    new = |effects, configure, init!, update!, view| {
-        render! = |model, frame| {
-            draw = effects.render(frame)
-            Renderer.draw!(draw, view(model))
-        }
+### Optional: a package that waits for work
 
-        {
-            init!: { config: configure, run!: init! },
-            update!,
-            render!,
-        }
-    }
-}
-```
+A package should define its own message type and expose a task body. It should
+not need to know the application's `Msg`:
 
-The application makes the authority transfer explicit:
-
-```roc
-program = Program.new(App.effects(), configure, init!, update!, view)
-```
-
-This is preferable to repeating structural `where` constraints for every draw
-operation. It gives the package one documented capability contract and keeps
-the platform dependency at the application boundary.
-
-## Scoped drawing
-
-Drawing scopes such as scissoring substitute a nested drawing capability while
-host state is active. Always continue with the handle passed to the callback:
-
-```roc
-draw_panel! : Drawing.Effects, Panel => Try({}, [ScopeLimit])
-draw_panel! = |draw, panel|
-    draw.with_scissor!(
-        panel.bounds,
-        |scoped| {
-            scoped.rectangle!(panel.background)
-            draw_children!(scoped, panel.children)?
-            Ok({})
-        },
-    )
-```
-
-Do not use or retain the outer `draw` inside that callback. Nested targets may
-have different dimensions and host state, and the supplied `scoped` handle is
-the authority for exactly that scope.
-
-The current scissor receiver has the fixed callback shape
-`Drawing.Effects => Try({}, [ScopeLimit])`. This reflects a compiler limitation
-around generalized result and open-error variables stored in the private effect
-record, not a different ownership protocol.
-
-## Waiting effects and tasks
-
-The root handle also supports package-owned waiting effects. A package may
-expose both a direct operation for initialization and a task body in its own
-message type, without knowing the application's `Msg`:
+In `App.Effects(frame)`, `frame` is a type parameter saying which kind of frame
+the effects can later bind. The root value does not contain a current frame.
 
 ```roc
 import rrt.App
@@ -197,18 +113,64 @@ load_theme! : App.Effects(frame), Str -> (() => Msg)
 load_theme! = |effects, path| || ThemeLoaded(effects.read_text!(path))
 ```
 
-During `init!`, the application may call that function directly, where the read
-blocks startup:
+The direct function is useful during application initialization. The task body
+is useful after the app has started, when waiting must not stop the frame loop.
+
+## 3. Connect your package in the app
+
+The application depends on RocRay and your package. It does **not** add its own
+`roc-ray-types` dependency:
+
+```roc
+app [Model, program] {
+    rr: platform "../../roc-ray/platform/main.roc",
+    toolkit: "../package/main.roc",
+    roc: "nightly-2026-08-31-86e69b4",
+}
+
+import rr.App
+import toolkit.Toolkit
+```
+
+### Connect drawing
+
+The app gets the configured effects value from RocRay. Inside `render!`, it
+binds the current frame and calls your package:
+
+```roc
+app_effects = App.effects()
+
+render! = |model, frame| {
+    draw = app_effects.render(frame)
+    Toolkit.draw!(draw, model.view)
+    Ok({})
+}
+```
+
+A framework that constructs the app's whole `program` can accept the effects
+value once:
+
+```roc
+program = Toolkit.program(App.effects(), configure, init!, update!, view)
+```
+
+Its generated `render!` still calls `effects.render(frame)` for each current
+frame. It stores only the unbound root value, never a frame or drawing handle.
+
+### Connect initialization and tasks
+
+During `init!`, a waiting effect may run directly and block startup:
 
 ```roc
 theme_source = Toolkit.read_theme!(App.effects(), "theme.txt")?
 ```
 
-During the orderly application lifetime, work that waits belongs in a task.
-The application owns the `App.Input(msg)` witness, starts the task, and chooses
-the message wrapper:
+After startup, the application starts the package's task body with its current
+input and chooses how the package message fits into the app's `Msg`:
 
 ```roc
+import rr.Task
+
 effects = App.effects()
 Task.spawn_with!(
     input,
@@ -217,20 +179,132 @@ Task.spawn_with!(
 )
 ```
 
-The package must not manufacture an input, spawn work without the application's
-message witness, or ask the host to retain an arbitrary callback. `spawn_with!`
-lets the task answer in the package's own message type while the application
-chooses how to wrap it. The task body returns exactly one message; scheduling,
-parking, shutdown, and payload bounds remain platform-owned.
+`spawn_with!` is the application boundary: your package owns its task and
+message type; the app owns the `App.Input(msg)` required to start work and the
+wrapper into its larger message type.
 
-Application callbacks and task bodies remain serial on the frame thread.
-Waiting parks a task so frames can continue; long pure computation inside the
-task still blocks the frame loop.
+## Passing values and resources
 
-## Alternative package APIs
+RocRay re-exports the types from `roc-ray-types`. A value named `Text.Font` or
+`Draw.Texture` in the app is the same nominal value your package names as
+`rrt.Font` or `rrt.Texture`.
 
-A package with a deliberately different drawing model can accept the same root
-and explicit frame instead of using the canonical high-level receivers:
+That means the app can load a font or texture and pass it directly to your
+package:
+
+```roc
+# In the app
+font = startup.default_font!()?
+toolkit = Toolkit.init(font)
+```
+
+```roc
+# In your package
+init : Font -> Toolkit
+```
+
+No conversion, native handle, or manual cleanup API is needed. Your package may
+retain the resource and use its pure information, such as font metrics or
+texture dimensions. Loading, mutation, and other host operations still require
+an effect supplied by the app.
+
+For packages that need several resources, consider exposing a pure plan:
+
+```roc
+required_assets : Theme -> List(AssetRequest)
+
+init : List(Texture), Font -> Toolkit
+```
+
+The app performs the loading during `init!`, then gives the results to your
+package.
+
+## Drawing inside a scope
+
+Some drawing operations temporarily change the active host state. Scissoring
+is the package-facing example. The callback receives the drawing value for that
+scope; use it for every nested draw:
+
+```roc
+draw_panel! : Drawing.Effects, Panel => Try({}, [ScopeLimit])
+draw_panel! = |draw, panel|
+    draw.with_scissor!(
+        panel.bounds,
+        |scoped| {
+            scoped.rectangle!(panel.background)
+            draw_children!(scoped, panel.children)?
+            Ok({})
+        },
+    )
+```
+
+Do not call the outer `draw` from inside the callback. A nested target can have
+different dimensions and host state, so the callback's `scoped` value is the
+one your recursive renderer must pass onward.
+
+## Which effect value is which?
+
+You can usually follow two simple rules:
+
+1. A renderer accepts `Drawing.Effects`.
+2. Code that creates task bodies or deliberately wraps RocRay's low-level API
+   accepts `App.Effects(frame)`.
+
+For reference:
+
+| Value | What it represents | Keep it in package state? |
+| --- | --- | --- |
+| `App.Effects(frame)` in your package, or `App.Effects` in the app | RocRay-configured root effects, with no current frame or input | Yes |
+| `Draw.Frame` in the app | One active host drawing target | No |
+| `Drawing.Effects` in your package | Drawing bound to the current frame or nested scope | No |
+
+`App.effects()` only constructs the unbound root value; it performs no host
+operation. Calling `effects.render(frame)` binds a frame and returns the
+drawing-only value.
+
+Importing or naming any of these types does not create a working effect value.
+Only the app's selected platform can configure one that reaches the host.
+
+## When effects may run
+
+RocRay checks the actual hosted operation even when your package wraps it:
+
+| Operation | Where it may run |
+| --- | --- |
+| Drawing through `Drawing.Effects` | `render!` only |
+| Waiting `read_text!` | `init!`, where it blocks, or a task, where it parks |
+| Pure package code | Anywhere ordinary pure Roc code may run |
+
+An invalid call stops the application with a programmer error naming the
+effect, phase, and fix. External conditions such as a missing file remain typed
+results.
+
+Application callbacks and task bodies run serially on the frame thread. A
+waiting effect parks its task so frames can continue; long pure computation in
+a task still blocks the frame loop.
+
+## Local development and releases
+
+During local development, point both projects at the same checkout:
+
+- Your package points `rrt` at that checkout's `types/main.roc`.
+- The integration app points its platform at that checkout's
+  `platform/main.roc`.
+- Use the Roc compiler version in that checkout's `.roc-version`.
+
+This matters because Roc package types have nominal identity. Two packages with
+the same source but different resolved package identities may not unify.
+
+For releases, publish `roc-ray-types` first, then publish the RocRay platform
+that references that exact package bundle. A downstream package should pin the
+matching released types package; its application should pin the matching
+RocRay platform and compiler.
+
+## Advanced: defining a different drawing API
+
+Most renderers should accept `Drawing.Effects`. If your package deliberately
+offers a different drawing model, it can combine the root value with an
+explicit frame and call the root's lower-level receivers:
 
 ```roc
 Alternative(frame) :: {
@@ -248,61 +322,26 @@ Alternative(frame) :: {
 }
 ```
 
-The application constructs that facade only while it has a frame:
+The application creates this facade only inside `render!`:
 
 ```roc
 Alternative.from_effects(App.effects(), frame).panel!(panel)
 ```
 
-Use this form when the package intentionally owns a different drawing API.
-Packages that merely compose RocRay's standard helpers should accept
-`Drawing.Effects` instead.
+Choose this only when your package needs to replace the canonical drawing API,
+not merely compose its helpers.
 
-## Phase and ownership rules
+## Checklist
 
-The root handle is phase-neutral. Its type does not hide operations that are
-invalid in the current callback, because Roc values are not affine and a
-retained phase-shaped handle would not prove correct use. RocRay remains the
-semantic authority:
+- Your package depends on `roc-ray-types`, not the RocRay platform.
+- The app depends on RocRay and your package, with no separate types dependency.
+- The app loads host resources and passes them to your package unchanged.
+- Rendering functions accept `Drawing.Effects`.
+- Recursive scoped drawing passes the callback's drawing value onward.
+- Package tasks return the package's message type; the app calls
+  `Task.spawn_with!` and supplies the wrapper.
+- Frames and `Drawing.Effects` are never stored for later use.
+- Local platform and package dependencies resolve the same `roc-ray-types`.
 
-| Operation | Legal phases |
-| --- | --- |
-| Drawing through `Drawing.Effects` | `render!` only |
-| Waiting `read_text!` | `init!`, where it blocks, or a task, where it parks |
-| Pure package receivers | Any pure Roc code |
-
-An invalid hosted call fails immediately as a programmer error naming the
-effect, phase, and fix. Runtime conditions such as a missing file remain typed
-outcomes. Package receivers call their injected delegates synchronously; the
-host never retains, schedules, or resumes those delegates.
-
-Keep these boundaries intact:
-
-- The application owns `App.Config`, `App.Startup`, `App.Input(msg)`, task
-  spawning, and `Draw.Frame`.
-- The package owns its domain API, state, pure algorithms, and higher-level
-  effect receivers.
-- RocRay owns hosted primitives, phase checks, resource bounds, scope
-  restoration, scheduling, and backends.
-
-## Package-author checklist
-
-- Depend on `roc-ray-types`, never the application-selected platform.
-- Keep the application free of a separate `roc-ray-types` dependency.
-- Accept shared package types directly; do not copy or translate host-resource
-  handles.
-- Prefer pure startup plans and application-loaded resources.
-- Accept `Drawing.Effects` for the canonical rendering path.
-- Accept `App.Effects(frame)` plus a frame only for a deliberately different
-  facade or for a root effect such as `read_text!`.
-- Bind frames only inside `render!`.
-- Propagate callback-supplied scoped effects through recursive drawing.
-- Let the application provide the task message witness and wrapper.
-- Test local platform and package builds together so their nominal identities
-  cannot drift.
-
-The executable source of truth for these boundaries is
-[`test/package_interop`](../test/package_interop/README.md). It compiles a
-types-only input adapter, canonical and alternative renderers, scoped drawing,
-resource round trips, a waiting effect, and an application that depends only on
-the platform and those packages.
+The executable integration coverage for these patterns lives in
+[`test/package_interop`](../test/package_interop/README.md).

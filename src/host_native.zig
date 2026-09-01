@@ -3924,52 +3924,71 @@ fn mainThreadIo() std.Io {
     }
 }
 
-fn appReadTextResultOk(contents: abi.RocStr) AppReadTextResult {
-    var result: AppReadTextResult = undefined;
-    result.tag = .Ok;
+/// Construct one payload-bearing `Try` emitted by Roc glue.
+///
+/// On 32-bit targets glue stores the payload as aligned bytes; on 64-bit it
+/// emits an extern union. The generated payload accessor is the shared source
+/// of truth for the value type on both layouts.
+const AbiTryBranch = enum { ok, err };
+
+fn abiTryPayload(
+    comptime Result: type,
+    comptime branch: AbiTryBranch,
+    value: anytype,
+) Result {
+    comptime {
+        if (!@hasField(Result, "tag") or !@hasField(Result, "payload"))
+            @compileError("ABI Try result must have tag and payload fields");
+
+        const Expected = switch (branch) {
+            .ok => @typeInfo(@TypeOf(Result.payload_ok)).@"fn".return_type.?,
+            .err => @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?,
+        };
+        if (@TypeOf(value) != Expected)
+            @compileError("ABI Try payload does not match its generated accessor type");
+    }
+
+    var result: Result = undefined;
+    result.tag = switch (branch) {
+        .ok => .Ok,
+        .err => .Err,
+    };
+
     if (@sizeOf(usize) == 4) {
-        const payload: *abi.RocStr = @ptrCast(@alignCast(&result.payload));
-        payload.* = contents;
+        const PayloadStorage = @FieldType(Result, "payload");
+        comptime {
+            if (@sizeOf(@TypeOf(value)) > @sizeOf(PayloadStorage))
+                @compileError("ABI Try payload is larger than its generated storage");
+            if (@alignOf(@TypeOf(value)) > @alignOf(PayloadStorage))
+                @compileError("ABI Try payload is more aligned than its generated storage");
+        }
+        const payload: *@TypeOf(value) = @ptrCast(@alignCast(&result.payload));
+        payload.* = value;
     } else {
-        result.payload.ok = contents;
+        switch (branch) {
+            .ok => result.payload.ok = value,
+            .err => result.payload.err = value,
+        }
     }
     return result;
 }
 
-fn appReadTextResultErr(err: abi.HostApp_read_textErr) AppReadTextResult {
-    var result: AppReadTextResult = undefined;
-    result.tag = .Err;
-    if (@sizeOf(usize) == 4) {
-        const payload: *abi.HostApp_read_textErr = @ptrCast(@alignCast(&result.payload));
-        payload.* = err;
-    } else {
-        result.payload.err = err;
-    }
-    return result;
+fn abiTryOk(comptime Result: type, value: anytype) Result {
+    return abiTryPayload(Result, .ok, value);
 }
 
-fn tilemapLoadResultOk(map: TilemapRawMap) TilemapLoadTmxResult {
-    var result: TilemapLoadTmxResult = undefined;
-    result.tag = .Ok;
-    if (@sizeOf(usize) == 4) {
-        const payload: *TilemapRawMap = @ptrCast(@alignCast(&result.payload));
-        payload.* = map;
-    } else {
-        result.payload.ok = map;
-    }
-    return result;
+fn abiTryErr(comptime Result: type, err: anytype) Result {
+    return abiTryPayload(Result, .err, err);
 }
 
-fn tilemapLoadResultErr(err: abi.HostTilemap_load_tmxErr) TilemapLoadTmxResult {
-    var result: TilemapLoadTmxResult = undefined;
-    result.tag = .Err;
-    if (@sizeOf(usize) == 4) {
-        const payload: *abi.HostTilemap_load_tmxErr = @ptrCast(@alignCast(&result.payload));
-        payload.* = err;
-    } else {
-        result.payload.err = err;
-    }
-    return result;
+test "ABI Try constructors preserve typed success and error payloads" {
+    const ok = abiTryOk(AppReadTextResult, abi.RocStr.empty());
+    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Ok, ok.tag);
+    try std.testing.expectEqualStrings("", ok.payload_ok().asSlice());
+
+    const err = abiTryErr(AppReadTextResult, abi.HostApp_read_textErr.not_found);
+    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, err.tag);
+    try std.testing.expectEqual(abi.HostApp_read_textErr.not_found, err.payload_err());
 }
 
 fn tilemapLoadError(err: tmx_loader.LoadError) abi.HostTilemap_load_tmxErr {
@@ -5480,49 +5499,25 @@ fn releaseStartupFontHandle(host: *RocHost) void {
     startup_font_handle = null;
 }
 
-fn fontResultOk(comptime Result: type, font: Font) Result {
-    var result: Result = undefined;
-    result.tag = .Ok;
-    if (@sizeOf(usize) == 4) {
-        const payload: *Font = @ptrCast(@alignCast(&result.payload));
-        payload.* = font;
-    } else {
-        result.payload.ok = font;
-    }
-    return result;
-}
-
-fn fontResultErr(comptime Result: type, err: anytype) Result {
-    var result: Result = undefined;
-    result.tag = .Err;
-    if (@sizeOf(usize) == 4) {
-        const payload: *@TypeOf(err) = @ptrCast(@alignCast(&result.payload));
-        payload.* = err;
-    } else {
-        result.payload.err = err;
-    }
-    return result;
-}
-
 fn configuredStartupFont(host: *RocHost) abi.HostText_startup_default_fontResult {
     const Result = abi.HostText_startup_default_fontResult;
     const Error = abi.HostText_startup_default_fontErr;
     enforcePhase("App.Startup.default_font!", during_startup);
     const effect = EffectScope.begin("App.Startup.default_font!", startup_font_config.path.len);
     defer effect.end();
-    if (startup_font_config.path.len == 0) return fontResultOk(Result, completeFont(host, defaultFontHandle()));
-    if (!isSafeStoreRelativePath(startup_font_config.path)) return fontResultErr(Result, Error.asset_path_invalid);
-    if (startup_font_config.size <= 0) return fontResultErr(Result, Error.font_load_failed);
+    if (startup_font_config.path.len == 0) return abiTryOk(Result, completeFont(host, defaultFontHandle()));
+    if (!isSafeStoreRelativePath(startup_font_config.path)) return abiTryErr(Result, Error.asset_path_invalid);
+    if (startup_font_config.size <= 0) return abiTryErr(Result, Error.font_load_failed);
 
     if (startup_font_handle) |handle| {
         abi.increfBox(@ptrCast(handle), 1);
-        return fontResultOk(Result, completeFont(host, handle));
+        return abiTryOk(Result, completeFont(host, handle));
     }
 
-    const file_type = fontFileTypeFromPath(startup_font_config.path) orelse return fontResultErr(Result, Error.font_load_failed);
+    const file_type = fontFileTypeFromPath(startup_font_config.path) orelse return abiTryErr(Result, Error.font_load_failed);
     const allocator = allocatorFromHost(host);
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), startup_font_config.path, allocator, .limited(MAX_ASSET_FILE_BYTES)) catch |err| {
-        return fontResultErr(Result, switch (err) {
+        return abiTryErr(Result, switch (err) {
             error.FileNotFound => Error.asset_not_found,
             else => Error.asset_read_failed,
         });
@@ -5532,13 +5527,13 @@ fn configuredStartupFont(host: *RocHost) abi.HostText_startup_default_fontResult
     const handle = if (headlessMode())
         storeFont(.headless)
     else blk: {
-        const font = raylib.loadFontFromMemory(file_type, bytes, startup_font_config.size) orelse return fontResultErr(Result, Error.font_load_failed);
+        const font = raylib.loadFontFromMemory(file_type, bytes, startup_font_config.size) orelse return abiTryErr(Result, Error.font_load_failed);
         break :blk storeFont(.{ .native = font });
     };
-    const stored = handle orelse return fontResultErr(Result, Error.resource_limit);
+    const stored = handle orelse return abiTryErr(Result, Error.resource_limit);
     startup_font_handle = stored;
     abi.increfBox(@ptrCast(stored), 1);
-    return fontResultOk(Result, completeFont(host, stored));
+    return abiTryOk(Result, completeFont(host, stored));
 }
 
 fn exportedTextStartupDefaultFontRaw() callconv(.c) abi.HostText_startup_default_fontResult {
@@ -6963,15 +6958,15 @@ fn hostedTextLoadFontRaw(host: *RocHost, args: abi.HostText_load_fontArgs) callc
     defer effect.end();
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
-    const file_type = fontFileType(args.format) orelse return fontResultErr(Result, Error.font_load_failed);
-    if (bytes.len == 0 or args.size <= 0) return fontResultErr(Result, Error.font_load_failed);
+    const file_type = fontFileType(args.format) orelse return abiTryErr(Result, Error.font_load_failed);
+    if (bytes.len == 0 or args.size <= 0) return abiTryErr(Result, Error.font_load_failed);
     if (headlessMode()) {
-        const font = storeFont(.headless) orelse return fontResultErr(Result, Error.resource_limit);
-        return fontResultOk(Result, completeFont(host, font));
+        const font = storeFont(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, completeFont(host, font));
     }
-    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return fontResultErr(Result, Error.font_load_failed);
-    const stored = storeFont(.{ .native = font }) orelse return fontResultErr(Result, Error.resource_limit);
-    return fontResultOk(Result, completeFont(host, stored));
+    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return abiTryErr(Result, Error.font_load_failed);
+    const stored = storeFont(.{ .native = font }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, completeFont(host, stored));
 }
 
 fn exportedTextLoadFontRaw(args: abi.HostText_load_fontArgs) callconv(.c) abi.HostText_load_fontResult {
@@ -6990,25 +6985,25 @@ fn hostedTextLoadStoreFontRaw(host: *RocHost, args: abi.HostText_load_store_font
     defer effect.end();
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
-    if (args.size <= 0) return fontResultErr(Result, Error.font_load_failed);
-    const store = store_heap.get(args.store.*) orelse return fontResultErr(Result, Error.read_failed);
+    if (args.size <= 0) return abiTryErr(Result, Error.font_load_failed);
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
     const source = readStoreAsset(allocator, store, args.path.asSlice());
     const bytes = switch (source) {
-        .path_invalid => return fontResultErr(Result, Error.path_invalid),
-        .not_found => return fontResultErr(Result, Error.not_found),
-        .failed => return fontResultErr(Result, Error.read_failed),
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
         .bytes => |value| value,
     };
     defer allocator.free(bytes);
     if (headlessMode()) {
-        const font = storeFont(.headless) orelse return fontResultErr(Result, Error.resource_limit);
-        return fontResultOk(Result, completeFont(host, font));
+        const font = storeFont(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        return abiTryOk(Result, completeFont(host, font));
     }
-    const file_type = fontFileTypeFromPath(args.path.asSlice()) orelse return fontResultErr(Result, Error.font_load_failed);
-    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return fontResultErr(Result, Error.font_load_failed);
-    const stored = storeFont(.{ .native = font }) orelse return fontResultErr(Result, Error.resource_limit);
-    return fontResultOk(Result, completeFont(host, stored));
+    const file_type = fontFileTypeFromPath(args.path.asSlice()) orelse return abiTryErr(Result, Error.font_load_failed);
+    const font = raylib.loadFontFromMemory(file_type, bytes, args.size) orelse return abiTryErr(Result, Error.font_load_failed);
+    const stored = storeFont(.{ .native = font }) orelse return abiTryErr(Result, Error.resource_limit);
+    return abiTryOk(Result, completeFont(host, stored));
 }
 
 fn fontFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
@@ -7449,14 +7444,14 @@ fn hostedAppReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) AppR
     const allocator = allocatorFromHost(roc_host);
     const path = path_arg.asSlice();
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_FILE_READ_BYTES)) catch |err| {
-        return appReadTextResultErr(switch (err) {
-            error.FileNotFound => .not_found,
-            else => .read_failed,
+        return abiTryErr(AppReadTextResult, switch (err) {
+            error.FileNotFound => abi.HostApp_read_textErr.not_found,
+            else => abi.HostApp_read_textErr.read_failed,
         });
     };
     defer allocator.free(bytes);
 
-    return appReadTextResultOk(abi.RocStr.fromSlice(bytes, roc_host));
+    return abiTryOk(AppReadTextResult, abi.RocStr.fromSlice(bytes, roc_host));
 }
 
 fn exportedAppReadText(path_arg: abi.RocStr) callconv(.c) AppReadTextResult {
@@ -7517,11 +7512,11 @@ fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     const path = path_arg.asSlice();
     const reader = tmx_loader.FileReader{ .read = readTilemapFileWaiting };
     var map = tmx_loader.load(allocatorFromHost(roc_host), reader, path) catch |err| {
-        return tilemapLoadResultErr(tilemapLoadError(err));
+        return abiTryErr(TilemapLoadTmxResult, tilemapLoadError(err));
     };
     defer map.deinit();
 
-    return tilemapLoadResultOk(convertTilemapRawMap(roc_host, map.raw));
+    return abiTryOk(TilemapLoadTmxResult, convertTilemapRawMap(roc_host, map.raw));
 }
 
 fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {

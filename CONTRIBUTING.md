@@ -21,6 +21,17 @@ Install:
 - Python 3 and `zstd` for the full test and bundle checks
 - SQLite's `sqlite3` command-line tool for inspecting Observatory captures
 
+Alternatively, use [`kai`](https://github.com/thebrandonlucas/kai) to install them for you:
+
+```
+# Enter a `nix` shell with kai with `nix` if you don't have it
+nix shell github:thebrandonlucas/kai
+```
+
+Then to enter the developer shell:
+
+`kai shell roc-ray`
+
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
 come first on it. A local debug build of the compiler is not a substitute: it
 trips SpecConstr invariants on this platform's code and fails in ways that look

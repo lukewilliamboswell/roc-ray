@@ -1,0 +1,11 @@
+shell {
+  packages: [
+    "rocpkgs.nightly-2026-08-23-fb208ba",
+    "zig_0_16",
+    "python3",
+    "zstd",
+    "sqlite",
+    "llvmPackages.bintools"
+  ]
+  overlays: ["github:roc-lang/roc-overlay"]
+}

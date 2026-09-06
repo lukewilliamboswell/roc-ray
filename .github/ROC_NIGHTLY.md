@@ -1,6 +1,8 @@
 # Roc nightly updates
 
-The Roc nightly updater checks the latest published release four times a day.
+The Roc nightly updater checks the latest published release once a day at 13:40 UTC.
+This is about four hours after roc-lang/nightlies starts its daily 09:00 UTC build.
+If publication is late, the next daily check can pick it up.
 It keeps `.roc-version` as the compiler pin and opens or updates one PR from
 `automation/roc-nightly`. That branch is reserved for the updater; put manual
 compatibility fixes on a separate branch.

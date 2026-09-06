@@ -1,3 +1,5 @@
+# Roc nightly updates
+
 The Roc nightly updater checks the latest published release four times a day.
 It keeps `.roc-version` as the compiler pin and opens or updates one PR from
 `automation/roc-nightly`. That branch is reserved for the updater; put manual

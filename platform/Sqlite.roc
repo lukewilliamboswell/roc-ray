@@ -16,9 +16,8 @@
 ## At most eight connections and sixty-four statements may be open. Queries
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
+import Resource
 import Host
-import resources/SqliteDb as PlatformSqliteDb
-import resources/SqliteStmt as PlatformSqliteStmt
 
 Sqlite := [].{
 
@@ -174,7 +173,7 @@ Sqlite := [].{
 	## The host owns the connection; this is a reference-counted handle to it.
 	## Keep it in the model, copy it freely, and let the last reference close
 	## it.
-	Db :: PlatformSqliteDb.SqliteDb.{
+	Db :: Resource.Db.{
 
 		## Open or create a database under `default_config`.
 		##
@@ -240,7 +239,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(PlatformSqliteDb.stub)
+		stub = Db.(Resource.Handle.stub)
 	}
 
 	## One row of a result, with its column names.
@@ -389,7 +388,7 @@ Sqlite := [].{
 	## what a per-frame or per-record write wants. The host owns the compiled
 	## statement; the last handle released finalizes it, and the connection it
 	## came from stays open at least that long.
-	Stmt :: PlatformSqliteStmt.SqliteStmt.{
+	Stmt :: Resource.Stmt.{
 
 		## Run this statement, which must not return rows.
 		##
@@ -417,7 +416,7 @@ Sqlite := [].{
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(PlatformSqliteStmt.stub)
+		stub = Stmt.(Resource.Handle.stub)
 	}
 
 	## Compile one statement for repeated use.

@@ -32,12 +32,13 @@
 ##
 ## `Draw.text!` draws at an already-resolved top-left origin without a layout
 ## pass. Use `Text` for optional anchor alignment or prepared text.
+import Resource
+
 import Assets
 import Camera
 import Color
 import Host
 import Font
-import resources/Shader as PlatformShader
 import Math
 
 TextureDrawConfig : {
@@ -599,7 +600,7 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: PlatformShader.Shader.{
+	Shader :: Resource.Shader.{
 
 		## Compile shader stages from source strings.
 		##
@@ -688,7 +689,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(PlatformShader.stub)
+		stub = Shader.(Resource.Handle.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -1350,7 +1351,7 @@ font_format_code = |format|
 		Otf => 1
 	}
 
-uniform_host! : PlatformShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : Resource.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	# closed error union to open error union
 	match Host.shader_location!({ shader, name }) {

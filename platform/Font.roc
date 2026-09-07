@@ -3,7 +3,8 @@
 ## A font pairs an opaque, reference-counted native resource identity with an
 ## immutable scalar metric snapshot. Pure application code can retain and measure
 ## it without calling the host. `Text.Font` and `Draw.Font` name this same type.
-import resources/Handle
+
+import Resource
 
 Font := {
 	handle : FontHandle,
@@ -12,7 +13,7 @@ Font := {
 
 	## Opaque native resource identity. Only a host can manufacture a live one,
 	## but applications can compare and hash handles they receive.
-	FontHandle : Handle([FontResource])
+	FontHandle : Resource.Font
 
 	## Scalar metrics for one glyph, in the atlas's own units.
 	GlyphMetrics : {
@@ -53,7 +54,7 @@ Font := {
 	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: Handle.stub,
+		handle: Resource.Handle.stub,
 		metrics: {
 			base_size: 1,
 			line_spacing: 0,

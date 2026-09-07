@@ -19,12 +19,12 @@
 ## Preparation is legal in `init!`, `update!`, and tasks, and refused in
 ## `render!`. Drawing requires `Draw.Frame` and is legal only in `render!`.
 ## Retain repeatedly drawn `Prepared` values in the model.
+import Resource
 import Color
 import Draw
 import Host
 import Math
 import Font as PlatformFont
-import resources/TextPrepared as PlatformTextPrepared
 
 Text := [].{
 
@@ -123,7 +123,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : PlatformTextPrepared.TextPrepared,
+		resource : Resource.Prepared,
 		measured : Size,
 	}.{
 
@@ -170,7 +170,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: PlatformTextPrepared.stub,
+				resource: Resource.Handle.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)

@@ -36,10 +36,10 @@
 ##
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
 ## Release textures the app no longer needs before loading more.
+import Resource
 import Color
 import Host
 import Texture as PlatformTexture
-import resources/Store as PlatformStore
 
 Assets := [].{
 
@@ -54,7 +54,7 @@ Assets := [].{
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
-	Store :: PlatformStore.Store.{
+	Store :: Resource.Store.{
 
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
@@ -116,10 +116,10 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(PlatformStore.stub)
+		stub = Store.(Resource.Handle.stub)
 
 		## Internal bridge for platform operations that also use an asset store.
-		for_host : Store -> PlatformStore.Store
+		for_host : Store -> Resource.Store
 		for_host = |Store.(store)| store
 	}
 

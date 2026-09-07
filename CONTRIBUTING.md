@@ -552,8 +552,8 @@ x64glibc and x64win. So a local checkout can build a complete bundle, which is
 what `scripts/all_tests.py` relies on. `bundle.sh` names the exact file it is
 missing if some target was never built.
 
-`bundle.sh` includes all platform modules, including private resource
-submodules, with their relative paths preserved. Local tests and release
+`bundle.sh` includes all platform modules, including the private `Resource`
+module, with their relative paths preserved. Local tests and release
 builds use the same bundling path.
 
 ## Vendored C libraries

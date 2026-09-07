@@ -38,13 +38,13 @@ def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
     return rewritten, count > 0
 
 
-def serve_dir(directory: Path) -> tuple[http.server.ThreadingHTTPServer, int]:
+def serve_dir(directory: Path, port: int = 0) -> tuple[http.server.ThreadingHTTPServer, int]:
     class Handler(http.server.SimpleHTTPRequestHandler):
         def log_message(self, *args):  # keep workflow logs focused
             pass
 
     handler = functools.partial(Handler, directory=str(directory))
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, port
@@ -126,6 +126,12 @@ def build_example(roc: str, example: Path) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("bundle_file", help="Downloaded bundle artifact filename")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="HTTP port embedded in PR dependency URLs; default: choose a free port",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
@@ -153,7 +159,7 @@ def main() -> int:
         return 1
     print(f"Using Roc executable: {roc}")
 
-    httpd, port = serve_dir(bundle_path.parent)
+    httpd, port = serve_dir(bundle_path.parent, args.port)
     bundle_url = f"http://127.0.0.1:{port}/{bundle_path.name}"
     print(f"Bundle URL: {bundle_url}")
     check_bundle_url(bundle_url)

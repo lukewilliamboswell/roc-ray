@@ -17,7 +17,8 @@
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
 import Host
-import rrt.Handle
+import rrt.SqliteDb as RrtSqliteDb
+import rrt.SqliteStmt as RrtSqliteStmt
 
 Sqlite := [].{
 
@@ -173,7 +174,7 @@ Sqlite := [].{
 	## The host owns the connection; this is a reference-counted handle to it.
 	## Keep it in the model, copy it freely, and let the last reference close
 	## it.
-	Db :: Host.SqliteDb.{
+	Db :: RrtSqliteDb.SqliteDb.{
 
 		## Open or create a database under `default_config`.
 		##
@@ -201,12 +202,11 @@ Sqlite := [].{
 				config.busy_timeout_ms,
 				config.max_result_bytes,
 			)
-			if result.err == 0 {
-				Ok(Db.(result.db))
-			} else if result.err == err_too_many_connections {
-				Err(TooManyConnections)
-			} else {
-				Err(sqlite_err(result.err, result.message))
+			# closed error union to open error union
+			match result {
+				Ok(db) => Ok(Db.(db))
+				Err(TooManyConnections) => Err(TooManyConnections)
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 			}
 		}
 
@@ -225,14 +225,12 @@ Sqlite := [].{
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
 		close! : Db => Try({}, [SqliteErr(ErrCode, Str)])
-		close! = |Db.(db)| {
-			result = Host.sqlite_close!(db)
-			if result.err == 0 {
-				Ok({})
-			} else {
-				Err(sqlite_err(result.err, result.message))
+		close! = |Db.(db)|
+		# closed error union to open error union
+			match Host.sqlite_close!(db) {
+				Ok({}) => Ok({})
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 			}
-		}
 
 		## Resource-free connection value for pure tests.
 		##
@@ -242,7 +240,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(Handle.stub)
+		stub = Db.(RrtSqliteDb.stub)
 	}
 
 	## One row of a result, with its column names.
@@ -391,7 +389,7 @@ Sqlite := [].{
 	## what a per-frame or per-record write wants. The host owns the compiled
 	## statement; the last handle released finalizes it, and the connection it
 	## came from stays open at least that long.
-	Stmt :: Host.SqliteStmt.{
+	Stmt :: RrtSqliteStmt.SqliteStmt.{
 
 		## Run this statement, which must not return rows.
 		##
@@ -419,7 +417,7 @@ Sqlite := [].{
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(Handle.stub)
+		stub = Stmt.(RrtSqliteStmt.stub)
 	}
 
 	## Compile one statement for repeated use.
@@ -431,15 +429,12 @@ Sqlite := [].{
 	## the task; refused in `update!` and `render!`.
 	prepare! : Db, Str => Try(Stmt, PrepareErr)
 	prepare! = |Db.(db), query| {
-		result = Host.sqlite_prepare!(db, query)
-		if result.err == 0 {
-			Ok(Stmt.(result.stmt))
-		} else if result.err == err_too_many_statements {
-			Err(TooManyStatements)
-		} else if result.err == err_multiple_statements {
-			Err(MultipleStatements)
-		} else {
-			Err(sqlite_err(result.err, result.message))
+		# closed error union to open error union
+		match Host.sqlite_prepare!(db, query) {
+			Ok(stmt) => Ok(Stmt.(stmt))
+			Err(TooManyStatements) => Err(TooManyStatements)
+			Err(MultipleStatements) => Err(MultipleStatements)
+			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 		}
 	}
 
@@ -480,14 +475,12 @@ Sqlite := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
-	exec_script! = |Db.(db), script| {
-		result = Host.sqlite_exec_script!(db, script)
-		if result.err == 0 {
-			Ok({})
-		} else {
-			Err(sqlite_err(result.err, result.message))
+	exec_script! = |Db.(db), script|
+	# closed error union to open error union
+		match Host.sqlite_exec_script!(db, script) {
+			Ok({}) => Ok({})
+			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 		}
-	}
 
 	## Describe an error code, for a log line or an error screen.
 	errcode_to_str : ErrCode -> Str
@@ -539,20 +532,6 @@ mode_code = |mode|
 expect mode_code(ReadWriteCreate) == 0
 expect mode_code(ReadOnly) == 2
 
-## Host refusals. Negative because SQLite's own result codes never are, so one
-## number never means two things. Mirrored in `src/sqlite_effect.zig`.
-err_too_many_connections : I64
-err_too_many_connections = -1
-
-err_too_many_statements : I64
-err_too_many_statements = -2
-
-err_result_too_large : I64
-err_result_too_large = -3
-
-err_multiple_statements : I64
-err_multiple_statements = -4
-
 ## Column type codes, as SQLite numbers them. Mirrored in
 ## `src/sqlite_effect.zig`.
 cell_integer : U8
@@ -601,8 +580,8 @@ expect in_bounds(I64.to_u8_try(-1)) == Err(IntOutOfBounds)
 ## `Constraint` and the detail stays in the message. Without this an app
 ## matching on `Constraint` would miss every constraint SQLite bothered to be
 ## specific about.
-sqlite_err : I64, Str -> [SqliteErr(Sqlite.ErrCode, Str), ..]
-sqlite_err = |code, message| SqliteErr(errcode_from_i64(code % 256), message)
+sqlite_err : Host.SqliteFailure -> [SqliteErr(Sqlite.ErrCode, Str), ..]
+sqlite_err = |{ code, message }| SqliteErr(errcode_from_i64(code % 256), message)
 
 errcode_from_i64 : I64 -> Sqlite.ErrCode
 errcode_from_i64 = |code|
@@ -648,8 +627,8 @@ expect errcode_from_i64(101) == Done
 expect errcode_from_i64(77) == Unknown(77)
 
 ## 2067 is SQLITE_CONSTRAINT_UNIQUE: primary code 19 with detail 8 above it.
-expect sqlite_err(2067, "unique") == SqliteErr(Constraint, "unique")
-expect sqlite_err(5, "busy") == SqliteErr(Busy, "busy")
+expect sqlite_err({ code: 2067, message: "unique" }) == SqliteErr(Constraint, "unique")
+expect sqlite_err({ code: 5, message: "busy" }) == SqliteErr(Busy, "busy")
 
 ## Flatten one binding for the host. Only the field `kind` names is read, so
 ## the others carry whatever is cheapest to write down.
@@ -669,16 +648,14 @@ expect binding_wire({ name: ":a", value: Null }).kind == cell_null
 expect binding_wire({ name: ":a", value: String("hi") }).text == "hi"
 
 ## Turn a finished query into rows, or into the reason there are none.
-queried : Host.SqliteQueryResult -> Try(List(Sqlite.Row), Sqlite.QueryErr)
+queried : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(List(Sqlite.Row), Sqlite.QueryErr)
 queried = |result|
-	if result.err == 0 {
-		Ok(decode_rows(result))
-	} else if result.err == err_result_too_large {
-		Err(ResultTooLarge)
-	} else if result.err == err_multiple_statements {
-		Err(MultipleStatements)
-	} else {
-		Err(sqlite_err(result.err, result.message))
+# closed error union to open error union
+	match result {
+		Ok(rows) => Ok(decode_rows(rows))
+		Err(ResultTooLarge) => Err(ResultTooLarge)
+		Err(MultipleStatements) => Err(MultipleStatements)
+		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}
 
 ## Turn a finished statement into what it changed.
@@ -686,42 +663,40 @@ queried = |result|
 ## A statement that produced rows is refused rather than reported as a
 ## successful write: `execute!` has nowhere to put them, and silently dropping
 ## a `SELECT`'s output would hide the mistake.
-executed : Host.SqliteQueryResult -> Try(Sqlite.Outcome, Sqlite.ExecuteErr)
+executed : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(Sqlite.Outcome, Sqlite.ExecuteErr)
 executed = |result|
-	if result.err == 0 {
-		if result.row_count > 0 {
-			Err(RowsReturnedUseQueryInstead)
-		} else {
-			Ok({ changes: result.changes, last_insert_rowid: result.last_insert_rowid })
-		}
-	} else if result.err == err_result_too_large {
-		Err(ResultTooLarge)
-	} else if result.err == err_multiple_statements {
-		Err(MultipleStatements)
-	} else {
-		Err(sqlite_err(result.err, result.message))
+# closed error union to open error union
+	match result {
+		Ok(rows) =>
+			if rows.row_count > 0 {
+				Err(RowsReturnedUseQueryInstead)
+			} else {
+				Ok({ changes: rows.changes, last_insert_rowid: rows.last_insert_rowid })
+			}
+		Err(ResultTooLarge) => Err(ResultTooLarge)
+		Err(MultipleStatements) => Err(MultipleStatements)
+		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}
 
 ## Turn a finished query into its single row.
-exactly_one : Host.SqliteQueryResult -> Try(Sqlite.Row, Sqlite.ExactlyOneErr)
+exactly_one : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(Sqlite.Row, Sqlite.ExactlyOneErr)
 exactly_one = |result|
-	if result.err == 0 {
-		if result.row_count == 0 {
-			Err(NoRowsReturned)
-		} else if result.row_count > 1 {
-			Err(TooManyRowsReturned)
-		} else {
-			match List.first(decode_rows(result)) {
-				Ok(row) => Ok(row)
-				Err(_) => Err(NoRowsReturned)
+# closed error union to open error union
+	match result {
+		Ok(rows) =>
+			if rows.row_count == 0 {
+				Err(NoRowsReturned)
+			} else if rows.row_count > 1 {
+				Err(TooManyRowsReturned)
+			} else {
+				match List.first(decode_rows(rows)) {
+					Ok(row) => Ok(row)
+					Err(_) => Err(NoRowsReturned)
+				}
 			}
-		}
-	} else if result.err == err_result_too_large {
-		Err(ResultTooLarge)
-	} else if result.err == err_multiple_statements {
-		Err(MultipleStatements)
-	} else {
-		Err(sqlite_err(result.err, result.message))
+		Err(ResultTooLarge) => Err(ResultTooLarge)
+		Err(MultipleStatements) => Err(MultipleStatements)
+		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}
 
 ## Decode a whole result into rows.
@@ -731,13 +706,13 @@ exactly_one = |result|
 ## that names, text and blobs all point into. Nothing here can fail: a cell the
 ## host did not write is not reachable, and a short buffer ends the decode
 ## rather than being guessed at.
-decode_rows : Host.SqliteQueryResult -> List(Sqlite.Row)
+decode_rows : Host.SqliteRows -> List(Sqlite.Row)
 decode_rows = |result| {
 	names = decode_names(result.names, 0, [])
 	decode_row_at(result, names, 0, [])
 }
 
-decode_row_at : Host.SqliteQueryResult, List(Str), U64, List(Sqlite.Row) -> List(Sqlite.Row)
+decode_row_at : Host.SqliteRows, List(Str), U64, List(Sqlite.Row) -> List(Sqlite.Row)
 decode_row_at = |result, names, row, found|
 	if row >= result.row_count {
 		found
@@ -750,7 +725,7 @@ decode_row_at = |result, names, row, found|
 		)
 	}
 
-decode_cells : Host.SqliteQueryResult, U64, U64, List(Sqlite.Value) -> List(Sqlite.Value)
+decode_cells : Host.SqliteRows, U64, U64, List(Sqlite.Value) -> List(Sqlite.Value)
 decode_cells = |result, at, remaining, found|
 	if remaining == 0 {
 		found

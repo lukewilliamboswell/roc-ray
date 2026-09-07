@@ -103,14 +103,17 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	read_text! : Str => Try(Str, ReadTextError)
-	read_text! = |path| {
-		result = Host.files_read_text!(path)
-		if result.err == 0 {
-			Ok(result.contents)
-		} else {
-			Err(read_text_error(result.err))
+	read_text! = |path|
+		match Host.files_read_text!(path) {
+			# closed error union to open error union
+			Ok(contents) => Ok(contents)
+			Err(Busy) => Err(Busy)
+			Err(NotFound) => Err(NotFound)
+			Err(NotUtf8) => Err(NotUtf8)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TooLarge) => Err(TooLarge)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## Read a bounded file as ordinary Roc bytes.
 	##
@@ -128,14 +131,16 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	read_bytes! : Str => Try(List(U8), ReadBytesError)
-	read_bytes! = |path| {
-		result = Host.files_read_bytes!(path)
-		if result.err == 0 {
-			Ok(result.bytes)
-		} else {
-			Err(read_bytes_error(result.err))
+	read_bytes! = |path|
+		match Host.files_read_bytes!(path) {
+			# closed error union to open error union
+			Ok(bytes) => Ok(bytes)
+			Err(Busy) => Err(Busy)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TooLarge) => Err(TooLarge)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## List one directory without recursively walking its children.
 	##
@@ -152,14 +157,17 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	list! : Str => Try(List(Entry), ListError)
-	list! = |path| {
-		result = Host.files_list!(path)
-		if result.err == 0 {
-			Ok(decode_listing(result.bytes))
-		} else {
-			Err(list_error(result.err))
+	list! = |path|
+		match Host.files_list!(path) {
+			# closed error union to open error union
+			Ok(bytes) => Ok(decode_listing(bytes))
+			Err(Busy) => Err(Busy)
+			Err(NotADirectory) => Err(NotADirectory)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TooLarge) => Err(TooLarge)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## What one path is, how big it is, and when it last changed.
 	##
@@ -208,21 +216,23 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	metadata! : Str => Try(Metadata, MetadataError)
-	metadata! = |path| {
-		result = Host.files_metadata!(path)
-		if result.err == 0 {
+	metadata! = |path|
+		match Host.files_metadata!(path) {
+			# closed error union to open error union
+			Ok(stat) =>
 			# The host normalizes the instant before it crosses, so the only
 			# way this fails is a host that is wrong about its own contract.
 			# Saying so is more use than reporting it as a filesystem error an
 			# app could act on.
-			match Time.Timestamp.from_parts({ seconds: result.modified_seconds, nanosecond: result.modified_nanosecond }) {
-				Ok(modified) => Ok({ kind: entry_kind(result.kind), size_bytes: result.size_bytes, modified: modified })
-				Err(InvalidNanosecond) => crash ("roc-ray: Files.metadata! received a modification time the host had not normalized")
-			}
-		} else {
-			Err(metadata_error(result.err))
+				match Time.Timestamp.from_parts({ seconds: stat.modified_seconds, nanosecond: stat.modified_nanosecond }) {
+					Ok(modified) => Ok({ kind: entry_kind(stat.kind), size_bytes: stat.size_bytes, modified: modified })
+					Err(InvalidNanosecond) => crash ("roc-ray: Files.metadata! received a modification time the host had not normalized")
+				}
+			Err(NotFound) => Err(NotFound)
+			Err(PermissionDenied) => Err(PermissionDenied)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## Replace a file's contents with a `Str`, creating it if it is not there.
 	##
@@ -272,92 +282,6 @@ Files := [].{
 	write_bytes! = |path, bytes| write_result(Host.files_write_bytes!(path, bytes))
 
 }
-
-## Error code for work the host would not start. Mirrored in
-## `src/host_native.zig`.
-read_err_busy : U8
-read_err_busy = 3
-
-## Error code for content the host declined to copy into a `Str`.
-## Mirrored in `src/host_native.zig`.
-read_err_too_large : U8
-read_err_too_large = 5
-
-## Error code for bytes that cannot become a `Str`. Mirrored in
-## `src/host_native.zig`.
-read_err_not_utf8 : U8
-read_err_not_utf8 = 6
-
-## The host refused to list the path because it is not a directory. Mirrored in
-## `src/host_native.zig`.
-read_err_not_a_directory : U8
-read_err_not_a_directory = 7
-
-## Decode the host's read-error code for a byte-list read. Mirrored in
-## `src/host_native.zig`.
-read_bytes_error : U8 -> Files.ReadBytesError
-read_bytes_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == read_err_busy {
-		Busy
-	} else if code == 4 {
-		Unavailable
-	} else if code == read_err_too_large {
-		TooLarge
-	} else {
-		ReadFailed
-	}
-
-expect read_bytes_error(1) == NotFound
-expect read_bytes_error(2) == ReadFailed
-expect read_bytes_error(3) == Busy
-expect read_bytes_error(4) == Unavailable
-expect read_bytes_error(5) == TooLarge
-expect read_bytes_error(99) == ReadFailed
-
-## Decode the host's read-error code for a string-delivered read.
-##
-## The same codes plus one, rather than a second table: the two reads fail for
-## the same reasons and only differ in what they were asked to produce.
-read_text_error : U8 -> Files.ReadTextError
-read_text_error = |code|
-	if code == read_err_not_utf8 {
-		NotUtf8
-	} else {
-		match read_bytes_error(code) {
-			NotFound => NotFound
-			Busy => Busy
-			Unavailable => Unavailable
-			TooLarge => TooLarge
-			ReadFailed => ReadFailed
-		}
-	}
-
-expect read_text_error(6) == NotUtf8
-expect read_text_error(1) == NotFound
-expect read_text_error(5) == TooLarge
-
-## Decode the host's listing-error code. Mirrored in `src/host_native.zig`.
-list_error : U8 -> Files.ListError
-list_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == read_err_busy {
-		Busy
-	} else if code == 4 {
-		Unavailable
-	} else if code == read_err_too_large {
-		TooLarge
-	} else if code == read_err_not_a_directory {
-		NotADirectory
-	} else {
-		ReadFailed
-	}
-
-expect list_error(1) == NotFound
-expect list_error(7) == NotADirectory
-expect list_error(2) == ReadFailed
 
 ## The host refused the write because the path is not the app's to write.
 ## Mirrored in `src/host_native.zig`.
@@ -490,26 +414,3 @@ expect decode_listing([2, 's', 'r', 'c', 0, 1, 'a', '.', 't', 0]) == [
 ## A kind byte with no terminator after it ends the listing rather than being
 ## guessed at, so a truncated buffer still yields the entries that were whole.
 expect decode_listing([1, 'a', 0, 2, 'b']) == [{ name: "a", kind: File }]
-
-## Decode the host's metadata-error code. Mirrored in `src/host_native.zig`.
-##
-## A stat can be refused for a reason a read cannot: a directory on the way to
-## the path may be one this process may not look inside, which is
-## `PermissionDenied` rather than the file being absent.
-metadata_error : U8 -> Files.MetadataError
-metadata_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == 4 {
-		Unavailable
-	} else if code == write_err_permission_denied {
-		PermissionDenied
-	} else {
-		ReadFailed
-	}
-
-expect metadata_error(1) == NotFound
-expect metadata_error(2) == ReadFailed
-expect metadata_error(4) == Unavailable
-expect metadata_error(8) == PermissionDenied
-expect metadata_error(99) == ReadFailed

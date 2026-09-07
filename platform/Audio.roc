@@ -37,7 +37,8 @@
 ## `Music.is_playing!`, `Music.length!`, and `Music.time_played!` -- are legal
 ## in any callback, `render!` included.
 import Host
-import rrt.Handle
+import rrt.AudioSound as RrtAudioSound
+import rrt.AudioMusic as RrtAudioMusic
 
 Audio := [].{
 
@@ -46,7 +47,7 @@ Audio := [].{
 	## A sound has no volume, pitch, or pan of its own that outlives a play.
 	## raylib's are sticky per resource, and every play sets all three, so there
 	## is nothing to set once and inherit -- see `Playback`.
-	Sound :: { resource : Host.AudioSound }.{
+	Sound :: { resource : RrtAudioSound.AudioSound }.{
 
 		## Play this sound at its default volume, pitch, and pan.
 		##
@@ -95,7 +96,7 @@ Audio := [].{
 		## Put it in a model to reach the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
-		stub = { resource: Handle.stub }
+		stub = { resource: RrtAudioSound.stub }
 	}
 
 	## A sound together with the settings it should be played at.
@@ -135,7 +136,7 @@ Audio := [].{
 	}
 
 	## Host-owned streamed music. The platform updates active streams each frame.
-	Music :: { resource : Host.AudioMusic }.{
+	Music :: { resource : RrtAudioMusic.AudioMusic }.{
 
 		## Start or restart playback.
 		##
@@ -218,7 +219,7 @@ Audio := [].{
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music
-		stub = { resource: Handle.stub }
+		stub = { resource: RrtAudioMusic.stub }
 	}
 
 	## Procedural waveform used by `gen_sound!`.
@@ -296,7 +297,7 @@ Audio := [].{
 	expect waveform_code(Noise) == 4
 }
 
-loaded_sound_from_resource : Try(Host.AudioSound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource : Try(RrtAudioSound.AudioSound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
 loaded_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union
@@ -311,7 +312,7 @@ loaded_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-generated_sound_from_resource : Try(Host.AudioSound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource : Try(RrtAudioSound.AudioSound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
 generated_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union
@@ -326,7 +327,7 @@ generated_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-music_from_resource : Try(Host.AudioMusic, Host.AudioLoadMusicError) -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
+music_from_resource : Try(RrtAudioMusic.AudioMusic, Host.AudioLoadMusicError) -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
 music_from_resource = |result|
 	match result {
 		# closed error union to open error union

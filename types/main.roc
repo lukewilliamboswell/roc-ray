@@ -27,6 +27,13 @@ package
 		Font,
 		Texture,
 		Shader,
+		Store,
+		TextPrepared,
+		AudioSound,
+		AudioMusic,
+		UdpSocket,
+		SqliteDb,
+		SqliteStmt,
 		Drawing,
 	]
 	{}
@@ -35,3 +42,10 @@ import resources/Handle
 import resources/Font
 import resources/Texture
 import resources/Shader
+import resources/Store
+import resources/TextPrepared
+import resources/AudioSound
+import resources/AudioMusic
+import resources/UdpSocket
+import resources/SqliteDb
+import resources/SqliteStmt

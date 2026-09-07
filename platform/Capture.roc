@@ -274,11 +274,14 @@ Capture := [].{
 	## run under `--host-headless`.
 	pixel_at! : Source, { x : I32, y : I32 } => Try(Color.Rgba, PixelReadError)
 	pixel_at! = |source, point| {
-		result = Host.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
-		if result.err == 0 {
-			Ok(Color.rgba(result.r, result.g, result.b, result.a))
-		} else {
-			Err(pixel_read_error(result.err))
+		# closed error union to open error union
+		match Host.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y }) {
+			Ok(pixel) => Ok(Color.rgba(pixel.r, pixel.g, pixel.b, pixel.a))
+			Err(Busy) => Err(Busy)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -314,10 +317,14 @@ Capture := [].{
 			width: region.width,
 			height: region.height,
 		})
-		if result.err == 0 {
-			Ok(result.bytes)
-		} else {
-			Err(pixel_read_error(result.err))
+		# closed error union to open error union
+		match result {
+			Ok(bytes) => Ok(bytes)
+			Err(Busy) => Err(Busy)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -477,31 +484,6 @@ pixel_source = |source|
 		Screen => { target: Draw.RenderTexture.stub.for_host(), screen: Bool.True }
 		Target(target) => { target: target.for_host(), screen: Bool.False }
 	}
-
-## Decode the host's capture-error code for a pixel readback.
-##
-## The same `src/capture.zig` codes the exports use, plus the one that is only
-## a readback's business: a region outside its source. An unnamed code is drift
-## between this module and the host rather than a state an app can act on, so
-## it reports as the driver having refused the read.
-pixel_read_error : U8 -> Capture.PixelReadError
-pixel_read_error = |code|
-	match code {
-		10 => Busy
-		11 => Unavailable
-		12 => ReadbackFailed
-		13 => TargetUnavailable
-		14 => RegionOutOfBounds
-		_ => ReadbackFailed
-	}
-
-expect pixel_read_error(10) == Busy
-expect pixel_read_error(11) == Unavailable
-expect pixel_read_error(12) == ReadbackFailed
-expect pixel_read_error(13) == TargetUnavailable
-expect pixel_read_error(14) == RegionOutOfBounds
-expect pixel_read_error(0) == ReadbackFailed
-expect pixel_read_error(99) == ReadbackFailed
 
 expect capture_format_code(Png) == 0
 expect capture_format_code(Gif) == 1

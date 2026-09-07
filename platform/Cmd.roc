@@ -262,13 +262,17 @@ Cmd := {
 			stderr_limit_bytes: cmd.stderr_limit_bytes,
 		})
 
-		output = { exit_code: result.exit_code, stdout: result.stdout, stderr: result.stderr }
-		if result.err == 0 {
-			Ok(output)
-		} else if result.err == run_err_timed_out {
-			Err(Timeout(output))
-		} else {
-			Err(run_error(result.err))
+		# closed error union to open error union
+		match result {
+			Ok(output) => Ok(output)
+			Err(Timeout(output)) => Err(Timeout(output))
+			Err(Busy) => Err(Busy)
+			Err(CommandNotFound) => Err(CommandNotFound)
+			Err(PermissionDenied) => Err(PermissionDenied)
+			Err(SpawnFailed) => Err(SpawnFailed)
+			Err(StderrLimitExceeded) => Err(StderrLimitExceeded)
+			Err(StdoutLimitExceeded) => Err(StdoutLimitExceeded)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -294,50 +298,6 @@ Cmd := {
 			Err(err) => Err(err)
 		}
 }
-
-## The deadline expired and the host killed the child. Mirrored in
-## `src/cmd_effect.zig`.
-run_err_timed_out : U8
-run_err_timed_out = 5
-
-## The host would not start another child. Mirrored in `src/cmd_effect.zig`,
-## and numbered as `Files` numbers its own `Busy`, so a code never means two
-## things across this boundary.
-run_err_busy : U8
-run_err_busy = 3
-
-## Decode the host's run-error code.
-##
-## `Timeout` is absent because it carries a payload only `run!` holds;
-## `run!` names it before asking here. Anything unrecognized is `SpawnFailed`,
-## the code for a child that could not be started for a reason with no better
-## name.
-run_error : U8 -> Cmd.CmdErr
-run_error = |code|
-	if code == 1 {
-		CommandNotFound
-	} else if code == run_err_busy {
-		Busy
-	} else if code == 4 {
-		Unavailable
-	} else if code == 6 {
-		StdoutLimitExceeded
-	} else if code == 7 {
-		StderrLimitExceeded
-	} else if code == 8 {
-		PermissionDenied
-	} else {
-		SpawnFailed
-	}
-
-expect run_error(1) == CommandNotFound
-expect run_error(2) == SpawnFailed
-expect run_error(3) == Busy
-expect run_error(4) == Unavailable
-expect run_error(6) == StdoutLimitExceeded
-expect run_error(7) == StderrLimitExceeded
-expect run_error(8) == PermissionDenied
-expect run_error(99) == SpawnFailed
 
 expect Cmd.new("ls").program == "ls"
 expect Cmd.new("ls").args == []

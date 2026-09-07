@@ -38,8 +38,8 @@
 ## Release textures the app no longer needs before loading more.
 import Color
 import Host
-import rrt.Handle
 import rrt.Texture as RrtTexture
+import rrt.Store as RrtStore
 
 Assets := [].{
 
@@ -56,7 +56,7 @@ Assets := [].{
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
-	Store :: Host.Store.{
+	Store :: RrtStore.Store.{
 
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
@@ -118,10 +118,10 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(Handle.stub)
+		stub = Store.(RrtStore.stub)
 
 		## Internal bridge for platform operations that also use an asset store.
-		for_host : Store -> Host.Store
+		for_host : Store -> RrtStore.Store
 		for_host = |Store.(store)| store
 	}
 

@@ -1002,7 +1002,20 @@ fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize,
 /// file. A file that is not valid UTF-8 is reported rather than delivered,
 /// because `RocStr.fromSlice` only copies and every later string operation on
 /// an invalid one would be undefined.
-fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textRetRecord {
+/// Name a read code in `Files.read_text!`'s vocabulary.
+fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
+    return switch (code) {
+        READ_ERR_NOT_FOUND => .not_found,
+        READ_ERR_BUSY => .busy,
+        READ_ERR_UNAVAILABLE => .unavailable,
+        READ_ERR_TOO_LARGE => .too_large,
+        READ_ERR_NOT_UTF8 => .not_utf8,
+        else => .read_failed,
+    };
+}
+
+fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
+    const Result = abi.HostFiles_read_textResult;
     enforcePhase("Files.read_text!", during_wait);
     var effect = EffectScope.begin("Files.read_text!", path_arg.asSlice().len);
     defer effect.end();
@@ -1014,7 +1027,7 @@ fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) ab
     const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse {
         effect.setExternalElapsed(external_started);
         effect.setOutcome(if (err == READ_ERR_BUSY or err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
-        return .{ .err = err, .contents = abi.RocStr.empty() };
+        return abiTryErr(Result, filesReadTextError(err));
     };
     effect.setExternalElapsed(external_started);
     defer allocator.free(bytes);
@@ -1023,17 +1036,17 @@ fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) ab
     if (!std.unicode.utf8ValidateSlice(bytes)) {
         effect.setValidationElapsed(validation_started);
         effect.setOutcome(.runtime_error);
-        return .{ .err = READ_ERR_NOT_UTF8, .contents = abi.RocStr.empty() };
+        return abiTryErr(Result, filesReadTextError(READ_ERR_NOT_UTF8));
     }
     effect.setValidationElapsed(validation_started);
     effect.addCopiedBytes(bytes.len);
     const conversion_started = observatoryDetailMeasurementStart();
     const contents = abi.RocStr.fromSlice(bytes, roc_host);
     effect.setConversionElapsed(conversion_started);
-    return .{ .err = 0, .contents = contents };
+    return abiTryOk(Result, contents);
 }
 
-fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textRetRecord {
+fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
     return hostedFilesReadText(activeHost(), path_arg);
 }
 
@@ -1044,7 +1057,19 @@ fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_t
 /// file costs one allocation and no copy. A delivery slot is reserved before
 /// any I/O starts, so a full heap answers `Busy` rather than reading a file and
 /// discarding it.
-fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesRetRecord {
+/// Name a read code in `Files.read_bytes!`'s vocabulary.
+fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
+    return switch (code) {
+        READ_ERR_NOT_FOUND => .not_found,
+        READ_ERR_BUSY => .busy,
+        READ_ERR_UNAVAILABLE => .unavailable,
+        READ_ERR_TOO_LARGE => .too_large,
+        else => .read_failed,
+    };
+}
+
+fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+    const Result = abi.HostFiles_read_bytesResult;
     enforcePhase("Files.read_bytes!", during_wait);
     var effect = EffectScope.begin("Files.read_bytes!", path_arg.asSlice().len);
     defer effect.end();
@@ -1052,31 +1077,48 @@ fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) a
     const result = readByteListWaiting(roc_host, path_arg.asSlice(), .read);
     if (result.err != 0) {
         effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
-    } else {
-        effect.addOwnershipTransferBytes(result.bytes.items().len);
+        return abiTryErr(Result, filesReadBytesError(result.err));
     }
-    return result;
+    effect.addOwnershipTransferBytes(result.bytes.items().len);
+    return abiTryOk(Result, result.bytes);
 }
 
-fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesRetRecord {
+fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
     return hostedFilesReadBytes(activeHost(), path_arg);
 }
 
 /// `Files.list!`: one directory's entries, encoded into the same byte list a
 /// read delivers and decoded by `Files`.
-fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listRetRecord {
+/// Name a read code in `Files.list!`'s vocabulary.
+///
+/// A listing is the only one of the three that can be refused for not being a
+/// directory, which is why it does not share `Files.read_bytes!`'s union.
+fn filesListError(code: u8) abi.HostFiles_listErr {
+    return switch (code) {
+        READ_ERR_NOT_FOUND => .not_found,
+        READ_ERR_BUSY => .busy,
+        READ_ERR_UNAVAILABLE => .unavailable,
+        READ_ERR_TOO_LARGE => .too_large,
+        READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
+        else => .read_failed,
+    };
+}
+
+fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
+    const Result = abi.HostFiles_listResult;
     enforcePhase("Files.list!", during_wait);
     var effect = EffectScope.begin("Files.list!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
-    // Structurally the same record as a byte read's, but a distinct generated
-    // type, so copy it across field by field rather than casting.
     const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
-    if (result.err != 0) effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
-    return .{ .err = result.err, .bytes = result.bytes };
+    if (result.err != 0) {
+        effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+        return abiTryErr(Result, filesListError(result.err));
+    }
+    return abiTryOk(Result, result.bytes);
 }
 
-fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listRetRecord {
+fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
     return hostedFilesList(activeHost(), path_arg);
 }
 
@@ -1112,21 +1154,41 @@ fn statEntryKind(kind: std.Io.File.Kind) u8 {
 /// the same, and the difference is only that the answer is five numbers rather
 /// than a payload, so there is no delivery slot to reserve and nothing to
 /// bound but the wait itself.
-fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) abi.HostFiles_metadataRetRecord {
+fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) StatOutcome {
     const stat = base.statFile(io, path, .{ .follow_symlinks = true }) catch |err|
-        return .{ .err = statErrorCode(err), .kind = 0, .size_bytes = 0, .modified_seconds = 0, .modified_nanosecond = 0 };
+        return .{ .err = statErrorCode(err), .found = std.mem.zeroes(abi.HostFiles_metadataOk) };
     const modified = timestampFromNanos(stat.mtime.nanoseconds);
     return .{
         .err = 0,
-        .kind = statEntryKind(stat.kind),
-        .size_bytes = stat.size,
-        .modified_seconds = modified.seconds,
-        .modified_nanosecond = modified.nanosecond,
+        .found = .{
+            .kind = statEntryKind(stat.kind),
+            .size_bytes = stat.size,
+            .modified_seconds = modified.seconds,
+            .modified_nanosecond = modified.nanosecond,
+        },
+    };
+}
+
+/// A finished stat, before it is named in the app's vocabulary. `found` is
+/// meaningful only when `err` is zero.
+const StatOutcome = struct {
+    err: u8,
+    found: abi.HostFiles_metadataOk,
+};
+
+/// Name a stat code in `Files.metadata!`'s vocabulary.
+fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
+    return switch (code) {
+        READ_ERR_NOT_FOUND => .not_found,
+        READ_ERR_UNAVAILABLE => .unavailable,
+        WRITE_ERR_PERMISSION_DENIED => .permission_denied,
+        else => .read_failed,
     };
 }
 
 /// `Files.metadata!`: what one path is, how big it is, and when it changed.
-fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataRetRecord {
+fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
+    const Result = abi.HostFiles_metadataResult;
     enforcePhase("Files.metadata!", during_wait);
     var effect = EffectScope.begin("Files.metadata!", path_arg.asSlice().len);
     defer effect.end();
@@ -1136,11 +1198,14 @@ fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) ab
     const park = AppTasks.observePark("stat", 0);
     defer AppTasks.observeResume(park, "stat");
     const result = statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
-    if (result.err != 0) effect.setOutcome(if (result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
-    return result;
+    if (result.err != 0) {
+        effect.setOutcome(if (result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+        return abiTryErr(Result, filesMetadataError(result.err));
+    }
+    return abiTryOk(Result, result.found);
 }
 
-fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataRetRecord {
+fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
     return hostedFilesMetadata(activeHost(), path_arg);
 }
 
@@ -1705,8 +1770,26 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
     };
 }
 
-fn pixelReadFailure(err: u8) abi.HostCapture_pixel_atRetRecord {
-    return .{ .err = err, .r = 0, .g = 0, .b = 0, .a = 0 };
+/// Name a readback code in `Capture`'s pixel vocabulary.
+///
+/// `pixel_at!` and `read_region!` fail for the same reasons and share one
+/// union; only the payload of a success differs.
+fn capturePixelError(code: u8) abi.HostCapture_pixel_atErr {
+    return switch (code) {
+        capture.err_busy => .busy,
+        capture.err_unavailable => .unavailable,
+        capture.err_target_unavailable => .target_unavailable,
+        capture.err_region_out_of_bounds => .region_out_of_bounds,
+        else => .readback_failed,
+    };
+}
+
+fn pixelReadFailure(err: u8) abi.HostCapture_pixel_atResult {
+    return abiTryErr(abi.HostCapture_pixel_atResult, capturePixelError(err));
+}
+
+fn regionReadFailure(err: u8) abi.HostCapture_read_regionResult {
+    return abiTryErr(abi.HostCapture_read_regionResult, capturePixelError(err));
 }
 
 /// `Capture.pixel_at!`: one pixel's colour, with nothing allocated to carry it.
@@ -1714,7 +1797,7 @@ fn pixelReadFailure(err: u8) abi.HostCapture_pixel_atRetRecord {
 /// Synchronous rather than waiting. The screen comes from a snapshot the host
 /// already holds and a render target is read through the graphics context this
 /// thread owns, so there is nothing here to park on.
-fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.HostCapture_pixel_atArgs) abi.HostCapture_pixel_atRetRecord {
+fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.HostCapture_pixel_atArgs) abi.HostCapture_pixel_atResult {
     enforcePhase("Capture.pixel_at!", during_update);
     var effect = EffectScope.begin("Capture.pixel_at!", 0);
     defer effect.end();
@@ -1729,10 +1812,10 @@ fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.HostCapture_pixel_atArgs) 
 
     const channels = capture.pixelAt(pixels.bytes, pixels.width, args.x, args.y);
     effect.setDrawMetrics(1, 4);
-    return .{ .err = capture.err_none, .r = channels[0], .g = channels[1], .b = channels[2], .a = channels[3] };
+    return abiTryOk(abi.HostCapture_pixel_atResult, abi.HostCapture_pixel_atOk{ .r = channels[0], .g = channels[1], .b = channels[2], .a = channels[3] });
 }
 
-fn exportedCapturePixelAt(args: abi.HostCapture_pixel_atArgs) callconv(.c) abi.HostCapture_pixel_atRetRecord {
+fn exportedCapturePixelAt(args: abi.HostCapture_pixel_atArgs) callconv(.c) abi.HostCapture_pixel_atResult {
     return hostedCapturePixelAt(activeHost(), args);
 }
 
@@ -1744,46 +1827,45 @@ fn exportedCapturePixelAt(args: abi.HostCapture_pixel_atArgs) callconv(.c) abi.H
 /// readback, so the expensive part never runs for a read that has nowhere to
 /// put its answer -- the same admission `Files.read_bytes!` does before it
 /// opens a path, and for the same reason.
-fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_regionArgs) abi.HostCapture_read_regionRetRecord {
+fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_regionArgs) abi.HostCapture_read_regionResult {
     enforcePhase("Capture.read_region!", during_update);
     var effect = EffectScope.begin("Capture.read_region!", 0);
     defer effect.end();
     defer releaseResourceBox(roc_host, args.source.target.handle);
 
-    const empty = abi.RocListWith(u8, false).empty();
     const region = capture.Region{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
 
     const bytes = capture.regionBytes(region) orelse
-        return .{ .err = capture.err_region_out_of_bounds, .bytes = empty };
+        return regionReadFailure(capture.err_region_out_of_bounds);
     if (bytes > capture.max_readback_bytes)
-        return .{ .err = capture.err_region_out_of_bounds, .bytes = empty };
+        return regionReadFailure(capture.err_region_out_of_bounds);
 
-    if (!file_bytes_delivery_reservations.reserve()) return .{ .err = capture.err_busy, .bytes = empty };
+    if (!file_bytes_delivery_reservations.reserve()) return regionReadFailure(capture.err_busy);
     defer file_bytes_delivery_reservations.release();
 
     var err: u8 = capture.err_readback_failed;
-    const pixels = resolveReadbackSource(args.source, &err) orelse return .{ .err = err, .bytes = empty };
+    const pixels = resolveReadbackSource(args.source, &err) orelse return regionReadFailure(err);
     defer pixels.deinit();
 
     const bounds = capture.validateRegion(region, pixels.width, pixels.height);
-    if (bounds != capture.err_none) return .{ .err = bounds, .bytes = empty };
+    if (bounds != capture.err_none) return regionReadFailure(bounds);
 
     const allocator = allocatorFromHost(roc_host);
     const copy = allocator.alloc(u8, @intCast(bytes)) catch
-        return .{ .err = capture.err_busy, .bytes = empty };
+        return regionReadFailure(capture.err_busy);
     capture.copyRegion(copy, pixels.bytes, pixels.width, region);
 
     // The transfer itself, shared with every other handed-over byte list. Its
     // only refusal is a full heap, which is the same "no slot" this call
     // already reserved against and reports as `Busy`.
     const installed = installReadBytes(allocator, copy);
-    if (installed.err != 0) return .{ .err = capture.err_busy, .bytes = empty };
+    if (installed.err != 0) return regionReadFailure(capture.err_busy);
     effect.addOwnershipTransferBytes(@intCast(bytes));
     effect.setDrawMetrics(@as(u64, @intCast(args.width)) *| @as(u64, @intCast(args.height)), bytes);
-    return .{ .err = capture.err_none, .bytes = installed.bytes };
+    return abiTryOk(abi.HostCapture_read_regionResult, installed.bytes);
 }
 
-fn exportedCaptureReadRegion(args: abi.HostCapture_read_regionArgs) callconv(.c) abi.HostCapture_read_regionRetRecord {
+fn exportedCaptureReadRegion(args: abi.HostCapture_read_regionArgs) callconv(.c) abi.HostCapture_read_regionResult {
     return hostedCaptureReadRegion(activeHost(), args);
 }
 
@@ -1792,7 +1874,17 @@ fn exportedCaptureReadRegion(args: abi.HostCapture_read_regionArgs) callconv(.c)
 /// same list on the way out.
 const ByteListWait = enum { read, list };
 
-fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait) abi.HostFiles_read_bytesRetRecord {
+/// A finished byte-list wait, before it is named in the app's vocabulary.
+///
+/// The host keeps one internal code table for reads, listings, and stats
+/// because they share the same failures; each hosted function translates it
+/// into that effect's own closed error union on the way out.
+const ByteListOutcome = struct {
+    err: u8,
+    bytes: abi.RocListWith(u8, false),
+};
+
+fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait) ByteListOutcome {
     const empty = abi.RocListWith(u8, false).empty();
     // Reserve before any filesystem work starts. A terminal `Busy` here means
     // precisely that nothing was read.
@@ -1838,7 +1930,7 @@ fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait)
 /// An empty read becomes the canonical empty list rather than occupying a slot,
 /// and a full heap frees the buffer and reports `Busy` -- the read happened,
 /// but there is nowhere to hand it over.
-fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) abi.HostFiles_read_bytesRetRecord {
+fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) ByteListOutcome {
     const empty = abi.RocListWith(u8, false).empty();
     if (bytes.len == 0) {
         allocator.free(bytes);
@@ -1856,7 +1948,9 @@ fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) abi.HostFiles_rea
 /// The phase handling mirrors `hostedTaskSleep`: the request parks this
 /// coroutine, the frame loop runs in between and sets phases of its own, and
 /// the task must see `.task` again when the response arrives.
-fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Response {
+fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendResult {
+    const Result = abi.HostHttp_sendResult;
+    const Union = abi.HostHttp_sendErr;
     enforcePhase("Http.send!", during_wait);
     var effect = EffectScope.begin("Http.send!", 0);
     defer effect.end();
@@ -1867,8 +1961,35 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
     const external_started = observatoryMeasurementStart();
     const result = http_effect.send(roc_host, allocatorFromHost(roc_host), request);
     effect.setExternalElapsed(external_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    if (result.err == http_effect.ERR_OK) {
+        result.err_message.decref(roc_host);
+        return abiTryOk(Result, abi.HostHttp_sendOk{
+            .status = result.status,
+            .headers = result.headers,
+            .body = result.body,
+        });
+    }
+    effect.setOutcome(.runtime_error);
+    result.headers.decref(roc_host);
+    result.body.decref(roc_host);
+    // Only `Other` carries the host's description; the three named failures
+    // say everything they have to say in their own name, so their message is
+    // released rather than passed along.
+    return abiTryErr(Result, switch (result.err) {
+        http_effect.ERR_TIMEOUT => blk: {
+            result.err_message.decref(roc_host);
+            break :blk abiUnion(Union, .Timeout);
+        },
+        http_effect.ERR_NETWORK => blk: {
+            result.err_message.decref(roc_host);
+            break :blk abiUnion(Union, .NetworkError);
+        },
+        http_effect.ERR_BAD_BODY => blk: {
+            result.err_message.decref(roc_host);
+            break :blk abiUnion(Union, .MalformedResponse);
+        },
+        else => abiUnionPayload(Union, .Other, "other", result.err_message),
+    });
 }
 
 /// This process's own environment, as `std.process.Environ`.
@@ -1894,14 +2015,26 @@ fn hostProcessEnviron() std.process.Environ {
     return .empty;
 }
 
-/// A run that started no child, carrying only its code.
-fn cmdRunFailure(code: u8) abi.HostCmd_runRetRecord {
-    return .{
-        .err = code,
-        .exit_code = 0,
-        .stdout = abi.RocListWith(u8, false).empty(),
-        .stderr = abi.RocListWith(u8, false).empty(),
+/// Name a run code in `Cmd.run!`'s vocabulary.
+///
+/// `Timeout` is absent: it is the one variant carrying the output captured
+/// before the deadline, so only the caller holding that output can build it.
+fn cmdRunError(code: u8) abi.HostCmd_runErr {
+    const Union = abi.HostCmd_runErr;
+    return switch (code) {
+        cmd_effect.ERR_COMMAND_NOT_FOUND => abiUnion(Union, .CommandNotFound),
+        cmd_effect.ERR_BUSY => abiUnion(Union, .Busy),
+        cmd_effect.ERR_UNAVAILABLE => abiUnion(Union, .Unavailable),
+        cmd_effect.ERR_STDOUT_LIMIT => abiUnion(Union, .StdoutLimitExceeded),
+        cmd_effect.ERR_STDERR_LIMIT => abiUnion(Union, .StderrLimitExceeded),
+        cmd_effect.ERR_PERMISSION_DENIED => abiUnion(Union, .PermissionDenied),
+        else => abiUnion(Union, .SpawnFailed),
     };
+}
+
+/// A run that started no child, carrying only its refusal.
+fn cmdRunFailure(code: u8) abi.HostCmd_runResult {
+    return abiTryErr(abi.HostCmd_runResult, cmdRunError(code));
 }
 
 /// Copy the command out of the Roc record into host-owned storage.
@@ -1956,7 +2089,8 @@ fn copyCmdSpec(arena: std.mem.Allocator, args: abi.HostCmd_runArgs) ?cmd_effect.
 /// Both streams cross as ordinary copies rather than through the byte-list
 /// transfer path. A run produces two payloads where that path hands over one
 /// allocation per slot, and both are already bounded by limits the app stated.
-fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runRetRecord {
+fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runResult {
+    const Result = abi.HostCmd_runResult;
     enforcePhase("Cmd.run!", during_wait);
     var effect = EffectScope.begin("Cmd.run!", 0);
     defer effect.end();
@@ -2005,15 +2139,24 @@ fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArgs) callconv(.c) abi.
     defer outcome.deinit(allocator);
     if (outcome.err != 0) effect.setOutcome(.runtime_error);
 
-    return .{
-        .err = outcome.err,
+    // A timeout keeps whatever the child managed to write, so its output is
+    // built on that path too and handed over inside the `Timeout` variant.
+    const captured = abi.HostCmd_runOk{
         .exit_code = outcome.exit_code,
         .stdout = abi.RocListWith(u8, false).fromSlice(outcome.stdout, roc_host),
         .stderr = abi.RocListWith(u8, false).fromSlice(outcome.stderr, roc_host),
     };
+    if (outcome.err == cmd_effect.ERR_TIMED_OUT) {
+        return abiTryErr(Result, abiUnionPayload(abi.HostCmd_runErr, .Timeout, "timeout", captured));
+    }
+    if (outcome.err != 0) {
+        captured.decref(roc_host);
+        return cmdRunFailure(outcome.err);
+    }
+    return abiTryOk(Result, captured);
 }
 
-fn exportedCmdRun(args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runRetRecord {
+fn exportedCmdRun(args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runResult {
     return hostedCmdRun(activeHost(), args);
 }
 
@@ -2026,7 +2169,7 @@ fn exportedCmdRun(args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runRetReco
 /// can hand a turn to the executor, which runs other tasks' Roc code; the
 /// `PhaseScope` restore is what keeps the rest of this `update!` in the right
 /// phase afterwards, exactly as `Task.spawn!` does.
-fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindRetRecord {
+fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindResult {
     enforcePhase("Udp.bind!", during_load);
     var effect = EffectScope.begin("Udp.bind!", args.ip.asSlice().len);
     defer effect.end();
@@ -2058,22 +2201,28 @@ fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArgs) callconv(.c) abi.Ho
         effect.setOutcome(.refused);
         return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
     };
-    return .{
-        .handle = handle,
+    return abiTryOk(abi.HostUdp_bindResult, abi.HostUdp_bindOk{
+        .handle = .{ .handle = handle },
         .ip = socket.local_ip,
         .port = socket.local_port,
-        .err = 0,
-    };
+    });
 }
 
-fn exportedUdpBind(args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindRetRecord {
+fn exportedUdpBind(args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindResult {
     return hostedUdpBind(activeHost(), args);
 }
 
-/// A bind that produced no socket. The handle is the shared invalid token, so
-/// `Udp` still gets a structurally valid value to discard.
-fn udpBindFailure(code: u8) abi.HostUdp_bindRetRecord {
-    return .{ .handle = invalidResourceHandle(), .ip = 0, .port = 0, .err = code };
+/// A bind that produced no socket, named in `Udp.bind!`'s vocabulary.
+fn udpBindFailure(code: u8) abi.HostUdp_bindResult {
+    const Union = abi.HostUdp_bindErr;
+    return abiTryErr(abi.HostUdp_bindResult, switch (code) {
+        udp_effect.ERR_INVALID_ADDRESS => abiUnion(Union, .invalid_address),
+        udp_effect.ERR_RESOURCE_LIMIT => abiUnion(Union, .resource_limit),
+        udp_effect.ERR_ADDRESS_IN_USE => abiUnion(Union, .address_in_use),
+        udp_effect.ERR_ADDRESS_UNAVAILABLE => abiUnion(Union, .address_unavailable),
+        udp_effect.ERR_PERMISSION_DENIED => abiUnion(Union, .permission_denied),
+        else => abiUnion(Union, .unavailable),
+    });
 }
 
 /// `Udp.send!`: hand one datagram to the kernel, without waiting.
@@ -2089,7 +2238,7 @@ fn hostedUdpSend(host: *RocHost, args: abi.HostUdp_sendArgs) callconv(.c) u8 {
     defer args.decref(host);
 
     const validation_started = observatoryMeasurementStart();
-    const socket = udp_socket_heap.get(args.socket.*) orelse {
+    const socket = udp_socket_heap.get(args.socket.handle.*) orelse {
         effect.setValidationElapsed(validation_started);
         effect.setOutcome(.refused);
         return udp_effect.ERR_UNAVAILABLE;
@@ -2120,13 +2269,13 @@ fn exportedUdpSend(args: abi.HostUdp_sendArgs) callconv(.c) u8 {
 /// The batch is built in host memory first and copied into Roc values only
 /// once it is complete, so a cancelled or failed receive cannot leave a
 /// half-built Roc value behind.
-fn hostedUdpReceive(host: *RocHost, args: abi.HostUdp_receiveArgs) callconv(.c) abi.HostUdp_receiveRetRecord {
+fn hostedUdpReceive(host: *RocHost, args: abi.HostUdp_receiveArgs) callconv(.c) abi.HostUdp_receiveResult {
     enforcePhase("Udp.receive!", during_wait);
     var effect = EffectScope.begin("Udp.receive!", 0);
     defer effect.end();
     defer args.decref(host);
 
-    const socket = udp_socket_heap.get(args.socket.*) orelse {
+    const socket = udp_socket_heap.get(args.socket.handle.*) orelse {
         effect.setOutcome(.refused);
         return udpReceiveFailure(udp_effect.ERR_UNAVAILABLE);
     };
@@ -2160,35 +2309,37 @@ fn hostedUdpReceive(host: *RocHost, args: abi.HostUdp_receiveArgs) callconv(.c) 
         },
     };
     const conversion_started = observatoryMeasurementStart();
-    const result: abi.HostUdp_receiveRetRecord = .{
-        .err = 0,
+    const result = abiTryOk(abi.HostUdp_receiveResult, abi.HostUdp_receiveOk{
         .payload = abi.RocListWith(u8, false).fromSlice(batch.payload, host),
         .slices = udpRocSlices(host, batch.slices),
-    };
+    });
     effect.setConversionElapsed(conversion_started);
     return result;
 }
 
-fn exportedUdpReceive(args: abi.HostUdp_receiveArgs) callconv(.c) abi.HostUdp_receiveRetRecord {
+fn exportedUdpReceive(args: abi.HostUdp_receiveArgs) callconv(.c) abi.HostUdp_receiveResult {
     return hostedUdpReceive(activeHost(), args);
 }
 
 /// A receive that produced no datagrams, carrying only its code.
-fn udpReceiveFailure(code: u8) abi.HostUdp_receiveRetRecord {
-    return .{
-        .err = code,
-        .payload = abi.RocListWith(u8, false).empty(),
-        .slices = abi.RocListWith(abi.HostUdp_receiveSlices, false).empty(),
-    };
+/// A receive that produced no batch, named in `Udp.receive!`'s vocabulary.
+fn udpReceiveFailure(code: u8) abi.HostUdp_receiveResult {
+    const Union = abi.HostUdp_receiveErr;
+    return abiTryErr(abi.HostUdp_receiveResult, switch (code) {
+        udp_effect.ERR_TIMEOUT => abiUnion(Union, .timeout),
+        udp_effect.ERR_ALREADY_RECEIVING => abiUnion(Union, .already_receiving),
+        udp_effect.ERR_UNAVAILABLE => abiUnion(Union, .unavailable),
+        else => abiUnion(Union, .receive_failed),
+    });
 }
 
 /// Copy the batch index into the Roc list `Udp` decodes.
 fn udpRocSlices(
     host: *RocHost,
     slices: []const udp_effect.Slice,
-) abi.RocListWith(abi.HostUdp_receiveSlices, false) {
-    if (slices.len == 0) return abi.RocListWith(abi.HostUdp_receiveSlices, false).empty();
-    const list = abi.RocListWith(abi.HostUdp_receiveSlices, false).allocate(slices.len, host);
+) abi.RocListWith(abi.HostUdp_receiveOkSlices, false) {
+    if (slices.len == 0) return abi.RocListWith(abi.HostUdp_receiveOkSlices, false).empty();
+    const list = abi.RocListWith(abi.HostUdp_receiveOkSlices, false).allocate(slices.len, host);
     const elements = list.elements_ptr.?;
     for (slices, 0..) |slice, index| {
         elements[index] = .{
@@ -2199,6 +2350,68 @@ fn udpRocSlices(
         };
     }
     return list;
+}
+
+/// Name a SQLite outcome in one effect's closed error union.
+///
+/// The host's own refusals are the negative `ERR_*` codes; anything else is a
+/// code SQLite itself produced, and travels with the message it came with. A
+/// union that has no variant for a host refusal cannot receive one, so those
+/// arms are only compiled where they exist.
+fn sqliteError(comptime Union: type, roc_host: *RocHost, err: i64, message: abi.RocStr) Union {
+    const Failure = abi.HostSqlite_closeErr;
+    const Names = if (@typeInfo(Union) == .@"enum")
+        Union
+    else if (@hasField(Union, "tag")) @FieldType(Union, "tag") else void;
+    inline for (.{
+        .{ "TooManyConnections", sqlite_effect.ERR_TOO_MANY_CONNECTIONS },
+        .{ "TooManyStatements", sqlite_effect.ERR_TOO_MANY_STATEMENTS },
+        .{ "MultipleStatements", sqlite_effect.ERR_MULTIPLE_STATEMENTS },
+        .{ "ResultTooLarge", sqlite_effect.ERR_RESULT_TOO_LARGE },
+    }) |refusal| {
+        if (comptime Names != void and abiVariantName(Names, refusal[0]) != null) {
+            if (err == refusal[1]) {
+                message.decref(roc_host);
+                return abiUnionNamed(Union, refusal[0]);
+            }
+        }
+    }
+    const failure = Failure{ .code = err, .message = message };
+    // A single-variant union erases to its payload, so `[SqliteErr(_)]` is the
+    // failure record itself rather than a tagged wrapper around it.
+    if (Union == Failure) return failure;
+    return abiUnionPayload(Union, .SqliteErr, "sqlite_err", failure);
+}
+
+/// Hand one finished query over, or the reason there is none.
+///
+/// `run_stmt!` and `run_once!` answer with the same shape and the same
+/// failures, so the two share this rather than repeating it.
+fn sqliteQueryResult(
+    comptime Result: type,
+    roc_host: *RocHost,
+    effect: *EffectScope,
+    result: sqlite_effect.QueryOutcome,
+) Result {
+    if (result.err != 0) {
+        effect.setOutcome(.runtime_error);
+        result.names.decref(roc_host);
+        result.cells.decref(roc_host);
+        result.payload.decref(roc_host);
+        const Union = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+        return abiTryErr(Result, sqliteError(Union, roc_host, result.err, result.message));
+    }
+    result.message.decref(roc_host);
+    const Ok = @typeInfo(@TypeOf(Result.payload_ok)).@"fn".return_type.?;
+    return abiTryOk(Result, Ok{
+        .names = result.names,
+        .ncols = result.ncols,
+        .row_count = result.row_count,
+        .cells = result.cells,
+        .payload = result.payload,
+        .changes = result.changes,
+        .last_insert_rowid = result.last_insert_rowid,
+    });
 }
 
 /// The `Sqlite` effects.
@@ -2214,7 +2427,8 @@ fn hostedSqliteOpen(
     mode: u8,
     busy_timeout_ms: u64,
     max_result_bytes: u64,
-) callconv(.c) abi.HostSqlite_open {
+) callconv(.c) abi.HostSqlite_openResult {
+    const Result = abi.HostSqlite_openResult;
     enforcePhase("Sqlite.Db.open!", during_wait);
     var effect = EffectScope.begin("Sqlite.Db.open!", path_arg.asSlice().len);
     defer effect.end();
@@ -2234,11 +2448,16 @@ fn hostedSqliteOpen(
         max_result_bytes,
     );
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    if (result.err != 0) {
+        effect.setOutcome(.runtime_error);
+        return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, result.err, result.message));
+    }
+    result.message.decref(roc_host);
+    return abiTryOk(Result, abi.SqliteDb{ .handle = result.db });
 }
 
-fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_close {
+fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_closeResult {
+    const Result = abi.HostSqlite_closeResult;
     enforcePhase("Sqlite.Db.close!", during_wait);
     var effect = EffectScope.begin("Sqlite.Db.close!", 0);
     defer effect.end();
@@ -2251,11 +2470,16 @@ fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_close {
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    if (result.err != 0) {
+        effect.setOutcome(.runtime_error);
+        return abiTryErr(Result, sqliteError(abi.HostSqlite_closeErr, roc_host, result.err, result.message));
+    }
+    result.message.decref(roc_host);
+    return abiTryEmptyOk(Result);
 }
 
-fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_prepare {
+fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_prepareResult {
+    const Result = abi.HostSqlite_prepareResult;
     enforcePhase("Sqlite.prepare!", during_wait);
     var effect = EffectScope.begin("Sqlite.prepare!", sql_arg.asSlice().len);
     defer effect.end();
@@ -2269,14 +2493,18 @@ fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostS
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    if (result.err != 0) {
+        effect.setOutcome(.runtime_error);
+        return abiTryErr(Result, sqliteError(abi.HostSqlite_prepareErr, roc_host, result.err, result.message));
+    }
+    result.message.decref(roc_host);
+    return abiTryOk(Result, abi.SqliteStmt{ .handle = result.stmt });
 }
 
 fn hostedSqliteRunStmt(
     stmt_arg: *u64,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
-) callconv(.c) abi.HostSqlite_run_stmt {
+) callconv(.c) abi.HostSqlite_run_stmtResult {
     enforcePhase("Sqlite.Stmt.query!", during_wait);
     var effect = EffectScope.begin("Sqlite.Stmt.query!", 0);
     defer effect.end();
@@ -2290,15 +2518,14 @@ fn hostedSqliteRunStmt(
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    return sqliteQueryResult(abi.HostSqlite_run_stmtResult, roc_host, &effect, result);
 }
 
 fn hostedSqliteRunOnce(
     db_arg: *u64,
     sql_arg: abi.RocStr,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
-) callconv(.c) abi.HostSqlite_run_once {
+) callconv(.c) abi.HostSqlite_run_onceResult {
     enforcePhase("Sqlite.query!", during_wait);
     var effect = EffectScope.begin("Sqlite.query!", sql_arg.asSlice().len);
     defer effect.end();
@@ -2313,11 +2540,11 @@ fn hostedSqliteRunOnce(
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    return sqliteQueryResult(abi.HostSqlite_run_onceResult, roc_host, &effect, result);
 }
 
-fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_exec_script {
+fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_exec_scriptResult {
+    const Result = abi.HostSqlite_exec_scriptResult;
     enforcePhase("Sqlite.exec_script!", during_wait);
     var effect = EffectScope.begin("Sqlite.exec_script!", sql_arg.asSlice().len);
     defer effect.end();
@@ -2331,8 +2558,12 @@ fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.Ho
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
-    if (result.err != 0) effect.setOutcome(.runtime_error);
-    return result;
+    if (result.err != 0) {
+        effect.setOutcome(.runtime_error);
+        return abiTryErr(Result, sqliteError(abi.HostSqlite_exec_scriptErr, roc_host, result.err, result.message));
+    }
+    result.message.decref(roc_host);
+    return abiTryEmptyOk(Result);
 }
 
 var active_phase: Phase = .idle;
@@ -3408,13 +3639,6 @@ var scissor_scope_count: usize = 0;
 
 const INVALID_RESOURCE_TOKEN = std.math.maxInt(u64);
 
-const InvalidResourceBox = extern struct {
-    refcount: isize = 0,
-    token: u64 = INVALID_RESOURCE_TOKEN,
-};
-
-var invalid_resource_box: InvalidResourceBox = .{};
-
 const DefaultFontBox = extern struct {
     refcount: isize = 0,
     token: u64 = 0,
@@ -3949,6 +4173,99 @@ fn abiTryPayload(
     return result;
 }
 
+/// A `Try` whose success carries nothing.
+///
+/// Glue emits no `payload_ok` accessor for a zero-sized success, so there is
+/// no payload to write and `abiTryOk` has nothing to check against.
+fn abiTryEmptyOk(comptime Result: type) Result {
+    var result: Result = std.mem.zeroes(Result);
+    result.tag = .Ok;
+    return result;
+}
+
+/// One payloadless variant of a generated closed error union.
+///
+/// A union whose variants all carry nothing is generated as a plain `enum`,
+/// and one with any payload as a tagged struct; this names a variant the same
+/// way in both. The payload bytes of the struct form are zeroed rather than
+/// left undefined so a value crossing the boundary never carries stale stack.
+fn abiUnion(comptime Union: type, comptime variant: @TypeOf(.enum_literal)) Union {
+    return abiUnionNamed(Union, @tagName(variant));
+}
+
+/// `abiUnion` for a variant named by a string rather than an enum literal.
+fn abiUnionNamed(comptime Union: type, comptime variant: []const u8) Union {
+    if (@typeInfo(Union) == .@"enum") return @field(Union, abiVariantName(Union, variant).?);
+    const Tag = @FieldType(Union, "tag");
+    var value: Union = std.mem.zeroes(Union);
+    value.tag = @field(Tag, abiVariantName(Tag, variant).?);
+    return value;
+}
+
+/// The member of `Enum` naming `variant`, or null when it has none.
+///
+/// Glue spells a payloadless union's members in snake_case and a tagged one's
+/// in the Roc tag's own PascalCase, so a caller that names a variant one way
+/// is matched against both rather than having to know which shape it got.
+fn abiVariantName(comptime Enum: type, comptime variant: []const u8) ?[]const u8 {
+    comptime {
+        if (@hasField(Enum, variant)) return variant;
+        var snake: [variant.len * 2]u8 = undefined;
+        var len: usize = 0;
+        for (variant, 0..) |char, index| {
+            if (std.ascii.isUpper(char)) {
+                if (index != 0) {
+                    snake[len] = '_';
+                    len += 1;
+                }
+                snake[len] = std.ascii.toLower(char);
+            } else {
+                snake[len] = char;
+            }
+            len += 1;
+        }
+        const final = snake[0..len].*;
+        if (@hasField(Enum, &final)) return &final;
+        return null;
+    }
+}
+
+/// One payload-carrying variant of a generated closed error union.
+///
+/// Shaped like `abiTryPayload`: on 32-bit targets glue stores the payload as
+/// aligned bytes, on 64-bit it emits an extern union, and the generated
+/// `payload_<variant>` accessor is the shared source of truth for the type.
+fn abiUnionPayload(
+    comptime Union: type,
+    comptime tag: @FieldType(Union, "tag"),
+    comptime field: []const u8,
+    value: anytype,
+) Union {
+    comptime {
+        const accessor = "payload_" ++ field;
+        const Expected = @typeInfo(@TypeOf(@field(Union, accessor))).@"fn".return_type.?;
+        if (@TypeOf(value) != Expected)
+            @compileError("ABI union payload does not match its generated accessor type");
+    }
+
+    var result: Union = undefined;
+    result.tag = tag;
+    if (@sizeOf(usize) == 4) {
+        const PayloadStorage = @FieldType(Union, "payload");
+        comptime {
+            if (@sizeOf(@TypeOf(value)) > @sizeOf(PayloadStorage))
+                @compileError("ABI union payload is larger than its generated storage");
+            if (@alignOf(@TypeOf(value)) > @alignOf(PayloadStorage))
+                @compileError("ABI union payload is more aligned than its generated storage");
+        }
+        const payload: *@TypeOf(value) = @ptrCast(@alignCast(&result.payload));
+        payload.* = value;
+    } else {
+        @field(result.payload, field) = value;
+    }
+    return result;
+}
+
 fn abiTryOk(comptime Result: type, value: anytype) Result {
     return abiTryPayload(Result, .ok, value);
 }
@@ -4363,7 +4680,7 @@ test "prepared text allocates long native bytes once and retains its loaded font
         .spacing = 1,
     });
     try std.testing.expectEqual(abi.HostText_prepareResultTag.Ok, result.tag);
-    const prepared = result.payload_ok().prepared;
+    const prepared = result.payload_ok().prepared.handle;
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -4375,7 +4692,7 @@ test "prepared text allocates long native bytes once and retains its loaded font
     for (0..10) |_| {
         abi.increfBox(@ptrCast(prepared), 1);
         hostedDrawPreparedTextRaw(&roc_host, .{
-            .prepared = prepared,
+            .prepared = .{ .handle = prepared },
             .pos = .{ .x = 20, .y = 30 },
             .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
         });
@@ -4412,7 +4729,7 @@ test "prepared text rejects resource kind confusion and releases transferred own
 
     const draw_shader = storeShader(.headless).?;
     hostedDrawPreparedTextRaw(&roc_host, .{
-        .prepared = draw_shader,
+        .prepared = .{ .handle = draw_shader },
         .pos = .{ .x = 0, .y = 0 },
         .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 },
     });
@@ -4983,14 +5300,14 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // Every store-backed loader reports the read it could not make.
         const store_texture = hostedTextureLoadStoreRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .path = abi.RocStr.fromSlice("atlas.png", &roc_host),
         });
         try std.testing.expectEqual(abi.HostTexture_load_storeResultTag.Err, store_texture.tag);
         try std.testing.expectEqual(abi.HostTexture_load_storeErr.read_failed, store_texture.payload_err());
 
         const store_font = hostedTextLoadStoreFontRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
             .size = 16,
         });
@@ -4998,7 +5315,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         try std.testing.expectEqual(abi.HostText_load_store_fontErr.read_failed, store_font.payload_err());
 
         const store_shader = hostedShaderLoadStoreRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
         });
@@ -5030,7 +5347,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         // one is: no draw is counted and nothing faults.
         const draws_before = prepared_text_draw_calls;
         hostedDrawPreparedTextRaw(&roc_host, .{
-            .prepared = allocateTestResourceStub(&roc_host),
+            .prepared = .{ .handle = allocateTestResourceStub(&roc_host) },
             .pos = .{ .x = 10, .y = 20 },
             .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
         });
@@ -5441,7 +5758,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
             .spacing = 1,
         });
         try std.testing.expectEqual(abi.HostText_prepareResultTag.Ok, result.tag);
-        prepared.* = result.payload_ok().prepared;
+        prepared.* = result.payload_ok().prepared.handle;
     }
     const refused_text = hostedTextPrepareRaw(&roc_host, .{
         .font = defaultFontHandle(),
@@ -6006,7 +6323,7 @@ test "store startup failures close an untransferred root and successful insertio
     try std.testing.expectEqual(@as(usize, 1), store_heap.active());
     // This is the one transferred reference. Its final release retires, then
     // closes, exactly one directory resource.
-    const base: *isize = @ptrFromInt(@intFromPtr(opened.payload_ok()) - @sizeOf(isize));
+    const base: *isize = @ptrFromInt(@intFromPtr(opened.payload_ok().handle) - @sizeOf(isize));
     base.* = 0;
     try std.testing.expectEqual(host_resource.DeallocRoute.deallocated, store_heap.routeDealloc(base));
     try std.testing.expectEqual(@as(usize, 1), store_heap.retiredCount());
@@ -6074,7 +6391,7 @@ test "opening a store and loading a texture from it wait rather than load" {
         defer update.leave();
         last_phase_violation = null;
         _ = hostedTextureLoadStoreRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .path = abi.RocStr.fromSlice("logo.png", &roc_host),
         });
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
@@ -6192,7 +6509,7 @@ fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c)
         return abiTryErr(Result, Error.resource_limit);
     };
     root_transferred = true;
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.Store{ .handle = stored });
 }
 
 fn exportedStoreOpenRaw(args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openResult {
@@ -6224,8 +6541,8 @@ fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostTexture_load_storeArg
     const effect = EffectScope.begin("Assets.load_texture!", 0);
     defer effect.end();
     defer args.path.decref(host);
-    defer releaseResourceBox(host, args.store);
-    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
+    defer releaseResourceBox(host, args.store.handle);
+    const store = store_heap.get(args.store.handle.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
     const source = readStoreAsset(allocator, store, args.path.asSlice());
     const bytes = switch (source) {
@@ -6494,11 +6811,11 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
     defer effect.end();
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
-    defer releaseResourceBox(host, args.store);
+    defer releaseResourceBox(host, args.store.handle);
     const vertex_path = args.vertex_path.asSlice();
     const fragment_path = args.fragment_path.asSlice();
     if (vertex_path.len == 0 and fragment_path.len == 0) return abiTryErr(Result, Error.path_invalid);
-    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
+    const store = store_heap.get(args.store.handle.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
 
     const vertex_read = if (vertex_path.len == 0) null else readStoreAsset(allocator, store, vertex_path);
@@ -6991,9 +7308,9 @@ fn hostedTextLoadStoreFontRaw(host: *RocHost, args: abi.HostText_load_store_font
     const effect = EffectScope.begin("Draw.load_store_font!", args.path.asSlice().len);
     defer effect.end();
     defer args.path.decref(host);
-    defer releaseResourceBox(host, args.store);
+    defer releaseResourceBox(host, args.store.handle);
     if (args.size <= 0) return abiTryErr(Result, Error.font_load_failed);
-    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
+    const store = store_heap.get(args.store.handle.*) orelse return abiTryErr(Result, Error.read_failed);
     const allocator = allocatorFromHost(host);
     const source = readStoreAsset(allocator, store, args.path.asSlice());
     const bytes = switch (source) {
@@ -7057,7 +7374,7 @@ test "the store-backed font and shader loaders wait rather than load" {
         defer update.leave();
         last_phase_violation = null;
         _ = hostedTextLoadStoreFontRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
             .size = 16,
         });
@@ -7068,7 +7385,7 @@ test "the store-backed font and shader loaders wait rather than load" {
 
         last_phase_violation = null;
         _ = hostedShaderLoadStoreRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host),
+            .store = .{ .handle = allocateTestResourceStub(&roc_host) },
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
         });
@@ -7084,7 +7401,7 @@ test "the store-backed font and shader loaders wait rather than load" {
     defer task.leave();
     last_phase_violation = null;
     const font = hostedTextLoadStoreFontRaw(&roc_host, .{
-        .store = retainTestResourceBox(opened.payload_ok()),
+        .store = .{ .handle = retainTestResourceBox(opened.payload_ok().handle) },
         .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
         .size = 16,
     });
@@ -7259,7 +7576,7 @@ fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv
         .spacing = args.spacing,
     }) orelse return abiTryErr(Result, Error.resource_limit);
 
-    return abiTryOk(Result, abi.HostText_prepareOk{ .prepared = prepared, .height = measured.height, .width = measured.width });
+    return abiTryOk(Result, abi.HostText_prepareOk{ .prepared = .{ .handle = prepared }, .height = measured.height, .width = measured.width });
 }
 
 fn exportedTextPrepareRaw(args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareResult {
@@ -7270,8 +7587,8 @@ fn hostedDrawPreparedTextRaw(host: *RocHost, args: abi.HostDraw_draw_prepared_te
     enforcePhase("Text.Prepared.draw!", during_render);
     const effect = EffectScope.begin("Text.Prepared.draw!", 0);
     defer effect.end();
-    defer releaseResourceBox(host, args.prepared);
-    const resource = prepared_text_heap.get(args.prepared.*) orelse return;
+    defer releaseResourceBox(host, args.prepared.handle);
+    const resource = prepared_text_heap.get(args.prepared.handle.*) orelse return;
     prepared_text_draw_calls += 1;
     if (headlessMode()) return;
 
@@ -8179,21 +8496,33 @@ fn exportedCaptureSetVirtualText(text: abi.RocListWith(u32, false)) callconv(.c)
     hostedCaptureSetVirtualText(activeHost(), text);
 }
 
-fn hostedCaptureStopRecording() callconv(.c) abi.HostCapture_stop_recordingRetRecord {
+fn hostedCaptureStopRecording() callconv(.c) abi.HostCapture_stop_recordingResult {
+    const Result = abi.HostCapture_stop_recordingResult;
     enforcePhase("Capture.stop!", during_update);
     const effect = EffectScope.begin("Capture.stop!", 0);
     defer effect.end();
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
-    if (stop_result == capture.err_not_recording) {
-        return .{ .err = stop_result, .frames = frames, .bytes = capture_recording_bytes };
-    }
+    if (stop_result == capture.err_not_recording)
+        return abiTryErr(Result, abi.HostCapture_stop_recordingErr.not_recording);
 
     // Finalize even when the session already failed: the frames captured
     // before the failure are still worth a readable file.
     const close_result = closeCaptureSink(true);
     const err = if (stop_result != capture.err_none) stop_result else close_result;
-    return .{ .err = err, .frames = frames, .bytes = capture_recording_bytes };
+    if (err != capture.err_none) {
+        const Union = abi.HostCapture_stop_recordingErr;
+        const named: Union = switch (err) {
+            capture.err_not_recording => .not_recording,
+            capture.err_budget_exceeded => .budget_exceeded,
+            capture.err_busy => .busy,
+            capture.err_unavailable => .unavailable,
+            capture.err_target_unavailable => .target_unavailable,
+            else => .readback_failed,
+        };
+        return abiTryErr(Result, named);
+    }
+    return abiTryOk(Result, abi.HostCapture_stop_recordingOk{ .frames = frames, .bytes = capture_recording_bytes });
 }
 
 /// The recording state sampled into every input.
@@ -8225,32 +8554,28 @@ fn captureStateForStep() CaptureFromHost {
 /// decides how big it is, and turning it into a `Str` is a copy and a UTF-8
 /// scan on this thread. Cap it where a text read is capped, and for the same
 /// reason.
-fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clipboardRetRecord {
+fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clipboardResult {
+    const Result = abi.HostWindow_read_clipboardResult;
+    const Error = abi.BusyOrTooLargeOrUnavailable;
     enforcePhase("Window.read_clipboard!", during_update);
     const effect = EffectScope.begin("Window.read_clipboard!", 0);
     defer effect.end();
 
     if (headlessMode()) {
-        if (!headless_clipboard_set) return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
-        return .{
-            .err = 0,
-            .contents = abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host),
-        };
+        if (!headless_clipboard_set) return abiTryErr(Result, Error.unavailable);
+        return abiTryOk(Result, abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host));
     }
 
     // The pointer belongs to the windowing backend: it is null when the
     // clipboard is empty or holds non-text content, must never be freed, and is
     // invalidated by the next clipboard call -- so copy it out now.
-    const text = raylib.getClipboardText() orelse
-        return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
+    const text = raylib.getClipboardText() orelse return abiTryErr(Result, Error.unavailable);
     const contents = std.mem.span(text);
-    if (contents.len > MAX_INLINE_READ_BYTES) {
-        return .{ .err = READ_ERR_TOO_LARGE, .contents = abi.RocStr.empty() };
-    }
-    return .{ .err = 0, .contents = abi.RocStr.fromSlice(contents, roc_host) };
+    if (contents.len > MAX_INLINE_READ_BYTES) return abiTryErr(Result, Error.too_large);
+    return abiTryOk(Result, abi.RocStr.fromSlice(contents, roc_host));
 }
 
-fn exportedReadClipboard() callconv(.c) abi.HostWindow_read_clipboardRetRecord {
+fn exportedReadClipboard() callconv(.c) abi.HostWindow_read_clipboardResult {
     return hostedReadClipboard(activeHost());
 }
 
@@ -8363,21 +8688,22 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 
     // Nothing written yet, so a read reports the clipboard as unavailable
     // rather than handing back an empty string.
-    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, hostedReadClipboard(&roc_host).err);
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Err, hostedReadClipboard(&roc_host).tag);
 
     hostedSetClipboardText(&roc_host, abi.RocStr.fromSlice("copied", &roc_host));
     const stored = hostedReadClipboard(&roc_host);
-    defer stored.contents.decref(&roc_host);
-    try std.testing.expectEqual(@as(u8, 0), stored.err);
-    try std.testing.expectEqualStrings("copied", stored.contents.asSlice());
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, stored.tag);
+    defer stored.payload_ok().decref(&roc_host);
+    try std.testing.expectEqualStrings("copied", stored.payload_ok().asSlice());
 
     // A write that cannot fit leaves the previous contents intact, and still
     // releases the Roc string it was handed.
     const oversized = abi.RocStr.fromSlice(&([_]u8{'x'} ** (HEADLESS_CLIPBOARD_CAPACITY + 1)), &roc_host);
     hostedSetClipboardText(&roc_host, oversized);
     const unchanged = hostedReadClipboard(&roc_host);
-    defer unchanged.contents.decref(&roc_host);
-    try std.testing.expectEqualStrings("copied", unchanged.contents.asSlice());
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, unchanged.tag);
+    defer unchanged.payload_ok().decref(&roc_host);
+    try std.testing.expectEqualStrings("copied", unchanged.payload_ok().asSlice());
 }
 
 /// `App.Startup.entropy!`: one draw from the operating system's entropy.
@@ -8405,10 +8731,6 @@ fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     return raylib.getRandomValue(min, max);
 }
 
-fn invalidResourceHandle() *u64 {
-    return &invalid_resource_box.token;
-}
-
 fn storeSound(resource: SoundResource) ?*u64 {
     return sound_heap.insert(0, resource) orelse {
         var rejected = resource;
@@ -8433,11 +8755,11 @@ fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAud
     defer effect.end();
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, sound);
+        return abiTryOk(Result, abi.AudioSound{ .handle = sound });
     }
     const sound = raylib.genTone(args.freq, args.ms) orelse return abiTryErr(Result, Error.sound_generation_failed);
     const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.AudioSound{ .handle = stored });
 }
 
 fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostAudio_gen_toneResult {
@@ -8448,11 +8770,11 @@ fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostA
     defer effect.end();
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, sound);
+        return abiTryOk(Result, abi.AudioSound{ .handle = sound });
     }
     const sound = raylib.genSound(args) orelse return abiTryErr(Result, Error.sound_generation_failed);
     const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.AudioSound{ .handle = stored });
 }
 
 /// The extension raylib's in-memory audio decoders dispatch on.
@@ -8498,14 +8820,14 @@ fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
 
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, sound);
+        return abiTryOk(Result, abi.AudioSound{ .handle = sound });
     }
 
     const file_type = audioFileTypeFromPath(path_slice, false) orelse
         return abiTryErr(Result, Error.sound_load_failed);
     const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return abiTryErr(Result, Error.sound_load_failed);
     const stored = storeSound(.{ .native = sound }) orelse return abiTryErr(Result, Error.resource_limit);
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.AudioSound{ .handle = stored });
 }
 
 fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
@@ -8536,7 +8858,7 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
 
     if (headlessMode()) {
         const music = storeMusic(.headless) orelse return abiTryErr(Result, Error.resource_limit);
-        return abiTryOk(Result, music);
+        return abiTryOk(Result, abi.AudioMusic{ .handle = music });
     }
 
     const file_type = audioFileTypeFromPath(path_slice, true) orelse
@@ -8547,7 +8869,7 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
         return abiTryErr(Result, Error.resource_limit);
     };
     bytes_transferred = true;
-    return abiTryOk(Result, stored);
+    return abiTryOk(Result, abi.AudioMusic{ .handle = stored });
 }
 
 fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
@@ -8609,8 +8931,8 @@ test "the audio file loaders wait rather than load" {
     try std.testing.expectEqual(abi.HostAudio_load_soundResultTag.Err, missing.tag);
     try std.testing.expectEqual(abi.HostAudio_load_soundErr.sound_load_failed, missing.payload_err());
 
-    releaseResourceBox(&roc_host, sound.payload_ok());
-    releaseResourceBox(&roc_host, music.payload_ok());
+    releaseResourceBox(&roc_host, sound.payload_ok().handle);
+    releaseResourceBox(&roc_host, music.payload_ok().handle);
 }
 
 test "an extension raylib cannot decode is refused, and module music is music only" {
@@ -10977,20 +11299,19 @@ test "a file that is not text is refused rather than made into a Str" {
     var path_buffer: [capture.path_capacity]u8 = undefined;
 
     const binary = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "binary"));
-    try std.testing.expectEqual(READ_ERR_NOT_UTF8, binary.err);
-    try std.testing.expectEqual(@as(usize, 0), binary.contents.asSlice().len);
-    binary.contents.decref(&roc_host);
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Err, binary.tag);
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.not_utf8, binary.payload_err());
 
     const text = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "text"));
-    try std.testing.expectEqual(@as(u8, 0), text.err);
-    try std.testing.expectEqualStrings("caf\u{e9}", text.contents.asSlice());
-    text.contents.decref(&roc_host);
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, text.tag);
+    try std.testing.expectEqualStrings("caf\u{e9}", text.payload_ok().asSlice());
+    text.payload_ok().decref(&roc_host);
 
     // The empty file is text too, and the shortest way to get it wrong.
     const empty = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "empty"));
-    try std.testing.expectEqual(@as(u8, 0), empty.err);
-    try std.testing.expectEqual(@as(usize, 0), empty.contents.asSlice().len);
-    empty.contents.decref(&roc_host);
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, empty.tag);
+    try std.testing.expectEqual(@as(usize, 0), empty.payload_ok().asSlice().len);
+    empty.payload_ok().decref(&roc_host);
 }
 
 test "a read above the inline cap is refused rather than copied on the frame thread" {
@@ -11016,15 +11337,14 @@ test "a read above the inline cap is refused rather than copied on the frame thr
     var path_buffer: [capture.path_capacity]u8 = undefined;
 
     const fits = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "at-limit"));
-    try std.testing.expectEqual(@as(u8, 0), fits.err);
-    try std.testing.expectEqual(MAX_INLINE_READ_BYTES, fits.contents.asSlice().len);
-    fits.contents.decref(&roc_host);
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, fits.tag);
+    try std.testing.expectEqual(MAX_INLINE_READ_BYTES, fits.payload_ok().asSlice().len);
+    fits.payload_ok().decref(&roc_host);
 
     const refused = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "over"));
-    try std.testing.expectEqual(READ_ERR_TOO_LARGE, refused.err);
-    // Nothing was copied: the answer carries an empty string.
-    try std.testing.expectEqual(@as(usize, 0), refused.contents.asSlice().len);
-    refused.contents.decref(&roc_host);
+    // Nothing was copied: the answer is the refusal alone, with no payload.
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.too_large, refused.payload_err());
 }
 
 /// A Roc-owned path string for a file `std.testing.tmpDir` created, resolved
@@ -11115,13 +11435,14 @@ test "the socket ceiling is a refusal an app can bind its way back out of" {
     var handles: [MAX_LIVE_UDP_SOCKETS]*u64 = undefined;
     for (&handles) |*handle| {
         const bound = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
-        try std.testing.expectEqual(@as(u8, 0), bound.err);
-        handle.* = bound.handle;
+        try std.testing.expectEqual(abi.HostUdp_bindResultTag.Ok, bound.tag);
+        handle.* = bound.payload_ok().handle.handle;
     }
     try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
 
     const refused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
-    try std.testing.expectEqual(udp_effect.ERR_RESOURCE_LIMIT, refused.err);
+    try std.testing.expectEqual(abi.HostUdp_bindResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostUdp_bindErr.resource_limit, refused.payload_err());
     try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
 
     // Release one. The slot is retired rather than free, so the next bind is
@@ -11129,8 +11450,8 @@ test "the socket ceiling is a refusal an app can bind its way back out of" {
     // fail if `insert` did not drain its own heap first.
     releaseResourceBox(&roc_host, handles[0]);
     const reused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
-    try std.testing.expectEqual(@as(u8, 0), reused.err);
-    handles[0] = reused.handle;
+    try std.testing.expectEqual(abi.HostUdp_bindResultTag.Ok, reused.tag);
+    handles[0] = reused.payload_ok().handle.handle;
 
     for (handles) |handle| releaseResourceBox(&roc_host, handle);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -11145,7 +11466,8 @@ test "a bad address is refused before any descriptor is opened" {
 
     for ([_][]const u8{ "::1", "localhost", "999.0.0.1", "" }) |text| {
         const result = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice(text, &roc_host), .port = 0 });
-        try std.testing.expectEqual(udp_effect.ERR_INVALID_ADDRESS, result.err);
+        try std.testing.expectEqual(abi.HostUdp_bindResultTag.Err, result.tag);
+        try std.testing.expectEqual(abi.HostUdp_bindErr.invalid_address, result.payload_err());
     }
     try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
 }
@@ -13285,25 +13607,25 @@ test "a stat reports what a path is, how big it is, and when it changed" {
 
     const file = statPathIn(tmp.dir, std.testing.io, "notes.txt");
     try std.testing.expectEqual(@as(u8, 0), file.err);
-    try std.testing.expectEqual(DIR_ENTRY_FILE, file.kind);
-    try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.size_bytes);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, file.found.kind);
+    try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.found.size_bytes);
 
     // The modification time is wall-clock, so it is a plausible instant rather
     // than a counter starting at the app's own start. Anything after 2020 is
     // enough to catch a monotonic clock leaking in here by mistake.
-    try std.testing.expect(file.modified_seconds > 1_577_836_800);
-    try std.testing.expect(file.modified_nanosecond < 1_000_000_000);
+    try std.testing.expect(file.found.modified_seconds > 1_577_836_800);
+    try std.testing.expect(file.found.modified_nanosecond < 1_000_000_000);
 
     const dir = statPathIn(tmp.dir, std.testing.io, "assets");
     try std.testing.expectEqual(@as(u8, 0), dir.err);
-    try std.testing.expectEqual(DIR_ENTRY_DIR, dir.kind);
+    try std.testing.expectEqual(DIR_ENTRY_DIR, dir.found.kind);
 
     // A failed stat answers with the reason and zeroes, so an app cannot read
     // a size or a time out of an answer that has neither.
     const missing = statPathIn(tmp.dir, std.testing.io, "absent.txt");
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
-    try std.testing.expectEqual(@as(u64, 0), missing.size_bytes);
-    try std.testing.expectEqual(@as(i64, 0), missing.modified_seconds);
+    try std.testing.expectEqual(@as(u64, 0), missing.found.size_bytes);
+    try std.testing.expectEqual(@as(i64, 0), missing.found.modified_seconds);
 }
 
 test "a stat rewrites a modification a hot-reload loop can compare" {
@@ -13317,9 +13639,9 @@ test "a stat rewrites a modification a hot-reload loop can compare" {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "two but longer" });
     const after = statPathIn(tmp.dir, std.testing.io, "shader.fs");
 
-    try std.testing.expect(after.size_bytes > before.size_bytes);
-    const moved = after.modified_seconds > before.modified_seconds or
-        (after.modified_seconds == before.modified_seconds and after.modified_nanosecond >= before.modified_nanosecond);
+    try std.testing.expect(after.found.size_bytes > before.found.size_bytes);
+    const moved = after.found.modified_seconds > before.found.modified_seconds or
+        (after.found.modified_seconds == before.found.modified_seconds and after.found.modified_nanosecond >= before.found.modified_nanosecond);
     try std.testing.expect(moved);
 }
 
@@ -13623,11 +13945,11 @@ test "a screen readback answers with the snapshot's own pixels, top-down" {
     try installTestScreenSnapshot(4, 3);
 
     const read = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 2, .y = 1 });
-    try std.testing.expectEqual(capture.err_none, read.err);
-    try std.testing.expectEqual(@as(u8, 2), read.r);
-    try std.testing.expectEqual(@as(u8, 1), read.g);
-    try std.testing.expectEqual(@as(u8, 7), read.b);
-    try std.testing.expectEqual(@as(u8, 255), read.a);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Ok, read.tag);
+    try std.testing.expectEqual(@as(u8, 2), read.payload_ok().r);
+    try std.testing.expectEqual(@as(u8, 1), read.payload_ok().g);
+    try std.testing.expectEqual(@as(u8, 7), read.payload_ok().b);
+    try std.testing.expectEqual(@as(u8, 255), read.payload_ok().a);
 
     // The region and the point agree at the same coordinates, and the bytes
     // come back row-major from the topmost requested row.
@@ -13638,19 +13960,19 @@ test "a screen readback answers with the snapshot's own pixels, top-down" {
         .width = 2,
         .height = 2,
     });
-    try std.testing.expectEqual(capture.err_none, region.err);
+    try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Ok, region.tag);
     try std.testing.expectEqualSlices(u8, &.{
         1, 1, 7, 255, 2, 1, 7, 255,
         1, 2, 7, 255, 2, 2, 7, 255,
-    }, region.bytes.items());
+    }, region.payload_ok().items());
 
     // The payload is handed over rather than copied, so it occupies a delivery
     // slot until the app drops it -- and releases the reservation either way.
-    try std.testing.expect(region.bytes.isSeamlessSlice());
+    try std.testing.expect(region.payload_ok().isSeamlessSlice());
     try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.active());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
-    region.bytes.decref(&roc_host);
+    region.payload_ok().decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 }
@@ -13678,8 +14000,8 @@ test "a readback outside its source is refused rather than clamped" {
             .x = point[0],
             .y = point[1],
         });
-        try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
-        try std.testing.expectEqual(@as(u8, 0), read.a);
+        try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, read.tag);
+        try std.testing.expectEqual(abi.HostCapture_pixel_atErr.region_out_of_bounds, read.payload_err());
     }
 
     for ([_]capture.Region{
@@ -13695,8 +14017,8 @@ test "a readback outside its source is refused rather than clamped" {
             .width = region.width,
             .height = region.height,
         });
-        try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
-        try std.testing.expectEqual(@as(usize, 0), read.bytes.len());
+        try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, read.tag);
+        try std.testing.expectEqual(abi.HostCapture_read_regionErr.region_out_of_bounds, read.payload_err());
     }
 
     // A refused read leaves nothing behind: no delivery reservation, no slot,
@@ -13729,8 +14051,8 @@ test "a region past the readback cap never reaches a source" {
         .width = 8192,
         .height = 4097,
     });
-    try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
-    try std.testing.expectEqual(@as(usize, 0), read.bytes.len());
+    try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, read.tag);
+    try std.testing.expectEqual(abi.HostCapture_read_regionErr.region_out_of_bounds, read.payload_err());
     try std.testing.expect(!screen_snapshot_requested);
 }
 
@@ -13753,7 +14075,8 @@ test "a screen readback with no presented frame is unavailable and arms the next
     // the first `update!`. There is no colour to invent, and the ask is what
     // makes the following frame keep one.
     const read = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
-    try std.testing.expectEqual(capture.err_unavailable, read.err);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, read.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.unavailable, read.payload_err());
     try std.testing.expect(screen_snapshot_requested);
 
     const region = hostedCaptureReadRegion(&roc_host, .{
@@ -13763,7 +14086,8 @@ test "a screen readback with no presented frame is unavailable and arms the next
         .width = 1,
         .height = 1,
     });
-    try std.testing.expectEqual(capture.err_unavailable, region.err);
+    try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, region.tag);
+    try std.testing.expectEqual(abi.HostCapture_read_regionErr.unavailable, region.payload_err());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 }
 
@@ -13785,7 +14109,8 @@ test "a render-target readback reports what the handle resolves to" {
         .x = 0,
         .y = 0,
     });
-    try std.testing.expectEqual(capture.err_target_unavailable, stubbed.err);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, stubbed.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.target_unavailable, stubbed.payload_err());
 
     // A headless target holds nothing: every draw into it was a no-op, so
     // there is no pixel to report, exactly as there is no file to export.
@@ -13795,7 +14120,8 @@ test "a render-target readback reports what the handle resolves to" {
         .x = 0,
         .y = 0,
     });
-    try std.testing.expectEqual(capture.err_unavailable, headless.err);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, headless.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.unavailable, headless.payload_err());
 
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
@@ -13841,14 +14167,14 @@ test "a full byte-list heap refuses a region read before it reads any pixels" {
         .width = 2,
         .height = 2,
     });
-    try std.testing.expectEqual(capture.err_busy, refused.err);
-    try std.testing.expectEqual(@as(usize, 0), refused.bytes.len());
+    try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostCapture_read_regionErr.busy, refused.payload_err());
     try std.testing.expect(!screen_snapshot_requested);
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
     // A single pixel needs no slot, so the same moment still answers it.
     const point = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
-    try std.testing.expectEqual(capture.err_none, point.err);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Ok, point.tag);
 
     for (held) |item| item.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -13886,7 +14212,7 @@ test "a pixel readback called from render! is rejected" {
         .width = 1,
         .height = 1,
     });
-    try std.testing.expectEqual(@as(usize, 0), region.bytes.len());
+    try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, region.tag);
     const region_violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Capture.read_region!", region_violation.operation);
     try std.testing.expect(region_violation.allowed.eql(during_update));

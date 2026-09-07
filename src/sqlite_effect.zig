@@ -247,7 +247,7 @@ const BindingBytes = struct {
 };
 
 /// One encoded cell. Field-for-field the record `Sqlite` decodes.
-const Cell = abi.HostSqlite_run_stmtCells;
+const Cell = abi.HostSqlite_run_stmtOkCells;
 
 /// What a worker filled in, and what the frame thread turns into Roc values.
 const Result = struct {
@@ -616,6 +616,44 @@ fn freeBindings(allocator: std.mem.Allocator, bindings: []const BindingBytes) vo
     }
 }
 
+/// A finished operation with nothing to report but whether it failed.
+///
+/// SQLite's own result codes are what `err` carries, so the code stays numeric
+/// here and `host_native` turns it into the effect's closed error union. The
+/// host's own refusals use the negative `ERR_*` codes above, which SQLite
+/// never produces.
+pub const StatusOutcome = struct {
+    err: i64,
+    message: abi.RocStr,
+};
+
+/// A finished operation that opened a connection.
+pub const OpenOutcome = struct {
+    err: i64,
+    message: abi.RocStr,
+    db: *u64,
+};
+
+/// A finished operation that compiled a statement.
+pub const PrepareOutcome = struct {
+    err: i64,
+    message: abi.RocStr,
+    stmt: *u64,
+};
+
+/// A finished query, in the flattened row-major form `Sqlite` decodes.
+pub const QueryOutcome = struct {
+    err: i64,
+    message: abi.RocStr,
+    names: abi.RocListWith(u8, false),
+    ncols: u64,
+    row_count: u64,
+    cells: abi.RocListWith(Cell, false),
+    payload: abi.RocListWith(u8, false),
+    changes: i64,
+    last_insert_rowid: i64,
+};
+
 /// Turn a worker's buffers into the Roc record the effect answers with.
 ///
 /// Every list is copied into a fresh Roc allocation rather than moved: the
@@ -665,7 +703,7 @@ pub fn open(
     mode: u8,
     busy_timeout_ms: u64,
     max_result_bytes: u64,
-) abi.HostSqlite_open {
+) OpenOutcome {
     _ = rt;
     const allocator = workerAllocator();
 
@@ -719,7 +757,7 @@ pub fn close(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
     db_arg: *u64,
-) abi.HostSqlite_close {
+) StatusOutcome {
     const resource = db_heap.get(db_arg.*) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
@@ -752,14 +790,14 @@ pub fn close(
     if (rt) |runtime| {
         var blocking = runtime.spawnBlocking(Closer.run, .{&job}) catch {
             Closer.run(&job);
-            return toRocStatus(abi.HostSqlite_close, roc_host, &result);
+            return toRocStatus(StatusOutcome, roc_host, &result);
         };
         blocking.join();
     } else {
         Closer.run(&job);
     }
 
-    return toRocStatus(abi.HostSqlite_close, roc_host, &result);
+    return toRocStatus(StatusOutcome, roc_host, &result);
 }
 
 /// `Sqlite.prepare!`: compile one statement for reuse.
@@ -768,7 +806,7 @@ pub fn prepare(
     rt: ?*zio.Runtime,
     db_arg: *u64,
     sql_arg: abi.RocStr,
-) abi.HostSqlite_prepare {
+) PrepareOutcome {
     _ = rt;
     const allocator = workerAllocator();
 
@@ -834,8 +872,8 @@ pub fn runStmt(
     rt: ?*zio.Runtime,
     stmt_arg: *u64,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
-) abi.HostSqlite_run_stmt {
-    const Record = abi.HostSqlite_run_stmt;
+) QueryOutcome {
+    const Record = QueryOutcome;
     const allocator = workerAllocator();
 
     const stmt_resource = stmt_heap.get(stmt_arg.*) orelse
@@ -873,8 +911,8 @@ pub fn runOnce(
     db_arg: *u64,
     sql_arg: abi.RocStr,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
-) abi.HostSqlite_run_once {
-    const Record = abi.HostSqlite_run_once;
+) QueryOutcome {
+    const Record = QueryOutcome;
     const allocator = workerAllocator();
 
     const resource = db_heap.get(db_arg.*) orelse
@@ -911,8 +949,8 @@ pub fn execScript(
     rt: ?*zio.Runtime,
     db_arg: *u64,
     sql_arg: abi.RocStr,
-) abi.HostSqlite_exec_script {
-    const Record = abi.HostSqlite_exec_script;
+) StatusOutcome {
+    const Record = StatusOutcome;
     const allocator = workerAllocator();
 
     const resource = db_heap.get(db_arg.*) orelse return .{

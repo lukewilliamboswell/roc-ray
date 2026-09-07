@@ -1,7 +1,7 @@
 ## Reads text, bytes, and file details while continuing to animate the window.
 ## Press Escape to quit. This example introduces tasks for work that may take
 ## time, messages that return task results to `update!`, and typed file errors.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc4/BGTPtdHMMxruKNB9ieDnz4R3ARe4PfP86jZ6cL4Vw3Ha.tar.zst", roc: "nightly-2026-09-06-d85e877" }
 
 import rr.App
 import rr.Files

@@ -5,8 +5,8 @@
 ## values they exchange. It is deliberately not an application API: public
 ## modules own application-facing validation, naming, composition, and phase
 ## documentation. A hosted declaration may carry a shared pure type or the
-## same concrete outcome tags its public adapter exposes. `Host` is exposed as
-## `rr.Host` for direct structural interface access.
+## same concrete outcome tags its public adapter exposes. `Host` is omitted from
+## the platform exposes list; applications use the public adapters.
 ##
 ## Declarations are grouped into interfaces which contain, where applicable:
 ##
@@ -47,31 +47,23 @@
 ## > `Udp`: bound sockets and bounded datagram send/receive batches.
 ## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
-## Resource values from the `roc-ray-types` package carry an opaque
+## Platform resource values carry an opaque
 ## `Handle(resource)` that erases to a `Box(U64)` token resolved and
 ## lifetime-checked by the host, never exposing native addresses.
 ## Native pointers, backend objects, public unions, and application policy do
 ## not belong here.
-import rrt.Camera
-import rrt.Color
-import rrt.Font
-import rrt.Math
-import rrt.Handle
-import rrt.Shader
-import rrt.Texture
-import rrt.Store
-import rrt.TextPrepared
-import rrt.AudioSound
-import rrt.AudioMusic
-import rrt.UdpSocket
-import rrt.SqliteDb
-import rrt.SqliteStmt
+import Resource
+import Camera
+import Color
+import Font
+import Math
+import Texture
 
 Host := [].{
 
 	## Texture resource interface
 	## Store-relative texture path.
-	TextureLoadStore : { store : Store, path : Str }
+	TextureLoadStore : { store : Resource.Store, path : Str }
 
 	## Failures while reading and decoding a texture from an asset store.
 	TextureLoadStoreError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed]
@@ -176,13 +168,13 @@ Host := [].{
 	TextPrepareError : [ResourceLimit, InvalidResource]
 
 	## Prepared text and its measured size.
-	TextPreparedResult : { prepared : TextPrepared, width : F32, height : F32 }
+	TextPreparedResult : { prepared : Resource.Prepared, width : F32, height : F32 }
 
 	## Font bytes, format, and pixel size.
 	TextLoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
 
 	## Store-relative font path and pixel size.
-	TextLoadStoreFont : { store : Store, path : Str, size : I32 }
+	TextLoadStoreFont : { store : Resource.Store, path : Str, size : I32 }
 
 	## Failures while constructing a font from encoded bytes.
 	TextLoadFontError : [FontLoadFailed, ResourceLimit]
@@ -211,16 +203,16 @@ Host := [].{
 	text_prepare! : TextPrepare => Try(TextPreparedResult, TextPrepareError)
 
 	## Located shader uniform.
-	ShaderUniform : { shader : Shader, location : I32 }
+	ShaderUniform : { shader : Resource.Shader, location : I32 }
 
 	## Vertex and fragment shader sources.
 	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
 
 	## Store-relative vertex and fragment shader paths.
-	ShaderLoadStore : { store : Store, vertex_path : Str, fragment_path : Str }
+	ShaderLoadStore : { store : Resource.Store, vertex_path : Str, fragment_path : Str }
 
 	## Shader-uniform lookup parameters.
-	ShaderLocation : { shader : Shader, name : Str }
+	ShaderLocation : { shader : Resource.Shader, name : Str }
 
 	## Scalar floating-point uniform value.
 	ShaderFloat : { uniform : ShaderUniform, value : F32 }
@@ -248,11 +240,11 @@ Host := [].{
 
 	## Load a shader from source strings.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_load_source! : ShaderLoadSource => Try(Shader, ShaderLoadSourceError)
+	shader_load_source! : ShaderLoadSource => Try(Resource.Shader, ShaderLoadSourceError)
 
 	## Load a shader from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	shader_load_store! : ShaderLoadStore => Try(Shader, ShaderLoadStoreError)
+	shader_load_store! : ShaderLoadStore => Try(Resource.Shader, ShaderLoadStoreError)
 
 	## Failures while looking up a shader uniform.
 	ShaderLocationError : [UniformNotFound]
@@ -304,7 +296,7 @@ Host := [].{
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	store_open! : StoreOpen => Try(Store, StoreOpenError)
+	store_open! : StoreOpen => Try(Resource.Store, StoreOpenError)
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
@@ -400,99 +392,99 @@ Host := [].{
 
 	## Generate a tone.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_tone! : { freq : F32, ms : I32 } => Try(AudioSound, AudioGenerateSoundError)
+	audio_gen_tone! : { freq : F32, ms : I32 } => Try(Resource.Sound, AudioGenerateSoundError)
 
 	## Generate a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_gen_sound! : AudioGenSound => Try(AudioSound, AudioGenerateSoundError)
+	audio_gen_sound! : AudioGenSound => Try(Resource.Sound, AudioGenerateSoundError)
 
 	## Load a sound from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Str => Try(AudioSound, AudioLoadSoundError)
+	audio_load_sound! : Str => Try(Resource.Sound, AudioLoadSoundError)
 
 	## Load a music stream from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Str => Try(AudioMusic, AudioLoadMusicError)
+	audio_load_music! : Str => Try(Resource.Music, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_play_sound! : AudioSound => {}
+	audio_play_sound! : Resource.Sound => {}
 
 	## Stop a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_stop_sound! : AudioSound => {}
+	audio_stop_sound! : Resource.Sound => {}
 
 	## Pause a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_pause_sound! : AudioSound => {}
+	audio_pause_sound! : Resource.Sound => {}
 
 	## Resume a paused sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_resume_sound! : AudioSound => {}
+	audio_resume_sound! : Resource.Sound => {}
 
 	## Report whether a sound is playing.
 	## Legal in any callback, `render!` included.
-	audio_is_sound_playing! : AudioSound => Bool
+	audio_is_sound_playing! : Resource.Sound => Bool
 
 	## Set sound volume; `1` is full volume.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_sound_volume! : AudioSound, F32 => {}
+	audio_set_sound_volume! : Resource.Sound, F32 => {}
 
 	## Set sound pitch; `1` is the original pitch.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_sound_pitch! : AudioSound, F32 => {}
+	audio_set_sound_pitch! : Resource.Sound, F32 => {}
 
 	## Set sound pan; `0.5` is centered.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_sound_pan! : AudioSound, F32 => {}
+	audio_set_sound_pan! : Resource.Sound, F32 => {}
 
 	## Start a music stream.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_play_music! : AudioMusic => {}
+	audio_play_music! : Resource.Music => {}
 
 	## Stop a music stream.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_stop_music! : AudioMusic => {}
+	audio_stop_music! : Resource.Music => {}
 
 	## Pause a music stream.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_pause_music! : AudioMusic => {}
+	audio_pause_music! : Resource.Music => {}
 
 	## Resume a paused music stream.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_resume_music! : AudioMusic => {}
+	audio_resume_music! : Resource.Music => {}
 
 	## Set music volume; `1` is full volume.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_music_volume! : AudioMusic, F32 => {}
+	audio_set_music_volume! : Resource.Music, F32 => {}
 
 	## Set music pitch; `1` is the original pitch.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_music_pitch! : AudioMusic, F32 => {}
+	audio_set_music_pitch! : Resource.Music, F32 => {}
 
 	## Set music pan; `0.5` is centered.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_music_pan! : AudioMusic, F32 => {}
+	audio_set_music_pan! : Resource.Music, F32 => {}
 
 	## Enable or disable music looping.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_set_music_looping! : AudioMusic, Bool => {}
+	audio_set_music_looping! : Resource.Music, Bool => {}
 
 	## Report whether a music stream is playing.
 	## Legal in any callback, `render!` included.
-	audio_is_music_playing! : AudioMusic => Bool
+	audio_is_music_playing! : Resource.Music => Bool
 
 	## Seek to a position in seconds.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	audio_seek_music! : AudioMusic, F32 => {}
+	audio_seek_music! : Resource.Music, F32 => {}
 
 	## Get music length in seconds.
 	## Legal in any callback, `render!` included.
-	audio_music_length! : AudioMusic => F32
+	audio_music_length! : Resource.Music => F32
 
 	## Get elapsed music time in seconds.
 	## Legal in any callback, `render!` included.
-	audio_music_time_played! : AudioMusic => F32
+	audio_music_time_played! : Resource.Music => F32
 
 	## Set master volume; `1` is full volume.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -671,7 +663,7 @@ Host := [].{
 
 	## A bound socket and the address the kernel assigned it.
 	UdpBound : {
-		handle : UdpSocket,
+		handle : Resource.Socket,
 		ip : U32,
 		port : U16,
 	}
@@ -681,7 +673,7 @@ Host := [].{
 
 	## One outgoing datagram. `ip` is a dotted-quad IPv4 literal.
 	UdpSendArgs : {
-		socket : UdpSocket,
+		socket : Resource.Socket,
 		ip : Str,
 		port : U16,
 		bytes : List(U8),
@@ -689,7 +681,7 @@ Host := [].{
 
 	## Receive request; zero timeout means none, and the host caps the batch.
 	UdpReceiveArgs : {
-		socket : UdpSocket,
+		socket : Resource.Socket,
 		timeout_ms : U64,
 		max_datagrams : U32,
 	}
@@ -992,27 +984,27 @@ Host := [].{
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_open! : Str, U8, U64, U64 => Try(SqliteDb, SqliteOpenError)
+	sqlite_open! : Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
 
 	## Close early; final handle release remains the fallback.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_close! : SqliteDb => Try({}, SqliteStatusError)
+	sqlite_close! : Resource.Db => Try({}, SqliteStatusError)
 
 	## Compile one statement for reuse.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_prepare! : SqliteDb, Str => Try(SqliteStmt, SqlitePrepareError)
+	sqlite_prepare! : Resource.Db, Str => Try(Resource.Stmt, SqlitePrepareError)
 
 	## Bind and run a prepared statement to completion, then reset it.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_run_stmt! : SqliteStmt, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
+	sqlite_run_stmt! : Resource.Stmt, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
 
 	## Prepare, bind, run, and finalize without retaining a statement.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_run_once! : SqliteDb, Str, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
+	sqlite_run_once! : Resource.Db, Str, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
 
 	## Run a script without bindings or returned rows.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_exec_script! : SqliteDb, Str => Try({}, SqliteStatusError)
+	sqlite_exec_script! : Resource.Db, Str => Try({}, SqliteStatusError)
 
 	## Draw interface
 	## Zero-sized frame authority minted by the adapter.
@@ -1070,7 +1062,7 @@ Host := [].{
 	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.FontHandle }
 
 	## Prepared-text drawing parameters.
-	DrawPreparedTextDraw : { prepared : TextPrepared, pos : Math.Vec2, color : Color.Rgba }
+	DrawPreparedTextDraw : { prepared : Resource.Prepared, pos : Math.Vec2, color : Color.Rgba }
 
 	## Current frame dimensions.
 	DrawFrameSize : { width : F32, height : F32 }
@@ -1129,7 +1121,7 @@ Host := [].{
 
 	## Begin custom-shader drawing.
 	## Legal in `render!` only.
-	draw_begin_shader! : Shader => Try({}, DrawScopeError)
+	draw_begin_shader! : Resource.Shader => Try({}, DrawScopeError)
 
 	## Restore the default shader.
 	## Legal in `render!` only.

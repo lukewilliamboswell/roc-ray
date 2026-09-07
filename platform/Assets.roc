@@ -20,8 +20,8 @@
 ## A store anchors relative asset paths to an explicit directory. Paths that
 ## escape the store are refused rather than rewritten.
 ##
-## Textures are the shared texture type from the companion `roc-ray-types`
-## package, re-exported here as `Assets.Texture`. Releasing the final reference
+## Textures are platform-owned values, also named `Assets.Texture` and
+## `Draw.Texture`. Releasing the final reference
 ## to one unloads the native texture automatically, so there is no `unload` to
 ## remember.
 ##
@@ -36,10 +36,10 @@
 ##
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
 ## Release textures the app no longer needs before loading more.
+import Resource
 import Color
 import Host
-import rrt.Texture as RrtTexture
-import rrt.Store as RrtStore
+import Texture as PlatformTexture
 
 Assets := [].{
 
@@ -47,16 +47,14 @@ Assets := [].{
 	## the pixel width and height, kept on the value so layout and
 	## source-rectangle math stays pure.
 	##
-	## This is the shared texture type from the companion `roc-ray-types`
-	## package, re-exported so an app can name it without depending on that
-	## package as well. `Draw.Texture` is the same type under a second name, and
-	## a package written against the package's own `Texture` unifies with both.
-	Texture : RrtTexture.Texture
+	## This is the platform's `Texture` value. `Draw.Texture` names the same
+	## type, so loading and drawing need no conversion.
+	Texture : PlatformTexture.Texture
 
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
-	Store :: RrtStore.Store.{
+	Store :: Resource.Store.{
 
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
@@ -118,10 +116,10 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(RrtStore.stub)
+		stub = Store.(Resource.Handle.stub)
 
 		## Internal bridge for platform operations that also use an asset store.
-		for_host : Store -> RrtStore.Store
+		for_host : Store -> Resource.Store
 		for_host = |Store.(store)| store
 	}
 

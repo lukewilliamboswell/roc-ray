@@ -18,7 +18,7 @@
 ##
 ## Every effect that takes a `Frame` is legal only in `render!`. Resource
 ## constructors `default_font!`, `font_from_bytes!`,
-## `load_render_texture!`, `Shader.from_source!` and the `Shader.uniform_*!`
+## `RenderTexture.load!`, `Shader.from_source!` and the `Shader.uniform_*!`
 ## resolvers allocate host resources from what the app already has, so they are
 ## legal in `init!`, `update!`, and tasks. The two
 ## that read files out of an asset store, `load_store_font!` and
@@ -32,12 +32,13 @@
 ##
 ## `Draw.text!` draws at an already-resolved top-left origin without a layout
 ## pass. Use `Text` for optional anchor alignment or prepared text.
+import Resource
+
 import Assets
 import Camera
 import Color
 import Host
-import rrt.Font
-import rrt.Shader as RrtShader
+import Font
 import Math
 
 TextureDrawConfig : {
@@ -247,7 +248,7 @@ Draw := [].{
 	##
 	## Named here as well so drawing code can keep a texture in its model
 	## without importing `Assets`; `Draw.Texture`, `Assets.Texture` and the
-	## companion package's `Texture` are one type, not three.
+	## platform's `Texture` are one type, not three.
 	Texture : Assets.Texture
 
 	## Two-dimensional vector used by drawing records.
@@ -348,12 +349,6 @@ Draw := [].{
 		points : List(Vector2),
 		style : ShapeStyle,
 	}
-
-	## Deprecated: use `ConvexPolygon`.
-	##
-	## The same type under its older name. `ConvexPolygon` says the constraint
-	## the host relies on, so it is visible at the call site.
-	Polygon : ConvexPolygon
 
 	## Position, size, and color for the FPS counter.
 	Fps : {
@@ -536,17 +531,6 @@ Draw := [].{
 		tint : Color.Rgba,
 	}
 
-	## Sampled texture view projected exactly onto a validated planar quad.
-	ProjectiveTextureView : {
-		texture : Texture,
-		source : Math.Rect,
-		quad : ProjectiveQuad,
-		tint : Color.Rgba,
-	}
-
-	## Camera accepted by scoped 2D drawing.
-	CameraMode : Camera2D
-
 	## Host-owned framebuffer. Its texture-shaped box has a distinct host kind;
 	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
@@ -579,7 +563,7 @@ Draw := [].{
 		##
 		## The handle never resolves to a host resource, so entering a scope with
 		## it is refused the way a released target is. Its color attachment is
-		## the package's `Texture.stub` with zero dimensions; copy it with the
+		## `Texture.stub` with zero dimensions; copy it with the
 		## dimensions
 		## the test needs. Do not use it to test drawing, offscreen scopes, or
 		## resource lifetime.
@@ -599,7 +583,7 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: RrtShader.Shader.{
+	Shader :: Resource.Shader.{
 
 		## Compile shader stages from source strings.
 		##
@@ -688,7 +672,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(RrtShader.stub)
+		stub = Shader.(Resource.Handle.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -994,12 +978,6 @@ Draw := [].{
 		}
 	}
 
-	## Deprecated: use `convex_polygon!`.
-	##
-	## Legal in `render!` only.
-	polygon! : Frame, Polygon => {}
-	polygon! = |frame, cfg| frame.convex_polygon!(cfg)
-
 	## Draw a convex filled polygon and/or an ordered polygon outline. The host
 	## triangulates the fill without allocating; fewer than three points do not
 	## fill.
@@ -1056,14 +1034,6 @@ Draw := [].{
 	texture_at : Texture, Math.Vec2 -> TextureDraw
 	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
-	## Create a draw configuration covering a read-only sampled view.
-	texture_view_draw : Texture -> TextureDraw
-	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
-
-	## Create a sampled-view draw configuration at `pos`.
-	texture_view_at : Texture, Math.Vec2 -> TextureDraw
-	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
-
 	## Draw a texture with explicit source, destination, origin, rotation, and
 	## tint.
 	##
@@ -1079,12 +1049,6 @@ Draw := [].{
 			tint: cfg.tint,
 		})
 	}
-
-	## Deprecated: use `texture!`.
-	##
-	## Legal in `render!` only.
-	draw_texture! : Frame, TextureDraw => {}
-	draw_texture! = |frame, cfg| frame.texture!(cfg)
 
 	## Draw many instances of one texture, in list order, with a single hosted
 	## call.
@@ -1123,52 +1087,6 @@ Draw := [].{
 		q_top_right: cfg.quad.q_top_right,
 		tint: cfg.tint,
 	})
-
-	## Project a sampled texture view onto a validated planar quad.
-	##
-	## Legal in `render!` only.
-	projective_texture_view! : Frame, ProjectiveTextureView => {}
-	projective_texture_view! = |_frame, cfg| Host.draw_draw_texture_quad!({
-		texture: cfg.texture,
-		source: cfg.source,
-		top_left: cfg.quad.top_left,
-		bottom_left: cfg.quad.bottom_left,
-		bottom_right: cfg.quad.bottom_right,
-		top_right: cfg.quad.top_right,
-		q_top_left: cfg.quad.q_top_left,
-		q_bottom_left: cfg.quad.q_bottom_left,
-		q_bottom_right: cfg.quad.q_bottom_right,
-		q_top_right: cfg.quad.q_top_right,
-		tint: cfg.tint,
-	})
-
-	## Allocate an offscreen framebuffer.
-	##
-	## Creation allocates GPU resources and one fixed host-heap slot, so do it
-	## in `init!` rather than per frame. Legal in `init!`, `update!`, and
-	## tasks; refused in `render!`.
-	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
-	load_render_texture! = |size| RenderTexture.load!(size)
-
-	## View the color attachment as a sampled texture without allocating or copying.
-	## The returned reference keeps the owning framebuffer alive.
-	render_texture : RenderTexture -> Texture
-	render_texture = |target| target.texture()
-
-	## The source rectangle that samples a render target's colour attachment.
-	##
-	## Its height is negative. Render textures use OpenGL framebuffer
-	## coordinates, so the attachment is vertically inverted when sampled on
-	## screen, and a negative-height source is how a draw flips it back.
-	render_texture_source : RenderTexture -> Math.Rect
-	render_texture_source = |target| target.source()
-
-	## Compile shader stages from source strings. Empty strings select the default
-	## stage, which is useful for fragment-only 2D post-processing.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader_source! = |cfg| Shader.from_source!(cfg)
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
 	## Callback errors are returned only after the native target has been
@@ -1233,7 +1151,7 @@ Draw := [].{
 	## Draw the callback in world space using this camera.
 	##
 	## Legal in `render!` only.
-	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_camera! : Frame, Camera2D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_camera! = |frame, camera, callback| {
 		# closed error union to open error union. The scope is closed on every
 		# path the callback can take, error included.
@@ -1247,12 +1165,6 @@ Draw := [].{
 			Err(ScopeUnavailable) => crash "camera scope host invariant failed"
 		}
 	}
-
-	## Deprecated: use `with_camera!`.
-	##
-	## Legal in `render!` only.
-	with_mode_2d! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
-	with_mode_2d! = |frame, camera, callback| frame.with_camera!(camera, callback)
 
 	## Restrict callback drawing to screen-space `bounds`, and close the scissor
 	## however the callback ends, error included.
@@ -1350,7 +1262,7 @@ font_format_code = |format|
 		Otf => 1
 	}
 
-uniform_host! : RrtShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : Resource.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	# closed error union to open error union
 	match Host.shader_location!({ shader, name }) {
@@ -1442,7 +1354,7 @@ expect List.len(Font.stub.metrics.glyphs) == 1
 expect Font.measure(Font.stub, { text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
 expect Font.measure(Font.stub, { text: "inert", size: 20, spacing: 0 }) == { width: 100, height: 20 }
 
-## A stub render target's colour attachment is the `roc-ray-types` package's
+## A stub render target's colour attachment is the platform's
 ## `Texture.stub`, so it has no area and its vertically flipped source
 ## rectangle has none either.
 expect Draw.RenderTexture.stub.texture().width == 0

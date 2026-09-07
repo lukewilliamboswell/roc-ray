@@ -27,7 +27,6 @@ LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
-SKIPPED_EXAMPLES = {"cave_climb"}
 
 
 def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
@@ -77,7 +76,7 @@ def roc_version(roc: str) -> str | None:
 def find_roc(root: Path) -> str | None:
     """Resolve the compiler, preferring one that matches the pin.
 
-    A local `roc-src` build at a different revision than `.roc-version` used to
+    A local `roc-src` build at a different revision than `platform/main.roc` used to
     be picked silently, and produced a run of SIGSEGVs that looked like a fault
     in the bundle under test. Prefer a matching compiler, and say so loudly when
     falling back to one that does not match.
@@ -94,9 +93,8 @@ def find_roc(root: Path) -> str | None:
     if not candidates:
         return None
 
-    try:
-        pinned = (root / ".roc-version").read_text(encoding="utf-8").splitlines()[0].strip()
-    except (OSError, IndexError):
+    pinned = local_bundles.read_roc_pin(root)
+    if not pinned:
         return candidates[0]
 
     for candidate in candidates:
@@ -106,7 +104,7 @@ def find_roc(root: Path) -> str | None:
 
     chosen = candidates[0]
     print(
-        f"WARNING: no compiler matches .roc-version ({pinned}); using {chosen} "
+        f"WARNING: no compiler matches platform/main.roc ({pinned}); using {chosen} "
         f"({roc_version(chosen) or 'unknown version'}). Failures below may be the "
         "compiler, not the bundle.",
         file=sys.stderr,
@@ -142,15 +140,10 @@ def main() -> int:
         print(f"Missing bundle artifact: {bundle_path}", file=sys.stderr)
         return 1
 
-    examples = sorted(
-        example
-        for example in examples_dir.glob("*/main.roc")
-        if example.parent.name not in SKIPPED_EXAMPLES
-    )
+    examples = sorted(examples_dir.glob("*/main.roc"))
     if not examples:
         print("No .roc examples found", file=sys.stderr)
         return 1
-    print(f"Skipping release bundle build: {', '.join(sorted(SKIPPED_EXAMPLES))}")
 
     roc = find_roc(root)
     if roc is None:
@@ -176,6 +169,7 @@ def main() -> int:
                 print(f"Skipping rewrite for {example}: no platform reference")
                 continue
 
+            rewritten = local_bundles.rewrite_compiler_pin(rewritten, local_bundles.read_roc_pin(root))
             example.write_text(rewritten)
 
         for example in examples:

@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-09-06-d85e877",
 }
 
@@ -8,9 +7,8 @@ app [Model, program] {
 # another.
 import rr.App
 import rr.Draw
-import rrt.Font
-import rrt.Handle
-import rrt.Texture
+import rr.Font
+import rr.Texture
 
 Model : {}
 
@@ -25,7 +23,7 @@ init! = App.init(
 	},
 )
 
-use_font_handle : Handle([FontResource]) -> {}
+use_font_handle : Font.FontHandle -> {}
 use_font_handle = |_handle| {}
 
 Msg : []

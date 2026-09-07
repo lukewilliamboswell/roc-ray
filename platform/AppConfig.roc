@@ -11,7 +11,6 @@ import Capture
 import Host
 import Keys
 import Mouse
-import rrt.Capture as RrtCapture
 
 capture_format_code = |value|
 	match value {
@@ -207,30 +206,30 @@ expect AppConfig.to_host({}, App.default).output_dir == "."
 expect AppConfig.to_host({}, App.default.with_output_dir("captures")).output_dir == "captures"
 expect !(AppConfig.to_host({}, App.default).record_enabled)
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_enabled and host.record_path == "recording.gif" and host.record_format == 1 and host.record_fps == 25
 }
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_max_frames == 300 and host.record_scale_numerator == 1 and host.record_scale_denominator == 2
 }
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_every_nth == 1 and host.record_timing == 1 and host.record_cursor == 0
 }
-expect AppConfig.to_host({}, App.default.with_recording(RrtCapture.default)).record_quality == 1
+expect AppConfig.to_host({}, App.default.with_recording(Capture.default)).record_quality == 1
 expect {
 	host = AppConfig.to_host({}, App.default.with_default_font({ path: "assets/body.ttf", size: 32 }))
 	host.default_font_path == "assets/body.ttf" and host.default_font_size == 32
 }
 expect {
-	fast = RrtCapture.default.with_quality(Fast)
-	best = RrtCapture.default.with_quality(Best)
+	fast = Capture.default.with_quality(Fast)
+	best = Capture.default.with_quality(Best)
 	AppConfig.to_host({}, App.default.with_recording(fast)).record_quality == 0 and AppConfig.to_host({}, App.default.with_recording(best)).record_quality == 2
 }
 expect {
 	custom =
-		RrtCapture.default
+		Capture.default
 			.with_path("demo.webm")
 			.with_format(WebM)
 			.with_scale(Quarter)

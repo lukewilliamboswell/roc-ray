@@ -16,7 +16,7 @@ discussed first.
 Install:
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- The exact Roc nightly named in [`.roc-version`](.roc-version), available as
+- The exact Roc nightly named in [`platform/main.roc`](platform/main.roc), available as
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 - SQLite's `sqlite3` command-line tool for inspecting Observatory captures
@@ -73,7 +73,6 @@ scripts/run-example.py examples/cave_climb -- --host-debug-allocator
 | `examples/` | Complete apps and focused, reusable patterns |
 | `scripts/` | Local development, profiling, ABI, bundle, and release helpers |
 | `test/compile_fail/` | Checks that internal platform details stay private |
-| `types/` | The `roc-ray-types` package, released independently |
 | `www/` | Versioned generated API documentation |
 
 ## Everyday checks
@@ -100,8 +99,8 @@ The JSON and Markdown reports are written under `zig-out/`. Timing is not a CI
 pass/fail threshold; deterministic recorder invariants remain in the ordinary
 test suite. See [the Observatory methodology](docs/observatory.md#regression-and-microbenchmark-methodology).
 
-This covers lints, Zig tests, platform privacy checks, and Roc checks/tests over
-the examples. The lower-level example driver is also useful while iterating:
+This covers lints, Zig tests, platform privacy checks, pure platform-value
+tests, and Roc checks/tests over the examples. The lower-level example driver is also useful while iterating:
 
 ```bash
 scripts/all_tests.py
@@ -123,23 +122,17 @@ rest.
 
 ### How the apps reach the platform
 
-Every app stage resolves its packages over localhost. `scripts/bundle.sh`
-bundles the roc-ray-types package and the platform into a scratch directory,
-`scripts/local_bundles.py` serves that directory over HTTP, and each app is
-*copied* to a scratch directory with its header pointed at the served bundle.
-Three things follow:
+Development checks use the compiler declared in the platform headers.
+They rebind both the platform URL and compiler pin in temporary app copies;
+public example headers and released starters retain their own compiler requirements.
+Release candidates and starters are pinned to the release compiler and exact bundle.
 
-- Examples are checked and built in the shape they ship in. `roc bundle` drops a
-  relative dependency without complaining, and the app it breaks fails
-  `roc check` with INVALID PACKAGE DEPENDENCY.
-- Every reference to roc-ray-types resolves one freshly built artifact: the
-  platform's, the four examples that name the package themselves
-  (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
-  halves of `test/package_interop`. Building an app against a package build
-  nobody produced is not expressible. `test/package_interop` is built every run
-  to keep that honest.
-- No tracked file is ever rewritten, so `git status` stays clean however a run
-  ends -- including a `kill -9` part way through a build.
+Every development app stage resolves the platform over localhost. `scripts/bundle.sh`
+bundles the platform API and native inputs into a scratch directory,
+`scripts/local_bundles.py` serves that directory over HTTP, and each app is
+copied to a scratch directory with its header pointed at the served bundle.
+Examples are checked and built in the same dependency shape they ship in.
+No tracked file is rewritten, including when a run is interrupted.
 
 Built executables land in the scratch directory rather than beside each
 `main.roc`; pass `--copy-executables` if you want them in place, and use
@@ -148,7 +141,7 @@ Built executables land in the scratch directory rather than beside each
 Roc caches packages by content hash, so re-bundling changed sources produces a
 new hash and a stale reference is not expressible. The port is derived from the
 checkout path so the hashes stay put between runs and the cache is reused; edits
-to `platform/` or `types/` each leave another extracted copy (~90 MB for the
+to `platform/` each leave another extracted copy (~90 MB for the
 platform) under `~/.cache/roc/packages`, so delete that directory when it grows.
 
 Run `python3 scripts/local_bundles.py --serve` to hold the bundles up on
@@ -201,8 +194,8 @@ uniform.set!(value)
 
 Use attached constructors such as `Draw.RenderTexture.load!` and
 `Draw.Shader.from_store!` when creation naturally belongs to the result type.
-Shared textures deliberately use standalone `Assets` functions because their
-authoritative type lives in `roc-ray/types`, which has no host authority.
+Textures use standalone `Assets` functions for loading and mutation; their
+value type and pure helpers live in the platform's `Texture` module.
 
 Keep transport details inside the platform. Flattened ABI records, scalar
 handles, and hosted helpers should not leak into normal application code.
@@ -237,37 +230,23 @@ Fonts, textures, prepared text, sounds, music, render textures, and shaders are
 typed host resources with lifetimes driven by Roc references. A final release
 unloads the native value and makes its bounded slot reusable.
 
-Keep capabilities narrow. A package depending only on `roc-ray/types` can
-retain a `Texture` and read its dimensions, while mutation requires the
-platform's `Assets` module. Keep typed shader-uniform handles so invalid setter
-combinations remain a compile-time error.
-
-An *application* never adds `roc-ray-types` to its header. Name a texture held
-in the model `Assets.Texture` (or `Draw.Texture`, the same type under a second
-name); the platform re-exports it as a transparent alias, so it still unifies
-with a package written against `rrt.Texture`. The same applies to every other
-package type the platform's API mentions. If you find yourself adding an `rrt:`
-entry to an example just to name a type, the platform is missing a re-export.
+Keep capabilities narrow. `Texture` exposes dimensions and pure construction
+of test stubs; mutation requires `Assets`. `Assets.Texture` and `Draw.Texture`
+name the same platform-owned value. Keep typed shader-uniform handles so
+invalid setter combinations remain a compile-time error. Applications depend
+only on the platform to name every RocRay API value.
 
 Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
 when the work can be paid once.
 
-**The package describes, the app performs.** A package that needs fonts,
-textures, a window size, or work that waits does not get startup authority to
-go and take them: `App.Startup` is a capability token the platform adapter
-mints, and a type nobody outside the platform can construct would be a type
-nobody outside the platform can use. Instead the package exposes a plan and a
-pure constructor -- `Toolkit.required_assets : Theme -> List(AssetRequest)` and
-`Toolkit.init : List(Draw.Texture), Text.Font -> Toolkit.State` -- and the
-app's `init!` walks the plan, calls `Assets.load_texture!` and
-`Draw.load_store_font!`, and hands the results back. For work that waits the
-package exposes a closure rather than spawning: `Toolkit.fetch_theme! : () =>
-Toolkit.Msg`, which the app starts with `Task.spawn_with!(input,
-Toolkit.fetch_theme!, |m| ToolkitMsg(m))`. A package wanting to configure the
-window answers the same way, with a suggestion the app applies. This is why
-`Task.spawn_with!` exists, and it is the answer whenever a package author asks
-for `App.Init` or `App.Config` in `roc-ray-types`.
+**The package describes, the app performs.** Reusable packages keep their own
+domain types and explicit data interfaces. A package can describe required
+assets or return a plan; the application's `init!` loads those assets and
+adapts their descriptions to the package's inputs. Application modules can
+use the platform API directly. Work that waits runs in a task, with
+`Task.spawn_with!` available to map a helper's result into the application's
+message type. No package needs startup authority to decide what it needs.
 
 ### Validate before the hot path
 
@@ -303,13 +282,11 @@ the user-facing README when they change how an app is started or structured.
 
 ## API documentation
 
-The published reference is two doc sets: the platform at `www/<version>/` and
-the `roc-ray-types` package at `www/<version>/types/`. Both are required.
-`roc docs` attaches a nominal's receivers to the module that *declares* it, so
-the platform's re-export modules carry the signatures while `Camera2D.with_zoom`,
-`Mouse.State.position` and the rest live only on the package's pages. Each
-re-export module links across. Put a receiver's user-facing documentation on
-the module that declares the nominal, or it will not render anywhere.
+The complete API reference lives at `www/<version>/`. Public values, pure
+receivers, and effects are documented in one site. `roc docs` attaches a
+nominal's receivers to its defining module: for example, `Text.Font` aliases
+`Font`, so its measurement receivers are documented on the `Font` page.
+Document each receiver where it is declared.
 
 The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
 opened with ```` ```roc ````. It does not take markdown headings, bullet lists,
@@ -317,33 +294,24 @@ opened with ```` ```roc ````. It does not take markdown headings, bullet lists,
 literal text. Write examples in fences and structure a long module comment with
 short paragraphs.
 
-Build and validate both locally:
+Build and validate the reference locally:
 
 ```bash
 scripts/build_docs.py --check              # temp dir, touches nothing
-scripts/build_docs.py --version 0.10.0     # writes www/0.10.0 and www/0.10.0/types
+scripts/build_docs.py --version 0.10.0     # writes www/0.10.0
 ```
 
-`--check` fails on a module missing a page, a broken relative link, or a
-re-export module that stops pointing at the package docs. The release workflow
+`--check` fails on a module missing a page, a broken relative link, or missing
+representative pure receivers. The release workflow
 runs `--check` before building and the versioned form when publishing.
 
 ## Releases
 
-The platform and the `roc-ray-types` package release independently, so either
-can be bumped on its own:
-
-- **Types package** — run the "Release roc-ray-types" workflow, then update
-  `.types-version` with the URL it prints.
-- **Platform** — run the "Release" workflow. `scripts/bundle.sh` rewrites the
-  staged platform header to the pinned package URL and refuses to build if
-  `types/` no longer bundles to the pinned filename. Bundles are content
-  addressed, so a platform release can never reference a package build that was
-  never published.
-
-When `types/` changes, release the package first. The local and CI bundle tests
-bypass the pin with `--types-url-base`, bundling and serving the package
-themselves.
+Run the "Release" workflow to publish the platform. Types, helpers, effects,
+and native host inputs ship together in each content-addressed platform
+bundle. There is no separate vocabulary release or package pin to update.
+The default and Wayland bundles expose the same API with different native
+link configurations.
 
 ## ABI and host changes
 
@@ -358,10 +326,10 @@ A value that crosses the host boundary is flat: scalars, `List` of scalars, or
 `List` of a record of scalars. Unions and boxed lists do not cross. The input
 event record is the worked example -- the host fills
 `List({ kind : U8, code : U32, x : F32, y : F32 })` and
-`Devices.events_from_raw` in the types package decodes it into the typed
+`AppTransport.events_from_raw` in the platform decodes it into the typed
 `Devices.Event`; the `kind` numbering is stated on both sides
 (`InputEventKind` in `src/backend_raylib.zig`, `event_from_raw` in
-`types/Devices.roc`) so neither can drift alone. A new field on
+`platform/AppTransport.roc`) so neither can drift alone. A new field on
 `Devices.Snapshot` touches `InputFromHost` and `input_from_raw` in both
 platform headers, `Devices.none` and `Devices.empty`, and the ABI regeneration
 below.
@@ -489,7 +457,7 @@ scripts/roc_platform_abi.py \
 ```
 
 The helper requires the compiler and Roc source revision to agree with
-`.roc-version`. Its focused tests run under `zig build test` or directly with:
+the compiler pin in `platform/main.roc`. Its focused tests run under `zig build test` or directly with:
 
 ```bash
 python3 scripts/test_roc_platform_abi.py
@@ -586,10 +554,9 @@ x64glibc and x64win. So a local checkout can build a complete bundle, which is
 what `scripts/all_tests.py` relies on. `bundle.sh` names the exact file it is
 missing if some target was never built.
 
-The platform depends on roc-ray-types by relative path, which cannot survive
-bundling, so `bundle.sh` rewrites the staged header to a real URL: the release
-pinned in `.types-version`, or `--types-url-base` when the package is being
-served locally.
+`bundle.sh` includes all platform modules, including the private `Resource`
+module, with their relative paths preserved. Local tests and release
+builds use the same bundling path.
 
 ## Vendored C libraries
 

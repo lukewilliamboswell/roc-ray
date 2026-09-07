@@ -2,16 +2,9 @@
 """
 Run all tests for the roc-ray platform.
 
-Every app stage resolves its packages through localhost. `scripts/bundle.sh`
-bundles the roc-ray-types package and the platform into a scratch directory,
-`scripts/local_bundles.py` serves that directory over HTTP, and each app is
-*copied* to a scratch directory with its header pointed at the served bundle.
-Three things follow: every app is checked and built in the shape it ships in
-rather than against the platform sources, every reference to roc-ray-types --
-the platform's and both halves of test/package_interop, which is all of them
-now that the platform re-exports the types an app needs to name -- resolves one
-freshly built artifact, and no tracked file is ever rewritten, so an
-interrupted run cannot leave the working tree dirty.
+Each app is copied to a scratch directory and points at a locally served
+platform bundle containing the complete API and native inputs. Checks exercise
+the release dependency shape without rewriting tracked files.
 
 This script runs:
 - zig build       - Build the native host libraries
@@ -49,8 +42,8 @@ This script runs:
                     (test/cmd).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
-- package interop - Build test/package_interop with the package pinning the
-                    served types URL, which is the case this all exists for
+- platform values - Run the platform's pure helper tests from source
+- platform API    - Retain public inputs and resources across application modules
 - wayland bundle  - Bundle, inspect and build the Linux-only Wayland package
 
 Usage:
@@ -64,7 +57,7 @@ Usage:
     ./scripts/all_tests.py --skip-windowed       # Skip the windowed sweep (needs a display)
     ./scripts/all_tests.py --windowed-dll-dir=DIR # Copy DIR/*.dll beside each binary first
     ./scripts/all_tests.py --skip-bundle-test    # Skip the Wayland bundle package test
-    ./scripts/all_tests.py --platform-mode=source # Serve types only; use platform sources
+    ./scripts/all_tests.py --platform-mode=source # Use staged platform sources
     ./scripts/all_tests.py --copy-executables    # Also leave binaries beside each main.roc
     ./scripts/all_tests.py --verbose             # Show all output
 
@@ -111,14 +104,6 @@ LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
 # FAILED.
 #   e.g. "example": "blocked on roc-lang/roc#NNNN (record-update lowering)"
 BUNDLE_TEST_SKIP: dict[str, str] = {}
-
-# Examples to skip in native `roc build` / headless runtime checks.
-# Keep these explicit so CI still exercises every example that currently
-# compiles, without hiding unrelated build/runtime failures.
-BUILD_RUNTIME_SKIP: dict[str, str] = {
-    # TODO: Investigate why this example takes several minutes to compile in CI.
-    "cave_climb": "follow-up: investigate unusually slow Roc build",
-}
 
 
 def run_cmd(
@@ -1335,51 +1320,6 @@ def run_model_allocation_check(
     return [] if ok else ["model allocation check"]
 
 
-def run_package_interop_test(
-    root: Path, packages: local_bundles.ServedPackages, verbose: bool
-) -> list[str]:
-    """Build `test/package_interop` with the *package* pinning types by URL.
-
-    This is the arrangement the served bundles exist for: `input_adapter` is a
-    package depending only on roc-ray-types, and the app depends on both it and
-    the platform, so three separate references have to describe one package.
-    Staging points every `rrt:` entry in the tree at the served URL, and this
-    asserts the result still compiles and runs -- which is the property the
-    README says the whole types-package split rests on.
-    """
-    entry = root / "test" / "package_interop" / "app.roc"
-    if not entry.is_file():
-        print("\nSkipping package interop test (test/package_interop is absent)")
-        return []
-
-    print("\nRunning package interop test (package and platform share a types URL)...")
-    staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "package_interop")
-
-    failed: list[str] = []
-    for command in ("check", "build"):
-        print(f"  {command.capitalize()}ing {entry.name}...", end=" ", flush=True)
-        if run_cmd(["roc", command, staged.name, *LIMITS], f"interop {command}", verbose, cwd=staged.parent):
-            print("ok")
-        else:
-            print("FAILED")
-            failed.append(f"package interop roc {command}")
-            return failed
-
-    print(f"  Running {entry.name} headlessly...", end=" ", flush=True)
-    if run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=3"],
-        "interop headless run",
-        verbose,
-        cwd=root,
-    ):
-        print("ok")
-    else:
-        print("FAILED")
-        failed.append("package interop headless run")
-
-    return failed
-
-
 def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
     """Read a .tar.zst Roc bundle into a TarFile for content assertions."""
     zstd = shutil.which("zstd")
@@ -1532,6 +1472,26 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
     return failed
 
 
+def run_platform_value_tests(root: Path, verbose: bool) -> list[str]:
+    """Run pure value tests from source; URL dependencies do not run their tests.
+
+    These entry modules transitively cover app configuration and inputs, geometry,
+    cameras, colors, devices, recording descriptions, font metrics, and time helpers.
+    """
+    failed = []
+    print("\nRunning platform value tests...")
+    for module in ("App", "Devices", "AppTransport", "Capture", "Font", "Physics", "Time"):
+        print(f"  Testing {module}...", end=" ", flush=True)
+        if run_cmd(["roc", "test", str(root / "platform" / f"{module}.roc"),
+                    f"--main={root / 'platform' / 'main.roc'}"],
+                   f"platform values {module}", verbose, cwd=root):
+            print("ok")
+        else:
+            print("FAILED")
+            failed.append(f"platform values {module}")
+    return failed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
     parser.add_argument(
@@ -1548,10 +1508,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--skip-roc-build",
-        "--skip-build",
         dest="skip_roc_build",
         action="store_true",
-        help="Skip roc build (--skip-build is a deprecated alias)",
+        help="Skip roc build",
     )
     parser.add_argument(
         "--skip-roc-test",
@@ -1611,20 +1570,12 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--skip-interop-test",
-        action="store_true",
-        help=(
-            "Skip building test/package_interop, which checks that a package "
-            "pinning roc-ray-types by URL and the platform agree on one identity"
-        ),
-    )
-    parser.add_argument(
         "--platform-mode",
         choices=["auto", "bundle", "source"],
         default="auto",
         help=(
             "How apps reach the platform: 'bundle' serves a platform bundle over "
-            "localhost, 'source' serves only the types package and uses a staged copy "
+            "localhost, 'source' uses a staged copy "
             "of platform/ that points at it, 'auto' (default) bundles when it can"
         ),
     )
@@ -1715,7 +1666,7 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
     else:
         print("\nRunning roc fmt --check...")
         print("  Formatting platform modules...", end=" ", flush=True)
-        platform_modules = sorted((root / "platform").glob("*.roc"))
+        platform_modules = sorted((root / "platform").rglob("*.roc"))
         if run_cmd(
             ["roc", "fmt", "--check", *map(str, platform_modules)],
             "fmt platform",
@@ -1734,6 +1685,9 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
                 print("FAILED")
                 failed.append(f"roc fmt {name}")
 
+    if not args.runtime_only and not args.skip_roc_test:
+        failed.extend(run_platform_value_tests(root, args.verbose))
+
     try:
         with local_bundles.serve_packages(
             root,
@@ -1742,7 +1696,6 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
             stable_port=not args.ephemeral_port,
         ) as packages:
             print(f"\nServing packages from {packages.base_url}")
-            print(f"  types:    {packages.types_url}")
             print(f"  platform: {packages.platform_ref}")
             for note in packages.notes:
                 print(f"  note:     {note}")
@@ -1753,12 +1706,6 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
 
             failed.extend(_run_example_stages(args, root, examples, staged, packages))
 
-            if args.runtime_only:
-                print("\nSkipping package interop test (--runtime-only)")
-            elif args.skip_interop_test:
-                print("\nSkipping package interop test (--skip-interop-test)")
-            else:
-                failed.extend(run_package_interop_test(root, packages, args.verbose))
     except local_bundles.LocalBundleError as err:
         print(f"\nFAILED to serve the local packages: {err}", file=sys.stderr)
         failed.append("serve local packages")
@@ -1839,7 +1786,7 @@ def _run_example_stages(
         print("\nRunning roc build...")
         for example in examples:
             name = example_name(example)
-            skip_reason = BUILD_RUNTIME_SKIP.get(name) or BUNDLE_TEST_SKIP.get(name)
+            skip_reason = BUNDLE_TEST_SKIP.get(name)
             if skip_reason:
                 print(f"  Building {name}... SKIPPED ({skip_reason})")
                 continue

@@ -3,14 +3,13 @@ app [Model, program] {
 	roc: "nightly-2026-09-06-d85e877",
 }
 
-# A shader's resource identity is private to the host. Applications can retain
-# the shared shader value, but cannot manufacture its handle from a raw integer.
+# The shared handle representation must not let one resource kind stand in for
+# another.
 import rr.App
 import rr.Draw
+import rr.Audio
 
-Model : {
-	shader : Draw.Shader,
-}
+Model : {}
 
 program = { init!, update!, render! }
 
@@ -18,10 +17,13 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = Box.box(0)
-		Ok({ shader: Draw.Shader.(handle) })
+		use_sound(Audio.Music.stub)
+		Ok({})
 	},
 )
+
+use_sound : Audio.Sound -> {}
+use_sound = |_sound| {}
 
 Msg : []
 

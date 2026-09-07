@@ -10,20 +10,22 @@
 ## `suggest_*` effects request geometry that the window manager may alter or
 ## decline; a later `Snapshot` is authoritative. `set_*` effects change state
 ## controlled by the host.
-import rrt.Window as RrtWindow
 import Host
 
 Window := [].{
 
-	## Window geometry and visibility sampled once for this cycle.
+	## The window's logical drawing size, whether it has keyboard focus, and
+	## whether it is minimized.
 	##
-	## `size` is the logical drawing size, `focused` says whether the window has
-	## keyboard focus, and `minimized` says whether it is minimized. A minimized
-	## window still runs the frame loop.
-	##
-	## Declared in the `roc-ray-types` package's `Window` and re-exported here;
-	## `App.Input` carries one as `input.window`.
-	Snapshot : RrtWindow.Snapshot
+	## `size` is in the same logical units as mouse positions and every drawing
+	## call, not in framebuffer pixels; multiply by `Window.scale!` for those.
+	## A minimized window still runs the frame loop, so an app that should idle
+	## while minimized has to check this.
+	Snapshot : {
+		size : { width : I32, height : I32 },
+		focused : Bool,
+		minimized : Bool,
+	}
 
 	## Suggest a new logical window size to the window manager.
 	##

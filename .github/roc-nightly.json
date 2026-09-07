@@ -2,5 +2,10 @@
   "workflows": [
     "ci.yml",
     "release.yml"
-  ]
+  ],
+  "compiler_roots": [
+    "platform/main.roc",
+    "platform/main-wayland.roc"
+  ],
+  "auto_merge": false
 }

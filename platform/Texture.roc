@@ -3,14 +3,15 @@
 ## The handle is an opaque, reference-counted native resource identity. Width
 ## and height are descriptive pixel metadata kept directly on the value for
 ## pure layout and source-rectangle calculations.
-import Handle
+
+import Resource
 
 Texture := {
 	handle : TextureHandle,
 	width : F32,
 	height : F32,
 }.{
-	TextureHandle : Handle([TextureResource])
+	TextureHandle : Resource.Texture
 
 	## Resource-free texture value for pure tests.
 	##
@@ -19,7 +20,7 @@ Texture := {
 	## sampling configuration, or resource lifetime.
 	stub : Texture
 	stub = {
-		handle: Handle.stub,
+		handle: Resource.Handle.stub,
 		width: 0,
 		height: 0,
 	}

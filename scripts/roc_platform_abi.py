@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PIN_FILE = ROOT / ".roc-version"
+PIN_FILE = ROOT / "platform" / "main.roc"
 PLATFORM_FILE = ROOT / "platform" / "main.roc"
 ABI_FILE = ROOT / "src" / "roc_platform_abi.zig"
 PIN_PATTERN = re.compile(
@@ -37,20 +37,27 @@ class RocPin:
 
 def read_pin(path: Path = PIN_FILE) -> RocPin:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        source = path.read_text(encoding="utf-8")
     except OSError as error:
         raise GlueError(f"cannot read Roc pin {path}: {error}") from error
 
-    if len(lines) != 1 or not lines[0]:
-        raise GlueError(f"{path} must contain exactly one non-empty nightly tag")
+    # Ignore module docs, which may contain example app headers with their own pin.
+    source = re.sub(r"(?m)^\s*#.*$", "", source)
+    packages = re.search(r"\bpackages\s*\{([^}]*)\}", source)
+    if packages is None:
+        raise GlueError(f"{path} must declare a platform packages block")
+    pins = re.findall(r'\broc\s*:\s*"([^"\n]+)"', packages.group(1))
+    if len(pins) != 1:
+        raise GlueError(f"{path} must declare exactly one roc compiler pin")
+    nightly = pins[0]
 
-    match = PIN_PATTERN.fullmatch(lines[0])
+    match = PIN_PATTERN.fullmatch(nightly)
     if match is None:
         raise GlueError(
-            f"unsupported Roc pin {lines[0]!r}; expected a nightly tag ending in a commit hash"
+            f"unsupported Roc pin {nightly!r}; expected a nightly tag ending in a commit hash"
         )
 
-    return RocPin(nightly=lines[0], commit=match.group("commit"))
+    return RocPin(nightly=nightly, commit=match.group("commit"))
 
 
 def _display_command(args: list[str]) -> str:
@@ -102,7 +109,7 @@ def verify_compiler(program: str, pin: RocPin) -> Path:
     observed = result.stdout.strip()
     if not compiler_matches_pin(observed, pin):
         raise GlueError(
-            "Roc compiler does not match .roc-version\n"
+            "Roc compiler does not match platform/main.roc\n"
             f"  expected: Roc compiler version {pin.nightly} (or a build of {pin.commit})\n"
             f"  observed: {observed or '<empty output>'}\n"
             f"  binary:   {roc}"
@@ -274,7 +281,7 @@ def install_or_check(generated: Path, checked_in: Path, *, check: bool) -> bool:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Regenerate roc-ray's Zig ABI from the compiler and Roc source pinned by .roc-version."
+        description="Regenerate roc-ray's Zig ABI from the compiler and Roc source pinned by platform/main.roc."
     )
     parser.add_argument(
         "--roc-repo",

@@ -1,7 +1,8 @@
 # Example gallery
 
-A zip of the examples pinned to this release is attached to every release;
-unzip and `roc examples/<name>/main.roc`.
+For the published examples, use the [release starter and compiler](../README.md#try-it).
+These checked-in examples also demonstrate development APIs; run them against
+the checkout with `scripts/run-example.py examples/<name>` from the repository root.
 
 Choose the closest example to what you want to build and copy its directory.
 

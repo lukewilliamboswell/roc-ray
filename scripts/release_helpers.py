@@ -13,6 +13,9 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from local_bundles import rewrite_compiler_pin
+from roc_platform_abi import read_pin
+
 
 BUNDLE_SUFFIX = ".tar.zst"
 DEFAULT_TEST_OS = ["ubuntu-latest", "macos-15-intel", "macos-latest", "windows-latest"]
@@ -119,18 +122,6 @@ def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
     return 0
 
 
-def read_types_pin() -> str:
-    """The published roc-ray-types bundle the platform bundles were built against."""
-    pin = Path(__file__).resolve().parent.parent / ".types-version"
-    if not pin.is_file():
-        return ""
-    for line in pin.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#"):
-            return stripped
-    return ""
-
-
 def cmd_make_release_notes(args: argparse.Namespace) -> int:
     release_version = args.release_version or os.environ.get("RELEASE_VERSION", "")
     if not release_version:
@@ -148,6 +139,8 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
 
     lines = [
         f"Release {release_version}.",
+        "",
+        f"Supported compiler: `{read_pin().nightly}`. Install this compiler before running the examples.",
         "",
         "## Bundles",
         "",
@@ -167,21 +160,6 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         f'platform "{wayland_url}"',
         "```",
     ]
-    types_url = read_types_pin()
-    if types_url:
-        lines.extend([
-            "",
-            "### roc-ray-types package",
-            "",
-            "Shared data types and pure helpers, released independently of the platform. The",
-            "bundles above already depend on this version; add it to your app only if a reusable",
-            "package of your own also uses these types, so both resolve the same URL.",
-            "",
-            "```roc",
-            f'"{types_url}"',
-            "```",
-        ])
-
     examples_url = release_asset_url(repo, release_version, f"examples-{release_version}.zip")
     lines.extend([
         "",
@@ -233,6 +211,7 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
         raise RuntimeError(f"no Roc examples found in {examples_dir}")
 
     replacement = f'"{default_url}"'
+    compiler = read_pin(examples_dir.resolve().parent / "platform" / "main.roc").nightly
     for example in examples:
         original = example.read_text(encoding="utf-8")
         rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
@@ -240,6 +219,7 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
             raise RuntimeError(
                 f"expected one recognized platform reference in {example}, found {count}"
             )
+        rewritten = rewrite_compiler_pin(rewritten, compiler)
         example.write_text(rewritten, encoding="utf-8")
 
     print(f"Updated {len(examples)} example(s) to {default_url}")
@@ -258,6 +238,7 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
         raise RuntimeError(f"invalid release tag: {tag!r}")
 
     root = repo_root()
+    compiler = read_pin(root / "platform" / "main.roc").nightly
     examples_dir = Path(args.examples_dir)
     if len(examples_dir.parts) != 1:
         raise RuntimeError(f"examples dir must be a single top-level directory: {examples_dir}")
@@ -296,7 +277,7 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
                     raise RuntimeError(
                         f"expected one recognized platform reference in {entry}, found {count}"
                     )
-                data = rewritten.encode("utf-8")
+                data = rewrite_compiler_pin(rewritten, compiler).encode("utf-8")
                 rewritten_headers += 1
                 packaged_apps.add(parts[1])
             else:

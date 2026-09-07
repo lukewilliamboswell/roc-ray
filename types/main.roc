@@ -29,9 +29,7 @@ package
 		Shader,
 		Drawing,
 	]
-	{
-		unicode: "https://github.com/roc-lang/unicode/releases/download/4.1.0/4n6bqjbVU6WnwtKCDUCP5vtMtA1mPVSMLuEN91dzhPVt.tar.zst",
-	}
+	{}
 
 import resources/Handle
 import resources/Font

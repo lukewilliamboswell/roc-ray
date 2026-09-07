@@ -198,7 +198,7 @@ init! = App.init(
 		font = Draw.default_font!()
 		# Only scores 0..win_score can ever be shown, so the whole scoreboard is
 		# prepared here and a frame just picks the glyph it needs.
-		digits = List.map_try(
+		digits = List.map_try!(
 			List.map_with_index(List.repeat({}, win_score + 1), |_unit, index| U64.to_str(index)),
 			|glyph| Text.from(glyph, font).size(64).prepare!(),
 		)?

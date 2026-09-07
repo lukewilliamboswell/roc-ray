@@ -4,7 +4,6 @@
 ## immutable scalar metric snapshot. Reusable packages can retain and measure
 ## it without importing the platform or calling the host. The platform
 ## re-exports this type as `Text.Font`.
-import unicode.Scalar
 import Handle
 
 Font := {
@@ -134,7 +133,51 @@ Font := {
 
 ## Iterate over the Unicode codepoints in a valid Roc string.
 text_codepoints : Str -> Iter(U32)
-text_codepoints = |text| Scalar.iter(text).map(|located| located.scalar.to_u32())
+# TODO(follow up): Restore unicode.Scalar.iter after a Unicode release compatible
+# with nightly-2026-09-06-d85e877. Unicode 4.1.0 emits mutable-name warnings.
+# Roc strings are valid UTF-8. Decode one scalar per step without allocating a
+# codepoint list; embedded NUL is a scalar, not a terminator.
+text_codepoints = |text| {
+	bytes = Str.to_utf8(text)
+	Iter.custom(
+		0.U64,
+		Unknown,
+		|offset| {
+			match List.get(bytes, offset) {
+				Err(OutOfBounds) => Err(NoMore)
+				Ok(first) => {
+					(width, prefix) = if first < 128 {
+						(1.U64, first.to_u32())
+					}
+						else if first < 224 {
+							(2, first.to_u32() - 192)
+						}
+							else if first < 240 {
+								(3, first.to_u32() - 224)
+							}
+								else {
+									(4, first.to_u32() - 240)
+								}
+					var $scalar = prefix
+					var $index = 1.U64
+					while $index < width {
+						byte = match List.get(bytes, offset + $index) {
+							Ok(value) => value
+							Err(OutOfBounds) => crash "Roc string contains truncated UTF-8"
+						}
+						$scalar = $scalar * 64 + byte.to_u32() - 128
+						$index = $index + 1
+					}
+					Ok(($scalar, offset + width))
+				}
+			}
+		},
+	)
+}
+
+expect List.from_iter(text_codepoints("")) == []
+expect List.from_iter(text_codepoints("a\u(0000)é€😀")) == [97, 0, 233, 8364, 128512]
+expect List.from_iter(text_codepoints("\u(007F)\u(0080)\u(07FF)\u(0800)\u(D7FF)\u(E000)\u(FFFF)\u(10000)\u(10FFFF)")) == [127, 128, 2047, 2048, 55295, 57344, 65535, 65536, 1114111]
 
 ## Iterate over bytes as codepoints when the text is known to be ASCII.
 text_codepoints_ascii : Str -> Iter(U32)

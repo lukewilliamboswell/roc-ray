@@ -5,34 +5,65 @@
 ## module, which re-exports everything declared here, so an app names them
 ## through `Capture` and never depends on this package directly.
 
+# TODO(follow up): Restore derived equality when Roc handles it through type aliases
+# without looping during compilation (nightly-2026-09-06-d85e877).
 CaptureFormat := [Png, Gif, WebM].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : CaptureFormat, CaptureFormat -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Png, Png) => Bool.True
+		(Gif, Gif) => Bool.True
+		(WebM, WebM) => Bool.True
+		_ => Bool.False
+	}
 }
 
 CaptureScale := [Full, Half, Quarter, Ratio({ numerator : U32, denominator : U32 })].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : CaptureScale, CaptureScale -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Full, Full) => Bool.True
+		(Half, Half) => Bool.True
+		(Quarter, Quarter) => Bool.True
+		(Ratio(left), Ratio(right)) => left.numerator == right.numerator and left.denominator == right.denominator
+		_ => Bool.False
+	}
 }
 
 CaptureTiming := [RealTime, FixedStep].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : CaptureTiming, CaptureTiming -> Bool
+	is_eq = |a, b| match (a, b) {
+		(RealTime, RealTime) => Bool.True
+		(FixedStep, FixedStep) => Bool.True
+		_ => Bool.False
+	}
 }
 
 CaptureCursor := [NoCursor, DrawCursor].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : CaptureCursor, CaptureCursor -> Bool
+	is_eq = |a, b| match (a, b) {
+		(NoCursor, NoCursor) => Bool.True
+		(DrawCursor, DrawCursor) => Bool.True
+		_ => Bool.False
+	}
 }
 
 CaptureQuality := [Fast, Balanced, Best].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : CaptureQuality, CaptureQuality -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Fast, Fast) => Bool.True
+		(Balanced, Balanced) => Bool.True
+		(Best, Best) => Bool.True
+		_ => Bool.False
+	}
 }
 
 Capture := [].{
@@ -249,3 +280,13 @@ expect Capture.default.with_timing(RealTime).timing() == RealTime
 expect Capture.default.with_cursor(DrawCursor).cursor() == DrawCursor
 expect Capture.default.with_quality(Fast).quality() == Fast
 expect Capture.default.with_quality(Best).quality() == Best
+
+expect CaptureFormat.is_eq(Png, Gif) == Bool.False
+expect CaptureScale.is_eq(Half, Full) == Bool.False
+expect CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 1, denominator: 2 }))
+expect !CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 2, denominator: 2 }))
+expect !CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 1, denominator: 3 }))
+expect !CaptureScale.is_eq(Half, Ratio({ numerator: 1, denominator: 2 }))
+expect !CaptureTiming.is_eq(RealTime, FixedStep)
+expect !CaptureCursor.is_eq(NoCursor, DrawCursor)
+expect !CaptureQuality.is_eq(Fast, Best)

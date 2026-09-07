@@ -23,13 +23,13 @@ Model : {
 	listening : Bool,
 
 	## The peer's last known pointer, once one has arrived.
-	peer_pointer : Try({ x : F32, y : F32 }, [NothingYet]),
+	peer_pointer : Try(Draw.Vector2, [NothingYet]),
 	received : U64,
 	dropped : U64,
 
 	## This instance's own pointer, kept so `render!` can draw the position
 	## that was sent beside the one that arrived.
-	pointer : { x : F32, y : F32 },
+	pointer : Draw.Vector2,
 	title : Text.Prepared,
 	subtitle : Text.Prepared,
 	hint : Text.Prepared,
@@ -129,7 +129,7 @@ apply_message = |model, message|
 
 ## Two big-endian `U16`s. Negative or off-screen coordinates clamp rather than
 ## wrap, so a pointer dragged off the window edge stops at it.
-encode : { x : F32, y : F32 } -> List(U8)
+encode : Draw.Vector2 -> List(U8)
 encode = |pointer| {
 	coordinate = |value| {
 		clamped = F32.min(F32.max(value, 0), 65535)
@@ -144,7 +144,7 @@ encode = |pointer| {
 ## The inverse. A payload that is not four bytes is not ours: the socket is
 ## reachable by anything on the machine, so a malformed datagram is ordinary
 ## input to be refused, not an error.
-decode : List(U8) -> Try({ x : F32, y : F32 }, [Malformed])
+decode : List(U8) -> Try(Draw.Vector2, [Malformed])
 decode = |bytes|
 	if List.len(bytes) != 4 {
 		Err(Malformed)
@@ -176,7 +176,7 @@ flag_port = |args, flag, fallback| {
 			text = List.get(args, $index + 1) ?? ""
 			bytes = Str.to_utf8(text)
 			if !List.is_empty(bytes) and List.all(bytes, |byte| byte >= 48 and byte <= 57) {
-				digits = List.fold(bytes, 0, |acc, byte| acc * 10 + U8.to_u64(byte - 48))
+				digits = List.fold(bytes, 0.U64, |acc, byte| acc * 10 + U8.to_u64(byte - 48))
 				if digits <= 65535 {
 					$found = U64.to_u16_wrap(digits)
 				}
@@ -240,7 +240,7 @@ draw_grid! = |frame, size|
 	)
 
 ## One pointer: a soft glow, a ring, and a crosshair with its name.
-draw_pointer! : Draw.Frame, { x : F32, y : F32 }, Color.Rgba, Str, F32 => {}
+draw_pointer! : Draw.Frame, Draw.Vector2, Color.Rgba, Str, F32 => {}
 draw_pointer! = |frame, at, color, label, radius| {
 	frame.circle_gradient!({ center: at, radius: radius * 2.6, color_inner: Color.with_alpha(color, 40), color_outer: Color.with_alpha(color, 0) })
 	frame.circle!({ center: at, radius: radius, style: Draw.outlined(color, 2) })

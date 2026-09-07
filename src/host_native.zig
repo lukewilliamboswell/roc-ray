@@ -84,9 +84,6 @@ const TilemapRawPoint = abi.HostTilemap_load_tmxOkPoints;
 const TilemapRawProperty = abi.HostTilemap_load_tmxOkProperties;
 const TilemapRawTileProperties = abi.HostTilemap_load_tmxOkTileProperties;
 const TilemapRawTileset = abi.HostTilemap_load_tmxOkTilesets;
-const RESOURCE_ERR_NONE: u8 = 0;
-const RESOURCE_ERR_FAILED: u8 = 1;
-const RESOURCE_ERR_LIMIT: u8 = 2;
 /// Store-loader results.  These remain separate from store-open errors so an
 /// application can say whether its installation or one optional asset failed.
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
@@ -12273,7 +12270,7 @@ test "observatory executable metadata basename is portable" {
     try std.testing.expectEqualStrings("particles", portableAppName("C:\\examples\\particles\\main.exe"));
     try std.testing.expectEqualStrings("particles", portableAppName("/opt/games/particles"));
     try std.testing.expectEqualStrings("main.roc", portableAppName("main.roc"));
-    try std.testing.expectEqualStrings("nightly-2026-08-23-fb208ba", roc_compiler_pin);
+    try std.testing.expectEqualStrings("nightly-2026-09-06-d85e877", roc_compiler_pin);
 }
 
 test "disabled observatory path performs no recorder startup work" {

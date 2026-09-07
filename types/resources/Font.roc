@@ -75,6 +75,7 @@ Font := {
 		if Str.is_empty(text) {
 			{ width: 0, height: 0 }
 		} else {
+			$state : { line_count : U64, line_width : F32, widest_count : U64, widest_width : F32, height : F32 }
 			var $state = {
 				# Codepoint count on the current line.
 				line_count: 0,
@@ -99,7 +100,7 @@ Font := {
 							widest_width: max_f32(current.widest_width, current.line_width),
 							line_count: 0,
 							widest_count: max_u64(current.widest_count, current.line_count),
-							height: current.height + size + font.metrics.line_spacing,
+							height: F32.plus(F32.plus(current.height, size), font.metrics.line_spacing),
 						}
 					} else {
 						# Other codepoints:

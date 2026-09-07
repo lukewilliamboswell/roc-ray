@@ -30,7 +30,7 @@ package
 		Drawing,
 	]
 	{
-		unicode: "https://github.com/roc-lang/unicode/releases/download/3.0.0/ACj5ceJnEY6vaejuQArN1naVzcxeThATZrKYYgzJCZJ5.tar.zst",
+		unicode: "https://github.com/roc-lang/unicode/releases/download/4.1.0/4n6bqjbVU6WnwtKCDUCP5vtMtA1mPVSMLuEN91dzhPVt.tar.zst",
 	}
 
 import resources/Handle

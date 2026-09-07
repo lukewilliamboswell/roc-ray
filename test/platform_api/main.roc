@@ -1,7 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	adapter: "input_adapter/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-09-06-d85e877",
 }
 
@@ -12,13 +10,12 @@ import rr.Draw
 import rr.Devices
 import rr.Keys
 import rr.Math
-import rrt.Font
-import adapter.Input as Events
+import rr.Font
+import Api as Events
 
-## Everything the view needs, derived in `update!` from values that came through
-## the package. `render!` only draws, so the round trip has to survive being
-## stored in the model rather than being re-read from a snapshot.
+## Every resource type is named through the sole platform dependency.
 Model : {
+	resources : Events.Resources,
 	started : U64,
 	label : Str,
 	clicked : Bool,
@@ -27,28 +24,13 @@ Model : {
 	font : Font,
 	layout : { label : Draw.TextSize, label_pos : { x : F32, y : F32 } },
 	layout_passes : U64,
-
-	## A host-owned texture named through the *platform*, never through `rrt`.
-	## It reaches this field only by passing through `Events.describe` and
-	## `Events.retained`, both of which are typed `rrt.Texture`.
 	swatch : Draw.Texture,
-
-	## What the package measured on the way through.
 	swatch_aspect : F32,
-
-	## What the package read off the whole `App.Input(Msg)`, which it accepted
-	## as one parameterized nominal rather than as an open record.
 	pulse : Events.Pulse,
 }
 
 program = { init!, update!, render! }
 
-## `init!` receives an `App.Startup`: authority, with nothing sampled yet. The
-## first `App.Input` supplies the clock, so `started` is latched there.
-##
-## The texture is generated here and immediately handed to the package. Only the
-## platform could have produced it and only the platform can upload to it, but
-## the package can hold and measure it -- the whole point of the split.
 init! : App.Init(Model, [TextureGenerationFailed, ResourceLimit])
 init! = App.init(
 	App.default,
@@ -57,6 +39,7 @@ init! = App.init(
 		label = "idle"
 		sized = Events.describe(Assets.generate_color_texture!({ width: 8, height: 4, color: Color.blue })?)
 		Ok({
+			resources: Events.resource_stubs,
 			started: 0,
 			label,
 			clicked: Bool.False,
@@ -72,20 +55,12 @@ init! = App.init(
 	},
 )
 
-## This is the UI package boundary: it names the types package's `Font`
-## directly, so layout can run during update without host authority. The value
-## it is handed is a `Font` loaded through the platform, which compiles
-## only because the two are one nominal.
 solve_layout : Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
 solve_layout = |font, label| {
 	label_size = Font.measure(font, { text: label, size: 20, spacing: Draw.default_spacing })
 	{ label: label_size, label_pos: { x: 10, y: 10 } }
 }
 
-## `input` is the platform's nominal `Devices.Snapshot`; `KeyW` is the platform's
-## re-exported `Key`. The event comes back carrying that same key type,
-## and the platform's `Keys.key_code` accepts it -- a full round trip through a
-## package that only ever depended on `roc-ray-types`.
 label_for : Devices.Snapshot -> Str
 label_for = |input|
 	match Events.key_event(input, KeyW) {
@@ -95,9 +70,6 @@ label_for = |input|
 		Nothing => "idle"
 	}
 
-## Every call below hands a value obtained through the RocRay platform to a
-## package that only ever depended on `roc-ray-types`. This compiles only if the
-## platform's re-exports and the package's own types are the same nominals.
 Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
@@ -137,6 +109,7 @@ update! = |model, program_input| {
 		Err(Exit(0))
 	} else {
 		Ok({
+			resources: Events.retain_resources(model.resources),
 			started,
 			label: next_label,
 			clicked,
@@ -166,4 +139,17 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
 	frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
 	Ok({})
+}
+
+## Input construction remains pure after moving the nominal into App.
+expect {
+	input : App.Input(U64)
+	input = App.Input.for_tests({}).with_messages([3, 7])
+	Events.pulse(input).messages == 2
+}
+
+expect {
+	input : App.Input(U64)
+	input = App.Input.for_tests({}).with_message(3).with_message(7)
+	input.messages == [3, 7]
 }

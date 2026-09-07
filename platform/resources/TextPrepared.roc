@@ -1,9 +1,7 @@
-## Shared host-owned prepared-text value.
+## Private host-owned prepared-text value.
 ##
-## The handle is an opaque, reference-counted native resource identity for a
-## laid-out run of text. Preparing and drawing it remain platform operations;
-## this value lets reusable packages retain prepared text without importing the
-## platform.
+## Internal typed ARC identity used by platform adapters and the native host.
+## Applications use the corresponding public resource API.
 import Handle
 
 TextPrepared := { handle : TextPreparedHandle }.{

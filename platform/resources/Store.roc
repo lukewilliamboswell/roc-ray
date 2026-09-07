@@ -1,9 +1,7 @@
-## Shared host-owned asset-store value.
+## Private host-owned asset-store value.
 ##
-## The handle is an opaque, reference-counted native resource identity for an
-## open, explicitly located directory. Opening a store and resolving assets
-## through it remain platform operations; this value lets reusable packages
-## retain store identity without importing the platform.
+## Internal typed ARC identity used by platform adapters and the native host.
+## Applications use the corresponding public resource API.
 import Handle
 
 Store := { handle : StoreHandle }.{

@@ -36,8 +36,8 @@ import Assets
 import Camera
 import Color
 import Host
-import rrt.Font
-import rrt.Shader as RrtShader
+import Font
+import resources/Shader as PlatformShader
 import Math
 
 TextureDrawConfig : {
@@ -247,7 +247,7 @@ Draw := [].{
 	##
 	## Named here as well so drawing code can keep a texture in its model
 	## without importing `Assets`; `Draw.Texture`, `Assets.Texture` and the
-	## companion package's `Texture` are one type, not three.
+	## platform's `Texture` are one type, not three.
 	Texture : Assets.Texture
 
 	## Two-dimensional vector used by drawing records.
@@ -579,7 +579,7 @@ Draw := [].{
 		##
 		## The handle never resolves to a host resource, so entering a scope with
 		## it is refused the way a released target is. Its color attachment is
-		## the package's `Texture.stub` with zero dimensions; copy it with the
+		## `Texture.stub` with zero dimensions; copy it with the
 		## dimensions
 		## the test needs. Do not use it to test drawing, offscreen scopes, or
 		## resource lifetime.
@@ -599,7 +599,7 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: RrtShader.Shader.{
+	Shader :: PlatformShader.Shader.{
 
 		## Compile shader stages from source strings.
 		##
@@ -688,7 +688,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(RrtShader.stub)
+		stub = Shader.(PlatformShader.stub)
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default
@@ -1350,7 +1350,7 @@ font_format_code = |format|
 		Otf => 1
 	}
 
-uniform_host! : RrtShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : PlatformShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	# closed error union to open error union
 	match Host.shader_location!({ shader, name }) {
@@ -1442,7 +1442,7 @@ expect List.len(Font.stub.metrics.glyphs) == 1
 expect Font.measure(Font.stub, { text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
 expect Font.measure(Font.stub, { text: "inert", size: 20, spacing: 0 }) == { width: 100, height: 20 }
 
-## A stub render target's colour attachment is the `roc-ray-types` package's
+## A stub render target's colour attachment is the platform's
 ## `Texture.stub`, so it has no area and its vertically flipped source
 ## rectangle has none either.
 expect Draw.RenderTexture.stub.texture().width == 0

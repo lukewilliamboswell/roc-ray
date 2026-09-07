@@ -209,7 +209,7 @@ fn observeInputQueue(event: InputQueueObservation) u64 {
 }
 
 /// What one recorded event was. The numbering is the wire contract with
-/// `Devices.events_from_raw` in the types package.
+/// `AppTransport.events_from_raw` in the platform input adapter.
 pub const InputEventKind = enum(u8) {
     key_pressed = 0,
     key_released = 1,

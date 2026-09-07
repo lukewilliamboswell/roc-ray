@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-09-06-d85e877",
 }
 
@@ -9,8 +8,7 @@ app [Model, program] {
 # worse -- but cannot manufacture a resource from a raw integer.
 import rr.App
 import rr.Draw
-import rrt.Font
-import rrt.Handle as ResourceHandle
+import rr.Font
 
 Model : {
 	font : Font,
@@ -22,7 +20,8 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = ResourceHandle.(Box.box(0))
+		handle : Box(U64)
+		handle = Box.box(0)
 		Ok({
 			font: { ..Font.stub, handle },
 		})

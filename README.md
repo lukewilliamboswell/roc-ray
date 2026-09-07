@@ -9,6 +9,10 @@ state and rules; RocRay provides drawing, audio, keyboard and mouse input,
 windows, recording, files, and networking. It runs on macOS (Intel and Apple
 Silicon), Linux x64, and Windows x64.
 
+The platform includes the complete RocRay API: value types, pure helpers, and
+host effects are documented and released together. Import them through your
+platform dependency, such as `rr.App`, `rr.Math`, and `rr.Assets`.
+
 ## See what it can do
 
 These nine apps span small games, designed levels, creative tools, responsive

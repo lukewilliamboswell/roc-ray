@@ -46,8 +46,8 @@ Task := [].{
 	## and drop replies that do not match the latest; `examples/http_fetch`
 	## shows the shape.
 	##
-	## This is the only way to start a task. `Input` is a pure value declared in
-	## the `roc-ray-types` package and has no effectful receivers, so there is no
+	## This is the only way to start a task. `Input` is a pure platform value
+	## with no effectful receivers, so there is no
 	## `input.spawn!` form.
 	##
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`

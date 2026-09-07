@@ -50,7 +50,7 @@
 ## privileges, and report `PermissionDenied` when they are missing. Broadcast
 ## and multicast are not enabled.
 import Host
-import rrt.UdpSocket as RrtUdpSocket
+import resources/UdpSocket as PlatformUdpSocket
 
 Udp := [].{
 
@@ -152,7 +152,7 @@ Udp := [].{
 	## The handle is reference counted: copy it freely, and when the last copy
 	## goes -- out of the model, out of a task's captures, or at shutdown --
 	## the socket is closed. There is nothing to remember to close.
-	Socket := { handle : RrtUdpSocket.UdpSocket, local : Address }.{
+	Socket := { handle : PlatformUdpSocket.UdpSocket, local : Address }.{
 
 		## The address this socket is actually bound to, including the port the
 		## operating system chose when `bind!` was given `0`.
@@ -230,7 +230,7 @@ Udp := [].{
 		## a pure `expect` build that model. Do not use it to test delivery or
 		## resource lifetime.
 		stub : Socket
-		stub = Socket.({ handle: RrtUdpSocket.stub, local: { ip: "0.0.0.0", port: 0 } })
+		stub = Socket.({ handle: PlatformUdpSocket.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
 }
 

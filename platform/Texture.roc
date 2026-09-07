@@ -3,7 +3,7 @@
 ## The handle is an opaque, reference-counted native resource identity. Width
 ## and height are descriptive pixel metadata kept directly on the value for
 ## pure layout and source-rectangle calculations.
-import Handle
+import resources/Handle
 
 Texture := {
 	handle : TextureHandle,

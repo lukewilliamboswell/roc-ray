@@ -38,8 +38,8 @@ def main() -> int:
         choices=["auto", "bundle", "source"],
         default="source",
         help=(
-            "How the example reaches the platform. 'source' (default) serves only "
-            "the types package and builds against a staged copy of platform/, which "
+            "How the example reaches the platform. 'source' (default) builds against "
+            "a staged copy of platform/, which "
             "is what you want while editing the platform. 'bundle' serves a platform "
             "bundle instead, matching a release"
         ),

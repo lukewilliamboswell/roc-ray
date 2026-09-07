@@ -25,7 +25,7 @@ pub const cursor_none: u8 = 0;
 pub const cursor_draw: u8 = 1;
 
 // Encoder effort, as chosen by `Capture.Quality` on the Roc side. These numbers
-// are the contract between `types/Capture.roc`'s `quality_code` and this host,
+// are the contract between `platform/Capture.roc`'s `quality_code` and this host,
 // so they must not be renumbered without changing both. Only the palette-
 // quantized formats have anything to spend the extra effort on, so today this
 // binds GIF and is ignored by PNG and WebM.

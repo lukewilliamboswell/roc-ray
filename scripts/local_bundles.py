@@ -1,91 +1,10 @@
 #!/usr/bin/env python3
-"""Bundle roc-ray's packages and serve them from localhost for local testing.
+"""Stage and serve the RocRay platform for local checks and example runs.
 
-Why this module exists
-----------------------
-`platform/main.roc` pins the companion types package by relative path
-(``rrt: "../types/main.roc"``) so a fresh clone builds with no published
-artifact. Release workflows rewrite that entry to the URL in `.types-version`.
-Three things bite local testing because of it:
-
-1. Apps reach the types package by several different routes at once, and nothing
-   makes them agree. `cave_climb`, `generated_assets`, `projective_texture` and
-   `top_down` name it by relative path in their own headers, `test/package_interop`
-   does so from both an app and a package, and the platform they build against
-   names it however it was last rewritten. When two of those routes resolve
-   different builds of the package, the same types arrive under two nominal
-   identities. `test/package_interop/README.md` records what that costs.
-   (Measured on the pin in `.roc-version`, `nightly-2026-08-23-fb208ba`, the
-   compiler tolerates it: path and URL unify, and so do two *different* types
-   bundles on either side of one app. It has not always, and the arrangement is
-   still one where an app can be built against a package build nobody shipped.)
-2. Examples were only ever type-checked against the platform *sources*. The
-   released shape is an archive, and `roc bundle` silently drops a relative
-   dependency -- the failure surfaces at the consumer as INVALID PACKAGE
-   DEPENDENCY. That was covered by a separate bundle test at the end of the run,
-   which is a slow way to find out.
-3. Test scripts rewrote the checked-in example headers in place. A run killed
-   part way through left those rewrites behind, and the obvious
-   `git checkout -- examples/` then ate whatever else was uncommitted.
-
-This module removes all three by never touching a tracked file. It bundles the
-types package (and, where possible, the platform) into a scratch directory
-outside the repository, serves that directory on a loopback port, and hands back
-URLs. Callers stage rewritten *copies* of the apps that consume those URLs, so
-every reference resolves one freshly built artifact, every app is checked in the
-shape it ships in, and an interrupted run -- SIGTERM, SIGKILL, power loss --
-cannot leave the working tree dirty.
-
-Modes
------
-``auto`` is the default: bundle the platform when that is possible, and fall
-back to ``source`` with the reason recorded in `ServedPackages.notes` when it is
-not. Ask for ``bundle`` explicitly where a silent fallback would be wrong, such
-as in CI.
-
-``bundle``
-    `scripts/bundle.sh` stages the platform, rewrites its `rrt:` entry to the
-    served types URL, and produces a platform bundle. Examples are pinned to
-    ``http://127.0.0.1:PORT/<hash>.tar.zst``. This is the mode that matches what
-    a released platform actually looks like.
-
-``source``
-    Fallback for when `bundle.sh` cannot run (no bash). The platform's `.roc`
-    files are copied to a scratch directory with the `rrt:` entry rewritten to
-    the served types URL, `targets/` is linked alongside them, and apps are
-    pinned to that staged `main.roc` by relative path. Less faithful -- the
-    platform is consumed as source rather than as an archive, so a bundling
-    problem goes unseen -- but every reference to the types package still
-    resolves the one served URL.
-
-Feasibility note (platform bundling)
-------------------------------------
-Bundling the platform needs `platform/targets/<target>/` populated for all four
-supported targets. That is not a blocker in practice: `zig build` cross-compiles
-every one of x64mac, arm64mac, x64glibc and x64win and copies the archives into
-the source tree, so an ordinary local checkout that has run `zig build` once can
-bundle the full platform (~17 MB, ~0.3 s). The only inputs a local checkout can
-lack are the Wayland raylib archive (`vendor/raylib/linux-x64-wayland/`, which
-is vendored and therefore present) and the macOS sysroot, which is optional.
-`bundle.sh` reports a precise "missing required bundle input" if any of that is
-absent, and `serve_packages` falls back to ``source`` mode with the message
-attached rather than failing the run.
-
-Caches
-------
-Roc caches URL packages by content hash, so a localhost URL caches exactly like
-a released one, and re-bundling changed sources yields a new hash -- which is
-the point: a stale reference is not expressible. The cost is that every edit to
-`platform/` or `types/` leaves another extracted copy under the Roc cache
-directory (`~/.cache/roc/packages` on Linux), and a platform bundle unpacks to
-roughly 90 MB. Delete that directory when it grows; it is rebuilt on demand.
-
-That is also why the HTTP port is *stable per checkout* rather than freshly
-ephemeral: the staged platform header embeds the types URL, so a new port on
-every run would change the platform bundle's hash on every run and cost another
-90 MB of cache each time. The port is derived from the repository path, and any
-port that is already taken falls back to the next candidate and finally to an
-OS-assigned ephemeral port, so concurrent runs and CI jobs still cannot collide.
+Bundle mode exercises the release dependency shape over localhost. Source mode
+copies platform modules and links native inputs into a scratch directory.
+Applications are always copied before their platform reference is rewritten;
+no checked-in file is modified, including on interrupted runs.
 """
 
 from __future__ import annotations
@@ -148,8 +67,6 @@ LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
-
-TYPES_DEP_RE = re.compile(r'rrt:\s*"[^"]*"')
 
 
 class LocalBundleError(RuntimeError):
@@ -228,20 +145,6 @@ def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
     Returns the rewritten text and whether anything changed.
     """
     rewritten, count = PLATFORM_REF_RE.subn(f"platform {replacement}", source, count=1)
-    return rewritten, count > 0
-
-
-def rewrite_types_dep(source: str, url: str) -> tuple[str, bool]:
-    """Point every `rrt:` package entry in a header at `url`.
-
-    The platform carries one, and so do both halves of `test/package_interop`.
-    No example does: the platform re-exports every package type its own API
-    mentions, so an app names `Assets.Texture` rather than `rrt.Texture`.
-    Pointing every remaining entry at the same served build is what makes "the
-    app and the platform agree about what roc-ray-types is" true by
-    construction rather than by luck.
-    """
-    rewritten, count = TYPES_DEP_RE.subn(f'rrt: "{url}"', source)
     return rewritten, count > 0
 
 
@@ -373,36 +276,6 @@ def _bundle_env(output_dir: Path) -> dict[str, str]:
     return env
 
 
-def bundle_types(root: Path, output_dir: Path, roc: str = "roc") -> str:
-    """Bundle `types/` into `output_dir`; return the content-hash filename.
-
-    Bundling runs from inside `types/` on purpose: bundling `types/main.roc`
-    from the repository root roots the archive one directory deeper than Roc
-    resolves on extraction.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    env = _bundle_env(output_dir)
-    result = subprocess.run(
-        [roc, "bundle", "main.roc", "--output-dir", str(output_dir)],
-        cwd=root / "types",
-        capture_output=True,
-        text=True,
-        shell=IS_WINDOWS,
-        env=env,
-    )
-    if result.returncode != 0:
-        raise LocalBundleError(
-            "failed to bundle the roc-ray-types package:\n"
-            + (result.stderr.strip() or result.stdout.strip())
-        )
-    created = _created_paths(result.stdout)
-    if not created:
-        raise LocalBundleError(
-            "could not determine the roc-ray-types bundle filename from:\n" + result.stdout
-        )
-    return created[-1]
-
-
 def find_bash() -> str | None:
     """Locate bash, including the Git Bash that Windows runners ship.
 
@@ -429,19 +302,13 @@ def find_bash() -> str | None:
 def bundle_platform(
     root: Path,
     output_dir: Path,
-    types_url_base: str,
     package: str = "default",
     roc: str = "roc",
-) -> tuple[str, str]:
+) -> str:
     """Bundle the platform into `output_dir` via `scripts/bundle.sh`.
 
-    `bundle.sh` owns what goes into a platform bundle (shared modules, the four
-    targets' archives, vendor licence texts, the macOS sysroot), and it already
-    stages a copy of the platform and rewrites its `rrt:` entry to
-    ``<types_url_base>/<hash>.tar.zst``. Delegating keeps one definition of a
-    bundle's contents rather than a second one that can drift.
-
-    Returns (platform bundle filename, types bundle filename).
+    `bundle.sh` owns the modules, native inputs, and notices in the archive.
+    Return the platform bundle filename.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     env = {**_bundle_env(output_dir), "ROC": roc}
@@ -457,8 +324,6 @@ def bundle_platform(
                 package,
                 "--output-dir",
                 str(output_dir),
-                "--types-url-base",
-                types_url_base,
             ],
             cwd=root,
             capture_output=True,
@@ -480,31 +345,24 @@ def bundle_platform(
             "could not determine the platform bundle filename from:\n" + result.stdout
         )
 
-    types_name = ""
-    for line in result.stdout.splitlines():
-        if line.startswith("Types package bundle:"):
-            types_name = line.split(":", 1)[1].strip()
-    return created[-1], types_name
+    return created[-1]
 
 
-def stage_platform_source(root: Path, types_url: str, dest: Path) -> Path:
-    """Copy the platform's `.roc` files to `dest`, pointing `rrt:` at `types_url`.
+def stage_platform_source(root: Path, dest: Path) -> Path:
+    """Copy the platform's `.roc` files to `dest`, preserving module paths.
 
     `targets/` is linked (or copied when links are unavailable) so the header's
     `inputs_dir: "targets/"` still resolves. Returns the staged `main.roc`.
     """
     dest.mkdir(parents=True, exist_ok=True)
-    for module in sorted((root / "platform").glob("*.roc")):
-        shutil.copyfile(module, dest / module.name)
-
+    for module in sorted((root / "platform").rglob("*.roc")):
+        relative = module.relative_to(root / "platform")
+        if relative.parts[0] == "targets":
+            continue
+        target = dest / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(module, target)
     staged_main = dest / "main.roc"
-    text = staged_main.read_text(encoding="utf-8")
-    rewritten, did_rewrite = rewrite_types_dep(text, types_url)
-    if not did_rewrite:
-        raise LocalBundleError(
-            f"expected an rrt: package entry to rewrite in {root / 'platform' / 'main.roc'}"
-        )
-    staged_main.write_text(rewritten, encoding="utf-8")
 
     targets_src = root / "platform" / "targets"
     targets_dest = dest / "targets"
@@ -524,11 +382,10 @@ def stage_platform_source(root: Path, types_url: str, dest: Path) -> Path:
 
 @dataclass
 class ServedPackages:
-    """Where an example should look for the platform and the types package."""
+    """Where an example should look for the platform."""
 
     mode: str  # "bundle" or "source"
     base_url: str
-    types_url: str
     platform_url: str | None  # set in "bundle" mode
     platform_source: Path | None  # staged main.roc, set in "source" mode
     served_dir: Path
@@ -599,27 +456,13 @@ def serve_packages(
 
     try:
         with serve_directory(served, verbose, ports) as base_url:
-            # The types package is the hard requirement: the platform and any
-            # URL-pinning package must resolve the same URL or the same types
-            # get two nominal identities.
-            types_name = bundle_types(root, served, roc=roc)
-            types_url = f"{base_url}/{types_name}"
-            if not wait_for_url(types_url):
-                raise LocalBundleError(f"types bundle not reachable at {types_url}")
-
             platform_url: str | None = None
             resolved_mode = mode
             if mode in ("auto", "bundle"):
                 try:
-                    platform_name, bundled_types = bundle_platform(
-                        root, served, base_url, package=package, roc=roc
+                    platform_name = bundle_platform(
+                        root, served, package=package, roc=roc
                     )
-                    # bundle.sh re-bundles types itself so the header it rewrites
-                    # and the archive it produces cannot disagree. Content
-                    # addressing makes that the same file; disagreement means
-                    # something rebundled differently, so trust bundle.sh.
-                    if bundled_types and bundled_types != types_name:
-                        types_url = f"{base_url}/{bundled_types}"
                     platform_url = f"{base_url}/{platform_name}"
                     if not wait_for_url(platform_url):
                         raise LocalBundleError(
@@ -635,7 +478,7 @@ def serve_packages(
             platform_source: Path | None = None
             if resolved_mode != "bundle":
                 platform_source = stage_platform_source(
-                    root, types_url, scratch / "platform-src"
+                    root, scratch / "platform-src"
                 )
                 platform_url = None
                 resolved_mode = "source"
@@ -643,7 +486,6 @@ def serve_packages(
             yield ServedPackages(
                 mode=resolved_mode,
                 base_url=base_url,
-                types_url=types_url,
                 platform_url=platform_url,
                 platform_source=platform_source,
                 served_dir=served,
@@ -660,7 +502,7 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
 
     Every `.roc` file under the app directory comes along, because an app is a
     directory here: `cave_climb` has a sibling `Cave.roc`, and
-    `test/package_interop` carries a whole `input_adapter` package.
+    local application modules may sit in nested directories.
 
     Assets are otherwise left where they are: they are opened at runtime through
     an `Assets.Store`, and the built executable is run from the repository root
@@ -669,10 +511,9 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
     the compiler resolves relative to the source file, and so has to exist beside
     the staged copy. Those are found by `embedded_paths` and copied too.
 
-    The entrypoint's `platform "..."` is pointed at the served platform, and
-    every `rrt:` entry anywhere in the tree at the served types package. Copies
-    rather than in-place rewrites are the whole point: the checked-in headers
-    are never touched, so a killed run leaves nothing to restore.
+    The entrypoint's `platform "..."` is pointed at the served platform. Other
+    package dependencies are preserved. Checked-in headers are never touched,
+    so a killed run leaves nothing to restore.
 
     Returns the staged entrypoint.
     """
@@ -682,8 +523,7 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
         target = dest / module.relative_to(source_dir)
         target.parent.mkdir(parents=True, exist_ok=True)
         source_text = module.read_text(encoding="utf-8")
-        text, _ = rewrite_types_dep(source_text, packages.types_url)
-        target.write_text(text, encoding="utf-8")
+        target.write_text(source_text, encoding="utf-8")
         stage_embedded(module, source_text, source_dir, dest)
 
     staged_entry = dest / entry.name
@@ -809,7 +649,6 @@ def _main(argv: list[str]) -> int:
         stable_port=not args.ephemeral_port,
     ) as packages:
         print(f"mode:     {packages.mode}")
-        print(f"types:    {packages.types_url}")
         print(f"platform: {packages.platform_ref}")
         for note in packages.notes:
             print(f"note:     {note}")

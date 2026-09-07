@@ -58,9 +58,8 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace, Host]
+	exposes [Font, Texture, Drawing, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace, Host]
 	packages {
-		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	}
@@ -221,11 +220,13 @@ platform ""
 	}
 
 import Draw
+import Font
+import Texture
+import Drawing
 import Host
 import Text
 import Color
 import Devices
-import rrt.Devices as RrtDevices
 import Files
 import Window
 import Keys
@@ -261,7 +262,7 @@ InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	text_input : List(U32), ## Unicode codepoints typed this interval, at most 32
 	text_input_overflow : Bool, ## whether more than 32 were typed and the rest discarded
-	events : List(RrtDevices.RawEvent), ## every event this interval in delivery order, at most 256
+	events : List(AppTransport.RawEvent), ## every event this interval in delivery order, at most 256
 	events_overflow : Bool, ## whether more than 256 arrived and the rest were discarded
 	gamepads : {
 		available : List(U8), ## 4 availability bytes
@@ -319,7 +320,7 @@ input_from_raw = |raw| {
 	keys: raw.keys,
 	text_input: raw.text_input,
 	text_input_overflow: raw.text_input_overflow,
-	events: RrtDevices.events_from_raw(raw.events),
+	events: AppTransport.events_from_raw(raw.events),
 	events_overflow: raw.events_overflow,
 	gamepads: {
 		connected: raw.gamepads.available,

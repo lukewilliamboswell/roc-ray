@@ -1,8 +1,7 @@
-## Shared host-owned shader value.
+## Private host-owned shader value.
 ##
-## The handle is an opaque, reference-counted native resource identity. Shader
-## compilation and uniform effects remain platform operations; this value lets
-## reusable packages retain shader identity without importing the platform.
+## Internal typed ARC identity used by platform adapters and the native host.
+## Applications use the corresponding public resource API.
 import Handle
 
 Shader := { handle : ShaderHandle }.{

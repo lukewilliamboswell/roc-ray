@@ -47,25 +47,25 @@
 ## > `Udp`: bound sockets and bounded datagram send/receive batches.
 ## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
-## Resource values from the `roc-ray-types` package carry an opaque
+## Platform resource values carry an opaque
 ## `Handle(resource)` that erases to a `Box(U64)` token resolved and
 ## lifetime-checked by the host, never exposing native addresses.
 ## Native pointers, backend objects, public unions, and application policy do
 ## not belong here.
-import rrt.Camera
-import rrt.Color
-import rrt.Font
-import rrt.Math
-import rrt.Handle
-import rrt.Shader
-import rrt.Texture
-import rrt.Store
-import rrt.TextPrepared
-import rrt.AudioSound
-import rrt.AudioMusic
-import rrt.UdpSocket
-import rrt.SqliteDb
-import rrt.SqliteStmt
+import Camera
+import Color
+import Font
+import Math
+import resources/Handle
+import resources/Shader
+import Texture
+import resources/Store
+import resources/TextPrepared
+import resources/AudioSound
+import resources/AudioMusic
+import resources/UdpSocket
+import resources/SqliteDb
+import resources/SqliteStmt
 
 Host := [].{
 

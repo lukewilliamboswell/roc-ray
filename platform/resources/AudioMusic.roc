@@ -1,9 +1,7 @@
-## Shared host-owned music-stream value.
+## Private host-owned music-stream value.
 ##
-## The handle is an opaque, reference-counted native resource identity for a
-## streamed music track. Loading and playback remain platform operations; this
-## value lets reusable packages retain music identity without importing the
-## platform.
+## Internal typed ARC identity used by platform adapters and the native host.
+## Applications use the corresponding public resource API.
 import Handle
 
 AudioMusic := { handle : AudioMusicHandle }.{

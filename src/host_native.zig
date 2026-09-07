@@ -75,7 +75,7 @@ const CaptureFromHost = abi.Update_for_hostArg1Capture;
 /// One file dropped onto the window, crossing as the public `App.Dropped`.
 const DroppedFile = abi.Update_for_hostArg1Dropped;
 const DroppedPosition = abi.Update_for_hostArg1DroppedPosition;
-/// One input event in the flat shape the types package decodes.
+/// One input event in the flat shape the platform input adapter decodes.
 const InputEventRecord = abi.Update_for_hostArg1DevicesEvents;
 const TilemapRawMap = abi.HostTilemap_load_tmxOk;
 const TilemapRawLayer = abi.HostTilemap_load_tmxOkLayers;

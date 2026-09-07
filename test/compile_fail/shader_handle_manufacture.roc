@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-09-06-d85e877",
 }
 
@@ -8,11 +7,9 @@ app [Model, program] {
 # the shared shader value, but cannot manufacture its handle from a raw integer.
 import rr.App
 import rr.Draw
-import rrt.Handle as ResourceHandle
-import rrt.Shader
 
 Model : {
-	shader : Shader,
+	shader : Draw.Shader,
 }
 
 program = { init!, update!, render! }
@@ -21,8 +18,8 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = ResourceHandle.(Box.box(0))
-		Ok({ shader: { handle } })
+		handle = Box.box(0)
+		Ok({ shader: Draw.Shader.(handle) })
 	},
 )
 

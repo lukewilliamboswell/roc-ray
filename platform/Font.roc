@@ -1,10 +1,9 @@
 ## Font handles, metric snapshots, and pure text measurement.
 ##
 ## A font pairs an opaque, reference-counted native resource identity with an
-## immutable scalar metric snapshot. Reusable packages can retain and measure
-## it without importing the platform or calling the host. The platform
-## re-exports this type as `Text.Font`.
-import Handle
+## immutable scalar metric snapshot. Pure application code can retain and measure
+## it without calling the host. `Text.Font` and `Draw.Font` name this same type.
+import resources/Handle
 
 Font := {
 	handle : FontHandle,

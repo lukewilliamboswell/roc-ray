@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-09-06-d85e877",
 }
 
@@ -9,8 +8,7 @@ app [Model, program] {
 # handle from a raw integer.
 import rr.App
 import rr.Draw
-import rrt.Handle as ResourceHandle
-import rrt.Texture
+import rr.Texture
 
 Model : {
 	texture : Texture,
@@ -22,8 +20,9 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = ResourceHandle.(Box.box(0))
-		Ok({ texture: { handle, width: 8, height: 8 } })
+		handle : Box(U64)
+		handle = Box.box(0)
+		Ok({ texture: { ..Texture.stub, handle } })
 	},
 )
 

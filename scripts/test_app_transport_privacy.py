@@ -28,6 +28,14 @@ ROOT = Path(__file__).resolve().parent.parent
 ROC_ENV = {**os.environ, "NO_COLOR": "1"}
 CASES = (
     (
+        ROOT / "test" / "compile_fail" / "device_transport_private.roc",
+        ("type not exposed", "RawEvent"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "resource_module_private.roc",
+        ("package module is private", "`rr.Handle`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "app_config_to_host.roc",
         ("missing method", "to_host method"),
     ),
@@ -57,7 +65,7 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Handle"),
+        ("type mismatch", "Texture.TextureHandle", "Box(U64)"),
     ),
     (
         ROOT / "test" / "compile_fail" / "transition_removed.roc",
@@ -69,15 +77,15 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "font_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Handle"),
+        ("type mismatch", "Font.FontHandle", "Box(U64)"),
     ),
     (
         ROOT / "test" / "compile_fail" / "shader_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Handle"),
+        ("cannot use opaque nominal type", "instance of Draw.Shader"),
     ),
     (
         ROOT / "test" / "compile_fail" / "resource_handle_kind_confusion.roc",
-        ("type mismatch", "Texture.TextureHandle", "FontResource"),
+        ("type mismatch", "Texture.TextureHandle", "Font.FontHandle"),
     ),
 )
 

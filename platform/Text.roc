@@ -23,15 +23,14 @@ import Color
 import Draw
 import Host
 import Math
-import rrt.Font as RrtFont
-import rrt.TextPrepared as RrtTextPrepared
+import Font as PlatformFont
+import resources/TextPrepared as PlatformTextPrepared
 
 Text := [].{
 
 	## A host-owned font and immutable metric snapshot. This is the shared type
-	## from `roc-ray-types`, re-exported for applications that depend only on the
-	## platform.
-	Font : RrtFont.Font
+	## owned by the platform's `Font` module.
+	Font : PlatformFont.Font
 
 	## Which horizontal edge or centre of the text `pos` names.
 	HAlign : [Left, Center, Right]
@@ -43,13 +42,13 @@ Text := [].{
 	Align : (VAlign, HAlign)
 
 	## A measured width and height, in the same logical units as every drawing
-	## call. This is `Draw.TextSize` and the types package's `Font.Size` under a
+	## call. This is `Draw.TextSize` and `Font.Size` under a
 	## third name; they are one type.
 	Size : { width : F32, height : F32 }
 
 	## Resource-free synthetic monospace font for pure layout tests.
 	font_stub : Font
-	font_stub = RrtFont.stub
+	font_stub = PlatformFont.stub
 
 	## Everything a draw needs beyond the text itself: where to put it, what
 	## colour to paint it, and which point of it `pos` names.
@@ -70,7 +69,7 @@ Text := [].{
 		content : Str,
 		size : F32,
 		spacing : F32,
-		font : RrtFont.Font,
+		font : PlatformFont.Font,
 	}.{
 
 		## Draw this text at a different pixel size. The default is `20`.
@@ -87,7 +86,7 @@ Text := [].{
 		spacing = |builder, value| { ..builder, spacing: value }
 
 		## Draw this text in a different font.
-		font : Builder, RrtFont.Font -> Builder
+		font : Builder, PlatformFont.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
 
 		## Measure this description from the font's immutable metric snapshot,
@@ -124,7 +123,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : RrtTextPrepared.TextPrepared,
+		resource : PlatformTextPrepared.TextPrepared,
 		measured : Size,
 	}.{
 
@@ -162,7 +161,7 @@ Text := [].{
 		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
 		## answers `{ width: 0, height: 0 }` and every alignment therefore
 		## resolves to the placement point itself. Copy this value with the
-		## bounds a test needs, the way the `roc-ray-types` package's
+		## bounds a test needs, the way the platform's
 		## `Texture.stub` is copied with dimensions.
 		##
 		## The handle never resolves to a host resource, so drawing it is skipped
@@ -171,7 +170,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: RrtTextPrepared.stub,
+				resource: PlatformTextPrepared.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)
@@ -184,7 +183,7 @@ Text := [].{
 
 	## Start describing a string drawn in a font. Adjust the result with
 	## `size`, `spacing` and `font`, then draw or prepare it.
-	from : Str, RrtFont.Font -> Builder
+	from : Str, PlatformFont.Font -> Builder
 	from = |content, font| {
 		content,
 		size: 20,

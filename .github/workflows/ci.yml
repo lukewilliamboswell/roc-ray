@@ -168,8 +168,8 @@ jobs:
               raise SystemExit(1)
           PY
 
-      # all_tests.py bundles the types package and the platform itself, serves
-      # them on a loopback port, and builds copies of the examples that point at
+      # all_tests.py bundles the complete platform and serves
+      # it on a loopback port, and builds copies of the examples that point at
       # the served URLs. It used to take three steps here to bundle, serve on a
       # fixed port 8000, and rewrite the checked-in example headers in place.
       # --platform-mode=bundle makes bundling mandatory, so a host that cannot

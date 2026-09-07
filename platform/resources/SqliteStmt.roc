@@ -1,9 +1,7 @@
-## Shared host-owned SQLite statement value.
+## Private host-owned SQLite statement value.
 ##
-## The handle is an opaque, reference-counted native resource identity for a
-## prepared statement. Preparation, binding, and execution remain platform
-## operations; this value lets reusable packages retain statement identity
-## without importing the platform.
+## Internal typed ARC identity used by platform adapters and the native host.
+## Applications use the corresponding public resource API.
 import Handle
 
 SqliteStmt := { handle : SqliteStmtHandle }.{

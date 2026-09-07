@@ -774,21 +774,26 @@ renderer. It preserves the host cycle, effect and task behavior, resource
 ownership, and controlled observations that do not require a real device.
 Pixel behavior is verified against graphical backends separately.
 
-## Pure types and package interoperability
+## API authority and reusable code
 
-Reusable Roc packages need to name common values without acquiring host
-authority. The companion pure-types package therefore owns shared vocabulary
-such as colors, vectors, input snapshots, time values, cameras, and descriptive
-parts of resource handles.
+RocRay is the sole authority for its public API. Types, pure constructors,
+query helpers, and hosted operations live in the platform and are versioned,
+documented, tested, and released together. There is no separately published
+RocRay vocabulary package and no second dependency an application must pin to
+name its input, geometry, configuration, or resources.
 
-The platform re-exports every companion nominal that appears in its public API
-as the same nominal, not a wrapper. Applications can depend only on the
-platform while reusable packages depend on the pure vocabulary, and values
-cross that package boundary without conversion or loss of type identity.
+Pure and effectful code remain distinct by behavior. Application decisions and
+layout can use the platform's pure helpers without calling the host. Resource
+stubs and input constructors support pure tests; only the host can manufacture
+live resource authority. Keeping both kinds of API in one platform does not
+relax phase enforcement, resource opacity, or the four boundary protocols.
 
-The pure package contains no hosted effects and cannot manufacture live
-resources. The platform pins a compatible published version so a release
-cannot refer to an unavailable or structurally different vocabulary build.
+Reusable packages own their domain vocabulary and algorithms. Applications
+adapt platform observations and resources to those packages' explicit data
+interfaces, or supply operations through typed parameters. A package does not
+need RocRay startup authority to describe work; the application applies that
+plan with platform effects and tasks. Shared RocRay nominal identity across an
+independently released package is not part of the platform contract.
 
 ## Verification obligations
 

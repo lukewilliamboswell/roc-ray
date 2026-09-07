@@ -132,7 +132,14 @@ Keys := [].{
 	ExitKey := [NoExitKey, ExitKey(Key)].{
 
 		## Compare two of these values.
-		is_eq : _
+		# Explicit equality avoids the pinned compiler's derived-equality loop
+		# when this type is compared through the public App.ExitKey alias.
+		is_eq : ExitKey, ExitKey -> Bool
+		is_eq = |a, b| match (a, b) {
+			(NoExitKey, NoExitKey) => Bool.True
+			(ExitKey(left), ExitKey(right)) => left == right
+			_ => Bool.False
+		}
 	}
 
 	## Flatten an exit key to the raylib key code the host passes to

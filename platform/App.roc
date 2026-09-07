@@ -40,10 +40,18 @@ import Host
 import Keys
 import Mouse
 
+# Explicit equality keeps comparisons through the public FramePacing alias
+# compilable with the pinned Roc compiler; derived equality loops on that path.
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : AppFramePacing, AppFramePacing -> Bool
+	is_eq = |a, b| match (a, b) {
+		(VSync, VSync) => Bool.True
+		(Capped(left), Capped(right)) => left == right
+		(Uncapped, Uncapped) => Bool.True
+		_ => Bool.False
+	}
 }
 
 AppRecording := [NoRecording, Record(Capture.Recording)].{
@@ -652,6 +660,11 @@ normalize_min_dimension = |value| if value > 0 value else 0
 
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
+expect App.default.frame_pacing() == Capped(240)
+expect App.default.frame_pacing() != Capped(60)
+expect App.default.frame_pacing() != VSync
+expect App.default.with_frame_pacing(VSync).frame_pacing() != Uncapped
+expect App.default.with_frame_pacing(Uncapped).frame_pacing() != Capped(240)
 expect App.default.with_cursor_mode(Hidden).cursor_mode() == Hidden
 expect App.default.with_title("Test").title() == "Test"
 expect App.default.size() == { width: 800, height: 600 }
@@ -663,6 +676,12 @@ expect App.default.with_min_size({ width: 400, height: 300 }).min_size() == { wi
 expect App.default.with_min_size({ width: -1, height: -20 }).min_size() == { width: 0, height: 0 }
 expect App.default.exit_key() == ExitKey(KeyEscape)
 expect App.default.with_exit_key(NoExitKey).exit_key() == NoExitKey
+expect App.default.exit_key() != ExitKey(KeySpace)
+expect App.default.exit_key() != NoExitKey
+expect App.default.with_exit_key(NoExitKey).exit_key() != ExitKey(KeyEscape)
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() == ExitKey(Raw(256))
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(Raw(257))
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(KeyEscape)
 expect App.default.with_resizable(Bool.True).resizable()
 expect App.default.with_fullscreen(Bool.True).fullscreen()
 expect App.default.visible()

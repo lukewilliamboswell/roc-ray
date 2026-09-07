@@ -105,14 +105,6 @@ LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
 #   e.g. "example": "blocked on roc-lang/roc#NNNN (record-update lowering)"
 BUNDLE_TEST_SKIP: dict[str, str] = {}
 
-# Examples to skip in native `roc build` / headless runtime checks.
-# Keep these explicit so CI still exercises every example that currently
-# compiles, without hiding unrelated build/runtime failures.
-BUILD_RUNTIME_SKIP: dict[str, str] = {
-    # TODO: Investigate why this example takes several minutes to compile in CI.
-    "cave_climb": "follow-up: investigate unusually slow Roc build",
-}
-
 
 def run_cmd(
     cmd: list[str], desc: str, verbose: bool = False, env: dict | None = None, cwd: Path | None = None
@@ -1483,14 +1475,15 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
 def run_platform_value_tests(root: Path, verbose: bool) -> list[str]:
     """Run pure value tests from source; URL dependencies do not run their tests.
 
-    These entry modules transitively cover geometry, cameras, colors, devices,
-    recording descriptions, font metrics, and time helpers.
+    These entry modules transitively cover app configuration and inputs, geometry,
+    cameras, colors, devices, recording descriptions, font metrics, and time helpers.
     """
     failed = []
     print("\nRunning platform value tests...")
-    for module in ("Devices", "AppTransport", "Capture", "Font", "Physics", "Time"):
+    for module in ("App", "Devices", "AppTransport", "Capture", "Font", "Physics", "Time"):
         print(f"  Testing {module}...", end=" ", flush=True)
-        if run_cmd(["roc", "test", str(root / "platform" / f"{module}.roc")],
+        if run_cmd(["roc", "test", str(root / "platform" / f"{module}.roc"),
+                    f"--main={root / 'platform' / 'main.roc'}"],
                    f"platform values {module}", verbose, cwd=root):
             print("ok")
         else:
@@ -1833,7 +1826,7 @@ def _run_example_stages(
         print("\nRunning roc build...")
         for example in examples:
             name = example_name(example)
-            skip_reason = BUILD_RUNTIME_SKIP.get(name) or BUNDLE_TEST_SKIP.get(name)
+            skip_reason = BUNDLE_TEST_SKIP.get(name)
             if skip_reason:
                 print(f"  Building {name}... SKIPPED ({skip_reason})")
                 continue

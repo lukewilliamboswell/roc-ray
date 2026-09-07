@@ -139,3 +139,6 @@ postcards/
 # Databases written by the sqlite example and probe
 sqlite_scores_out/
 probe_out/
+
+# Kai hidden managed directory
+.kai/

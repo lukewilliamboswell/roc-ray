@@ -1177,15 +1177,16 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_render_texture! = |frame, RenderTexture.(target), callback| {
-		status = Host.draw_begin_render_texture!(target)
-		if status == scope_ok {
-			result = callback(frame)
-			Host.draw_end_render_texture!()
-			result
-		} else if status == scope_limit {
-			Err(ScopeLimit)
-		} else {
-			Err(ScopeUnavailable)
+		# closed error union to open error union. The scope is closed on every
+		# path the callback can take, error included.
+		match Host.draw_begin_render_texture!(target) {
+			Ok({}) => {
+				result = callback(frame)
+				Host.draw_end_render_texture!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => Err(ScopeUnavailable)
 		}
 	}
 
@@ -1195,15 +1196,16 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_shader! : Frame, Shader, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_shader! = |frame, Shader.(shader), callback| {
-		status = Host.draw_begin_shader!(shader)
-		if status == scope_ok {
-			result = callback(frame)
-			Host.draw_end_shader!()
-			result
-		} else if status == scope_limit {
-			Err(ScopeLimit)
-		} else {
-			Err(ScopeUnavailable)
+		# closed error union to open error union. The scope is closed on every
+		# path the callback can take, error included.
+		match Host.draw_begin_shader!(shader) {
+			Ok({}) => {
+				result = callback(frame)
+				Host.draw_end_shader!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => Err(ScopeUnavailable)
 		}
 	}
 
@@ -1213,15 +1215,18 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_blend_mode! = |frame, mode, callback| {
-		status = Host.draw_begin_blend!(blend_mode_code(mode))
-		if status == scope_ok {
-			result = callback(frame)
-			Host.draw_end_blend!()
-			result
-		} else if status == scope_limit {
-			Err(ScopeLimit)
-		} else {
-			crash "blend scope host invariant failed"
+		# closed error union to open error union. The scope is closed on every
+		# path the callback can take, error included. `blend_mode_code` only
+		# ever produces a mode the backend accepts, so `ScopeUnavailable` here
+		# means the platform disagreed with itself.
+		match Host.draw_begin_blend!(blend_mode_code(mode)) {
+			Ok({}) => {
+				result = callback(frame)
+				Host.draw_end_blend!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => crash "blend scope host invariant failed"
 		}
 	}
 
@@ -1230,15 +1235,16 @@ Draw := [].{
 	## Legal in `render!` only.
 	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_camera! = |frame, camera, callback| {
-		status = Host.draw_begin_camera!(camera)
-		if status == scope_ok {
-			result = callback(frame)
-			Host.draw_end_camera!()
-			result
-		} else if status == scope_limit {
-			Err(ScopeLimit)
-		} else {
-			crash "camera scope host invariant failed"
+		# closed error union to open error union. The scope is closed on every
+		# path the callback can take, error included.
+		match Host.draw_begin_camera!(camera) {
+			Ok({}) => {
+				result = callback(frame)
+				Host.draw_end_camera!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => crash "camera scope host invariant failed"
 		}
 	}
 
@@ -1262,15 +1268,16 @@ Draw := [].{
 		# extern with Math.Rect's public ability-bearing alias.
 		scissor : Host.DrawScissor
 		scissor = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
-		status = Host.draw_begin_scissor!(scissor)
-		if status == scope_ok {
-			result = callback(frame)
-			Host.draw_end_scissor!()
-			result
-		} else if status == scope_limit {
-			Err(ScopeLimit)
-		} else {
-			crash "scissor scope host invariant failed"
+		# closed error union to open error union. The scope is closed on every
+		# path the callback can take, error included.
+		match Host.draw_begin_scissor!(scissor) {
+			Ok({}) => {
+				result = callback(frame)
+				Host.draw_end_scissor!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => crash "scissor scope host invariant failed"
 		}
 	}
 
@@ -1343,19 +1350,12 @@ font_format_code = |format|
 		Otf => 1
 	}
 
-scope_ok : U8
-scope_ok = 0
-
-scope_limit : U8
-scope_limit = 2
-
 uniform_host! : RrtShader.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
-	location = Host.shader_location!({ shader, name })
-	if location < 0 {
-		Err(UniformNotFound)
-	} else {
-		Ok({ shader, location })
+	# closed error union to open error union
+	match Host.shader_location!({ shader, name }) {
+		Ok(location) => Ok({ shader, location })
+		Err(UniformNotFound) => Err(UniformNotFound)
 	}
 }
 

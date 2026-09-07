@@ -127,13 +127,23 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_generate_checked! : TextureGenerateChecked => Try(Texture, TextureGenerateError)
 
+	## Failures while replacing a texture's pixels.
+	##
+	## `NotMutable` is a handle that is not an app-owned texture at all -- a
+	## released one, a stub, or a render target, which the host writes only
+	## through `render!`.
+	TextureUpdateError : [NotMutable, PixelCountMismatch]
+
+	## Failures while replacing pixels inside a texture rectangle.
+	TextureUpdateRegionError : [NotMutable, PixelCountMismatch, RegionOutOfBounds]
+
 	## Replace all texture pixels.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_update! : TextureUpdate => U8
+	texture_update! : TextureUpdate => Try({}, TextureUpdateError)
 
 	## Replace pixels within a texture rectangle.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_update_region! : TextureUpdateRegion => U8
+	texture_update_region! : TextureUpdateRegion => Try({}, TextureUpdateRegionError)
 
 	## Set the texture scaling filter.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -244,9 +254,12 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	shader_load_store! : ShaderLoadStore => Try(Shader, ShaderLoadStoreError)
 
+	## Failures while looking up a shader uniform.
+	ShaderLocationError : [UniformNotFound]
+
 	## Get a shader uniform location.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_location! : ShaderLocation => I32
+	shader_location! : ShaderLocation => Try(I32, ShaderLocationError)
 
 	## Set a floating-point shader uniform.
 	## Legal in `render!` only.
@@ -522,13 +535,19 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_list! : Str => Try(List(U8), FilesListError)
 
-	## Replace a file with UTF-8; return `0` or a `Files` write-error code.
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_text! : Str, Str => U8
+	## Failures while replacing a whole file.
+	##
+	## A write fails for reasons a read cannot, so it has a union of its own
+	## rather than sharing one with `files_read_bytes!`.
+	FilesWriteError : [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
 
-	## Replace a file with bytes; use the same result codes as text writes.
+	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_bytes! : Str, List(U8) => U8
+	files_write_text! : Str, Str => Try({}, FilesWriteError)
+
+	## Replace a file with bytes; the same failures as a text write.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
+	files_write_bytes! : Str, List(U8) => Try({}, FilesWriteError)
 
 	## Http interface
 	## One ordered HTTP header.
@@ -623,19 +642,25 @@ Host := [].{
 	cmd_run! : CmdRunArgs => Try(CmdOutput, CmdRunError)
 
 	## Stdio interface
-	## Queue UTF-8 atomically; return `0` or a stdio result code.
+	## Failures while queueing one atomic write.
+	##
+	## `TooLarge` is a payload past the whole ring and can never be queued;
+	## `BufferFull` is one that does not fit right now.
+	StdioWriteError : [BufferFull, TooLarge, Unavailable]
+
+	## Queue UTF-8 atomically.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_text! : U8, Str => U8
+	stdio_write_text! : U8, Str => Try({}, StdioWriteError)
 
 	## Queue UTF-8 and a newline as one reservation.
 	##
 	## Host-side appending avoids a copy and prevents interleaved writes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_line! : U8, Str => U8
+	stdio_write_line! : U8, Str => Try({}, StdioWriteError)
 
-	## Queue bytes atomically; use the text-write result codes.
+	## Queue bytes atomically; the same failures as a text write.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_bytes! : U8, List(U8) => U8
+	stdio_write_bytes! : U8, List(U8) => Try({}, StdioWriteError)
 
 	## Udp interface
 	## Bind a dotted-quad IPv4 literal; port `0` requests an assigned port.
@@ -690,9 +715,15 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	udp_bind! : UdpBindArgs => Try(UdpBound, UdpBindError)
 
-	## Send one datagram; return `0` or a `Udp` error code.
+	## Failures while handing one datagram to the kernel.
+	## `NoRoute` is what `Udp` exposes as `Unreachable`; it is spelled
+	## differently here because `roc glue` lowers a tag to a Zig enum member
+	## and `unreachable` is a Zig keyword.
+	UdpSendError : [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
+
+	## Send one datagram.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	udp_send! : UdpSendArgs => U8
+	udp_send! : UdpSendArgs => Try({}, UdpSendError)
 
 	## Wait for at least one datagram, then drain what is already buffered.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -1056,9 +1087,17 @@ Host := [].{
 	## Arbitrary textured-quad parameters.
 	DrawTextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 
+	## Failures while opening one drawing scope.
+	##
+	## `ScopeLimit` is the scope stack already at its bound. `ScopeUnavailable`
+	## is a handle that no longer resolves, or a flattened argument outside
+	## what the backend accepts; the scopes that take neither cannot produce
+	## it, and say so where they are used.
+	DrawScopeError : [ScopeLimit, ScopeUnavailable]
+
 	## Begin 2D drawing with a camera.
 	## Legal in `render!` only.
-	draw_begin_camera! : Camera.Camera2D => U8
+	draw_begin_camera! : Camera.Camera2D => Try({}, DrawScopeError)
 
 	## End 2D camera drawing.
 	## Legal in `render!` only.
@@ -1066,7 +1105,7 @@ Host := [].{
 
 	## Begin the flattened blend mode.
 	## Legal in `render!` only.
-	draw_begin_blend! : U8 => U8
+	draw_begin_blend! : U8 => Try({}, DrawScopeError)
 
 	## Restore alpha blending.
 	## Legal in `render!` only.
@@ -1074,7 +1113,7 @@ Host := [].{
 
 	## Begin drawing to a render target.
 	## Legal in `render!` only.
-	draw_begin_render_texture! : TextureRenderTarget => U8
+	draw_begin_render_texture! : TextureRenderTarget => Try({}, DrawScopeError)
 
 	## End render-target drawing.
 	## Legal in `render!` only.
@@ -1082,7 +1121,7 @@ Host := [].{
 
 	## Begin clipping to a screen rectangle.
 	## Legal in `render!` only.
-	draw_begin_scissor! : DrawScissor => U8
+	draw_begin_scissor! : DrawScissor => Try({}, DrawScopeError)
 
 	## End scissor clipping.
 	## Legal in `render!` only.
@@ -1090,7 +1129,7 @@ Host := [].{
 
 	## Begin custom-shader drawing.
 	## Legal in `render!` only.
-	draw_begin_shader! : Shader => U8
+	draw_begin_shader! : Shader => Try({}, DrawScopeError)
 
 	## Restore the default shader.
 	## Legal in `render!` only.
@@ -1237,17 +1276,23 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_set_virtual_text! : List(U32) => {}
 
+	## Failures while arming a recording.
+	CaptureStartError : [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, UnsupportedFormat, WriteFailed]
+
 	## Arm recording and latch its result for the next `Input`.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_start_recording! : CaptureStartRecording => U8
+	capture_start_recording! : CaptureStartRecording => Try({}, CaptureStartError)
 
 	## Finalize the running recording and write its file.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_stop_recording! : () => Try(CaptureStopped, CaptureStopError)
 
+	## Failures while writing one framebuffer as PNG.
+	CaptureScreenshotError : [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, WriteFailed]
+
 	## Write the next framebuffer as PNG, parking until complete.
 	## Legal only in a task, where it parks the task; refused in `init!`, `update!`, and `render!`.
-	capture_screenshot! : Str => U8
+	capture_screenshot! : Str => Try({}, CaptureScreenshotError)
 
 	## A render target and output path.
 	CaptureTextureShot : {
@@ -1255,9 +1300,12 @@ Host := [].{
 		path : Str,
 	}
 
+	## Failures while exporting one render target as PNG.
+	CaptureTextureShotError : [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed]
+
 	## Read back a target, then park while encoding and writing its PNG.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	capture_screenshot_texture! : CaptureTextureShot => U8
+	capture_screenshot_texture! : CaptureTextureShot => Try({}, CaptureTextureShotError)
 
 	## Flattened screen-or-target source.
 	##

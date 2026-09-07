@@ -148,11 +148,15 @@ Capture := [].{
 	## still waiting for its frame is `AlreadyPending`.
 	screenshot! : Str => Try({}, ScreenshotError)
 	screenshot! = |path| {
-		err = Host.capture_screenshot!(path)
-		if err == 0 {
-			Ok({})
-		} else {
-			Err(screenshot_error(err))
+		# closed error union to open error union
+		match Host.capture_screenshot!(path) {
+			Ok({}) => Ok({})
+			Err(AlreadyPending) => Err(AlreadyPending)
+			Err(Busy) => Err(Busy)
+			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(Unavailable) => Err(Unavailable)
+			Err(WriteFailed) => Err(WriteFailed)
 		}
 	}
 
@@ -202,11 +206,18 @@ Capture := [].{
 	## ```
 	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
 	screenshot_texture! = |target, path| {
-		err = Host.capture_screenshot_texture!({ target: target.for_host(), path })
-		if err == 0 {
-			Ok({})
-		} else {
-			Err(texture_export_error(err))
+		# closed error union to open error union
+		match Host.capture_screenshot_texture!({ target: target.for_host(), path }) {
+			Ok({}) => Ok({})
+			Err(BudgetExceeded) => Err(BudgetExceeded)
+			Err(Busy) => Err(Busy)
+			Err(OutOfMemory) => Err(OutOfMemory)
+			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
+			Err(WriteFailed) => Err(WriteFailed)
 		}
 	}
 
@@ -355,6 +366,8 @@ Capture := [].{
 	start! : Recording => {}
 	start! = |recording| {
 		ratio = capture_scale_ratio(recording.scale())
+		# The host latches the refusal for the next `Input` to report, so there
+		# is nothing to answer with here.
 		_refusal = Host.capture_start_recording!({
 			path: recording.path(),
 			format: capture_format_code(recording.format()),
@@ -414,64 +427,6 @@ expect failure_reason(8) == WriteFailed
 expect failure_reason(9) == EncodeFailed
 expect failure_reason(0) == Unknown
 expect failure_reason(200) == Unknown
-
-## Decode the host's capture-error code for a screenshot.
-##
-## These are `src/capture.zig`'s codes, the same ones a recording's
-## `FailureReason` names, so a path that escapes the output directory is still
-## reported as the sandbox refusing it rather than as a failed write.
-screenshot_error : U8 -> Capture.ScreenshotError
-screenshot_error = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		3 => AlreadyPending
-		7 => WriteFailed
-		10 => Busy
-		11 => Unavailable
-		_ => WriteFailed
-	}
-
-expect screenshot_error(1) == PathInvalid
-expect screenshot_error(2) == PathEscapesOutputDir
-expect screenshot_error(3) == AlreadyPending
-expect screenshot_error(7) == WriteFailed
-expect screenshot_error(10) == Busy
-expect screenshot_error(11) == Unavailable
-expect screenshot_error(99) == WriteFailed
-
-## Decode the host's capture-error code for an offscreen export.
-##
-## The same `src/capture.zig` codes again, so a path refused by the sandbox
-## reads the same here as it does for a screenshot or a recording. An unnamed
-## code is drift between this module and the host rather than a state an app can
-## do anything about, so it reports as a failed write.
-texture_export_error : U8 -> Capture.TextureExportError
-texture_export_error = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		6 => BudgetExceeded
-		7 => OutOfMemory
-		8 => WriteFailed
-		10 => Busy
-		11 => Unavailable
-		12 => ReadbackFailed
-		13 => TargetUnavailable
-		_ => WriteFailed
-	}
-
-expect texture_export_error(1) == PathInvalid
-expect texture_export_error(2) == PathEscapesOutputDir
-expect texture_export_error(6) == BudgetExceeded
-expect texture_export_error(7) == OutOfMemory
-expect texture_export_error(8) == WriteFailed
-expect texture_export_error(10) == Busy
-expect texture_export_error(11) == Unavailable
-expect texture_export_error(12) == ReadbackFailed
-expect texture_export_error(13) == TargetUnavailable
-expect texture_export_error(0) == WriteFailed
-expect texture_export_error(99) == WriteFailed
 
 ## Flatten a `Source` onto the pair the host ABI carries.
 ##

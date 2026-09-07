@@ -298,23 +298,34 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels|
-		whole_texture_result(Host.texture_update!({ texture, pixels }))
+	# closed error union to open error union. The public API does not yet
+	# distinguish a handle that is not an app-owned texture from a pixel
+	# count that does not match, so both report the mismatch.
+		match Host.texture_update!({ texture, pixels }) {
+			Ok({}) => Ok({})
+			Err(NotMutable) => Err(PixelCountMismatch)
+			Err(PixelCountMismatch) => Err(PixelCountMismatch)
+		}
 
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
-		region_result(
-			Host.texture_update_region!({
-				texture,
-				x: region.x,
-				y: region.y,
-				width: region.width,
-				height: region.height,
-				pixels: region.pixels,
-			}),
-		)
+	# closed error union to open error union, as `update_texture!` does.
+		match Host.texture_update_region!({
+			texture,
+			x: region.x,
+			y: region.y,
+			width: region.width,
+			height: region.height,
+			pixels: region.pixels,
+		}) {
+			Ok({}) => Ok({})
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(NotMutable) => Err(PixelCountMismatch)
+			Err(PixelCountMismatch) => Err(PixelCountMismatch)
+		}
 
 	## Change how this texture is sampled when scaled.
 	##
@@ -390,32 +401,4 @@ wrap_code = |wrap|
 		Clamp => 1
 		MirrorRepeat => 2
 		MirrorClamp => 3
-	}
-
-## Code the host returns when an upload exceeded the frame's budget.
-## Mirrored in `src/host_native.zig`.
-## Code the host returns for a region that hangs over the texture's edge.
-## Mirrored in `src/host_native.zig`.
-upload_err_out_of_bounds : U8
-upload_err_out_of_bounds = 3
-
-## Decode the host's code for a whole-texture upload, which has no region to
-## be out of bounds.
-whole_texture_result : U8 -> Try({}, [PixelCountMismatch, ..])
-whole_texture_result = |code|
-	if code == 0 {
-		Ok({})
-	} else {
-		Err(PixelCountMismatch)
-	}
-
-## Decode the host's code for a region upload.
-region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
-region_result = |code|
-	if code == 0 {
-		Ok({})
-	} else if code == upload_err_out_of_bounds {
-		Err(RegionOutOfBounds)
-	} else {
-		Err(PixelCountMismatch)
 	}

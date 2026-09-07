@@ -267,7 +267,7 @@ Files := [].{
 	## }
 	## ```
 	write_text! : Str, Str => Try({}, WriteError)
-	write_text! = |path, contents| write_result(Host.files_write_text!(path, contents))
+	write_text! = |path, contents| lifted(Host.files_write_text!(path, contents))
 
 	## Replace a file's contents with ordinary Roc bytes.
 	##
@@ -279,56 +279,21 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	write_bytes! : Str, List(U8) => Try({}, WriteError)
-	write_bytes! = |path, bytes| write_result(Host.files_write_bytes!(path, bytes))
+	write_bytes! = |path, bytes| lifted(Host.files_write_bytes!(path, bytes))
 
 }
 
-## The host refused the write because the path is not the app's to write.
-## Mirrored in `src/host_native.zig`.
-write_err_permission_denied : U8
-write_err_permission_denied = 8
-
-## The filesystem has no room for the file. Mirrored in
-## `src/host_native.zig`.
-write_err_no_space : U8
-write_err_no_space = 9
-
-## Turn a write's error code into its terminal outcome.
-##
-## The codes a write shares with a read -- `NotFound`, `Unavailable`, and the
-## generic failure -- are numbered the same as the read table's, so one code
-## never means two things across the boundary. The two a read cannot produce
-## are numbered past it.
-write_result : U8 -> Try({}, Files.WriteError)
-write_result = |code|
-	if code == 0 {
-		Ok({})
-	} else {
-		Err(write_error(code))
+## Re-lift a write's closed error union onto the open one `Files` exposes.
+lifted : Try({}, Host.FilesWriteError) -> Try({}, Files.WriteError)
+lifted = |result|
+	match result {
+		Ok({}) => Ok({})
+		Err(NoSpace) => Err(NoSpace)
+		Err(NotFound) => Err(NotFound)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Unavailable) => Err(Unavailable)
+		Err(WriteFailed) => Err(WriteFailed)
 	}
-
-write_error : U8 -> Files.WriteError
-write_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == 4 {
-		Unavailable
-	} else if code == write_err_permission_denied {
-		PermissionDenied
-	} else if code == write_err_no_space {
-		NoSpace
-	} else {
-		WriteFailed
-	}
-
-expect write_result(0) == Ok({})
-expect write_result(1) == Err(NotFound)
-expect write_error(1) == NotFound
-expect write_error(2) == WriteFailed
-expect write_error(4) == Unavailable
-expect write_error(8) == PermissionDenied
-expect write_error(9) == NoSpace
-expect write_error(99) == WriteFailed
 
 ## Decode a listing's bytes into entries.
 ##

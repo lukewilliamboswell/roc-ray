@@ -1253,7 +1253,7 @@ fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []c
 }
 
 /// `Files.write_text!`: replace a file's contents with a UTF-8 string.
-fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+fn hostedFilesWriteTextCode(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) u8 {
     enforcePhase("Files.write_text!", during_wait);
     var effect = EffectScope.begin("Files.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
     defer effect.end();
@@ -1264,12 +1264,38 @@ fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: 
     return result;
 }
 
-fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+/// Name a write code in `Files`' vocabulary.
+///
+/// A write fails for reasons a read cannot, so it has a union of its own; the
+/// codes it shares with a read are the same numbers, which is why they are
+/// read out of the same table.
+fn filesWriteResult(code: u8) abi.HostFiles_write_textResult {
+    const Result = abi.HostFiles_write_textResult;
+    const Union = abi.HostFiles_write_textErr;
+    return switch (code) {
+        0 => abiTryEmptyOk(Result),
+        READ_ERR_NOT_FOUND => abiTryErr(Result, Union.not_found),
+        READ_ERR_UNAVAILABLE => abiTryErr(Result, Union.unavailable),
+        WRITE_ERR_PERMISSION_DENIED => abiTryErr(Result, Union.permission_denied),
+        WRITE_ERR_NO_SPACE => abiTryErr(Result, Union.no_space),
+        else => abiTryErr(Result, Union.write_failed),
+    };
+}
+
+fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
+    return filesWriteResult(hostedFilesWriteTextCode(roc_host, path_arg, contents_arg));
+}
+
+fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
+    return filesWriteResult(hostedFilesWriteBytesCode(roc_host, path_arg, bytes_arg));
+}
+
+fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
     return hostedFilesWriteText(activeHost(), path_arg, contents_arg);
 }
 
 /// `Files.write_bytes!`: replace a file's contents with the app's bytes.
-fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+fn hostedFilesWriteBytesCode(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) u8 {
     enforcePhase("Files.write_bytes!", during_wait);
     var effect = EffectScope.begin("Files.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
     defer effect.end();
@@ -1280,7 +1306,7 @@ fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: ab
     return result;
 }
 
-fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
     return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
 }
 
@@ -1344,7 +1370,18 @@ fn queueStreamWrite(stream: u8, head: []const u8, tail: []const u8) u8 {
 }
 
 /// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
-fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+/// Name a queued-write code in `Stdout`'s and `Stderr`'s vocabulary.
+fn stdioWriteResult(comptime Result: type, code: u8) Result {
+    const Union = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    return switch (code) {
+        stdio_effect.OK => abiTryEmptyOk(Result),
+        stdio_effect.ERR_TOO_LARGE => abiTryErr(Result, abiUnion(Union, .too_large)),
+        stdio_effect.ERR_BUFFER_FULL => abiTryErr(Result, abiUnion(Union, .buffer_full)),
+        else => abiTryErr(Result, abiUnion(Union, .unavailable)),
+    };
+}
+
+fn hostedStdioWriteTextCode(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) u8 {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, text_arg.asSlice().len);
@@ -1355,7 +1392,11 @@ fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) ca
     return result;
 }
 
-fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_textResult {
+    return stdioWriteResult(abi.HostStdio_write_textResult, hostedStdioWriteTextCode(roc_host, stream, text_arg));
+}
+
+fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_textResult {
     return hostedStdioWriteText(activeHost(), stream, text_arg);
 }
 
@@ -1363,7 +1404,7 @@ fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
 ///
 /// The newline is the host's byte rather than a copy of the app's string with
 /// one appended, so a line costs no allocation and is queued as one payload.
-fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+fn hostedStdioWriteLineCode(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) u8 {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, text_arg.asSlice().len);
@@ -1374,12 +1415,16 @@ fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) ca
     return result;
 }
 
-fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_lineResult {
+    return stdioWriteResult(abi.HostStdio_write_lineResult, hostedStdioWriteLineCode(roc_host, stream, text_arg));
+}
+
+fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_lineResult {
     return hostedStdioWriteLine(activeHost(), stream, text_arg);
 }
 
 /// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
-fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+fn hostedStdioWriteBytesCode(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) u8 {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, bytes_arg.items().len);
@@ -1390,7 +1435,11 @@ fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListW
     return result;
 }
 
-fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostStdio_write_bytesResult {
+    return stdioWriteResult(abi.HostStdio_write_bytesResult, hostedStdioWriteBytesCode(roc_host, stream, bytes_arg));
+}
+
+fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostStdio_write_bytesResult {
     return hostedStdioWriteBytes(activeHost(), stream, bytes_arg);
 }
 
@@ -1405,7 +1454,47 @@ fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) ca
 /// A task is the only place this works: waiting for the end of a frame from
 /// `init!` would wait for a frame the frame loop has not started yet. See
 /// `during_frame_wait`.
-fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
+/// Name a capture code in one `Capture` effect's vocabulary.
+///
+/// The three writers share this because they share the code table; each
+/// union names only the failures its own effect can reach, and an arm it has
+/// no variant for is not compiled for it.
+fn captureWriteResult(comptime Result: type, code: u8) Result {
+    const Union = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    if (code == capture.err_none) return abiTryEmptyOk(Result);
+    inline for (.{
+        .{ "path_invalid", capture.err_path_invalid },
+        .{ "path_escapes_output_dir", capture.err_path_escapes },
+        .{ "already_pending", capture.err_already_recording },
+        .{ "already_recording", capture.err_already_recording },
+        .{ "unsupported_format", capture.err_unsupported_format },
+        .{ "budget_exceeded", capture.err_budget_exceeded },
+        .{ "out_of_memory", capture.err_out_of_memory },
+        .{ "busy", capture.err_busy },
+        .{ "unavailable", capture.err_unavailable },
+        .{ "readback_failed", capture.err_readback_failed },
+        .{ "target_unavailable", capture.err_target_unavailable },
+    }) |named| {
+        if (comptime abiVariantName(Union, named[0]) != null) {
+            if (code == named[1]) return abiTryErr(Result, abiUnionNamed(Union, named[0]));
+        }
+    }
+    return abiTryErr(Result, abiUnionNamed(Union, "write_failed"));
+}
+
+fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostCapture_screenshotResult {
+    return captureWriteResult(abi.HostCapture_screenshotResult, hostedCaptureScreenshotCode(roc_host, path_arg));
+}
+
+fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArgs) callconv(.c) abi.HostCapture_screenshot_textureResult {
+    return captureWriteResult(abi.HostCapture_screenshot_textureResult, hostedCaptureScreenshotTextureCode(roc_host, args));
+}
+
+fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.HostCapture_start_recordingArgs) callconv(.c) abi.HostCapture_start_recordingResult {
+    return captureWriteResult(abi.HostCapture_start_recordingResult, hostedCaptureStartRecordingCode(roc_host, args));
+}
+
+fn hostedCaptureScreenshotCode(roc_host: *RocHost, path_arg: abi.RocStr) u8 {
     enforcePhase("Capture.screenshot!", during_frame_wait);
     var effect = EffectScope.begin("Capture.screenshot!", path_arg.asSlice().len);
     defer effect.end();
@@ -1494,7 +1583,7 @@ fn encodeAndWritePng(
     return writeWholeFile(threaded.io(), path, encoded);
 }
 
-fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
+fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) abi.HostCapture_screenshotResult {
     return hostedCaptureScreenshot(activeHost(), path_arg);
 }
 
@@ -1506,7 +1595,7 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
 /// whatever the last completed `render!` left in the target. Only the encode
 /// and the write park, on zio's blocking pool, which is why `init!` is a legal
 /// place to call this and is not for `Capture.screenshot!`.
-fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArgs) callconv(.c) u8 {
+fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArgs) u8 {
     enforcePhase("Capture.screenshot_texture!", during_wait);
     var effect = EffectScope.begin("Capture.screenshot_texture!", 0);
     defer effect.end();
@@ -1602,7 +1691,7 @@ fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.HostCapture_scre
     return blocking.join();
 }
 
-fn exportedCaptureScreenshotTexture(args: abi.HostCapture_screenshot_textureArgs) callconv(.c) u8 {
+fn exportedCaptureScreenshotTexture(args: abi.HostCapture_screenshot_textureArgs) callconv(.c) abi.HostCapture_screenshot_textureResult {
     return hostedCaptureScreenshotTexture(activeHost(), args);
 }
 
@@ -2231,7 +2320,7 @@ fn udpBindFailure(code: u8) abi.HostUdp_bindResult {
 /// straight at the non-blocking descriptor. That is what makes this legal in
 /// `update!` -- there is no park for the frame to pay for, and no window in
 /// which another task's Roc code could run in the middle of an update.
-fn hostedUdpSend(host: *RocHost, args: abi.HostUdp_sendArgs) callconv(.c) u8 {
+fn hostedUdpSendCode(host: *RocHost, args: abi.HostUdp_sendArgs) u8 {
     enforcePhase("Udp.send!", during_update);
     var effect = EffectScope.begin("Udp.send!", args.ip.asSlice().len +| args.bytes.items().len);
     defer effect.end();
@@ -2256,7 +2345,31 @@ fn hostedUdpSend(host: *RocHost, args: abi.HostUdp_sendArgs) callconv(.c) u8 {
     return result;
 }
 
-fn exportedUdpSend(args: abi.HostUdp_sendArgs) callconv(.c) u8 {
+/// Name a send code in `Udp`'s vocabulary.
+///
+/// `NoRoute` is what `Udp` exposes as `Unreachable`; the wire spells it
+/// differently because `roc glue` lowers a tag to a Zig enum member and
+/// `unreachable` is a Zig keyword.
+fn udpSendResult(code: u8) abi.HostUdp_sendResult {
+    const Result = abi.HostUdp_sendResult;
+    const Union = abi.HostUdp_sendErr;
+    return switch (code) {
+        0 => abiTryEmptyOk(Result),
+        udp_effect.ERR_UNAVAILABLE => abiTryErr(Result, Union.unavailable),
+        udp_effect.ERR_INVALID_ADDRESS => abiTryErr(Result, Union.invalid_address),
+        udp_effect.ERR_PERMISSION_DENIED => abiTryErr(Result, Union.permission_denied),
+        udp_effect.ERR_TOO_LARGE => abiTryErr(Result, Union.too_large),
+        udp_effect.ERR_WOULD_BLOCK => abiTryErr(Result, Union.would_block),
+        udp_effect.ERR_UNREACHABLE => abiTryErr(Result, Union.no_route),
+        else => abiTryErr(Result, Union.send_failed),
+    };
+}
+
+fn hostedUdpSend(host: *RocHost, args: abi.HostUdp_sendArgs) callconv(.c) abi.HostUdp_sendResult {
+    return udpSendResult(hostedUdpSendCode(host, args));
+}
+
+fn exportedUdpSend(args: abi.HostUdp_sendArgs) callconv(.c) abi.HostUdp_sendResult {
     return hostedUdpSend(activeHost(), args);
 }
 
@@ -4183,6 +4296,16 @@ fn abiTryEmptyOk(comptime Result: type) Result {
     return result;
 }
 
+/// A `Try` whose failure carries nothing.
+///
+/// A closed union with one payloadless variant erases to a zero-sized
+/// payload, so there is nothing to write but the tag.
+fn abiTryEmptyErr(comptime Result: type) Result {
+    var result: Result = std.mem.zeroes(Result);
+    result.tag = .Err;
+    return result;
+}
+
 /// One payloadless variant of a generated closed error union.
 ///
 /// A union whose variants all carry nothing is generated as a plain `enum`,
@@ -4772,8 +4895,8 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_target = storeRenderTexture(.headless).?;
     const inner_target = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = outer_target, .height = 90, .width = 160 }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = inner_target, .height = 45, .width = 80 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = outer_target, .height = 90, .width = 160 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = inner_target, .height = 45, .width = 80 }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_render_texture_depth);
@@ -4787,8 +4910,8 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_shader = storeShader(.headless).?;
     const inner_shader = storeShader(.headless).?;
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = outer_shader }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = inner_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .handle = outer_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .handle = inner_shader }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_shader_depth);
@@ -4800,12 +4923,12 @@ test "nested render and shader scopes lease last references until matching end" 
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
 
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRawCode(.{ .arg0 = 1 }));
     try std.testing.expectEqual(@as(usize, 1), blend_scope_count);
     hostedDrawEndBlendRaw();
     try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
 
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginBlendRaw(.{ .arg0 = 6 }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginBlendRawCode(.{ .arg0 = 6 }));
     try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
 }
 
@@ -4822,8 +4945,8 @@ test "nested value scopes restore outer state and report bounded saturation" {
         .rotation = 15,
         .zoom = 0.5,
     };
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(outer_camera));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(inner_camera));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCameraCode(outer_camera));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCameraCode(inner_camera));
     hostedDrawEndCamera();
     try std.testing.expectEqual(@as(usize, 1), camera_scope_count);
     try std.testing.expectEqual(outer_camera.zoom, camera_scopes[0].zoom);
@@ -4831,32 +4954,32 @@ test "nested value scopes restore outer state and report bounded saturation" {
 
     const outer_scissor = abi.HostDraw_begin_scissorArgs{ .x = 10, .y = 20, .width = 300, .height = 200 };
     const inner_scissor = abi.HostDraw_begin_scissorArgs{ .x = 30, .y = 40, .width = 50, .height = 60 };
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(outer_scissor));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(inner_scissor));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRawCode(outer_scissor));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRawCode(inner_scissor));
     hostedDrawEndScissorRaw();
     try std.testing.expectEqual(@as(usize, 1), scissor_scope_count);
     try std.testing.expectEqual(outer_scissor.width, scissor_scopes[0].width);
     hostedDrawEndScissorRaw();
 
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 2 }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRawCode(.{ .arg0 = 2 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRawCode(.{ .arg0 = 1 }));
     hostedDrawEndBlendRaw();
     try std.testing.expectEqual(@as(usize, 1), blend_scope_count);
     try std.testing.expectEqual(@as(u8, 2), blend_scopes[0]);
     hostedDrawEndBlendRaw();
 
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 0 }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginBlendRaw(.{ .arg0 = 0 }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRawCode(.{ .arg0 = 0 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginBlendRawCode(.{ .arg0 = 0 }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndBlendRaw();
     try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
 
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(outer_camera));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginCamera(inner_camera));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCameraCode(outer_camera));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginCameraCode(inner_camera));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndCamera();
     try std.testing.expectEqual(@as(usize, 0), camera_scope_count);
 
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(outer_scissor));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginScissorRaw(inner_scissor));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRawCode(outer_scissor));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginScissorRawCode(inner_scissor));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndScissorRaw();
     try std.testing.expectEqual(@as(usize, 0), scissor_scope_count);
 }
@@ -4901,12 +5024,12 @@ test "the frame reports the active render target, and the window again once it c
     const outer_target = storeRenderTexture(.headless).?;
     const inner_target = storeRenderTexture(.headless).?;
 
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = outer_target, .height = 90, .width = 160 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = outer_target, .height = 90, .width = 160 }));
     const outer_size = hostedDrawFrameSizeRaw();
     try std.testing.expectEqual(@as(f32, 160), outer_size.width);
     try std.testing.expectEqual(@as(f32, 90), outer_size.height);
 
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = inner_target, .height = 45, .width = 80 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = inner_target, .height = 45, .width = 80 }));
     const inner_size = hostedDrawFrameSizeRaw();
     try std.testing.expectEqual(@as(f32, 80), inner_size.width);
     try std.testing.expectEqual(@as(f32, 45), inner_size.height);
@@ -4938,8 +5061,8 @@ test "the frame reports the active render target, and the window again once it c
     // A refused scope draws nowhere new, so it must not report anywhere new.
     const saturating = storeRenderTexture(.headless).?;
     abi.increfBox(@ptrCast(saturating), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = saturating, .height = 16, .width = 16 }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .handle = saturating, .height = 999, .width = 999 }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = saturating, .height = 16, .width = 16 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRawCode(.{ .handle = saturating, .height = 999, .width = 999 }));
     const saturated = hostedDrawFrameSizeRaw();
     try std.testing.expectEqual(@as(f32, 16), saturated.width);
     try std.testing.expectEqual(@as(f32, 16), saturated.height);
@@ -4974,16 +5097,16 @@ test "resource scopes report bounded saturation without leaking transferred owne
 
     const target = storeRenderTexture(.headless).?;
     abi.increfBox(@ptrCast(target), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = target, .height = 16, .width = 16 }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .handle = target, .height = 16, .width = 16 }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = target, .height = 16, .width = 16 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRawCode(.{ .handle = target, .height = 16, .width = 16 }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndRenderTextureRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 
     const shader = storeShader(.headless).?;
     abi.increfBox(@ptrCast(shader), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = shader }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRaw(.{ .handle = shader }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .handle = shader }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRawCode(.{ .handle = shader }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
@@ -5005,11 +5128,11 @@ test "scope kind confusion fails and releases transferred owners" {
     }
 
     const shader = storeShader(.headless).?;
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{ .handle = @ptrCast(shader), .height = 16, .width = 16 }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRawCode(.{ .handle = @ptrCast(shader), .height = 16, .width = 16 }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     const target = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .handle = @ptrCast(target) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(.{ .handle = @ptrCast(target) }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
@@ -5195,13 +5318,13 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
         hostedTextureSetFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
         hostedTextureSetWrapRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
 
-        const whole_err = hostedTextureUpdateRaw(&roc_host, .{
+        const whole_err = hostedTextureUpdateRawCode(&roc_host, .{
             .pixels = abi.RocListWith(Color, false).empty(),
             .texture = allocateTestTextureStub(&roc_host, 16, 8),
         });
         try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, whole_err);
 
-        const region_err = hostedTextureUpdateRegionRaw(&roc_host, .{
+        const region_err = hostedTextureUpdateRegionRawCode(&roc_host, .{
             .pixels = abi.RocListWith(Color, false).empty(),
             .texture = allocateTestTextureStub(&roc_host, 16, 8),
             .height = 1,
@@ -5293,7 +5416,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 
         // A uniform cannot be resolved on a stub shader.
-        try std.testing.expectEqual(@as(i32, -1), hostedShaderLocationRaw(&roc_host, .{
+        try std.testing.expectEqual(@as(i32, -1), hostedShaderLocationRawCode(&roc_host, .{
             .shader = .{ .handle = allocateTestResourceStub(&roc_host) },
             .name = abi.RocStr.fromSlice("uTime", &roc_host),
         }));
@@ -5333,9 +5456,9 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A scope cannot be opened on a stub, and reports the same refusal a
         // released resource would. Nothing is leased, so there is no end call.
-        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .handle = allocateTestResourceStub(&roc_host) }));
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(.{ .handle = allocateTestResourceStub(&roc_host) }));
         try std.testing.expectEqual(@as(usize, 0), shader_lease_count);
-        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRawCode(.{
             .handle = allocateTestResourceStub(&roc_host),
             .height = 90,
             .width = 160,
@@ -5357,14 +5480,14 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         // the reference each call was given.
         for (0..3) |_| {
             abi.increfBox(@ptrCast(real_shader), 1);
-            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .handle = real_shader }));
+            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .handle = real_shader }));
         }
         try std.testing.expectEqual(@as(u8, 3), headless_shader_depth);
         for (0..3) |_| hostedDrawEndShaderRaw();
         try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
 
         abi.increfBox(@ptrCast(real_target), 1);
-        try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = real_target, .height = 90, .width = 160 }));
+        try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = real_target, .height = 90, .width = 160 }));
         hostedDrawEndRenderTextureRaw();
     }
 
@@ -5672,7 +5795,7 @@ test "render target textures report not mutable and release ownership" {
     }
 
     const target = storeRenderTexture(.headless).?;
-    const err = hostedTextureUpdateRaw(&roc_host, .{
+    const err = hostedTextureUpdateRawCode(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).empty(),
         .texture = .{ .handle = target, .height = 4, .width = 4 },
     });
@@ -5923,7 +6046,7 @@ test "a structurally valid texture upload is not refused for host capacity" {
     defer std.testing.allocator.free(pixels);
     @memset(pixels, .{ .r = 1, .g = 2, .b = 3, .a = 255 });
     const handle = storeTexture(.{ .headless = .{ .width = width, .height = height } }).?;
-    const result = hostedTextureUpdateRaw(&roc_host, .{
+    const result = hostedTextureUpdateRawCode(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(pixels, &roc_host),
         .texture = .{ .handle = handle, .height = @floatFromInt(height), .width = @floatFromInt(width) },
     });
@@ -5952,14 +6075,14 @@ test "texture updates validate native dimensions instead of public metadata" {
 
     const pixels = [_]Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }} ** 6;
     const whole_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
-    const whole_err = hostedTextureUpdateRaw(&roc_host, .{
+    const whole_err = hostedTextureUpdateRawCode(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(&pixels, &roc_host),
         .texture = .{ .handle = whole_handle, .height = 99, .width = 99 },
     });
     try std.testing.expectEqual(TEXTURE_UPDATE_OK, whole_err);
 
     const region_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
-    const region_err = hostedTextureUpdateRegionRaw(&roc_host, .{
+    const region_err = hostedTextureUpdateRegionRawCode(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(pixels[0..2], &roc_host),
         .texture = .{ .handle = region_handle, .height = 99, .width = 99 },
         .height = 1,
@@ -6639,7 +6762,7 @@ fn hostedTextureGenerateCheckedRaw(args: abi.HostTexture_generate_checkedArgs) c
     return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
-fn hostedTextureUpdateRaw(host: *RocHost, args: abi.HostTexture_updateArgs) callconv(.c) u8 {
+fn hostedTextureUpdateRawCode(host: *RocHost, args: abi.HostTexture_updateArgs) u8 {
     enforcePhase("Assets.update_texture!", during_update);
     var effect = EffectScope.begin("Assets.update_texture!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
     defer effect.end();
@@ -6667,7 +6790,7 @@ fn hostedTextureUpdateRaw(host: *RocHost, args: abi.HostTexture_updateArgs) call
 /// one pixel of an atlas means re-uploading the atlas. The call carries its
 /// complete payload, so a structurally valid upload is performed rather than
 /// silently refused for transient host capacity.
-fn hostedTextureUpdateRegionRaw(host: *RocHost, args: abi.HostTexture_update_regionArgs) callconv(.c) u8 {
+fn hostedTextureUpdateRegionRawCode(host: *RocHost, args: abi.HostTexture_update_regionArgs) u8 {
     enforcePhase("Assets.update_texture_region!", during_update);
     var effect = EffectScope.begin("Assets.update_texture_region!", drawByteCount(abi.ColorRgba, args.pixels.items().len));
     defer effect.end();
@@ -6704,11 +6827,45 @@ fn hostedTextureUpdateRegionRaw(host: *RocHost, args: abi.HostTexture_update_reg
     return TEXTURE_UPDATE_OK;
 }
 
-fn exportedTextureUpdateRaw(args: abi.HostTexture_updateArgs) callconv(.c) u8 {
+/// Name a whole-texture upload code in `Assets`' vocabulary.
+///
+/// A whole-texture upload covers the texture by definition, so its union has
+/// no out-of-bounds variant to reach.
+fn textureUpdateResult(code: u8) abi.HostTexture_updateResult {
+    const Result = abi.HostTexture_updateResult;
+    const Union = abi.HostTexture_updateErr;
+    return switch (code) {
+        TEXTURE_UPDATE_OK => abiTryEmptyOk(Result),
+        TEXTURE_UPDATE_NOT_MUTABLE => abiTryErr(Result, Union.not_mutable),
+        else => abiTryErr(Result, Union.pixel_count_mismatch),
+    };
+}
+
+/// Name a region upload code in `Assets`' vocabulary.
+fn textureUpdateRegionResult(code: u8) abi.HostTexture_update_regionResult {
+    const Result = abi.HostTexture_update_regionResult;
+    const Union = abi.HostTexture_update_regionErr;
+    return switch (code) {
+        TEXTURE_UPDATE_OK => abiTryEmptyOk(Result),
+        TEXTURE_UPDATE_NOT_MUTABLE => abiTryErr(Result, Union.not_mutable),
+        TEXTURE_UPDATE_OUT_OF_BOUNDS => abiTryErr(Result, Union.region_out_of_bounds),
+        else => abiTryErr(Result, Union.pixel_count_mismatch),
+    };
+}
+
+fn hostedTextureUpdateRaw(host: *RocHost, args: abi.HostTexture_updateArgs) callconv(.c) abi.HostTexture_updateResult {
+    return textureUpdateResult(hostedTextureUpdateRawCode(host, args));
+}
+
+fn hostedTextureUpdateRegionRaw(host: *RocHost, args: abi.HostTexture_update_regionArgs) callconv(.c) abi.HostTexture_update_regionResult {
+    return textureUpdateRegionResult(hostedTextureUpdateRegionRawCode(host, args));
+}
+
+fn exportedTextureUpdateRaw(args: abi.HostTexture_updateArgs) callconv(.c) abi.HostTexture_updateResult {
     return hostedTextureUpdateRaw(activeHost(), args);
 }
 
-fn exportedTextureUpdateRegionRaw(args: abi.HostTexture_update_regionArgs) callconv(.c) u8 {
+fn exportedTextureUpdateRegionRaw(args: abi.HostTexture_update_regionArgs) callconv(.c) abi.HostTexture_update_regionResult {
     return hostedTextureUpdateRegionRaw(activeHost(), args);
 }
 
@@ -6871,7 +7028,21 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
     return null;
 }
 
-fn hostedDrawBeginRenderTextureRaw(args: abi.HostDraw_begin_render_textureArgs) callconv(.c) u8 {
+/// Name a scope code in `Draw`'s vocabulary.
+///
+/// Every `with_*!` scope shares one union: the two that cannot report
+/// `ScopeUnavailable` simply never reach that arm, and say so where they are
+/// used rather than by having a union of their own.
+fn drawScopeResult(comptime Result: type, code: u8) Result {
+    const Union = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    return switch (code) {
+        SCOPE_OK => abiTryEmptyOk(Result),
+        SCOPE_LIMIT => abiTryErr(Result, abiUnion(Union, .scope_limit)),
+        else => abiTryErr(Result, abiUnion(Union, .scope_unavailable)),
+    };
+}
+
+fn hostedDrawBeginRenderTextureRawCode(args: abi.HostDraw_begin_render_textureArgs) u8 {
     enforcePhase("Draw.with_render_texture!", during_render);
     const effect = EffectScope.begin("Draw.with_render_texture!", 0);
     defer effect.end();
@@ -6893,6 +7064,10 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.HostDraw_begin_render_textureArgs) 
     render_target_sizes[render_texture_lease_count] = .{ .height = args.height, .width = args.width };
     render_texture_lease_count += 1;
     return SCOPE_OK;
+}
+
+fn hostedDrawBeginRenderTextureRaw(args: abi.HostDraw_begin_render_textureArgs) callconv(.c) abi.HostDraw_begin_render_textureResult {
+    return drawScopeResult(abi.HostDraw_begin_render_textureResult, hostedDrawBeginRenderTextureRawCode(args));
 }
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
@@ -6930,7 +7105,7 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.HostDraw_frame_size {
     return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
 }
 
-fn hostedDrawBeginShaderRaw(args: abi.HostDraw_begin_shaderArgs) callconv(.c) u8 {
+fn hostedDrawBeginShaderRawCode(args: abi.HostDraw_begin_shaderArgs) u8 {
     enforcePhase("Draw.with_shader!", during_render);
     const effect = EffectScope.begin("Draw.with_shader!", 0);
     defer effect.end();
@@ -6953,6 +7128,10 @@ fn hostedDrawBeginShaderRaw(args: abi.HostDraw_begin_shaderArgs) callconv(.c) u8
     return SCOPE_OK;
 }
 
+fn hostedDrawBeginShaderRaw(args: abi.HostDraw_begin_shaderArgs) callconv(.c) abi.HostDraw_begin_shaderResult {
+    return drawScopeResult(abi.HostDraw_begin_shaderResult, hostedDrawBeginShaderRawCode(args));
+}
+
 fn hostedDrawEndShaderRaw() callconv(.c) void {
     enforcePhase("Draw.with_shader!", during_render);
     const effect = EffectScope.begin("Draw.with_shader!", 0);
@@ -6969,7 +7148,7 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
     releaseResourceBox(activeHost(), owner);
 }
 
-fn hostedDrawBeginBlendRaw(args: abi.HostDraw_begin_blendArgs) callconv(.c) u8 {
+fn hostedDrawBeginBlendRawCode(args: abi.HostDraw_begin_blendArgs) u8 {
     enforcePhase("Draw.with_blend_mode!", during_render);
     const effect = EffectScope.begin("Draw.with_blend_mode!", 0);
     defer effect.end();
@@ -6979,6 +7158,10 @@ fn hostedDrawBeginBlendRaw(args: abi.HostDraw_begin_blendArgs) callconv(.c) u8 {
     blend_scopes[blend_scope_count] = args.arg0;
     blend_scope_count += 1;
     return SCOPE_OK;
+}
+
+fn hostedDrawBeginBlendRaw(args: abi.HostDraw_begin_blendArgs) callconv(.c) abi.HostDraw_begin_blendResult {
+    return drawScopeResult(abi.HostDraw_begin_blendResult, hostedDrawBeginBlendRawCode(args));
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
@@ -6991,7 +7174,7 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
     if (!headlessMode() and blend_scope_count > 0) raylib.beginBlendMode(blend_scopes[blend_scope_count - 1]);
 }
 
-fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostShader_locationArgs) callconv(.c) i32 {
+fn hostedShaderLocationRawCode(host: *RocHost, args: abi.HostShader_locationArgs) i32 {
     enforcePhase("Draw.Shader.uniform_*!", during_load);
     const effect = EffectScope.begin("Draw.Shader.uniform_*!", args.name.asSlice().len);
     defer effect.end();
@@ -7012,7 +7195,15 @@ fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostShader_locationArgs) ca
     }
 }
 
-fn exportedShaderLocationRaw(args: abi.HostShader_locationArgs) callconv(.c) i32 {
+/// A uniform raylib could not find is a refusal rather than a negative index.
+fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostShader_locationArgs) callconv(.c) abi.HostShader_locationResult {
+    const Result = abi.HostShader_locationResult;
+    const location = hostedShaderLocationRawCode(host, args);
+    if (location < 0) return abiTryEmptyErr(Result);
+    return abiTryOk(Result, location);
+}
+
+fn exportedShaderLocationRaw(args: abi.HostShader_locationArgs) callconv(.c) abi.HostShader_locationResult {
     return hostedShaderLocationRaw(activeHost(), args);
 }
 
@@ -7090,7 +7281,7 @@ fn hostedShaderSetTextureRaw(args: abi.HostShader_set_textureArgs) callconv(.c) 
 }
 
 /// Forward Roc scissor bounds to the raylib backend.
-fn hostedDrawBeginScissorRaw(args: abi.HostDraw_begin_scissorArgs) callconv(.c) u8 {
+fn hostedDrawBeginScissorRawCode(args: abi.HostDraw_begin_scissorArgs) u8 {
     enforcePhase("Draw.with_scissor!", during_render);
     const effect = EffectScope.begin("Draw.with_scissor!", 0);
     defer effect.end();
@@ -7099,6 +7290,10 @@ fn hostedDrawBeginScissorRaw(args: abi.HostDraw_begin_scissorArgs) callconv(.c) 
     scissor_scopes[scissor_scope_count] = args;
     scissor_scope_count += 1;
     return SCOPE_OK;
+}
+
+fn hostedDrawBeginScissorRaw(args: abi.HostDraw_begin_scissorArgs) callconv(.c) abi.HostDraw_begin_scissorResult {
+    return drawScopeResult(abi.HostDraw_begin_scissorResult, hostedDrawBeginScissorRawCode(args));
 }
 
 /// End the scissor region opened by the Roc renderer.
@@ -7115,7 +7310,7 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
     }
 }
 
-fn hostedDrawBeginCamera(args: abi.HostDraw_begin_cameraArgs) callconv(.c) u8 {
+fn hostedDrawBeginCameraCode(args: abi.HostDraw_begin_cameraArgs) u8 {
     enforcePhase("Draw.with_camera!", during_render);
     const effect = EffectScope.begin("Draw.with_camera!", 0);
     defer effect.end();
@@ -7124,6 +7319,10 @@ fn hostedDrawBeginCamera(args: abi.HostDraw_begin_cameraArgs) callconv(.c) u8 {
     camera_scopes[camera_scope_count] = args;
     camera_scope_count += 1;
     return SCOPE_OK;
+}
+
+fn hostedDrawBeginCamera(args: abi.HostDraw_begin_cameraArgs) callconv(.c) abi.HostDraw_begin_cameraResult {
+    return drawScopeResult(abi.HostDraw_begin_cameraResult, hostedDrawBeginCameraCode(args));
 }
 
 fn hostedDrawCircleRaw(args: abi.HostDraw_circleArgs) callconv(.c) void {
@@ -8179,7 +8378,7 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
 ///
 /// Refusals are latched in the session for the next `input.capture`. The return
 /// code preserves the hosted ABI and supports direct tests.
-fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.HostCapture_start_recordingArgs) callconv(.c) u8 {
+fn hostedCaptureStartRecordingCode(roc_host: *RocHost, args: abi.HostCapture_start_recordingArgs) u8 {
     enforcePhase("Capture.start!", during_update);
     const effect = EffectScope.begin("Capture.start!", 0);
     defer effect.end();
@@ -8200,7 +8399,7 @@ fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.HostCapture_start_r
     return result;
 }
 
-fn exportedCaptureStartRecording(args: abi.HostCapture_start_recordingArgs) callconv(.c) u8 {
+fn exportedCaptureStartRecording(args: abi.HostCapture_start_recordingArgs) callconv(.c) abi.HostCapture_start_recordingResult {
     return hostedCaptureStartRecording(activeHost(), args);
 }
 
@@ -11756,7 +11955,7 @@ test "a screenshot path that escapes the output directory is refused, not rewrit
 
     try std.testing.expectEqual(
         capture.err_path_escapes,
-        hostedCaptureScreenshot(&roc_host, abi.RocStr.fromSlice("../escaped.png", &roc_host)),
+        hostedCaptureScreenshotCode(&roc_host, abi.RocStr.fromSlice("../escaped.png", &roc_host)),
     );
 
     // A valid path gets past the sandbox. Tests run headless, where there is
@@ -11764,7 +11963,7 @@ test "a screenshot path that escapes the output directory is refused, not rewrit
     // zeroes rather than parking for a frame that cannot arrive.
     try std.testing.expectEqual(
         capture.err_none,
-        hostedCaptureScreenshot(&roc_host, abi.RocStr.fromSlice("scene.png", &roc_host)),
+        hostedCaptureScreenshotCode(&roc_host, abi.RocStr.fromSlice("scene.png", &roc_host)),
     );
 }
 
@@ -11784,7 +11983,7 @@ test "an offscreen export refuses an escaping path and releases the target eithe
     const target = storeRenderTexture(.headless).?;
     abi.increfBox(@ptrCast(target), 1);
 
-    try std.testing.expectEqual(capture.err_path_escapes, hostedCaptureScreenshotTexture(&roc_host, .{
+    try std.testing.expectEqual(capture.err_path_escapes, hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("../escaped.png", &roc_host),
         .target = .{ .handle = target, .height = 8, .width = 16 },
     }));
@@ -11792,7 +11991,7 @@ test "an offscreen export refuses an escaping path and releases the target eithe
     // A headless target has no pixels: every draw into it was a no-op, so the
     // export answers without writing a file of zeroes, exactly as a screenshot
     // does with no framebuffer.
-    try std.testing.expectEqual(capture.err_none, hostedCaptureScreenshotTexture(&roc_host, .{
+    try std.testing.expectEqual(capture.err_none, hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("poster.png", &roc_host),
         .target = .{ .handle = target, .height = 8, .width = 16 },
     }));
@@ -11816,13 +12015,13 @@ test "an offscreen export of a handle that resolves to nothing is unavailable" {
         active_roc_host = null;
     }
 
-    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("poster.png", &roc_host),
         .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 },
     }));
 
     const shader = storeShader(.headless).?;
-    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("poster.png", &roc_host),
         .target = .{ .handle = @ptrCast(shader), .height = 8, .width = 16 },
     }));
@@ -11848,7 +12047,7 @@ test "an offscreen export called from update! is rejected" {
     }
 
     const target = storeRenderTexture(.headless).?;
-    _ = hostedCaptureScreenshotTexture(&roc_host, .{
+    _ = hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("poster.png", &roc_host),
         .target = .{ .handle = target, .height = 8, .width = 16 },
     });
@@ -11980,7 +12179,7 @@ test "a drawing primitive called from update is rejected" {
     defer last_phase_violation = null;
     defer blend_scope_count = 0;
 
-    _ = hostedDrawBeginBlendRaw(.{ .arg0 = 1 });
+    _ = hostedDrawBeginBlendRawCode(.{ .arg0 = 1 });
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.with_blend_mode!", violation.operation);
@@ -12244,7 +12443,7 @@ test "an operation called from its own phase is not rejected" {
     defer last_phase_violation = null;
     defer blend_scope_count = 0;
 
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRawCode(.{ .arg0 = 1 }));
     hostedDrawEndBlendRaw();
     try std.testing.expect(last_phase_violation == null);
 }
@@ -13768,14 +13967,14 @@ test "a stream payload past the whole queue is refused and still releases the st
     // this test if the early return skips it.
     try std.testing.expectEqual(
         stdio_effect.ERR_TOO_LARGE,
-        hostedStdioWriteText(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized, &roc_host)),
+        hostedStdioWriteTextCode(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized, &roc_host)),
     );
 
     // A line queues the newline with its text, so the longest string a line
     // can carry is one byte shorter than the longest `write!` can.
     try std.testing.expectEqual(
         stdio_effect.ERR_TOO_LARGE,
-        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..stdio_effect.ring_capacity], &roc_host)),
+        hostedStdioWriteLineCode(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..stdio_effect.ring_capacity], &roc_host)),
     );
 }
 
@@ -13818,7 +14017,7 @@ test "a queued write with no drainer running is unavailable" {
     // drain is refused rather than accepted and forgotten.
     try std.testing.expectEqual(
         stdio_effect.ERR_UNAVAILABLE,
-        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice("nobody home", &roc_host)),
+        hostedStdioWriteLineCode(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice("nobody home", &roc_host)),
     );
 }
 
@@ -13844,7 +14043,7 @@ test "lines queued from update! reach the stream in order, and shutdown drains t
             const text = std.fmt.bufPrint(&digits, "line {d}", .{line}) catch unreachable;
             try std.testing.expectEqual(
                 @as(u8, 0),
-                hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(text, &roc_host)),
+                hostedStdioWriteLineCode(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(text, &roc_host)),
             );
         }
 
@@ -13852,7 +14051,7 @@ test "lines queued from update! reach the stream in order, and shutdown drains t
         const raw = [_]u8{ 'r', 'a', 'w', '\n' };
         try std.testing.expectEqual(
             @as(u8, 0),
-            hostedStdioWriteBytes(&roc_host, STDIO_STREAM_STDOUT, abi.RocListWith(u8, false).fromSlice(&raw, &roc_host)),
+            hostedStdioWriteBytesCode(&roc_host, STDIO_STREAM_STDOUT, abi.RocListWith(u8, false).fromSlice(&raw, &roc_host)),
         );
     }
 

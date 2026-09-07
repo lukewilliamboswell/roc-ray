@@ -33,13 +33,13 @@ Stdout := [].{
 	## most 256 kibibytes cross per call, counting the string's UTF-8 bytes and
 	## the newline; a longer string is `TooLarge` and nothing is queued.
 	line! : Str => Try({}, WriteError)
-	line! = |text| write_result(Host.stdio_write_line!(1, text))
+	line! = |text| lifted(Host.stdio_write_line!(1, text))
 
 	## Write a string with no newline after it. Bounded exactly as `line!` is.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	write! : Str => Try({}, WriteError)
-	write! = |text| write_result(Host.stdio_write_text!(1, text))
+	write! = |text| lifted(Host.stdio_write_text!(1, text))
 
 	## Write bytes that are not necessarily text.
 	##
@@ -49,8 +49,16 @@ Stdout := [].{
 	## newline, no translation. Bounded exactly as `line!` is, counting the length
 	## of the list.
 	write_bytes! : List(U8) => Try({}, WriteError)
-	write_bytes! = |bytes| write_result(Host.stdio_write_bytes!(1, bytes))
+	write_bytes! = |bytes| lifted(Host.stdio_write_bytes!(1, bytes))
 }
 
-write_result = |code|
-	if code == 0 Ok({}) else if code == 5 Err(TooLarge) else if code == 11 Err(BufferFull) else Err(Unavailable)
+## Re-lift a queued write's closed error union onto the open one this module
+## exposes.
+lifted : Try({}, Host.StdioWriteError) -> Try({}, WriteError)
+lifted = |result|
+	match result {
+		Ok({}) => Ok({})
+		Err(BufferFull) => Err(BufferFull)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}

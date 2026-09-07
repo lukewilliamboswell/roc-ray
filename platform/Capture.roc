@@ -18,49 +18,293 @@
 ## `pixel_at!` and `read_region!` return pixels from the last presented frame
 ## or a render texture without writing a file. Both are refused in `render!`.
 ##
-## The types and pure helpers live in the companion `roc-ray-types` package so
-## reusable packages can depend on them without depending on this platform.
-## This module re-exports them, so `Recording` here and in the package are the
-## same nominal type.
-import rrt.Capture as RrtCapture
-import CaptureHost
+import Host
 import Color
 import Draw
+
+capture_format_code = |value|
+	match value {
+		Png => 0
+		Gif => 1
+		WebM => 2
+	}
+
+capture_timing_code = |value|
+	match value {
+		RealTime => 0
+		FixedStep => 1
+	}
+
+capture_cursor_code = |value|
+	match value {
+		NoCursor => 0
+		DrawCursor => 1
+	}
+
+capture_quality_code = |value|
+	match value {
+		Fast => 0
+		Balanced => 1
+		Best => 2
+	}
+
+capture_scale_ratio = |value|
+	match value {
+		Full => { numerator: 1, denominator: 1 }
+		Half => { numerator: 1, denominator: 2 }
+		Quarter => { numerator: 1, denominator: 4 }
+		Ratio(r) =>
+			if r.numerator == 0 or r.denominator == 0 {
+				{ numerator: 1, denominator: 1 }
+			} else {
+				{ numerator: r.numerator, denominator: r.denominator }
+			}
+		}
+
+# TODO(follow up): Restore derived equality when Roc handles it through type aliases
+# without looping during compilation (nightly-2026-09-06-d85e877).
+CaptureFormat := [Png, Gif, WebM].{
+
+	## Compare two of these values.
+	is_eq : CaptureFormat, CaptureFormat -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Png, Png) => Bool.True
+		(Gif, Gif) => Bool.True
+		(WebM, WebM) => Bool.True
+		_ => Bool.False
+	}
+}
+
+CaptureScale := [Full, Half, Quarter, Ratio({ numerator : U32, denominator : U32 })].{
+
+	## Compare two of these values.
+	is_eq : CaptureScale, CaptureScale -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Full, Full) => Bool.True
+		(Half, Half) => Bool.True
+		(Quarter, Quarter) => Bool.True
+		(Ratio(left), Ratio(right)) => left.numerator == right.numerator and left.denominator == right.denominator
+		_ => Bool.False
+	}
+}
+
+CaptureTiming := [RealTime, FixedStep].{
+
+	## Compare two of these values.
+	is_eq : CaptureTiming, CaptureTiming -> Bool
+	is_eq = |a, b| match (a, b) {
+		(RealTime, RealTime) => Bool.True
+		(FixedStep, FixedStep) => Bool.True
+		_ => Bool.False
+	}
+}
+
+CaptureCursor := [NoCursor, DrawCursor].{
+
+	## Compare two of these values.
+	is_eq : CaptureCursor, CaptureCursor -> Bool
+	is_eq = |a, b| match (a, b) {
+		(NoCursor, NoCursor) => Bool.True
+		(DrawCursor, DrawCursor) => Bool.True
+		_ => Bool.False
+	}
+}
+
+CaptureQuality := [Fast, Balanced, Best].{
+
+	## Compare two of these values.
+	is_eq : CaptureQuality, CaptureQuality -> Bool
+	is_eq = |a, b| match (a, b) {
+		(Fast, Fast) => Bool.True
+		(Balanced, Balanced) => Bool.True
+		(Best, Best) => Bool.True
+		_ => Bool.False
+	}
+}
 
 Capture := [].{
 
 	## Container and codec written for a capture.
-	Format : RrtCapture.Format
+	##
+	## `Png` writes a numbered still per captured frame. `Gif` and `WebM` each
+	## write a single animated file, encoded incrementally as frames arrive --
+	## so memory stays bounded by one frame and the length of a recording is
+	## limited only by `max_frames` and by disk space.
+	##
+	## `CaptureFormat` in the signature is the module-private nominal this
+	## aliases; `Capture.Format` is the name to write.
+	Format : CaptureFormat
 
 	## How far each captured frame is downscaled from the framebuffer.
-	Scale : RrtCapture.Scale
+	##
+	## Scaling happens after rendering, so it shrinks the output file without
+	## changing the window size or what the app draws. A ratio that would round
+	## an axis to zero is clamped to one pixel.
+	Scale : CaptureScale
 
 	## Whether simulation time follows the wall clock or advances in exact steps.
-	Timing : RrtCapture.Timing
+	##
+	## Reading back the framebuffer stalls the GPU, so a `RealTime` recording
+	## bakes that stutter into the output and differs between runs. `FixedStep`
+	## reports `1/fps` as the frame delta regardless of how long the frame
+	## actually took, which is smooth and reproducible.
+	Timing : CaptureTiming
 
 	## Whether the host composites a pointer glyph into captured frames.
-	Cursor : RrtCapture.Cursor
+	##
+	## The operating system cursor is not part of the framebuffer, so a
+	## recording never shows a pointer unless something draws one.
+	Cursor : CaptureCursor
 
 	## How hard the encoder works to choose colours for each frame.
-	Quality : RrtCapture.Quality
-
-	## A validated recording request. Update it through its receivers.
 	##
-	## Declared in the `roc-ray-types` package's `Capture` and re-exported here,
-	## which is also where its receivers are documented.
-	Recording : RrtCapture.Recording
+	## This setting affects `Gif` and is ignored by `Png` and `WebM`.
+	##
+	## `Best` searches the full colour depth. `Balanced` is the default and
+	## trades at most 16/255 channel error for faster encoding on flat-colour
+	## frames. `Fast` uses a coarser palette and may show visible banding.
+	Quality : CaptureQuality
+
+	## A validated recording request. Its fields cannot be updated directly;
+	## use its receiver updates so the invariants are preserved.
+	Recording :: {
+		path : Str,
+		format : CaptureFormat,
+		fps : I32,
+		max_frames : U64,
+		scale : CaptureScale,
+		every_nth : U32,
+		timing : CaptureTiming,
+		cursor : CaptureCursor,
+		quality : CaptureQuality,
+	}.{
+
+		## Compare two of these values.
+		is_eq : _
+
+		## Return a recording written to a different path.
+		##
+		## The path is relative to the app's configured output directory. The
+		## host refuses absolute paths and any path containing `..`.
+		with_path : Recording, Str -> Recording
+		with_path = |rec, value| { ..rec, path: value }
+
+		## Return a recording written in a different format.
+		with_format : Recording, Format -> Recording
+		with_format = |rec, value| { ..rec, format: value }
+
+		## Return a recording played back at a different frame rate. A
+		## non-positive rate falls back to the 25 FPS default.
+		with_fps : Recording, I32 -> Recording
+		with_fps = |rec, value| { ..rec, fps: normalize_fps(value) }
+
+		## Return a recording that stops after this many captured frames. `0`
+		## records until a `Capture.stop` command is applied or the app exits.
+		with_max_frames : Recording, U64 -> Recording
+		with_max_frames = |rec, value| { ..rec, max_frames: value }
+
+		## Return a recording captured at a different scale.
+		with_scale : Recording, Scale -> Recording
+		with_scale = |rec, value| { ..rec, scale: value }
+
+		## Return a recording that keeps only every nth rendered frame. `0` and
+		## `1` both keep every frame.
+		with_every_nth : Recording, U32 -> Recording
+		with_every_nth = |rec, value| { ..rec, every_nth: normalize_every_nth(value) }
+
+		## Return a recording using a different simulation timing strategy.
+		with_timing : Recording, Timing -> Recording
+		with_timing = |rec, value| { ..rec, timing: value }
+
+		## Return a recording that does or does not draw a pointer glyph.
+		with_cursor : Recording, Cursor -> Recording
+		with_cursor = |rec, value| { ..rec, cursor: value }
+
+		## Return a recording encoded at a different quality.
+		with_quality : Recording, Quality -> Recording
+		with_quality = |rec, value| { ..rec, quality: value }
+
+		## Inspect the output path.
+		path : Recording -> Str
+		path = |rec| rec.path
+
+		## Inspect the selected format.
+		format : Recording -> Format
+		format = |rec| rec.format
+
+		## Inspect the playback frame rate.
+		fps : Recording -> I32
+		fps = |rec| rec.fps
+
+		## Inspect the frame cap. `0` means the recording is unbounded.
+		max_frames : Recording -> U64
+		max_frames = |rec| rec.max_frames
+
+		## Inspect the capture scale.
+		scale : Recording -> Scale
+		scale = |rec| rec.scale
+
+		## Inspect the frame stride.
+		every_nth : Recording -> U32
+		every_nth = |rec| rec.every_nth
+
+		## Inspect the simulation timing strategy.
+		timing : Recording -> Timing
+		timing = |rec| rec.timing
+
+		## Inspect whether a pointer glyph is drawn.
+		cursor : Recording -> Cursor
+		cursor = |rec| rec.cursor
+
+		## Inspect the encoder quality.
+		quality : Recording -> Quality
+		quality = |rec| rec.quality
+	}
 
 	## Live recording state, sampled onto every `App.Input` as `input.capture`.
 	##
 	## `Finished` remains observable after automatic finalization at the frame cap.
-	Status : RrtCapture.Status
+	Status : [
+		Idle,
+		Active({ frames : U64, dropped : U64 }),
+		Finished({ frames : U64, bytes : U64 }),
+		Failed({ frames : U64, reason : FailureReason }),
+	]
 
 	## Why a recording is not running.
 	##
 	## `PathInvalid`, `PathEscapesOutputDir`, `AlreadyRecording`, and
 	## `BudgetExceeded` reject a start request before anything is written. The
 	## remaining reasons may stop an active recording.
-	FailureReason : RrtCapture.FailureReason
+	FailureReason : [
+		PathInvalid,
+		PathEscapesOutputDir,
+		AlreadyRecording,
+		BudgetExceeded,
+		UnsupportedFormat,
+		OutOfMemory,
+		WriteFailed,
+		EncodeFailed,
+		Unknown,
+	]
+
+	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
+	## and balanced encoder quality.
+	##
+	## Sized so a full-screen recording stays well inside the host's in-memory
+	## encoding budget and produces a file small enough to embed in a README.
+	default : Recording
+	default = {
+		path: "recording.gif",
+		format: Gif,
+		fps: 25,
+		max_frames: 300,
+		scale: Half,
+		every_nth: 1,
+		timing: FixedStep,
+		cursor: NoCursor,
+		quality: Balanced,
+	}
 
 	## Why a screenshot did not become a file.
 	##
@@ -109,11 +353,15 @@ Capture := [].{
 	## still waiting for its frame is `AlreadyPending`.
 	screenshot! : Str => Try({}, ScreenshotError)
 	screenshot! = |path| {
-		err = CaptureHost.screenshot!(path)
-		if err == 0 {
-			Ok({})
-		} else {
-			Err(screenshot_error(err))
+		# closed error union to open error union
+		match Host.capture_screenshot!(path) {
+			Ok({}) => Ok({})
+			Err(AlreadyPending) => Err(AlreadyPending)
+			Err(Busy) => Err(Busy)
+			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(Unavailable) => Err(Unavailable)
+			Err(WriteFailed) => Err(WriteFailed)
 		}
 	}
 
@@ -163,11 +411,18 @@ Capture := [].{
 	## ```
 	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
 	screenshot_texture! = |target, path| {
-		err = CaptureHost.screenshot_texture!({ target, path })
-		if err == 0 {
-			Ok({})
-		} else {
-			Err(texture_export_error(err))
+		# closed error union to open error union
+		match Host.capture_screenshot_texture!({ target: target.for_host(), path }) {
+			Ok({}) => Ok({})
+			Err(BudgetExceeded) => Err(BudgetExceeded)
+			Err(Busy) => Err(Busy)
+			Err(OutOfMemory) => Err(OutOfMemory)
+			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
+			Err(WriteFailed) => Err(WriteFailed)
 		}
 	}
 
@@ -235,11 +490,14 @@ Capture := [].{
 	## run under `--host-headless`.
 	pixel_at! : Source, { x : I32, y : I32 } => Try(Color.Rgba, PixelReadError)
 	pixel_at! = |source, point| {
-		result = CaptureHost.pixel_at!({ source: pixel_source(source), x: point.x, y: point.y })
-		if result.err == 0 {
-			Ok(Color.rgba(result.r, result.g, result.b, result.a))
-		} else {
-			Err(pixel_read_error(result.err))
+		# closed error union to open error union
+		match Host.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y }) {
+			Ok(pixel) => Ok(Color.rgba(pixel.r, pixel.g, pixel.b, pixel.a))
+			Err(Busy) => Err(Busy)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -268,17 +526,21 @@ Capture := [].{
 	## not a per-frame operation on a whole window.
 	read_region! : Source, Region => Try(List(U8), PixelReadError)
 	read_region! = |source, region| {
-		result = CaptureHost.read_region!({
+		result = Host.capture_read_region!({
 			source: pixel_source(source),
 			x: region.x,
 			y: region.y,
 			width: region.width,
 			height: region.height,
 		})
-		if result.err == 0 {
-			Ok(result.bytes)
-		} else {
-			Err(pixel_read_error(result.err))
+		# closed error union to open error union
+		match result {
+			Ok(bytes) => Ok(bytes)
+			Err(Busy) => Err(Busy)
+			Err(ReadbackFailed) => Err(ReadbackFailed)
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(TargetUnavailable) => Err(TargetUnavailable)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -290,11 +552,6 @@ Capture := [].{
 	## cannot both be given the whole of it.
 	max_readback_bytes : U64
 	max_readback_bytes = 128 * 1024 * 1024
-
-	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-input timing
-	## and balanced encoder quality.
-	default : Recording
-	default = RrtCapture.default
 
 	## Begin recording.
 	##
@@ -308,18 +565,20 @@ Capture := [].{
 	## the same way whichever phase started it.
 	start! : Recording => {}
 	start! = |recording| {
-		ratio = CaptureHost.scale_ratio(recording.scale())
-		_refusal = CaptureHost.start_recording!({
+		ratio = capture_scale_ratio(recording.scale())
+		# The host latches the refusal for the next `Input` to report, so there
+		# is nothing to answer with here.
+		_refusal = Host.capture_start_recording!({
 			path: recording.path(),
-			format: CaptureHost.format_code(recording.format()),
+			format: capture_format_code(recording.format()),
 			fps: recording.fps(),
 			max_frames: recording.max_frames(),
 			scale_numerator: ratio.numerator,
 			scale_denominator: ratio.denominator,
 			every_nth: recording.every_nth(),
-			timing: CaptureHost.timing_code(recording.timing()),
-			cursor: CaptureHost.cursor_code(recording.cursor()),
-			quality: CaptureHost.quality_code(recording.quality()),
+			timing: capture_timing_code(recording.timing()),
+			cursor: capture_cursor_code(recording.cursor()),
+			quality: capture_quality_code(recording.quality()),
 		})
 		{}
 	}
@@ -333,11 +592,51 @@ Capture := [].{
 	## and file size as `Finished`.
 	stop! : () => {}
 	stop! = || {
-		_finished = CaptureHost.stop_recording!()
+		_finished = Host.capture_stop_recording!()
 		{}
 	}
 
 }
+
+normalize_fps : I32 -> I32
+normalize_fps = |value| if value > 0 value else 25
+
+## `0` and `1` both mean "keep every frame"; the host divides by this value.
+normalize_every_nth : U32 -> U32
+normalize_every_nth = |value| if value > 0 value else 1
+
+expect Capture.default.format() == Gif
+expect Capture.default.fps() == 25
+expect Capture.default.max_frames() == 300
+expect Capture.default.scale() == Half
+expect Capture.default.every_nth() == 1
+expect Capture.default.timing() == FixedStep
+expect Capture.default.cursor() == NoCursor
+expect Capture.default.quality() == Balanced
+expect Capture.default.path() == "recording.gif"
+expect Capture.default.with_path("out/demo.gif").path() == "out/demo.gif"
+expect Capture.default.with_format(WebM).format() == WebM
+expect Capture.default.with_fps(50).fps() == 50
+expect Capture.default.with_fps(0).fps() == 25
+expect Capture.default.with_fps(-5).fps() == 25
+expect Capture.default.with_max_frames(0).max_frames() == 0
+expect Capture.default.with_scale(Full).scale() == Full
+expect Capture.default.with_every_nth(3).every_nth() == 3
+expect Capture.default.with_every_nth(0).every_nth() == 1
+expect Capture.default.with_timing(RealTime).timing() == RealTime
+expect Capture.default.with_cursor(DrawCursor).cursor() == DrawCursor
+expect Capture.default.with_quality(Fast).quality() == Fast
+expect Capture.default.with_quality(Best).quality() == Best
+
+expect CaptureFormat.is_eq(Png, Gif) == Bool.False
+expect CaptureScale.is_eq(Half, Full) == Bool.False
+expect CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 1, denominator: 2 }))
+expect !CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 2, denominator: 2 }))
+expect !CaptureScale.is_eq(Ratio({ numerator: 1, denominator: 2 }), Ratio({ numerator: 1, denominator: 3 }))
+expect !CaptureScale.is_eq(Half, Ratio({ numerator: 1, denominator: 2 }))
+expect !CaptureTiming.is_eq(RealTime, FixedStep)
+expect !CaptureCursor.is_eq(NoCursor, DrawCursor)
+expect !CaptureQuality.is_eq(Fast, Best)
 
 ## Name every failure code the host can latch, whether it refused a start or
 ## stopped a running recording.
@@ -369,97 +668,31 @@ expect failure_reason(9) == EncodeFailed
 expect failure_reason(0) == Unknown
 expect failure_reason(200) == Unknown
 
-## Decode the host's capture-error code for a screenshot.
-##
-## These are `src/capture.zig`'s codes, the same ones a recording's
-## `FailureReason` names, so a path that escapes the output directory is still
-## reported as the sandbox refusing it rather than as a failed write.
-screenshot_error : U8 -> Capture.ScreenshotError
-screenshot_error = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		3 => AlreadyPending
-		7 => WriteFailed
-		10 => Busy
-		11 => Unavailable
-		_ => WriteFailed
-	}
-
-expect screenshot_error(1) == PathInvalid
-expect screenshot_error(2) == PathEscapesOutputDir
-expect screenshot_error(3) == AlreadyPending
-expect screenshot_error(7) == WriteFailed
-expect screenshot_error(10) == Busy
-expect screenshot_error(11) == Unavailable
-expect screenshot_error(99) == WriteFailed
-
-## Decode the host's capture-error code for an offscreen export.
-##
-## The same `src/capture.zig` codes again, so a path refused by the sandbox
-## reads the same here as it does for a screenshot or a recording. An unnamed
-## code is drift between this module and the host rather than a state an app can
-## do anything about, so it reports as a failed write.
-texture_export_error : U8 -> Capture.TextureExportError
-texture_export_error = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		6 => BudgetExceeded
-		7 => OutOfMemory
-		8 => WriteFailed
-		10 => Busy
-		11 => Unavailable
-		12 => ReadbackFailed
-		13 => TargetUnavailable
-		_ => WriteFailed
-	}
-
-expect texture_export_error(1) == PathInvalid
-expect texture_export_error(2) == PathEscapesOutputDir
-expect texture_export_error(6) == BudgetExceeded
-expect texture_export_error(7) == OutOfMemory
-expect texture_export_error(8) == WriteFailed
-expect texture_export_error(10) == Busy
-expect texture_export_error(11) == Unavailable
-expect texture_export_error(12) == ReadbackFailed
-expect texture_export_error(13) == TargetUnavailable
-expect texture_export_error(0) == WriteFailed
-expect texture_export_error(99) == WriteFailed
-
 ## Flatten a `Source` onto the pair the host ABI carries.
 ##
 ## The unread half is `Draw.RenderTexture.stub`, a resource-free value the host
 ## never resolves, so the record always has a target to carry and the host
 ## never has to read a field that means nothing.
-pixel_source : Capture.Source -> CaptureHost.PixelSource
+pixel_source : Capture.Source -> Host.CapturePixelSource
 pixel_source = |source|
 	match source {
-		Screen => { target: Draw.RenderTexture.stub, screen: Bool.True }
-		Target(target) => { target, screen: Bool.False }
+		Screen => { target: Draw.RenderTexture.stub.for_host(), screen: Bool.True }
+		Target(target) => { target: target.for_host(), screen: Bool.False }
 	}
 
-## Decode the host's capture-error code for a pixel readback.
-##
-## The same `src/capture.zig` codes the exports use, plus the one that is only
-## a readback's business: a region outside its source. An unnamed code is drift
-## between this module and the host rather than a state an app can act on, so
-## it reports as the driver having refused the read.
-pixel_read_error : U8 -> Capture.PixelReadError
-pixel_read_error = |code|
-	match code {
-		10 => Busy
-		11 => Unavailable
-		12 => ReadbackFailed
-		13 => TargetUnavailable
-		14 => RegionOutOfBounds
-		_ => ReadbackFailed
-	}
-
-expect pixel_read_error(10) == Busy
-expect pixel_read_error(11) == Unavailable
-expect pixel_read_error(12) == ReadbackFailed
-expect pixel_read_error(13) == TargetUnavailable
-expect pixel_read_error(14) == RegionOutOfBounds
-expect pixel_read_error(0) == ReadbackFailed
-expect pixel_read_error(99) == ReadbackFailed
+expect capture_format_code(Png) == 0
+expect capture_format_code(Gif) == 1
+expect capture_format_code(WebM) == 2
+expect capture_timing_code(RealTime) == 0
+expect capture_timing_code(FixedStep) == 1
+expect capture_cursor_code(NoCursor) == 0
+expect capture_cursor_code(DrawCursor) == 1
+expect capture_quality_code(Fast) == 0
+expect capture_quality_code(Balanced) == 1
+expect capture_quality_code(Best) == 2
+expect capture_scale_ratio(Full) == { numerator: 1, denominator: 1 }
+expect capture_scale_ratio(Half) == { numerator: 1, denominator: 2 }
+expect capture_scale_ratio(Quarter) == { numerator: 1, denominator: 4 }
+expect capture_scale_ratio(Ratio({ numerator: 2, denominator: 3 })) == { numerator: 2, denominator: 3 }
+expect capture_scale_ratio(Ratio({ numerator: 1, denominator: 0 })) == { numerator: 1, denominator: 1 }
+expect capture_scale_ratio(Ratio({ numerator: 0, denominator: 4 })) == { numerator: 1, denominator: 1 }

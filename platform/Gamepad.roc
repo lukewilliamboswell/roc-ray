@@ -1,78 +1,261 @@
-## Gamepad helpers for `input.devices.gamepads`.
+## Gamepad state for one sampled input snapshot.
 ##
-## The types and pure helpers live in the companion `roc-ray-types` package so
-## reusable packages can depend on them without depending on this platform.
-## This module re-exports them, so the nominal types are shared either way.
+## The host samples up to four gamepads once per host cycle. Queries are pure
+## and do not cross the host boundary or allocate.
+## Button state uses the same bits as keyboard and mouse input: held is `1`,
+## pressed is `2`, released is `4`. Unlike keyboard and mouse edges, which are
+## recorded from the window system's events, gamepad edges come from comparing
+## two consecutive samples: a button pressed and released between two cycles
+## is not seen. Hold a button for at least one cycle to be sure it registers.
 ##
-## Query these pure values from `input.devices.gamepads`.
-import rrt.Gamepad as RrtGamepad
-
+## Resolve a `View` from the current `input.devices` during `update!`. Retaining
+## a view also retains that snapshot's sampled lists.
 Gamepad := [].{
 
-	## Gamepad input sampled once per host-cycle input for every slot.
-	##
-	## Sampled, unlike the keyboard and mouse: raylib polls gamepads once per
-	## cycle with no event callback to record from, so the pressed and released
-	## bits come from comparing two samples and a button pressed and released
-	## between two cycles is lost. Hold a button for at least one cycle to be
-	## sure it registers.
-	##
-	## Declared in the `roc-ray-types` package's `Gamepad` and re-exported here,
-	## which is also where its receivers are documented.
-	Snapshot : RrtGamepad.Snapshot
+	## Fixed-size gamepad state sampled once per host-cycle input.
+	Snapshot := {
+		connected : List(U8),
+		buttons : List(U8),
+		axes : List(F32),
+	}
 
-	## The four gamepad slots the platform samples.
-	Id : RrtGamepad.Id
+	## One of the four gamepad slots sampled by the platform.
+	Id := [One, Two, Three, Four].{
 
-	## Face, shoulder, d-pad, and stick buttons.
-	Button : RrtGamepad.Button
+		## Compare two of these values.
+		is_eq : _
+	}
 
-	## Analogue stick and trigger axes.
-	Axis : RrtGamepad.Axis
-
-	## A gamepad resolved against a snapshot, carrying its receivers.
-	View : RrtGamepad.View
-
-	## Validate and wrap a raw gamepad slot index.
+	## Validate and wrap a zero-based gamepad index.
 	from_index : U64 -> Try(Id, [InvalidGamepadIndex, ..])
-	from_index = RrtGamepad.from_index
+	from_index = |value|
+		match value {
+			0 => Ok(One)
+			1 => Ok(Two)
+			2 => Ok(Three)
+			3 => Ok(Four)
+			_ => Err(InvalidGamepadIndex)
+		}
 
-	## Resolve a gamepad slot in a sampled snapshot.
+	## Standard gamepad buttons. Face directions are layout-neutral rather than
+	## assuming Xbox, PlayStation, or Nintendo labels.
+	Button := [
+		Unknown,
+		DpadUp,
+		DpadRight,
+		DpadDown,
+		DpadLeft,
+		FaceUp,
+		FaceRight,
+		FaceDown,
+		FaceLeft,
+		LeftBumper,
+		LeftTrigger,
+		RightBumper,
+		RightTrigger,
+		Select,
+		Guide,
+		Start,
+		LeftStick,
+		RightStick,
+	]
+
+	## Analog stick and trigger axes.
+	Axis := [LeftX, LeftY, RightX, RightY, LeftTriggerAxis, RightTriggerAxis]
+
+	## A gamepad proven connected in this snapshot. This is a small value holding
+	## references to the existing flat lists; lookup does not allocate or resample.
+	## It is valid as a view of this snapshot only. Resolve the pad again from the
+	## next cycle's `Devices.Snapshot` instead of retaining it in the model.
+	View :: { snapshot : Snapshot, gamepad : Id }.{
+
+		## Slot occupied by this connected pad.
+		id : View -> Id
+		id = |pad| pad.gamepad
+
+		## Whether a button is currently held.
+		button_down : View, Button -> Bool
+		button_down = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 1)
+
+		## Whether a button is currently up.
+		button_up : View, Button -> Bool
+		button_up = |pad, button| !(pad.button_down(button))
+
+		## Whether a button went from up to down between the previous sample and
+		## this one. Sampled, so a press and release inside one cycle is lost.
+		button_pressed : View, Button -> Bool
+		button_pressed = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 2)
+
+		## Whether a button went from down to up between the previous sample and
+		## this one, with the same caveat as `button_pressed`.
+		button_released : View, Button -> Bool
+		button_released = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 4)
+
+		## Read an axis from this input's latest sample. Stick axes are normally in [-1, 1].
+		axis : View, Axis -> F32
+		axis = |pad, axis_name| axis_value(pad.snapshot, pad.gamepad, axis_name)
+
+		## Left stick as a two-dimensional vector.
+		left_stick : View -> { x : F32, y : F32 }
+		left_stick = |pad| { x: pad.axis(LeftX), y: pad.axis(LeftY) }
+
+		## Right stick as a two-dimensional vector.
+		right_stick : View -> { x : F32, y : F32 }
+		right_stick = |pad| { x: pad.axis(RightX), y: pad.axis(RightY) }
+	}
+
+	## Resolve a slot into a snapshot-scoped connected receiver. Callers handle
+	## disconnect once, after which button and axis queries stay allocation-free.
 	lookup : Snapshot, Id -> [Connected(View), Disconnected]
-	lookup = RrtGamepad.lookup
+	lookup = |snapshot, gamepad|
+		if is_connected(snapshot, gamepad) {
+			pad : View
+			pad = { snapshot, gamepad }
+			Connected(pad)
+		} else {
+			Disconnected
+		}
 
-	## Whether a gamepad slot is connected in this input's latest sample.
-	available : { connected : List(U8), ..state }, Id -> Bool
-	available = RrtGamepad.available
-
-	## Check if a gamepad button is currently held down.
+	## Whether a button is currently held.
 	button_down : { buttons : List(U8), ..state }, Id, Button -> Bool
-	button_down = RrtGamepad.button_down
+	button_down = |snapshot, gamepad, button| button_state(snapshot, gamepad, button, 1)
 
-	## Check if a gamepad button is currently up.
+	## Whether a button is currently up.
 	button_up : { buttons : List(U8), ..state }, Id, Button -> Bool
-	button_up = RrtGamepad.button_up
+	button_up = |snapshot, gamepad, button| !(button_down(snapshot, gamepad, button))
 
-	## Check if a gamepad button went from up to down between the previous
-	## sample and this one. Sampled, so a press and release inside one cycle
-	## is not seen; see `Snapshot`.
+	## Whether a button went from up to down between the previous sample and
+	## this one. Sampled, so a press and release inside one cycle is lost.
 	button_pressed : { buttons : List(U8), ..state }, Id, Button -> Bool
-	button_pressed = RrtGamepad.button_pressed
+	button_pressed = |snapshot, gamepad, button| button_state(snapshot, gamepad, button, 2)
 
-	## Check if a gamepad button went from down to up between the previous
-	## sample and this one, with the same caveat as `button_pressed`.
+	## Whether a button went from down to up between the previous sample and
+	## this one, with the same caveat as `button_pressed`.
 	button_released : { buttons : List(U8), ..state }, Id, Button -> Bool
-	button_released = RrtGamepad.button_released
+	button_released = |snapshot, gamepad, button| button_state(snapshot, gamepad, button, 4)
 
-	## Sampled value for one axis, in the range raylib reports.
+	## Read an axis from this input's latest sample. Stick axes are normally in [-1, 1].
+	## raylib reports trigger axes in [-1, 1], where -1 is released.
 	axis : { axes : List(F32), ..state }, Id, Axis -> F32
-	axis = RrtGamepad.axis
+	axis = |snapshot, gamepad, axis_name| axis_value(snapshot, gamepad, axis_name)
 
-	## Left analogue stick as a two-axis vector.
+	## Left stick as a two-dimensional vector.
 	left_stick : { axes : List(F32), ..state }, Id -> { x : F32, y : F32 }
-	left_stick = RrtGamepad.left_stick
+	left_stick = |snapshot, gamepad| {
+		x: axis(snapshot, gamepad, LeftX),
+		y: axis(snapshot, gamepad, LeftY),
+	}
 
-	## Right analogue stick as a two-axis vector.
+	## Right stick as a two-dimensional vector.
 	right_stick : { axes : List(F32), ..state }, Id -> { x : F32, y : F32 }
-	right_stick = RrtGamepad.right_stick
+	right_stick = |snapshot, gamepad| {
+		x: axis(snapshot, gamepad, RightX),
+		y: axis(snapshot, gamepad, RightY),
+	}
+
+	expect index(One) == 0
+	expect index(Four) == 3
+	expect from_index(4) == Err(InvalidGamepadIndex)
+	expect is_connected({ connected: [1, 0, 0, 0], buttons: [], axes: [] }, One)
+	expect button_pressed({ connected: [], buttons: [0, 0, 7], axes: [] }, One, DpadRight)
+	expect axis({ connected: [], buttons: [], axes: [0.25, -0.5] }, One, LeftY) == -0.5
+	expect {
+		snapshot : Snapshot
+		snapshot = { connected: [1, 0, 0, 0], buttons: [0, 0, 7], axes: [0.25, -0.5, 0.75, 1] }
+		match snapshot.lookup(One) {
+			Connected(pad) =>
+				pad.id() == One
+					and pad.button_down(DpadRight)
+						and !(pad.button_up(DpadRight))
+							and pad.button_pressed(DpadRight)
+								and pad.button_released(DpadRight)
+									and pad.axis(LeftY) == -0.5
+										and pad.left_stick() == { x: 0.25, y: -0.5 }
+											and pad.right_stick() == { x: 0.75, y: 1 }
+			Disconnected => False
+		}
+	}
+	expect {
+		snapshot : Snapshot
+		snapshot = { connected: [1, 0, 0, 0], buttons: [], axes: [] }
+		snapshot.lookup(Two) == Disconnected
+	}
+
 }
+
+gamepad_count : U64
+gamepad_count = 4
+
+button_count : U64
+button_count = 18
+
+axis_count : U64
+axis_count = 6
+
+index : Gamepad.Id -> U64
+index = |gamepad|
+	match gamepad {
+		One => 0
+		Two => 1
+		Three => 2
+		Four => 3
+	}
+
+button_code : Gamepad.Button -> U64
+button_code = |button|
+	match button {
+		Unknown => 0
+		DpadUp => 1
+		DpadRight => 2
+		DpadDown => 3
+		DpadLeft => 4
+		FaceUp => 5
+		FaceRight => 6
+		FaceDown => 7
+		FaceLeft => 8
+		LeftBumper => 9
+		LeftTrigger => 10
+		RightBumper => 11
+		RightTrigger => 12
+		Select => 13
+		Guide => 14
+		Start => 15
+		LeftStick => 16
+		RightStick => 17
+	}
+
+axis_code : Gamepad.Axis -> U64
+axis_code = |axis|
+	match axis {
+		LeftX => 0
+		LeftY => 1
+		RightX => 2
+		RightY => 3
+		LeftTriggerAxis => 4
+		RightTriggerAxis => 5
+	}
+
+button_state : { buttons : List(U8), ..state }, Gamepad.Id, Gamepad.Button, U8 -> Bool
+button_state = |snapshot, gamepad, button, mask| {
+	flat_index = index(gamepad) * button_count + button_code(button)
+	match List.get(snapshot.buttons, flat_index) {
+		Ok(value) => U8.bitwise_and(value, mask) != 0
+		Err(_) => False
+	}
+}
+
+axis_value : { axes : List(F32), ..state }, Gamepad.Id, Gamepad.Axis -> F32
+axis_value = |snapshot, gamepad, axis_name| {
+	flat_index = index(gamepad) * axis_count + axis_code(axis_name)
+	match List.get(snapshot.axes, flat_index) {
+		Ok(value) => value
+		Err(_) => 0
+	}
+}
+
+is_connected : { connected : List(U8), ..state }, Id -> Bool
+is_connected = |snapshot, gamepad|
+	match List.get(snapshot.connected, index(gamepad)) {
+		Ok(value) => value != 0
+		Err(_) => False
+	}

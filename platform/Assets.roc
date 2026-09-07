@@ -20,8 +20,8 @@
 ## A store anchors relative asset paths to an explicit directory. Paths that
 ## escape the store are refused rather than rewritten.
 ##
-## Textures are the shared texture type from the companion `roc-ray-types`
-## package, re-exported here as `Assets.Texture`. Releasing the final reference
+## Textures are platform-owned values, also named `Assets.Texture` and
+## `Draw.Texture`. Releasing the final reference
 ## to one unloads the native texture automatically, so there is no `unload` to
 ## remember.
 ##
@@ -36,9 +36,10 @@
 ##
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
 ## Release textures the app no longer needs before loading more.
+import Resource
 import Color
-import AssetsHost
-import rrt.Texture as RrtTexture
+import Host
+import Texture as PlatformTexture
 
 Assets := [].{
 
@@ -46,16 +47,14 @@ Assets := [].{
 	## the pixel width and height, kept on the value so layout and
 	## source-rectangle math stays pure.
 	##
-	## This is the shared texture type from the companion `roc-ray-types`
-	## package, re-exported so an app can name it without depending on that
-	## package as well. `Draw.Texture` is the same type under a second name, and
-	## a package written against the package's own `Texture` unifies with both.
-	Texture : RrtTexture.Texture
+	## This is the platform's `Texture` value. `Draw.Texture` names the same
+	## type, so loading and drawing need no conversion.
+	Texture : PlatformTexture.Texture
 
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
-	Store :: AssetsHost.Store.{
+	Store :: Resource.Store.{
 
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
@@ -87,25 +86,23 @@ Assets := [].{
 		## only. Nothing walks or hashes the loose files, so opening a store
 		## stays constant-time in the number of assets.
 		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
-		open! = |cfg| {
-			result = AssetsHost.open_store!(store_open_config(cfg))
-			match result.err {
-				0 => Ok(Store.(result.store))
-				1 => Err(RootNotFound)
-				2 => Err(RootNotDirectory)
-				3 => Err(RootUnreadable)
-				4 => Err(InvalidRootPath)
-				5 => Err(InvalidExpectedContentHash)
-				6 => Err(ManifestMissing)
-				7 => Err(ManifestUnreadable)
-				8 => Err(ManifestMalformed)
-				9 => Err(AssetSetMismatch)
-				10 => Err(SchemaMismatch)
-				11 => Err(ContentVersionMismatch)
-				12 => Err(ContentHashMismatch)
-				_ => Err(ResourceLimit)
+		open! = |cfg|
+			match Host.store_open!(store_open_config(cfg)) {
+				Ok(store) => Ok(Store.(store))
+				Err(RootNotFound) => Err(RootNotFound)
+				Err(RootNotDirectory) => Err(RootNotDirectory)
+				Err(RootUnreadable) => Err(RootUnreadable)
+				Err(InvalidRootPath) => Err(InvalidRootPath)
+				Err(InvalidExpectedContentHash) => Err(InvalidExpectedContentHash)
+				Err(ManifestMissing) => Err(ManifestMissing)
+				Err(ManifestUnreadable) => Err(ManifestUnreadable)
+				Err(ManifestMalformed) => Err(ManifestMalformed)
+				Err(AssetSetMismatch) => Err(AssetSetMismatch)
+				Err(SchemaMismatch) => Err(SchemaMismatch)
+				Err(ContentVersionMismatch) => Err(ContentVersionMismatch)
+				Err(ContentHashMismatch) => Err(ContentHashMismatch)
+				Err(ResourceLimit) => Err(ResourceLimit)
 			}
-		}
 
 		## Resource-free store value for pure tests.
 		##
@@ -119,7 +116,11 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(AssetsHost.Store.stub)
+		stub = Store.(Resource.Handle.stub)
+
+		## Internal bridge for platform operations that also use an asset store.
+		for_host : Store -> Resource.Store
+		for_host = |Store.(store)| store
 	}
 
 	## How a disk store root is resolved. These choices are explicit so moving an
@@ -241,50 +242,53 @@ Assets := [].{
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
 	## would not decode as an image.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit, ..])
-	load_texture! = |Store.(store), path| {
-		result = AssetsHost.load_store_texture!({ store, path })
-		if result.err == 1 {
-			Err(PathInvalid)
-		} else if result.err == 2 {
-			Err(NotFound)
-		} else if result.err == 3 {
-			Err(ReadFailed)
-		} else if result.err == 4 {
-			Err(TextureLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			Ok(result.texture)
+	load_texture! = |Store.(store), path|
+	# closed error union to open error union
+		match Host.texture_load_store!({ store, path }) {
+			Ok(texture) => Ok(texture)
+			Err(PathInvalid) => Err(PathInvalid)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Decode an authored image embedded with a compile-time file import.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-	texture_from_bytes! = |cfg| {
-		result = AssetsHost.load_texture_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
-	}
+	texture_from_bytes! = |cfg|
+	# closed error union to open error union
+		match Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes }) {
+			Ok(texture) => Ok(texture)
+			Err(TextureLoadFailed) => Err(TextureLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_color_texture! = |cfg| {
-		result = AssetsHost.generate_color_texture!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_color_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_color!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Generate a checkerboard GPU texture without retaining a CPU image.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_checked_texture! = |cfg| {
-		result = AssetsHost.generate_checked_texture!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_checked_texture! = |cfg|
+	# closed error union to open error union
+		match Host.texture_generate_checked!(cfg) {
+			Ok(texture) => Ok(texture)
+			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
+		}
 
 	## Replace every pixel. The row-major RGBA list must exactly match the texture
 	## dimensions and is borrowed only for this host call.
@@ -292,41 +296,52 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels|
-		whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
+	# closed error union to open error union. The public API does not yet
+	# distinguish a handle that is not an app-owned texture from a pixel
+	# count that does not match, so both report the mismatch.
+		match Host.texture_update!({ texture, pixels }) {
+			Ok({}) => Ok({})
+			Err(NotMutable) => Err(PixelCountMismatch)
+			Err(PixelCountMismatch) => Err(PixelCountMismatch)
+		}
 
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
-		region_result(
-			AssetsHost.update_texture_region!({
-				texture,
-				x: region.x,
-				y: region.y,
-				width: region.width,
-				height: region.height,
-				pixels: region.pixels,
-			}),
-		)
+	# closed error union to open error union, as `update_texture!` does.
+		match Host.texture_update_region!({
+			texture,
+			x: region.x,
+			y: region.y,
+			width: region.width,
+			height: region.height,
+			pixels: region.pixels,
+		}) {
+			Ok({}) => Ok({})
+			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
+			Err(NotMutable) => Err(PixelCountMismatch)
+			Err(PixelCountMismatch) => Err(PixelCountMismatch)
+		}
 
 	## Change how this texture is sampled when scaled.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_texture_filter! : Texture, TextureFilter => {}
-	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
+	set_texture_filter! = |texture, filter| Host.texture_set_filter!(texture, filter_code(filter))
 
 	## Change how out-of-range texture coordinates are wrapped.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_texture_wrap! : Texture, TextureWrap => {}
-	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+	set_texture_wrap! = |texture, wrap| Host.texture_set_wrap!(texture, wrap_code(wrap))
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3
 }
 
-store_open_config : Assets.StoreConfig -> AssetsHost.StoreOpen
+store_open_config : Assets.StoreConfig -> Host.StoreOpen
 store_open_config = |cfg| {
 	location = match cfg.root {
 		BesideExecutable(path) => { kind: 0, path }
@@ -384,32 +399,4 @@ wrap_code = |wrap|
 		Clamp => 1
 		MirrorRepeat => 2
 		MirrorClamp => 3
-	}
-
-## Code the host returns when an upload exceeded the frame's budget.
-## Mirrored in `src/host_native.zig`.
-## Code the host returns for a region that hangs over the texture's edge.
-## Mirrored in `src/host_native.zig`.
-upload_err_out_of_bounds : U8
-upload_err_out_of_bounds = 3
-
-## Decode the host's code for a whole-texture upload, which has no region to
-## be out of bounds.
-whole_texture_result : U8 -> Try({}, [PixelCountMismatch, ..])
-whole_texture_result = |code|
-	if code == 0 {
-		Ok({})
-	} else {
-		Err(PixelCountMismatch)
-	}
-
-## Decode the host's code for a region upload.
-region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
-region_result = |code|
-	if code == 0 {
-		Ok({})
-	} else if code == upload_err_out_of_bounds {
-		Err(RegionOutOfBounds)
-	} else {
-		Err(PixelCountMismatch)
 	}

@@ -9,6 +9,10 @@ state and rules; RocRay provides drawing, audio, keyboard and mouse input,
 windows, recording, files, and networking. It runs on macOS (Intel and Apple
 Silicon), Linux x64, and Windows x64.
 
+The platform includes the complete RocRay API: value types, pure helpers, and
+host effects are documented and released together. Import them through your
+platform dependency, such as `rr.App`, `rr.Math`, and `rr.Assets`.
+
 ## See what it can do
 
 These nine apps span small games, designed levels, creative tools, responsive
@@ -43,24 +47,30 @@ queryable SQLite `.rrstats` capture.
 
 ## Try it
 
-Install the Roc version named in [`.roc-version`](.roc-version), then run the
-smallest example. The first line of the app downloads RocRay automatically:
+Download the [0.10.0-rc3 example starter](https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/examples-0.10.0-rc3.zip)
+and install its declared compiler,
+[`nightly-2026-08-23-fb208ba`](https://github.com/roc-lang/nightlies/releases/tag/nightly-2026-08-23-fb208ba).
+Unzip it, open a terminal in the extracted directory containing `examples/`, and run:
 
 ```bash
-git clone https://github.com/lukewilliamboswell/roc-ray.git
-cd roc-ray
+roc version
 roc examples/hello_world/main.roc
 ```
 
-Run examples from the repository root so asset paths resolve correctly. Use
-`roc build` later when producing an optimized executable for distribution.
+Each starter includes immutable platform URLs and the matching compiler in its
+application headers. The header records the requirement; it does not install
+or select the compiler. Run from the extracted directory so asset paths resolve.
+Use `roc build` when producing an executable for distribution.
 
-For your own project, copy the closest app from the
-[example guide](examples/README.md). Each example downloads the matching RocRay
-release automatically, so app authors need only Roc. Keep that RocRay release
-and its matching Roc version together; the
-[latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
-provides both.
+Choose a starting point from the [example guide](examples/README.md). The
+[platform release](https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0-rc3)
+contains the tested downloads; the platform's development compiler can be newer.
+
+`main` contains development source, including examples of unreleased APIs.
+To run those against the checkout, follow [Contributing](CONTRIBUTING.md) and use
+`scripts/run-example.py examples/hello_world`. Development checks rebind temporary
+copies to the platform source and its compiler, while published starters keep
+their own pins.
 
 ## The programming model
 

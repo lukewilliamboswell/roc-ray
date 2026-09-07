@@ -3,7 +3,7 @@
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-09-06-d85e877",
 }
 
 import rr.App
@@ -85,7 +85,7 @@ init! = App.init(
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
-		logical_target = Draw.load_render_texture!({ width: 320.I32, height: 200.I32 })?
+		logical_target = Draw.RenderTexture.load!({ width: 320.I32, height: 200.I32 })?
 		sounds = load_sounds!()?
 		title_font = Draw.default_font!()
 
@@ -221,7 +221,7 @@ render! = |model, frame| {
 	scale = F32.min(size.width / logical_width, size.height / logical_height)
 	width = logical_width * scale
 	height = logical_height * scale
-	frame.texture!({ texture: Draw.render_texture(model.logical_target), source: Draw.render_texture_source(model.logical_target), dest: { x: (size.width - width) * 0.5, y: (size.height - height) * 0.5, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	frame.texture!({ texture: model.logical_target.texture(), source: model.logical_target.source(), dest: { x: (size.width - width) * 0.5, y: (size.height - height) * 0.5, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	Ok({})
 }
 

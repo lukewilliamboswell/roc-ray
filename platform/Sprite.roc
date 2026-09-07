@@ -6,9 +6,7 @@
 ## takes a `Draw.Frame` and is legal in `render!` only.
 ##
 ## Each transform is a noun named for what it sets: `sprite.pos(p)`,
-## `sprite.scale(2)`, `sprite.tint(Color.red)`. A `with_*` function of the same
-## name exists for each and is deprecated; it calls the receiver and is kept so
-## older code keeps building.
+## `sprite.scale(2)`, `sprite.tint(Color.red)`.
 import Assets
 import Color
 import Draw
@@ -119,38 +117,6 @@ Sprite := {
 		scale: { x: 1, y: 1 },
 		tint: Color.white,
 	}
-
-	## Deprecated: use the `source` receiver.
-	with_source : Sprite, Math.Rect -> Sprite
-	with_source = |sprite, source_rect| sprite.source(source_rect)
-
-	## Deprecated: use the `pos` receiver.
-	with_pos : Sprite, Math.Vec2 -> Sprite
-	with_pos = |sprite, new_pos| sprite.pos(new_pos)
-
-	## Deprecated: use the `origin` receiver.
-	with_origin : Sprite, Math.Vec2 -> Sprite
-	with_origin = |sprite, new_origin| sprite.origin(new_origin)
-
-	## Deprecated: use the `centered` receiver.
-	with_origin_center : Sprite -> Sprite
-	with_origin_center = |sprite| sprite.centered()
-
-	## Deprecated: use the `rotation` receiver.
-	with_rotation : Sprite, F32 -> Sprite
-	with_rotation = |sprite, angle| sprite.rotation(angle)
-
-	## Deprecated: use the `scale_xy` receiver.
-	with_scale_xy : Sprite, Math.Vec2 -> Sprite
-	with_scale_xy = |sprite, new_scale| sprite.scale_xy(new_scale)
-
-	## Deprecated: use the `scale` receiver.
-	with_scale : Sprite, F32 -> Sprite
-	with_scale = |sprite, amount| sprite.scale(amount)
-
-	## Deprecated: use the `tint` receiver.
-	with_tint : Sprite, Color.Rgba -> Sprite
-	with_tint = |sprite, new_tint| sprite.tint(new_tint)
 
 	## Return a source rectangle for a regular grid spritesheet.
 	sheet_frame : { frame_size : Math.Vec2, row : U64, col : U64 } -> Math.Rect

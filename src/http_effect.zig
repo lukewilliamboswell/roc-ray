@@ -32,13 +32,24 @@ const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
 
 /// The flattened request `Http` hands the host, as `roc glue` generated it.
-pub const Request = abi.HttpHostSendArgs;
+pub const Request = abi.HostHttp_sendArgs;
 
-/// The flattened response the host hands back.
-pub const Response = abi.HttpHostSend;
+/// A finished exchange, before it is named in the app's vocabulary.
+///
+/// The exchange has one internal code table because every failure it can hit
+/// is described the same way here; `host_native` translates it into the
+/// hosted function's closed error union on the way out. `err_message` is
+/// meaningful only for `ERR_OTHER`, and the payload fields only for `ERR_OK`.
+pub const Response = struct {
+    err: u8,
+    err_message: abi.RocStr,
+    status: u16,
+    headers: abi.RocList(HeaderPair),
+    body: abi.RocListWith(u8, false),
+};
 
 /// One header on the wire, in the order the peer sent or expects it.
-pub const HeaderPair = abi.HttpHostSendHeaders;
+pub const HeaderPair = abi.HostHttp_sendOkHeaders;
 
 /// The exchange completed; `status`, `headers` and `body` are meaningful.
 pub const ERR_OK: u8 = 0;

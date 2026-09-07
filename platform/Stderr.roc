@@ -9,7 +9,7 @@
 ## and are drained during orderly shutdown, but eventual delivery is not
 ## reported. Ordering against compiler `dbg`, `expect`, and crash output is
 ## undefined.
-import StdioHost
+import Host
 
 Stderr := [].{
 
@@ -34,13 +34,13 @@ Stderr := [].{
 	## most 256 kibibytes cross per call, counting the string's UTF-8 bytes and
 	## the newline; a longer string is `TooLarge` and nothing is queued.
 	line! : Str => Try({}, WriteError)
-	line! = |text| StdioHost.write_result(StdioHost.write_line!(StdioHost.stderr, text))
+	line! = |text| lifted(Host.stdio_write_line!(2, text))
 
 	## Write a string with no newline after it. Bounded exactly as `line!` is.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	write! : Str => Try({}, WriteError)
-	write! = |text| StdioHost.write_result(StdioHost.write_text!(StdioHost.stderr, text))
+	write! = |text| lifted(Host.stdio_write_text!(2, text))
 
 	## Write bytes that are not necessarily text.
 	##
@@ -50,5 +50,16 @@ Stderr := [].{
 	## newline, no translation. Bounded exactly as `line!` is, counting the length
 	## of the list.
 	write_bytes! : List(U8) => Try({}, WriteError)
-	write_bytes! = |bytes| StdioHost.write_result(StdioHost.write_bytes!(StdioHost.stderr, bytes))
+	write_bytes! = |bytes| lifted(Host.stdio_write_bytes!(2, bytes))
 }
+
+## Re-lift a queued write's closed error union onto the open one this module
+## exposes.
+lifted : Try({}, Host.StdioWriteError) -> Try({}, WriteError)
+lifted = |result|
+	match result {
+		Ok({}) => Ok({})
+		Err(BufferFull) => Err(BufferFull)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}

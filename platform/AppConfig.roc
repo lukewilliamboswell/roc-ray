@@ -8,10 +8,48 @@
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
-import CaptureHost
+import Host
 import Keys
 import Mouse
-import rrt.Capture as RrtCapture
+
+capture_format_code = |value|
+	match value {
+		Png => 0
+		Gif => 1
+		WebM => 2
+	}
+
+capture_timing_code = |value|
+	match value {
+		RealTime => 0
+		FixedStep => 1
+	}
+
+capture_cursor_code = |value|
+	match value {
+		NoCursor => 0
+		DrawCursor => 1
+	}
+
+capture_quality_code = |value|
+	match value {
+		Fast => 0
+		Balanced => 1
+		Best => 2
+	}
+
+capture_scale_ratio = |value|
+	match value {
+		Full => { numerator: 1, denominator: 1 }
+		Half => { numerator: 1, denominator: 2 }
+		Quarter => { numerator: 1, denominator: 4 }
+		Ratio(r) =>
+			if r.numerator == 0 or r.denominator == 0 {
+				{ numerator: 1, denominator: 1 }
+			} else {
+				{ numerator: r.numerator, denominator: r.denominator }
+			}
+		}
 
 AppHostConfig : {
 	title : Str,
@@ -116,22 +154,22 @@ host_recording = |value|
 			every_nth: 1,
 			timing: 0,
 			cursor: 0,
-			quality: CaptureHost.quality_code(Balanced),
+			quality: capture_quality_code(Balanced),
 		}
 		Record(recording) => {
-			ratio = CaptureHost.scale_ratio(recording.scale())
+			ratio = capture_scale_ratio(recording.scale())
 			{
 				enabled: Bool.True,
 				path: recording.path(),
-				format: CaptureHost.format_code(recording.format()),
+				format: capture_format_code(recording.format()),
 				fps: recording.fps(),
 				max_frames: recording.max_frames(),
 				scale_numerator: ratio.numerator,
 				scale_denominator: ratio.denominator,
 				every_nth: recording.every_nth(),
-				timing: CaptureHost.timing_code(recording.timing()),
-				cursor: CaptureHost.cursor_code(recording.cursor()),
-				quality: CaptureHost.quality_code(recording.quality()),
+				timing: capture_timing_code(recording.timing()),
+				cursor: capture_cursor_code(recording.cursor()),
+				quality: capture_quality_code(recording.quality()),
 			}
 		}
 	}
@@ -169,30 +207,30 @@ expect AppConfig.to_host({}, App.default).output_dir == "."
 expect AppConfig.to_host({}, App.default.with_output_dir("captures")).output_dir == "captures"
 expect !(AppConfig.to_host({}, App.default).record_enabled)
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_enabled and host.record_path == "recording.gif" and host.record_format == 1 and host.record_fps == 25
 }
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_max_frames == 300 and host.record_scale_numerator == 1 and host.record_scale_denominator == 2
 }
 expect {
-	host = AppConfig.to_host({}, App.default.with_recording(RrtCapture.default))
+	host = AppConfig.to_host({}, App.default.with_recording(Capture.default))
 	host.record_every_nth == 1 and host.record_timing == 1 and host.record_cursor == 0
 }
-expect AppConfig.to_host({}, App.default.with_recording(RrtCapture.default)).record_quality == 1
+expect AppConfig.to_host({}, App.default.with_recording(Capture.default)).record_quality == 1
 expect {
 	host = AppConfig.to_host({}, App.default.with_default_font({ path: "assets/body.ttf", size: 32 }))
 	host.default_font_path == "assets/body.ttf" and host.default_font_size == 32
 }
 expect {
-	fast = RrtCapture.default.with_quality(Fast)
-	best = RrtCapture.default.with_quality(Best)
+	fast = Capture.default.with_quality(Fast)
+	best = Capture.default.with_quality(Best)
 	AppConfig.to_host({}, App.default.with_recording(fast)).record_quality == 0 and AppConfig.to_host({}, App.default.with_recording(best)).record_quality == 2
 }
 expect {
 	custom =
-		RrtCapture.default
+		Capture.default
 			.with_path("demo.webm")
 			.with_format(WebM)
 			.with_scale(Quarter)

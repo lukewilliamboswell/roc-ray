@@ -10,20 +10,22 @@
 ## `suggest_*` effects request geometry that the window manager may alter or
 ## decline; a later `Snapshot` is authoritative. `set_*` effects change state
 ## controlled by the host.
-import rrt.Window as RrtWindow
-import HostHost
+import Host
 
 Window := [].{
 
-	## Window geometry and visibility sampled once for this cycle.
+	## The window's logical drawing size, whether it has keyboard focus, and
+	## whether it is minimized.
 	##
-	## `size` is the logical drawing size, `focused` says whether the window has
-	## keyboard focus, and `minimized` says whether it is minimized. A minimized
-	## window still runs the frame loop.
-	##
-	## Declared in the `roc-ray-types` package's `Window` and re-exported here;
-	## `App.Input` carries one as `input.window`.
-	Snapshot : RrtWindow.Snapshot
+	## `size` is in the same logical units as mouse positions and every drawing
+	## call, not in framebuffer pixels; multiply by `Window.scale!` for those.
+	## A minimized window still runs the frame loop, so an app that should idle
+	## while minimized has to check this.
+	Snapshot : {
+		size : { width : I32, height : I32 },
+		focused : Bool,
+		minimized : Bool,
+	}
 
 	## Suggest a new logical window size to the window manager.
 	##
@@ -35,7 +37,7 @@ Window := [].{
 	suggest_size! : { width : I32, height : I32 } => {}
 	suggest_size! = |size|
 		if size.width > 0 and size.height > 0 {
-			match HostHost.suggest_window_size!(size) {
+			match Host.window_suggest_size!(size) {
 				Ok({}) => {}
 				Err(NotSupported) => {}
 			}
@@ -53,7 +55,7 @@ Window := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_min_size! : { width : I32, height : I32 } => {}
 	suggest_min_size! = |size|
-		HostHost.suggest_window_min_size!({
+		Host.window_suggest_min_size!({
 			width: if size.width > 0 size.width else 0,
 			height: if size.height > 0 size.height else 0,
 		})
@@ -74,14 +76,14 @@ Window := [].{
 	## Content that is not text, or is larger than the host will copy into a
 	## `Str`, is refused rather than truncated.
 	read_clipboard! : () => Try(Str, ClipboardReadError)
-	read_clipboard! = || {
-		result = HostHost.read_clipboard!()
-		if result.err == 0 {
-			Ok(result.contents)
-		} else {
-			Err(clipboard_error(result.err))
+	read_clipboard! = ||
+		match Host.window_read_clipboard!() {
+			# closed error union to open error union
+			Ok(contents) => Ok(contents)
+			Err(Busy) => Err(Busy)
+			Err(TooLarge) => Err(TooLarge)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## Set raylib's CPU-side frame-rate cap.
 	##
@@ -90,7 +92,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_target_fps! : I32 => {}
-	set_target_fps! = |fps| HostHost.set_target_fps!(fps)
+	set_target_fps! = |fps| Host.window_set_target_fps!(fps)
 
 	## Replace the system clipboard contents.
 	##
@@ -98,7 +100,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_clipboard_text! : Str => {}
-	set_clipboard_text! = |text| HostHost.set_clipboard_text!(text)
+	set_clipboard_text! = |text| Host.window_set_clipboard_text!(text)
 
 	## How many framebuffer pixels one logical unit is, per axis.
 	##
@@ -109,7 +111,7 @@ Window := [].{
 	## differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to get the
 	## pixel resolution a `Capture` records at.
 	scale! : () => { x : F32, y : F32 }
-	scale! = || HostHost.window_scale_dpi!()
+	scale! = || Host.window_scale_dpi!()
 
 	## One display the windowing backend can currently see.
 	##
@@ -137,7 +139,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	monitors! : () => List(Monitor)
-	monitors! = || List.map(HostHost.monitors!(), monitor_from_host)
+	monitors! = || List.map(Host.window_monitors!(), monitor_from_host)
 
 	## Suggest where the window's top-left corner should sit, in
 	## virtual-desktop coordinates.
@@ -148,7 +150,7 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_position! : { x : I32, y : I32 } => {}
-	suggest_position! = |position| HostHost.suggest_window_position!(position)
+	suggest_position! = |position| Host.window_suggest_position!(position)
 
 	## Suggest which monitor the window should move to, by `Monitor.index`.
 	##
@@ -158,11 +160,11 @@ Window := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_monitor! : I32 => {}
-	suggest_monitor! = |index| HostHost.suggest_window_monitor!(index)
+	suggest_monitor! = |index| Host.window_suggest_monitor!(index)
 }
 
 ## Group the host's flat monitor record into the shape applications read.
-monitor_from_host : HostHost.MonitorInfo -> Window.Monitor
+monitor_from_host : Host.WindowMonitorInfo -> Window.Monitor
 monitor_from_host = |info| {
 	index: info.index,
 	name: info.name,
@@ -175,19 +177,3 @@ expect {
 	monitor = monitor_from_host({ index: 1, name: "HDMI-1", width: 2560, height: 1440, x: 1920, y: 0, refresh_hz: 144 })
 	monitor.size == { width: 2560, height: 1440 } and monitor.position == { x: 1920, y: 0 }
 }
-
-## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
-clipboard_error : U8 -> Window.ClipboardReadError
-clipboard_error = |code|
-	if code == 5 {
-		TooLarge
-	} else if code == 3 {
-		Busy
-	} else {
-		Unavailable
-	}
-
-expect clipboard_error(5) == TooLarge
-expect clipboard_error(3) == Busy
-expect clipboard_error(4) == Unavailable
-expect clipboard_error(0) == Unavailable

@@ -4,45 +4,143 @@
 ## construct, and the receivers read the same either way:
 ## `input.devices.mouse.position()`.
 ##
-## The types and pure helpers live in the companion `roc-ray-types` package so
-## reusable packages can depend on them without depending on this platform.
-## This module re-exports them, so `Snapshot` here and in the package are the same
-## nominal type and its receivers are available either way.
-import rrt.Mouse as RrtMouse
-import MouseHost
-import CaptureHost
+import Host
 
 Mouse := [].{
 
-	## Mouse input sampled once at the start of the current frame.
-	##
-	## Declared in the `roc-ray-types` package's `Mouse` and re-exported here,
-	## which is also where its receivers are documented.
-	Snapshot : RrtMouse.Snapshot
+	## Mouse input for one cycle. Position, movement and the held bits are
+	## samples at the cycle boundary; the pressed and released bits and the
+	## wheel are events recorded since the previous input.
+	Snapshot := {
+		buttons : List(U8),
+		left : Bool,
+		middle : Bool,
+		right : Bool,
+		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
+		x : F32,
+		y : F32,
+	}.{
+		button_down : Snapshot, Button -> Bool
+		button_down = |mouse, button| Mouse.button_down(mouse, button)
+
+		## Whether a button is currently up.
+		button_up : Snapshot, Button -> Bool
+		button_up = |mouse, button| Mouse.button_up(mouse, button)
+
+		## Whether a button was pressed at least once since the previous input.
+		## A click that began and ended between two cycles still counts.
+		button_pressed : Snapshot, Button -> Bool
+		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
+
+		## Whether a button was released at least once since the previous input.
+		button_released : Snapshot, Button -> Bool
+		button_released = |mouse, button| Mouse.button_released(mouse, button)
+
+		## Current cursor position in logical drawing coordinates.
+		position : Snapshot -> { x : F32, y : F32 }
+		position = |mouse| Mouse.position(mouse)
+
+		## Cursor movement since the previous frame.
+		delta : Snapshot -> { x : F32, y : F32 }
+		delta = |mouse| Mouse.delta(mouse)
+
+		## Horizontal and vertical wheel movement since the previous input,
+		## every notch in the interval summed.
+		wheel_delta : Snapshot -> { x : F32, y : F32 }
+		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
+	}
 
 	## Native operating-system cursor shapes.
-	Cursor : RrtMouse.Cursor
+	Cursor := [
+		Default,
+		Arrow,
+		IBeam,
+		Crosshair,
+		PointingHand,
+		ResizeEastWest,
+		ResizeNorthSouth,
+		ResizeNorthwestSoutheast,
+		ResizeNortheastSouthwest,
+		ResizeAll,
+		NotAllowed,
+	].{
+
+		## Compare two of these values.
+		is_eq : _
+	}
+
+	## Current cursor position in logical drawing coordinates.
+	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
+	position = |mouse| { x: mouse.x, y: mouse.y }
+
+	## Cursor movement since the previous frame, sampled once by the host.
+	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
+	delta = |mouse| { x: mouse.delta_x, y: mouse.delta_y }
+
+	## Horizontal and vertical wheel movement since the previous input, every
+	## notch in the interval summed.
+	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
+	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
 
 	## Standard mouse buttons sampled by the platform.
-	Button : RrtMouse.Button
+	Button := [Left, Right, Middle, Side, Extra, Forward, Back].{
 
+		## Compare two of these values, so a `Devices.Event` can be compared
+		## and a click can be matched against a remembered button.
+		is_eq : _
+	}
+
+	## Select hardware pointer samples or deterministic application-provided samples.
 	## Where pointer input comes from: `Hardware`, or a `Virtual` pointer whose
-	## position and buttons the app states itself.
-	##
-	## A virtual source is how a run drives its own pointer -- a scripted demo,
-	## a recorded walkthrough, a headless test that has to click something. The
-	## host reports it through `input.devices.mouse` exactly as it reports the
-	## hardware one, so nothing downstream can tell the difference.
-	Source : RrtMouse.Source
+	## position and buttons the app states itself. `Mouse.set_source!` on the
+	## platform is what switches between them.
+	Source := [Hardware, Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 })]
 
 	## A virtual pointer at a position, with no button held.
 	virtual_at : { x : F32, y : F32 } -> Source
-	virtual_at = RrtMouse.virtual_at
+	virtual_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
 
 	## A virtual pointer at a position with the left button held, so the next
 	## input reports a press there.
 	virtual_click_at : { x : F32, y : F32 } -> Source
-	virtual_click_at = RrtMouse.virtual_click_at
+	virtual_click_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
+
+	## Check if a mouse button is currently held down.
+	button_down : { buttons : List(U8), ..state }, Button -> Bool
+	button_down = |mouse, button| button_state(mouse.buttons, button, 1)
+
+	## Check if a mouse button is currently up.
+	button_up : { buttons : List(U8), ..state }, Button -> Bool
+	button_up = |mouse, button| !(button_down(mouse, button))
+
+	## Check if a mouse button was pressed at least once since the previous
+	## input. A click that began and ended between two cycles still counts.
+	## Coalesced per button; the ordered record with every click and its
+	## position is `Devices.Snapshot.events`.
+	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
+	button_pressed = |mouse, button| button_state(mouse.buttons, button, 2)
+
+	## Check if a mouse button was released at least once since the previous
+	## input.
+	button_released : { buttons : List(U8), ..state }, Button -> Bool
+	button_released = |mouse, button| button_state(mouse.buttons, button, 4)
+
+	expect button_code(Left) == 0
+	expect button_code(Back) == 6
+	expect cursor_code(PointingHand) == 4
+	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
+	expect {
+		mouse : Snapshot
+		mouse = { buttons: [7], left: True, middle: False, right: False, wheel: -2, wheel_x: 1, wheel_y: -2, delta_x: 3, delta_y: 4, x: 10, y: 20 }
+		mouse.position() == { x: 10, y: 20 }
+			and mouse.delta() == { x: 3, y: 4 }
+				and mouse.wheel_delta() == { x: 1, y: -2 }
+					and mouse.button_pressed(Left)
+	}
 
 	## Hand pointer input to a scripted source, or back to the hardware mouse.
 	##
@@ -50,8 +148,8 @@ Mouse := [].{
 	set_source! : Source => {}
 	set_source! = |source|
 		match source {
-			Hardware => CaptureHost.set_virtual_mouse!({ active: Bool.False, x: 0, y: 0, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
-			Virtual(state) => CaptureHost.set_virtual_mouse!({ active: Bool.True, x: state.x, y: state.y, left: state.left, middle: state.middle, right: state.right, wheel: state.wheel })
+			Hardware => Host.capture_set_virtual_mouse!({ active: Bool.False, x: 0, y: 0, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
+			Virtual(state) => Host.capture_set_virtual_mouse!({ active: Bool.True, x: state.x, y: state.y, left: state.left, middle: state.middle, right: state.right, wheel: state.wheel })
 		}
 
 	## Cursor visibility and capture policy, applied atomically as one tagged
@@ -102,7 +200,7 @@ Mouse := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor! : Cursor => {}
-	set_cursor! = |cursor| MouseHost.set_cursor!(cursor_code(cursor))
+	set_cursor! = |cursor| Host.mouse_set_cursor!(cursor_code(cursor))
 
 	## Set cursor visibility and capture, applied atomically as one operation.
 	## `Locked` is retained across focus loss; the native host reasserts it after
@@ -110,49 +208,40 @@ Mouse := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor_mode! : CursorMode => {}
-	set_cursor_mode! = |mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
-
-	## Current cursor position in logical drawing coordinates.
-	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
-	position = RrtMouse.position
-
-	## Cursor movement since the previous frame, sampled once by the host.
-	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
-	delta = RrtMouse.delta
-
-	## Horizontal and vertical wheel movement since the previous input: every
-	## scroll event in the interval summed, so notches turned between two
-	## cycles are all counted rather than only the last. Each notch is also a
-	## `Wheel` entry in `input.devices.events`, in order with the clicks and
-	## keys around it.
-	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
-	wheel_delta = RrtMouse.wheel_delta
-
-	## Check if a mouse button is held down at this cycle's boundary. A state
-	## sample.
-	button_down : { buttons : List(U8), ..state }, Button -> Bool
-	button_down = RrtMouse.button_down
-
-	## Check if a mouse button is up at this cycle's boundary.
-	button_up : { buttons : List(U8), ..state }, Button -> Bool
-	button_up = RrtMouse.button_up
-
-	## Check if a mouse button was pressed at least once since the previous
-	## input.
-	##
-	## An interval event recorded from the window system, so a click that
-	## began and ended between two cycles is still pressed (and released) in
-	## the next input. This is the coalesced view: presses of one button
-	## inside one interval answer once, and `position` is where the pointer
-	## was at the cycle boundary. For a drag that ended and began again inside
-	## one frame, a double click, or the exact spot each click landed at,
-	## walk `input.devices.events`: every `ButtonPressed` and `ButtonReleased`
-	## is there in order, each with its own position.
-	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
-	button_pressed = RrtMouse.button_pressed
-
-	## Check if a mouse button was released at least once since the previous
-	## input, with the same guarantee as `button_pressed`.
-	button_released : { buttons : List(U8), ..state }, Button -> Bool
-	button_released = RrtMouse.button_released
+	set_cursor_mode! = |mode| Host.mouse_set_cursor_mode!(cursor_mode_code(mode))
 }
+
+cursor_code : Mouse.Cursor -> U8
+cursor_code = |cursor|
+	match cursor {
+		Default => 0
+		Arrow => 1
+		IBeam => 2
+		Crosshair => 3
+		PointingHand => 4
+		ResizeEastWest => 5
+		ResizeNorthSouth => 6
+		ResizeNorthwestSoutheast => 7
+		ResizeNortheastSouthwest => 8
+		ResizeAll => 9
+		NotAllowed => 10
+	}
+
+button_code : Mouse.Button -> U64
+button_code = |button|
+	match button {
+		Left => 0
+		Right => 1
+		Middle => 2
+		Side => 3
+		Extra => 4
+		Forward => 5
+		Back => 6
+	}
+
+button_state : List(U8), Mouse.Button, U8 -> Bool
+button_state = |states, button, mask|
+	match List.get(states, button_code(button)) {
+		Ok(state) => U8.bitwise_and(state, mask) != 0
+		Err(_) => False
+	}

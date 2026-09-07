@@ -65,7 +65,7 @@
 ##
 ## HTTPS verifies peers with the operating system's certificate store. Custom
 ## certificate authorities and disabling verification are not supported.
-import HttpHost
+import Host
 import Url
 import http.Request
 import http.Response
@@ -161,11 +161,13 @@ Http := [].{
 		check_method(Request.method(request)) ? HttpErr
 		url = Url.parse(Request.uri(request)) ? InvalidUrl
 		canonical = Url.without_fragment(url)
-		raw = HttpHost.send!(to_host_request(config, request, Url.to_str(canonical)))
-		if raw.err == 0 {
-			Ok(from_host_response(raw))
-		} else {
-			Err(HttpErr(to_transport_err(raw)))
+		# closed error union to open error union
+		match Host.http_send!(to_host_request(config, request, Url.to_str(canonical))) {
+			Ok(raw) => Ok(from_host_response(raw))
+			Err(MalformedResponse) => Err(HttpErr(MalformedResponse))
+			Err(NetworkError) => Err(HttpErr(NetworkError))
+			Err(Other(message)) => Err(HttpErr(Other(Str.to_utf8(message))))
+			Err(Timeout) => Err(HttpErr(Timeout))
 		}
 	}
 
@@ -294,7 +296,7 @@ expect check_method(Unknown("FROB")) == Err(Other(Str.to_utf8("FROB is not a met
 ##
 ## The URI is passed separately because the caller has already canonicalized
 ## it; rebuilding the request just to carry it back would copy its body.
-to_host_request : Http.Config, Request, Str -> HttpHost.RequestToHost
+to_host_request : Http.Config, Request, Str -> Host.HttpRequestToHost
 to_host_request = |config, request, uri| {
 	method = Request.method(request)
 	{
@@ -309,27 +311,11 @@ to_host_request = |config, request, uri| {
 }
 
 ## Rebuild the shared `Response` from the host's flat record.
-from_host_response : HttpHost.ResponseFromHost -> Response
+from_host_response : Host.HttpResponseFromHost -> Response
 from_host_response = |raw|
 	Response.from_status(raw.status)
 		.with_headers(raw.headers.map(|{ name, value }| { name, value }))
 		.with_body(raw.body)
-
-## Rebuild the transport error the host reported.
-##
-## Unknown codes become `Other` rather than crashing, so a host that learns to
-## distinguish a new failure still reports something an app can print.
-to_transport_err : HttpHost.ResponseFromHost -> Http.TransportErr
-to_transport_err = |raw|
-	if raw.err == 1 {
-		Timeout
-	} else if raw.err == 2 {
-		NetworkError
-	} else if raw.err == 3 {
-		MalformedResponse
-	} else {
-		Other(Str.to_utf8(raw.err_message))
-	}
 
 ## basic-cli's numeric method codes, so the two hosts agree on the wire.
 ##
@@ -382,10 +368,3 @@ expect to_host_method_ext(GET) == ""
 # ordinary `Request.from_method(GET)` is never sent without one.
 expect to_host_timeout(NoTimeout, 30_000) == 30_000
 expect to_host_timeout(TimeoutMilliseconds(250), 30_000) == 250
-
-expect to_transport_err({ err: 1, err_message: "", status: 0, headers: [], body: [] }) == Timeout
-expect to_transport_err({ err: 2, err_message: "", status: 0, headers: [], body: [] }) == NetworkError
-expect to_transport_err({ err: 3, err_message: "", status: 0, headers: [], body: [] }) == MalformedResponse
-
-# An unrecognised code still reports the host's message rather than crashing.
-expect to_transport_err({ err: 99, err_message: "boom", status: 0, headers: [], body: [] }) == Other(Str.to_utf8("boom"))

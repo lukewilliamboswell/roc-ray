@@ -12,10 +12,10 @@ repository root:
 scripts/run-example.py examples/roc-doom-e1m1/main.roc
 ```
 
-The checked-in application header still names the last published release,
-which predates the 3D API used here. The release workflow now verifies this
-example against a release-shaped bundle; the direct `roc examples/roc-doom-e1m1/main.roc`
-command becomes valid when that bundle is published and the header is updated.
+The checked-in application header points at the local platform because this
+example uses unreleased 3D APIs. The runner uses the development compiler pin
+from `platform/main.roc`, and the release workflow verifies the example against
+a release-shaped bundle.
 
 A title card opens the example; press Space, Enter or the left mouse button
 to begin, or wait eight seconds. Controls are `W`/`S` or Up/Down to move,
@@ -51,7 +51,7 @@ headless execution), first build target archives with `zig build`, then run:
 
 ```sh
 scripts/all_tests.py --only roc-doom-e1m1 --skip-platform-build --skip-roc-test \
-    --skip-bundle-test --skip-interop-test --skip-integration-probes \
+    --skip-bundle-test --skip-integration-probes \
     --platform-mode=bundle --skip-windowed --headless-frames=3
 ```
 
@@ -70,7 +70,7 @@ important even when the suspected problem is pure Roc code, because generated
 procedure names otherwise cannot be mapped reliably to their source module:
 
 ```sh
-ROC=~/roc_nightly-linux_x86_64-2026-08-23-fb208ba/roc
+ROC=~/roc_nightly-linux_x86_64-2026-09-06-d85e877/roc
 $ROC build examples/roc-doom-e1m1/main.roc --debug --output=/tmp/doom-profile
 /usr/bin/time -f 'elapsed=%e user=%U sys=%S' \
     /tmp/doom-profile --host-headless --host-headless-frames=500
@@ -109,7 +109,7 @@ absent and reports total and `update!` allocation per cycle when enabled:
 ```sh
 /tmp/doom-profile --host-alloc-stats --host-headless \
     --host-headless-frames=500
-ROC=~/roc_nightly-linux_x86_64-2026-08-23-fb208ba/roc \
+ROC=~/roc_nightly-linux_x86_64-2026-09-06-d85e877/roc \
     scripts/test_doom_performance.py --frames 500
 ```
 

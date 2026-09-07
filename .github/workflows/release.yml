@@ -3,9 +3,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      nightly_validation:
+        description: "Validate a nightly candidate without publishing or deploying"
+        type: boolean
+        required: false
+        default: false
       release_version:
         description: "Release version, e.g. 0.8.0"
-        required: true
+        required: false
         type: string
       previous_release_url:
         description: "Previous default bundle URL for roc bump; empty resolves from latest release notes"
@@ -18,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', github.repository) || format('release-validate-{0}-{1}', github.repository, github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: ${{ (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation) && format('release-{0}', github.repository) || format('release-validate-{0}-{1}', github.repository, github.ref) }}
+  cancel-in-progress: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
 
 jobs:
   build:
@@ -34,13 +39,20 @@ jobs:
         shell: bash
 
     steps:
+      - name: Require a version for publication
+        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: test -n "$RELEASE_VERSION" || { echo "A release version is required for publication" >&2; exit 1; }
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -49,7 +61,7 @@ jobs:
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Install Zig
-        uses: mlugg/setup-zig@v2.0.5
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
 
@@ -57,12 +69,12 @@ jobs:
         id: validate
         uses: roc-lang/release-package/actions/validate-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
-          release_version: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
-          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          release_version: ${{ (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation) && inputs.release_version || '' }}
+          dry_run: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
           github_token: ${{ github.token }}
 
       - name: Validate release branch
-        if: github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" != "branch" ]]; then
             echo "Release workflow must be run from a branch so generated docs can be opened as a follow-up PR."
@@ -85,7 +97,7 @@ jobs:
           # headless host too. This catches a generated re-export or hosted
           # symbol omitted from the publishable package.
           scripts/all_tests.py --only roc-doom-e1m1 --skip-platform-build --skip-roc-test \
-            --skip-bundle-test --skip-interop-test --skip-integration-probes \
+            --skip-bundle-test --skip-integration-probes \
             --platform-mode=bundle --skip-windowed --headless-frames=3
           python3 scripts/build_docs.py --check
 
@@ -93,7 +105,7 @@ jobs:
         run: scripts/check_release_hosts.py
 
       - name: Resolve previous default bundle
-        if: github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         id: previous
         run: |
           python3 scripts/release_helpers.py resolve-previous-default-url \
@@ -108,7 +120,7 @@ jobs:
         uses: roc-lang/release-package/actions/run-bump-check@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
-          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          dry_run: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
           # Keep this advisory until the Roc compiler reaches 0.1.0.
           bump_check: ${{ steps.previous.outputs.bump_check || 'warn' }}
           bump_entrypoint: platform/main.roc
@@ -122,11 +134,6 @@ jobs:
         run: |
           mkdir -p dist
 
-          # The platform depends on roc-ray-types by relative path so local
-          # development needs no published artifact. bundle.sh rewrites the
-          # staged header to the release pinned in .types-version, and refuses
-          # if types/ no longer matches that pin -- release the types package
-          # first in that case.
           default_output="$(scripts/bundle.sh --platform default --output-dir dist)"
           echo "$default_output"
           default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | tail -1)"
@@ -173,7 +180,7 @@ jobs:
           rm -f .release/examples-dry-run.zip
 
       - name: Upload release bundles
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-bundles
           path: .release/bundles/*
@@ -181,7 +188,7 @@ jobs:
           retention-days: 7
 
       - name: Upload release metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-metadata
           path: |
@@ -206,10 +213,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -218,7 +225,7 @@ jobs:
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Download release bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-bundles
           path: .release/test-bundles
@@ -226,7 +233,7 @@ jobs:
       - name: Test release bundle
         uses: roc-lang/release-package/actions/test-bundle@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
-          test_bundle_command: scripts/test_bundle_artifact.py
+          test_bundle_command: scripts/test_bundle_artifact.py ${{ github.event_name == 'pull_request' && '--port 8765' || '' }}
           bundle_path: .release/test-bundles/${{ matrix.artifact_file }}
           bundle_name: ${{ matrix.bundle_name }}
           release_version: ${{ needs.build.outputs.release_version }}
@@ -236,25 +243,25 @@ jobs:
     needs:
       - build
       - test-bundles
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download release bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-bundles
           path: .release/bundles
 
       - name: Download release metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-metadata
           path: .release
@@ -290,7 +297,7 @@ jobs:
     needs:
       - build
       - publish-release
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -303,10 +310,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -315,7 +322,7 @@ jobs:
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Download release metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-metadata
           path: .release
@@ -332,10 +339,7 @@ jobs:
         with:
           docs_root: www
 
-      # Builds the platform docs and, nested under them at `types/`, the
-      # roc-ray-types package docs. Both are needed: `roc docs` attaches a
-      # nominal's receivers to the module that declares it, so the platform's
-      # re-export modules carry the signatures but not the receivers.
+      # Build the complete platform API documentation.
       - name: Generate docs
         run: python3 scripts/build_docs.py --version "${{ needs.build.outputs.docs_version }}"
 
@@ -363,13 +367,13 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: www
 
       - name: Deploy Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

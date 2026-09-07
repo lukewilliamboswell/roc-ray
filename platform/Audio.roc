@@ -36,7 +36,8 @@
 ## that only read a scalar the device already has -- `Sound.is_playing!`,
 ## `Music.is_playing!`, `Music.length!`, and `Music.time_played!` -- are legal
 ## in any callback, `render!` included.
-import AudioHost
+import Resource
+import Host
 
 Audio := [].{
 
@@ -45,7 +46,7 @@ Audio := [].{
 	## A sound has no volume, pitch, or pan of its own that outlives a play.
 	## raylib's are sticky per resource, and every play sets all three, so there
 	## is nothing to set once and inherit -- see `Playback`.
-	Sound :: { resource : AudioHost.Sound }.{
+	Sound :: Resource.Sound.{
 
 		## Play this sound at its default volume, pitch, and pan.
 		##
@@ -60,25 +61,25 @@ Audio := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		stop! : Sound => {}
-		stop! = |sound| AudioHost.stop_sound!(sound.resource)
+		stop! = |Sound.(sound)| Host.audio_stop_sound!(sound)
 
 		## Pause playback at the current position.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		pause! : Sound => {}
-		pause! = |sound| AudioHost.pause_sound!(sound.resource)
+		pause! = |Sound.(sound)| Host.audio_pause_sound!(sound)
 
 		## Resume a paused sound.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		resume! : Sound => {}
-		resume! = |sound| AudioHost.resume_sound!(sound.resource)
+		resume! = |Sound.(sound)| Host.audio_resume_sound!(sound)
 
 		## Whether this sound is currently playing.
 		##
 		## Legal in any callback, `render!` included.
 		is_playing! : Sound => Bool
-		is_playing! = |sound| AudioHost.is_sound_playing!(sound.resource)
+		is_playing! = |Sound.(sound)| Host.audio_is_sound_playing!(sound)
 
 		## The settings this sound plays at by default, so a play can adjust one
 		## of them without spelling out the rest:
@@ -94,7 +95,7 @@ Audio := [].{
 		## Put it in a model to reach the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
-		stub = { resource: AudioHost.Sound.stub }
+		stub = Sound.(Resource.Handle.stub)
 	}
 
 	## A sound together with the settings it should be played at.
@@ -126,87 +127,88 @@ Audio := [].{
 		## play cannot inherit what an earlier play left on the same sound.
 		play! : Playback => {}
 		play! = |Playback.(settings)| {
-			AudioHost.set_sound_volume!(settings.sound.resource, settings.volume)
-			AudioHost.set_sound_pitch!(settings.sound.resource, settings.pitch)
-			AudioHost.set_sound_pan!(settings.sound.resource, settings.pan)
-			AudioHost.play_sound!(settings.sound.resource)
+			Sound.(sound) = settings.sound
+			Host.audio_set_sound_volume!(sound, settings.volume)
+			Host.audio_set_sound_pitch!(sound, settings.pitch)
+			Host.audio_set_sound_pan!(sound, settings.pan)
+			Host.audio_play_sound!(sound)
 		}
 	}
 
 	## Host-owned streamed music. The platform updates active streams each frame.
-	Music :: { resource : AudioHost.Music }.{
+	Music :: Resource.Music.{
 
 		## Start or restart playback.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		play! : Music => {}
-		play! = |music| AudioHost.play_music!(music.resource)
+		play! = |Music.(music)| Host.audio_play_music!(music)
 
 		## Stop playback and rewind.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		stop! : Music => {}
-		stop! = |music| AudioHost.stop_music!(music.resource)
+		stop! = |Music.(music)| Host.audio_stop_music!(music)
 
 		## Pause at the current position.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		pause! : Music => {}
-		pause! = |music| AudioHost.pause_music!(music.resource)
+		pause! = |Music.(music)| Host.audio_pause_music!(music)
 
 		## Resume paused playback.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		resume! : Music => {}
-		resume! = |music| AudioHost.resume_music!(music.resource)
+		resume! = |Music.(music)| Host.audio_resume_music!(music)
 
 		## Set stream volume, clamped to 0 through 1.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_volume! : Music, F32 => {}
-		set_volume! = |music, volume| AudioHost.set_music_volume!(music.resource, volume)
+		set_volume! = |Music.(music), volume| Host.audio_set_music_volume!(music, volume)
 
 		## Set stream pitch multiplier.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_pitch! : Music, F32 => {}
-		set_pitch! = |music, pitch| AudioHost.set_music_pitch!(music.resource, pitch)
+		set_pitch! = |Music.(music), pitch| Host.audio_set_music_pitch!(music, pitch)
 
 		## Set stereo pan, clamped to -1 through 1.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_pan! : Music, F32 => {}
-		set_pan! = |music, pan| AudioHost.set_music_pan!(music.resource, pan)
+		set_pan! = |Music.(music), pan| Host.audio_set_music_pan!(music, pan)
 
 		## Enable or disable automatic looping.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_looping! : Music, Bool => {}
-		set_looping! = |music, looping| AudioHost.set_music_looping!(music.resource, looping)
+		set_looping! = |Music.(music), looping| Host.audio_set_music_looping!(music, looping)
 
 		## Whether this stream is currently playing.
 		##
 		## Legal in any callback, `render!` included.
 		is_playing! : Music => Bool
-		is_playing! = |music| AudioHost.is_music_playing!(music.resource)
+		is_playing! = |Music.(music)| Host.audio_is_music_playing!(music)
 
 		## Seek to seconds from the start. Negative values are clamped to zero.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		seek! : Music, F32 => {}
-		seek! = |music, seconds| AudioHost.seek_music!(music.resource, seconds)
+		seek! = |Music.(music), seconds| Host.audio_seek_music!(music, seconds)
 
 		## Total stream length in seconds, or zero for an invalid resource.
 		##
 		## Legal in any callback, `render!` included.
 		length! : Music => F32
-		length! = |music| AudioHost.music_length!(music.resource)
+		length! = |Music.(music)| Host.audio_music_length!(music)
 
 		## Current playback position in seconds.
 		##
 		## Legal in any callback, `render!` included.
 		time_played! : Music => F32
-		time_played! = |music| AudioHost.music_time_played!(music.resource)
+		time_played! = |Music.(music)| Host.audio_music_time_played!(music)
 
 		## Resource-free music value for pure tests.
 		##
@@ -217,7 +219,7 @@ Audio := [].{
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music
-		stub = { resource: AudioHost.Music.stub }
+		stub = Music.(Resource.Handle.stub)
 	}
 
 	## Procedural waveform used by `gen_sound!`.
@@ -248,7 +250,7 @@ Audio := [].{
 	## decoding the path; playback and queries keep their ordinary no-output
 	## resource semantics.
 	load_sound! : Str => Try(Sound, [SoundLoadFailed, ResourceLimit, ..])
-	load_sound! = |path| loaded_sound_from_resource(AudioHost.load_sound!(path))
+	load_sound! = |path| loaded_sound_from_resource(Host.audio_load_sound!(path))
 
 	## Load a streamed music file. Keep the returned value in the app model.
 	##
@@ -263,7 +265,7 @@ Audio := [].{
 	## A headless host returns a bounded inert `Music` without reading or
 	## decoding the path or creating/updating a native stream.
 	load_music! : Str => Try(Music, [MusicLoadFailed, ResourceLimit, ..])
-	load_music! = |path| music_from_resource(AudioHost.load_music!(path))
+	load_music! = |path| music_from_resource(Host.audio_load_music!(path))
 
 	## Generate a reusable procedural sound. Generation can fail if the fixed host
 	## resource heap is exhausted, so initialization should propagate the returned
@@ -271,7 +273,7 @@ Audio := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
-	gen_sound! = |cfg| generated_sound_from_resource(AudioHost.gen_sound!(raw_config(cfg)))
+	gen_sound! = |cfg| generated_sound_from_resource(Host.audio_gen_sound!(raw_config(cfg)))
 
 	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds.
 	##
@@ -294,23 +296,38 @@ Audio := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_master_volume! : F32 => {}
-	set_master_volume! = |volume| AudioHost.set_master_volume!(volume)
+	set_master_volume! = |volume| Host.audio_set_master_volume!(volume)
 
 	expect waveform_code(Sine) == 0
 	expect waveform_code(Noise) == 4
 }
 
-loaded_sound_from_resource : AudioHost.SoundResult -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource : Try(Resource.Sound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
 loaded_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundLoadFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(Audio.Sound.(resource))
+		Err(SoundLoadFailed) => Err(SoundLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-generated_sound_from_resource : AudioHost.SoundResult -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
 generated_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundGenerationFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(Audio.Sound.(resource))
+		Err(SoundGenerationFailed) => Err(SoundGenerationFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-music_from_resource : AudioHost.MusicResult -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
+music_from_resource : Try(Resource.Music, Host.AudioLoadMusicError) -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
 music_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(MusicLoadFailed) else Ok({ resource: result.music })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(Audio.Music.(resource))
+		Err(MusicLoadFailed) => Err(MusicLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
 waveform_code : Audio.Waveform -> U8
 waveform_code = |waveform|
@@ -322,7 +339,7 @@ waveform_code = |waveform|
 		Noise => 4
 	}
 
-raw_config : Audio.GenSound -> AudioHost.GenSound
+raw_config : Audio.GenSound -> Host.AudioGenSound
 raw_config = |cfg| {
 	waveform: waveform_code(cfg.waveform),
 	freq_start: cfg.freq_start,

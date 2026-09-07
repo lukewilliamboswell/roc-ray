@@ -1,6 +1,6 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
 
-# `App.Input` is a pure value declared in the `roc-ray-types` package, so it has
+# `App.Input` is a pure platform value, so it has
 # no effectful receivers. `Task.spawn!(input, || ...)` is the only way to start
 # a task, and this checks that the receiver form stays gone rather than coming
 # back as a second spelling of the same effect.

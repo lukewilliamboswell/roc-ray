@@ -1,7 +1,6 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-09-06-d85e877",
 }
 
 # A font's resource identity is private to the host. Applications can copy a
@@ -9,7 +8,7 @@ app [Model, program] {
 # worse -- but cannot manufacture a resource from a raw integer.
 import rr.App
 import rr.Draw
-import rrt.Font
+import rr.Font
 
 Model : {
 	font : Font,
@@ -21,7 +20,8 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		handle = Font.Handle.(Box.box(0))
+		handle : Box(U64)
+		handle = Box.box(0)
 		Ok({
 			font: { ..Font.stub, handle },
 		})

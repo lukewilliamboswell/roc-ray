@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
-"""Build and validate the published API docs.
+"""Build and validate RocRay's complete platform API documentation.
 
-The platform and the `roc-ray-types` package are documented separately, because
-`roc docs` attaches a nominal's receivers to the module that *declares* it. The
-platform re-exports those types by alias, so its pages carry the signatures but
-not the receivers -- `Camera2D.with_zoom`, `Mouse.Snapshot.position` and friends
-only exist on the package's pages.
-
-Layout, matching the existing versioned scheme:
-
-    www/<version>/          platform docs
-    www/<version>/types/    package docs, linked from every re-export module
-
-`--check` builds both into a temporary directory and validates them without
-touching `www/`, so the whole flow can be exercised locally.
+All public types, receivers, and effects are documented under www/<version>/.
+`--check` builds into a temporary directory without changing published docs.
 """
 
 from __future__ import annotations
@@ -29,10 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLATFORM_ENTRY = ROOT / "platform" / "main.roc"
-PACKAGE_ENTRY = ROOT / "types" / "main.roc"
-TYPES_SUBDIR = "types"
 PRIVATE_ENTRIES = {
-    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host"),
+    "Assets": ("Store.for_host",),
+    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host", "RenderTexture.for_host"),
     "Keys": ("exit_key_code",),
     "Mouse": ("cursor_code", "cursor_mode_code"),
     # `integer` is what every width-checked integer decoder is built from. It
@@ -50,28 +38,10 @@ APP_INTERNAL_TYPES = (
     "CommandApply",
 )
 
-REEXPORT_LINKS = {
-    "App": ("Devices", "Window", "Time", "Capture"),
-    "Assets": ("Texture",),
-    "Color": ("Color",),
-    "Devices": ("Devices",),
-    "Window": ("Window",),
-    "Keys": ("Keys",),
-    "Mouse": ("Mouse",),
-    "Gamepad": ("Gamepad",),
-    "Time": ("Time",),
-    "Math": ("Math",),
-    "Camera": ("Camera",),
-    "Physics": ("Physics",),
-    "Capture": ("Capture",),
-    "Draw": ("Drawing", "Font", "Texture"),
-    "Text": ("Font",),
-}
 
 # The name `roc docs` shows in the sidebar and the index title is the entry
-# file's stem, so both sites would otherwise be called "main" and "types".
+# file's stem, which would otherwise name the platform "main".
 PLATFORM_DISPLAY_NAME = "roc-ray"
-PACKAGE_DISPLAY_NAME = "roc-ray-types"
 
 # The phase sentence every effect entry has to carry, so a reader never has to
 # guess which callback an effect may be called from. `roc docs` renders a
@@ -211,7 +181,7 @@ def name_site(root: Path, display_name: str) -> None:
     """Replace the filename-derived site name in the title and every sidebar.
 
     `roc docs` derives it from the entry, so the platform site would be called
-    "main" and the package site "types". Which of the two parts of the path it
+    "main". Which of the two parts of the path it
     picks is not worth predicting: read the name off the index page and replace
     exactly that.
     """
@@ -254,11 +224,10 @@ def strip_empty_type_defs(root: Path) -> None:
 
 
 def polish_platform_docs(platform_root: Path) -> None:
-    """Hide compiler-required private bridges and link re-exported pure types."""
+    """Hide compiler-required private bridges."""
     pages = [platform_root / "index.html"] + [
         page
         for page in platform_root.glob("*/index.html")
-        if page.parent.name != TYPES_SUBDIR
     ]
     for module, names in PRIVATE_ENTRIES.items():
         defining_page = platform_root / module / "index.html"
@@ -285,21 +254,6 @@ def polish_platform_docs(platform_root: Path) -> None:
                 )
             page.write_text(source, encoding="utf-8")
 
-    for module, types_modules in REEXPORT_LINKS.items():
-        page = platform_root / module / "index.html"
-        source = page.read_text(encoding="utf-8")
-        links = ", ".join(
-            f'<a href="../{TYPES_SUBDIR}/{name}/">roc-ray-types {name}</a>'
-            for name in types_modules
-        )
-        link = f'<p class="types-package-link">Pure types and receivers: {links}</p>'
-        # The footer is inside `<main>`, so appending at `</main>` would put
-        # this after it.
-        if "<footer>" not in source:
-            raise DocsError(f"{page}: no footer to place the types link above")
-        source = source.replace("<footer>", f"{link}<footer>", 1)
-        page.write_text(source, encoding="utf-8")
-
 
 def exposed_modules(entry: Path) -> list[str]:
     """Read the `exposes [...]` list from a platform or package header."""
@@ -320,56 +274,42 @@ def check_modules(root: Path, entry: Path, label: str) -> list[str]:
     return problems
 
 
-def check_receivers_documented(types_root: Path) -> list[str]:
-    """Every nominal receiver must appear somewhere, or the split lost docs."""
-    problems: list[str] = []
-    found = 0
-    for page in types_root.glob("*/index.html"):
-        ids = re.findall(r'<article class="entry[^"]*" id="([^"]+)"', page.read_text(encoding="utf-8"))
-        found += len([i for i in ids if i.count(".") == 2])
-    if found == 0:
-        problems.append(
-            f"{TYPES_SUBDIR}: no receivers documented at all -- the package docs "
-            "are the only place they exist, so this means they were lost"
-        )
+def check_receivers_documented(platform_root: Path) -> list[str]:
+    """Check representative receivers on their defining platform pages."""
+    expected = {
+        "App": ("Input.for_tests", "Input.with_messages"),
+        "Camera": ("Camera2D.with_zoom",),
+        "Mouse": ("Snapshot.position",),
+        "Font": ("measure",),
+        "Texture": ("stub",),
+    }
+    problems = []
+    for module, receivers in expected.items():
+        source = (platform_root / module / "index.html").read_text(encoding="utf-8")
+        for receiver in receivers:
+            if f'id="{module}.{receiver}"' not in source:
+                problems.append(f"{module}: missing documented receiver {receiver}")
     return problems
 
 
-def check_cross_links(platform_root: Path, types_root: Path) -> list[str]:
-    """Every relative link resolves and each re-export links to its pure page.
-
-    Checking only links that mention `types` would miss the failure that
-    matters most -- a typo'd path resolves to nothing and mentions nothing.
-    """
+def check_cross_links(platform_root: Path) -> list[str]:
+    """Every relative API documentation link resolves."""
     problems: list[str] = []
-    linked: dict[str, set[Path]] = {}
     for page in sorted(platform_root.glob("*/index.html")):
         for raw in re.findall(r'<a href="([^"]+)"', page.read_text(encoding="utf-8")):
             href = html.unescape(raw).split("#", 1)[0].split("?", 1)[0]
             if not href or href.startswith(("http:", "https:", "mailto:", "//", "/")):
                 continue
             target = (page.parent / href).resolve()
-            linked.setdefault(page.parent.name, set()).add(target)
             if not target.is_file() and not (target / "index.html").is_file():
                 problems.append(f"{page.parent.name}: broken link {raw}")
-    for platform_module, types_modules in REEXPORT_LINKS.items():
-        for types_module in types_modules:
-            expected = (types_root / types_module).resolve()
-            if expected not in linked.get(platform_module, set()):
-                problems.append(
-                    f"{platform_module}: no link to corresponding types page {types_module}"
-                )
     return problems
 
 
 def build(roc: str, version_root: Path) -> None:
     run_roc_docs(roc, PLATFORM_ENTRY, version_root)
-    run_roc_docs(roc, PACKAGE_ENTRY, version_root / TYPES_SUBDIR)
-    types_root = version_root / TYPES_SUBDIR
     strip_empty_type_defs(version_root)
     write_index_body(version_root, PLATFORM_ENTRY, PLATFORM_DISPLAY_NAME)
-    write_index_body(types_root, PACKAGE_ENTRY, PACKAGE_DISPLAY_NAME)
-    name_site(types_root, PACKAGE_DISPLAY_NAME)
     name_site(version_root, PLATFORM_DISPLAY_NAME)
     polish_platform_docs(version_root)
 
@@ -414,7 +354,6 @@ def platform_pages(version_root: Path) -> list[Path]:
     return [
         page
         for page in sorted(version_root.glob("*/index.html"))
-        if page.parent.name != TYPES_SUBDIR
     ]
 
 
@@ -447,9 +386,7 @@ def check_prose_renders(version_root: Path) -> list[str]:
     because `roc docs` renders neither.
     """
     problems: list[str] = []
-    pages = platform_pages(version_root) + sorted(
-        (version_root / TYPES_SUBDIR).glob("*/index.html")
-    )
+    pages = platform_pages(version_root)
     for page in pages:
         source = page.read_text(encoding="utf-8")
         where = page.relative_to(version_root).parent
@@ -479,19 +416,20 @@ def check_prose_renders(version_root: Path) -> list[str]:
 
 def validate(version_root: Path) -> list[str]:
     problems = check_modules(version_root, PLATFORM_ENTRY, "platform")
-    problems += check_modules(version_root / TYPES_SUBDIR, PACKAGE_ENTRY, TYPES_SUBDIR)
-    problems += check_receivers_documented(version_root / TYPES_SUBDIR)
-    problems += check_cross_links(version_root, version_root / TYPES_SUBDIR)
+    problems += check_receivers_documented(version_root)
+    problems += check_cross_links(version_root)
     problems += check_phase_sentences(version_root)
     problems += check_prose_renders(version_root)
-    app_page = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_source = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    app_blocks = [body for _, body in entries(app_source)]
+    app_blocks += [body for body in MODULE_DOC_PATTERN.findall(app_source)]
+    app_text = " ".join(app_blocks)
     for forbidden in (*APP_INTERNAL_TYPES, "AppTransport"):
-        if forbidden in app_page:
+        if forbidden in app_text:
             problems.append(f"App: private boundary term leaked into docs: {forbidden}")
     platform_pages = [version_root / "index.html"] + [
         page
         for page in version_root.glob("*/index.html")
-        if page.parent.name != TYPES_SUBDIR
     ]
     platform_html = "".join(page.read_text(encoding="utf-8") for page in platform_pages)
     for module, names in PRIVATE_ENTRIES.items():
@@ -545,7 +483,6 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"Docs built and validated: {where}")
         print(f"  platform -> {where}")
-        print(f"  package  -> {where}/{TYPES_SUBDIR}")
         return 0
     except DocsError as error:
         print(f"ERROR: {error}", file=sys.stderr)

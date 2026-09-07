@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import roc_platform_abi as abi
+import local_bundles
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -28,11 +29,11 @@ def run_git(repo: Path, *args: str) -> str:
 
 
 class RocPlatformAbiTests(unittest.TestCase):
-    def test_reads_commit_from_single_line_nightly_pin(self) -> None:
+    def test_reads_header_pin_without_confusing_documented_app_pin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_name:
-            pin_file = Path(temporary_name) / ".roc-version"
+            pin_file = Path(temporary_name) / "main.roc"
             pin_file.write_text(
-                "nightly-2026-08-12-606470f\n", encoding="utf-8"
+                '## app [] { roc: "nightly-2026-08-01-abcdef0" }\nplatform "" packages { roc: "nightly-2026-08-12-606470f" }\n', encoding="utf-8"
             )
             self.assertEqual(
                 abi.read_pin(pin_file),
@@ -43,10 +44,18 @@ class RocPlatformAbiTests(unittest.TestCase):
             )
 
             pin_file.write_text(
-                "nightly-2026-August-03-94cbed3\nextra\n", encoding="utf-8"
+                'platform "" packages { roc: "nightly-2026-August-03-94cbed3", roc: "nightly-2026-08-01-abcdef0" }\n', encoding="utf-8"
             )
             with self.assertRaisesRegex(abi.GlueError, "exactly one"):
                 abi.read_pin(pin_file)
+
+    def test_staging_rebinds_the_app_pin_without_rewriting_module_docs(self) -> None:
+        source = '## app [] { roc: "nightly-2026-08-23-fb208ba" }\napp [] { roc: "nightly-2026-08-23-fb208ba" }\n'
+        rebound = local_bundles.rewrite_compiler_pin(source, "nightly-2026-09-06-d85e877")
+        self.assertEqual(source.splitlines()[0], rebound.splitlines()[0])
+        self.assertIn('roc: "nightly-2026-09-06-d85e877"', rebound.splitlines()[1])
+        with self.assertRaises(local_bundles.LocalBundleError):
+            local_bundles.rewrite_compiler_pin('app [] {}', "nightly-2026-09-06-d85e877")
 
     def test_rejects_compiler_from_a_different_nightly(self) -> None:
         pin = abi.RocPin(
@@ -63,7 +72,7 @@ class RocPlatformAbiTests(unittest.TestCase):
                 abi, "resolve_program", return_value=Path("/test/bin/roc")
             ),
             mock.patch.object(abi, "_run_checked", return_value=version_result),
-            self.assertRaisesRegex(abi.GlueError, "does not match .roc-version"),
+            self.assertRaisesRegex(abi.GlueError, "does not match platform/main.roc"),
         ):
             abi.verify_compiler("roc", pin)
 

@@ -6,29 +6,16 @@
 ## `now!` reads the nondeterministic wall clock. It is legal in `init!`,
 ## `update!`, and tasks, and refused in `render!`; it does not wait.
 ##
-## `Cycle` and its pure helpers are re-exported from `roc-ray-types`.
-import rrt.Time as RrtTime
-import TimeHost
+import Host
 
 Time := [].{
 
-	## When one cycle happened, and how much time it covers.
-	##
-	## `cycle_count` counts cycles from `0`, `simulation_nanos` is the
-	## simulation clock the platform advances, `monotonic_nanos` is the host's
-	## own monotonic clock at the sample, and `elapsed_seconds` is the time this
-	## cycle covers, which is what animation and simulation multiply by.
-	##
-	## Declared in the `roc-ray-types` package's `Time` and re-exported here;
-	## `App.Input` carries one as `input.time`.
-	Cycle : RrtTime.Cycle
+	## Timing samples attached to one host cycle.
+	Cycle : { cycle_count : U64, simulation_nanos : U64, monotonic_nanos : U64, elapsed_seconds : F32 }
 
-	## The cycle an app starts on: count zero, no elapsed time.
-	##
-	## `App.Input.for_tests` uses it, and a test that needs a second cycle says
-	## so: `input.with_time({ ..Time.first_cycle, cycle_count: 1 })`.
+	## Initial cycle sample used before any simulation time has elapsed.
 	first_cycle : Cycle
-	first_cycle = RrtTime.first_cycle
+	first_cycle = { cycle_count: 0, simulation_nanos: 0, monotonic_nanos: 0, elapsed_seconds: 0 }
 
 	## Convert a nanosecond duration to seconds.
 	##
@@ -36,19 +23,16 @@ Time := [].{
 	## expect Time.to_seconds(500_000_000) == 0.5
 	## ```
 	to_seconds : U64 -> F32
-	to_seconds = RrtTime.to_seconds
+	to_seconds = |nanos| U64.to_f32(nanos) / 1_000_000_000
 
-	## Seconds elapsed between two clock samples. The second must not be earlier
-	## than the first.
-	##
-	## Handy for deriving a delta over more than one cycle from
-	## `Time.Cycle.simulation_nanos`:
+	## Seconds elapsed between two clock samples. `current` must be at or after
+	## `previous`. Derive a delta from consecutive timestamp samples:
 	##
 	## ```roc
-	## dt = Time.delta_seconds(model.last_tick, input.time.simulation_nanos)
+	## dt = Time.delta_seconds(model.last_tick, timestamp_nanos)
 	## ```
 	delta_seconds : U64, U64 -> F32
-	delta_seconds = RrtTime.delta_seconds
+	delta_seconds = |previous, current| to_seconds(current - previous)
 
 	## An instant on the world's clock, as seconds and nanoseconds since the
 	## Unix epoch.
@@ -168,7 +152,7 @@ Time := [].{
 	## nondeterministic, it is not what a capture paces, and it is not what
 	## animation should move on.
 	now! : () => Timestamp
-	now! = || Timestamp.(TimeHost.now!())
+	now! = || Timestamp.(Host.time_now!())
 }
 
 ## The one second every conversion here is written in terms of.

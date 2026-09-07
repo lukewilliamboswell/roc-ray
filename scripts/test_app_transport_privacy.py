@@ -28,6 +28,26 @@ ROOT = Path(__file__).resolve().parent.parent
 ROC_ENV = {**os.environ, "NO_COLOR": "1"}
 CASES = (
     (
+        ROOT / "test" / "compile_fail" / "host_module.roc",
+        ("package module is private", "`rr.Host`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "sound_handle_manufacture.roc",
+        ("cannot use opaque nominal type", "instance of Audio.Sound"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "audio_resource_kind_confusion.roc",
+        ("type mismatch", "Audio.Sound", "Audio.Music"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "device_transport_private.roc",
+        ("type not exposed", "RawEvent"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "resource_module_private.roc",
+        ("package module is private", "`rr.Resource`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "app_config_to_host.roc",
         ("missing method", "to_host method"),
     ),
@@ -44,72 +64,8 @@ CASES = (
         ("package module is private", "`rr.File`"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "app_host_module.roc",
-        ("package module is private", "`rr.AppHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "files_host_module.roc",
-        ("package module is private", "`rr.FilesHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "capture_host_module.roc",
-        ("package module is private", "`rr.CaptureHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "draw_host_module.roc",
-        ("package module is private", "`rr.DrawHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "assets_host_module.roc",
-        ("package module is private", "`rr.AssetsHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "audio_host_module.roc",
-        ("package module is private", "`rr.AudioHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "mouse_host_module.roc",
-        ("package module is private", "`rr.MouseHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "tilemap_host_module.roc",
-        ("package module is private", "`rr.TilemapHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "http_host_module.roc",
-        ("package module is private", "`rr.HttpHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "stdio_host_module.roc",
-        ("package module is private", "`rr.StdioHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "time_host_module.roc",
-        ("package module is private", "`rr.TimeHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "udp_host_module.roc",
-        ("package module is private", "`rr.UdpHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "sqlite_host_module.roc",
-        ("package module is private", "`rr.SqliteHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "cmd_host_module.roc",
-        ("package module is private", "`rr.CmdHost`"),
-    ),
-    (
         ROOT / "test" / "compile_fail" / "sqlite_db_manufacture.roc",
         ("cannot use opaque nominal type", "instance of Sqlite.Db"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "task_host_module.roc",
-        ("package module is private", "`rr.TaskHost`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "trace_host_module.roc",
-        ("package module is private", "`rr.TraceHost`"),
     ),
     (
         ROOT / "test" / "compile_fail" / "program_module_removed.roc",
@@ -121,7 +77,7 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Texture.Handle"),
+        ("type mismatch", "Texture.TextureHandle", "Box(U64)"),
     ),
     (
         ROOT / "test" / "compile_fail" / "transition_removed.roc",
@@ -133,7 +89,15 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "font_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Font.Handle"),
+        ("type mismatch", "Font.FontHandle", "Box(U64)"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "shader_handle_manufacture.roc",
+        ("cannot use opaque nominal type", "instance of Draw.Shader"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "resource_handle_kind_confusion.roc",
+        ("type mismatch", "Texture.TextureHandle", "Font.FontHandle"),
     ),
 )
 

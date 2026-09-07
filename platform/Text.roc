@@ -19,18 +19,18 @@
 ## Preparation is legal in `init!`, `update!`, and tasks, and refused in
 ## `render!`. Drawing requires `Draw.Frame` and is legal only in `render!`.
 ## Retain repeatedly drawn `Prepared` values in the model.
+import Resource
 import Color
 import Draw
-import DrawHost
+import Host
 import Math
-import rrt.Font as RrtFont
+import Font as PlatformFont
 
 Text := [].{
 
 	## A host-owned font and immutable metric snapshot. This is the shared type
-	## from `roc-ray-types`, re-exported for applications that depend only on the
-	## platform.
-	Font : RrtFont.Font
+	## owned by the platform's `Font` module.
+	Font : PlatformFont.Font
 
 	## Which horizontal edge or centre of the text `pos` names.
 	HAlign : [Left, Center, Right]
@@ -42,17 +42,17 @@ Text := [].{
 	Align : (VAlign, HAlign)
 
 	## A measured width and height, in the same logical units as every drawing
-	## call. This is `Draw.TextSize` and the types package's `Font.Size` under a
+	## call. This is `Draw.TextSize` and `Font.Size` under a
 	## third name; they are one type.
-	Size : RrtFont.Size
+	Size : { width : F32, height : F32 }
 
 	## Resource-free synthetic monospace font for pure layout tests.
 	font_stub : Font
-	font_stub = RrtFont.stub
+	font_stub = PlatformFont.stub
 
 	## Everything a draw needs beyond the text itself: where to put it, what
 	## colour to paint it, and which point of it `pos` names.
-	Placement : {
+	Placement := {
 		pos : Math.Vec2,
 		color : Color.Rgba,
 		align : Align ?? (Top, Left),
@@ -69,7 +69,7 @@ Text := [].{
 		content : Str,
 		size : F32,
 		spacing : F32,
-		font : RrtFont.Font,
+		font : PlatformFont.Font,
 	}.{
 
 		## Draw this text at a different pixel size. The default is `20`.
@@ -86,7 +86,7 @@ Text := [].{
 		spacing = |builder, value| { ..builder, spacing: value }
 
 		## Draw this text in a different font.
-		font : Builder, RrtFont.Font -> Builder
+		font : Builder, PlatformFont.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
 
 		## Measure this description from the font's immutable metric snapshot,
@@ -123,7 +123,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : DrawHost.PreparedText,
+		resource : Resource.Prepared,
 		measured : Size,
 	}.{
 
@@ -161,7 +161,7 @@ Text := [].{
 		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
 		## answers `{ width: 0, height: 0 }` and every alignment therefore
 		## resolves to the placement point itself. Copy this value with the
-		## bounds a test needs, the way the `roc-ray-types` package's
+		## bounds a test needs, the way the platform's
 		## `Texture.stub` is copied with dimensions.
 		##
 		## The handle never resolves to a host resource, so drawing it is skipped
@@ -170,7 +170,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: DrawHost.PreparedText.stub,
+				resource: Resource.Handle.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)
@@ -183,7 +183,7 @@ Text := [].{
 
 	## Start describing a string drawn in a font. Adjust the result with
 	## `size`, `spacing` and `font`, then draw or prepare it.
-	from : Str, RrtFont.Font -> Builder
+	from : Str, PlatformFont.Font -> Builder
 	from = |content, font| {
 		content,
 		size: 20,
@@ -196,25 +196,24 @@ Text := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
 	prepare_builder! = |builder| {
-		result = DrawHost.prepare_text!({
+		result = Host.text_prepare!({
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
 			font: builder.font.handle,
 		})
-		if result.err == 2 {
-			Err(ResourceLimit)
-		} else if result.err != 0 {
-			crash "prepared text host invariant failed"
-		} else {
-			Ok(
+		match result {
+			# closed error union to open error union
+			Ok(prepared_result) => Ok(
 				Prepared.(
 					{
-						resource: result.prepared,
-						measured: { width: result.width, height: result.height },
+						resource: prepared_result.prepared,
+						measured: { width: prepared_result.width, height: prepared_result.height },
 					},
 				),
 			)
+			Err(ResourceLimit) => Err(ResourceLimit)
+			Err(InvalidResource) => crash "prepared text host invariant failed"
 		}
 	}
 
@@ -250,6 +249,9 @@ Text := [].{
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
+	## Prepared text and its placement, with top-left alignment by default.
+	PreparedPlacement := { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align ?? (Top, Left) }
+
 	## Draw prepared text, as `Prepared.draw!` does.
 	##
 	## Legal in `render!` only.
@@ -257,11 +259,11 @@ Text := [].{
 	## Prefer the receiver. This form takes the frame first, like every other
 	## free drawing function, and takes the text as a field of its config
 	## record rather than as its own argument.
-	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align ?? (Top, Left) } => {}
+	draw_prepared! : Draw.Frame, PreparedPlacement => {}
 	draw_prepared! = |_frame, cfg| {
 		Prepared.(prepared) = cfg.text
 		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
-		DrawHost.draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
+		Host.draw_draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
 	}
 }
 

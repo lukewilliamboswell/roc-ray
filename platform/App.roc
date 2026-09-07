@@ -36,20 +36,25 @@
 ## For pure tests, build input with `App.Input.for_tests({})` and its `with_*`
 ## receivers. Host resource types provide inert `stub` values for constructing
 ## models; stubs cannot test loading or resource lifetime.
-import HostHost
+import Host
 import Keys
 import Mouse
-import MouseHost
-import rrt.App as RrtApp
-import rrt.Capture as RrtCapture
 
+# Explicit equality keeps comparisons through the public FramePacing alias
+# compilable with the pinned Roc compiler; derived equality loops on that path.
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
 
 	## Compare two of these values.
-	is_eq : _
+	is_eq : AppFramePacing, AppFramePacing -> Bool
+	is_eq = |a, b| match (a, b) {
+		(VSync, VSync) => Bool.True
+		(Capped(left), Capped(right)) => left == right
+		(Uncapped, Uncapped) => Bool.True
+		_ => Bool.False
+	}
 }
 
-AppRecording := [NoRecording, Record(RrtCapture.Recording)].{
+AppRecording := [NoRecording, Record(Capture.Recording)].{
 
 	## Compare two of these values.
 	is_eq : _
@@ -61,12 +66,159 @@ import Time
 import Audio
 import Capture
 import Files
-import AppHost
 import AppTransport
-import DrawHost
-import rrt.Font
+import Font
 
 App := [].{
+
+	## One file dropped onto the window, and where the pointer was when it
+	## landed.
+	##
+	## The path is the one the window system reported, absolute on every
+	## platform. Reading the file is a separate, waiting effect, so a drop is
+	## handled by starting a task:
+	##
+	## ```roc
+	## Task.spawn!(input, || Opened(Files.read_bytes!(drop.path)))
+	## ```
+	##
+	## `position` is the pointer position the host sampled for the cycle the
+	## drop arrived on, in the same logical coordinates as
+	## `input.devices.mouse.position()`, so an app that has more than one drop
+	## target can tell which one the file landed on.
+	Dropped : { path : Str, position : { x : F32, y : F32 } }
+
+	## Everything the host observed for one cycle, handed to `update!`.
+	##
+	## `messages` contains every task message delivered for this cycle, in the
+	## order the tasks finished. Independent tasks may finish in any order; the
+	## order they were spawned in does not constrain it.
+	## `capture` contains the recording status sampled for this cycle.
+	##
+	## `dropped` contains the files dropped onto the window since the previous
+	## input, in the order the window system reported them. Like a key press it
+	## is an interval event rather than a latest value: it is empty on almost
+	## every cycle, and exactly one call to `update!` sees any given drop. At
+	## most 64 paths are delivered per cycle; a single drop carrying more has
+	## its extra paths discarded, and `dropped_overflow` says so.
+	Input(msg) := {
+		devices : Devices.Snapshot,
+		window : Window.Snapshot,
+		time : Time.Cycle,
+		messages : List(msg),
+		capture : Capture.Status,
+		dropped : List(Dropped),
+		dropped_overflow : Bool,
+	}.{
+
+		## Return the complete structural input for platform-independent libraries.
+		fields : Input(msg) -> {
+			devices : Devices.Snapshot,
+			window : Window.Snapshot,
+			time : Time.Cycle,
+			messages : List(msg),
+			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
+		}
+		fields = |input| input
+
+		## Build an input by stating every sampled field at once.
+		##
+		## This is the from-scratch constructor; `for_tests` is the one to reach
+		## for when only a field or two matters, since it supplies neutral values
+		## for the rest.
+		##
+		## Pass a structural record written out here. Use `fields` when reading an
+		## existing input and the `with_*` receivers when changing one field.
+		from_fields : {
+			devices : Devices.Snapshot,
+			window : Window.Snapshot,
+			time : Time.Cycle,
+			messages : List(msg),
+			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
+		} -> Input(msg)
+		from_fields = |sampled| Input.(sampled)
+
+		## A neutral input for testing an app's pure update logic from an `expect`.
+		##
+		## Nothing is pressed, the window is an ordinary focused
+		## `default_test_size`, the clock reads zero on its first cycle, no
+		## messages arrived, and nothing is recording. Customize it with the
+		## `with_*` receivers, which is what makes a test say only the one thing
+		## it is about:
+		##
+		## ```roc
+		## expect
+		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
+		##     decide(model, input) == Quit
+		## ```
+		##
+		## Building the model this is called with is the other half: every host
+		## resource an app can hold has a resource-free `stub`
+		## (`Text.font_stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
+		## `Assets.Texture.stub`, ...), so a `Model` full of assets can be written
+		## down in a pure test.
+		##
+		## `update!` itself is effectful, and an `expect` cannot call it. Keep
+		## the decisions in pure functions -- which message to fold in, whether
+		## to quit, what work to start -- and test those; `update!` is the thin
+		## shell that performs them.
+		for_tests : {} -> Input(msg)
+		for_tests = |{}|
+			Input.(
+				{
+					devices: Devices.none,
+					window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+					time: Time.first_cycle,
+					messages: [],
+					capture: Idle,
+					dropped: [],
+					dropped_overflow: Bool.False,
+				},
+			)
+
+		## Replace this input's sampled device snapshot. Build one from `Devices.none`.
+		with_devices : Input(msg), Devices.Snapshot -> Input(msg)
+		with_devices = |Input.(sampled), devices| Input.({ ..sampled, devices: devices })
+
+		## Replace this input's sampled window geometry and visibility.
+		with_window : Input(msg), Window.Snapshot -> Input(msg)
+		with_window = |Input.(sampled), window| Input.({ ..sampled, window: window })
+
+		## Replace this input's clock sample. Use it to drive a second cycle:
+		## `input.with_time({ ..Time.first_cycle, cycle_count: 1 })`.
+		with_time : Input(msg), Time.Cycle -> Input(msg)
+		with_time = |Input.(sampled), time| Input.({ ..sampled, time: time })
+
+		## Deliver task messages on this input, in the order the tasks finished.
+		with_messages : Input(msg), List(msg) -> Input(msg)
+		with_messages = |Input.(sampled), messages| Input.({ ..sampled, messages: messages })
+
+		## Deliver one more task message on this input, after any already there.
+		with_message : Input(msg), msg -> Input(msg)
+		with_message = |Input.(sampled), message| Input.({ ..sampled, messages: List.append(sampled.messages, message) })
+
+		## Replace this input's sampled recording status.
+		with_capture : Input(msg), Capture.Status -> Input(msg)
+		with_capture = |Input.(sampled), capture| Input.({ ..sampled, capture: capture })
+
+		## Deliver files dropped onto the window on this input.
+		with_dropped : Input(msg), List(Dropped) -> Input(msg)
+		with_dropped = |Input.(sampled), dropped| Input.({ ..sampled, dropped: dropped })
+
+		## Say that this cycle's drop carried more paths than the host delivers,
+		## which is what `input.dropped_overflow` reports.
+		with_dropped_overflow : Input(msg), Bool -> Input(msg)
+		with_dropped_overflow = |Input.(sampled), overflowed| Input.({ ..sampled, dropped_overflow: overflowed })
+	}
+
+	## The window size `Input.for_tests` reports. Ordinary rather than special:
+	## a test that depends on the size should say so with `with_window`.
+	default_test_size : { width : I32, height : I32 }
+	default_test_size = { width: 800, height: 600 }
 
 	## Mutually exclusive frame pacing strategy: `VSync`, `Capped(fps)`, or
 	## `Uncapped`. Config normalization maps a non-positive `Capped` value to
@@ -255,14 +407,14 @@ App := [].{
 	## the first `App.Input` supplies the first sampled values. After
 	## initialization, change host state by calling effects from `update!`, and
 	## ask for work that waits with `Task.spawn!`.
-	Startup :: HostHost.Startup.{
+	Startup :: Host.AppStartup.{
 
 		## Return the configured startup font. Legal only in `init!`.
 		default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 		default_font! = |startup| App.default_font!(startup)
 
 		## Construct the public startup capability at the private host boundary.
-		for_host : HostHost.Startup -> Startup
+		for_host : Host.AppStartup -> Startup
 		for_host = |startup| Startup.(startup)
 	}
 
@@ -271,7 +423,7 @@ App := [].{
 	## The exit happens after startup completes, so `init!` finishes and the
 	## host shuts down in the ordinary way. Legal only in `init!`.
 	exit! : Startup, I32 => {}
-	exit! = |_startup, code| HostHost.exit!(code)
+	exit! = |_startup, code| Host.app_exit!(code)
 
 	## Return the complete process argument list supplied by the launcher.
 	##
@@ -282,7 +434,7 @@ App := [].{
 	## Legal only in `init!`. `App.init_for_args` is the other way to read
 	## argv, before the window exists.
 	args! : Startup => List(Str)
-	args! = |_startup| HostHost.args!()
+	args! = |_startup| Host.app_args!()
 
 	## Read an environment variable by key.
 	##
@@ -290,27 +442,25 @@ App := [].{
 	## `init!`.
 	read_env! : Startup, Str => Try(Str, [NotFound, ..])
 	read_env! = |_startup, key|
-		match HostHost.read_env!(key) {
+	# closed error union to open error union
+		match Host.app_read_env!(key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
 		}
 
 	## Read a UTF-8 text file from disk, blocking until it is read.
 	##
-	## Call as `App.read_file!(startup, path)`. Legal only in `init!`. Use
+	## Call as `App.read_text!(startup, path)`. Legal only in `init!`. Use
 	## `Files.read_text!` inside a task to read a file while the app runs, and
 	## for the fuller error report.
-	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
-	read_file! = |_startup, path| {
-		result = HostHost.read_file!(path)
-		if result.ok {
-			Ok(result.contents)
-		} else if result.err == 1 {
-			Err(NotFound)
-		} else {
-			Err(ReadFailed)
+	read_text! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
+	read_text! = |_startup, path|
+	# closed error union to open error union
+		match Host.app_read_text!(path) {
+			Ok(contents) => Ok(contents)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
 		}
-	}
 
 	## Draw one number from the operating system's entropy source.
 	##
@@ -334,7 +484,7 @@ App := [].{
 	##
 	## Legal only in `init!`.
 	entropy! : Startup => U64
-	entropy! = |_startup| HostHost.entropy!()
+	entropy! = |_startup| Host.random_entropy!()
 
 	## Get a varying startup number in the inclusive range `[min, max]`.
 	##
@@ -344,7 +494,7 @@ App := [].{
 	## in a range, such as a jittered start position that nothing else depends
 	## on.
 	random_i32! : Startup, I32, I32 => I32
-	random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
+	random_i32! = |_startup, min, max| Host.random_i32!(min, max)
 
 	## Suggest positive initial window dimensions to the window manager.
 	##
@@ -357,7 +507,7 @@ App := [].{
 		if size.width <= 0 or size.height <= 0 {
 			Err(InvalidSize)
 		} else {
-			match HostHost.suggest_window_size!(size) {
+			match Host.window_suggest_size!(size) {
 				Ok({}) => Ok({})
 				Err(NotSupported) => Err(NotSupported)
 			}
@@ -371,7 +521,7 @@ App := [].{
 	## `App.suggest_window_min_size!(startup, size)`. Legal only in `init!`.
 	suggest_window_min_size! : Startup, { width : I32, height : I32 } => {}
 	suggest_window_min_size! = |_startup, size|
-		HostHost.suggest_window_min_size!({
+		Host.window_suggest_min_size!({
 			width: if size.width > 0 size.width else 0,
 			height: if size.height > 0 size.height else 0,
 		})
@@ -383,7 +533,7 @@ App := [].{
 	## Legal only in `init!`. A running app changes the cap with
 	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
-	set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
+	set_target_fps! = |_startup, fps| Host.window_set_target_fps!(fps)
 
 	## Set which key closes the window, or `NoExitKey` to stop any key from
 	## closing it.
@@ -393,7 +543,7 @@ App := [].{
 	## handle shutdown itself by returning `Err(Exit(code))`. Call as
 	## `App.set_exit_key!(startup, NoExitKey)`. Legal only in `init!`.
 	set_exit_key! : Startup, ExitKey => {}
-	set_exit_key! = |_startup, key| HostHost.set_exit_key!(Keys.exit_key_code(key))
+	set_exit_key! = |_startup, key| Host.keys_set_exit_key!(Keys.exit_key_code(key))
 
 	## Read UTF-8 text from the system clipboard.
 	##
@@ -405,9 +555,10 @@ App := [].{
 	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
 	get_clipboard_text! = |_startup|
-		match HostHost.get_clipboard_text!() {
-			Ok(text) => Ok(text)
-			Err(Unavailable) => Err(Unavailable)
+		match Host.window_read_clipboard!() {
+			# Startup deliberately collapses every refusal into one outcome.
+			Ok(contents) => Ok(contents)
+			Err(_) => Err(Unavailable)
 		}
 
 	## Replace the system clipboard contents with UTF-8 text.
@@ -415,41 +566,34 @@ App := [].{
 	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`.
 	## A running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
-	set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
+	set_clipboard_text! = |_startup, text| Host.window_set_clipboard_text!(text)
 
 	## Apply cursor visibility and capture atomically through one tagged
 	## operation. Legal only in `init!`. `Mouse.set_cursor_mode!` is the same
 	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
-	set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
+	set_cursor_mode! = |_startup, mode| Host.mouse_set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
 	## Set the native operating-system cursor shape. Legal only in `init!`.
 	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
-	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
+	set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cursor))
 
 	## Return the configured startup font, or the backend's built-in font when
 	## none was configured. A configured path is resolved from the process
 	## working directory. The host loads it once; repeat calls return retained
 	## aliases of the same resource. Legal only in `init!`.
 	default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
-	default_font! = |_startup| {
-		result = DrawHost.startup_default_font!()
-		if result.err == 1 {
-			Err(AssetPathInvalid)
-		} else if result.err == 2 {
-			Err(AssetNotFound)
-		} else if result.err == 3 {
-			Err(AssetReadFailed)
-		} else if result.err == 4 {
-			Err(FontLoadFailed)
-		} else if result.err != 0 {
-			Err(ResourceLimit)
-		} else {
-			metrics = DrawHost.font_metrics!(result.font)
-			Ok({ handle: result.font, metrics })
+	default_font! = |_startup|
+	# closed error union to open error union
+		match Host.text_startup_default_font!() {
+			Ok(font) => Ok(font)
+			Err(AssetPathInvalid) => Err(AssetPathInvalid)
+			Err(AssetNotFound) => Err(AssetNotFound)
+			Err(AssetReadFailed) => Err(AssetReadFailed)
+			Err(FontLoadFailed) => Err(FontLoadFailed)
+			Err(ResourceLimit) => Err(ResourceLimit)
 		}
-	}
 
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
@@ -493,42 +637,6 @@ App := [].{
 	## Build initialization from an argv-aware startup configuration.
 	init_for_args : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
 	init_for_args = |config_for_args, callback!| { config: config_for_args, run!: callback! }
-
-	## One file dropped onto the window, and where the pointer was when it landed.
-	##
-	## `path` is absolute, as the window system reported it. Nothing in the
-	## platform sandboxes it, so it is read the way any other path is: hand it
-	## to `Files.read_bytes!` inside a task, and the read parks that task while
-	## the frame loop keeps drawing.
-	##
-	## ```roc
-	## Task.spawn!(input, || Opened(Files.read_bytes!(drop.path)))
-	## ```
-	##
-	## Declared in the `roc-ray-types` package's `App` and re-exported here.
-	Dropped : RrtApp.Dropped
-
-	## Everything the host observed for one cycle, handed to `update!`.
-	##
-	## `messages` contains every task message delivered for this cycle, in the
-	## order the tasks finished. `capture` contains the recording status sampled
-	## for this cycle, and `dropped` the files dropped onto the window since the
-	## previous input.
-	##
-	## An `Input(msg)` is also the witness that pins a task's message type:
-	## `Task.spawn!(input, || ...)` takes one for that reason, and so should any
-	## public function of a package that starts work on the app's behalf. See
-	## `Task.spawn!`.
-	##
-	## Declared in the `roc-ray-types` package's `App` and re-exported here,
-	## which is also where its receivers are documented. A package can therefore
-	## accept a whole `Input(msg)` without depending on this platform.
-	Input(msg) : RrtApp.Input(msg)
-
-	## The window size `Input.for_tests` reports. Ordinary rather than special:
-	## a test that depends on the size should say so with `with_window`.
-	default_test_size : { width : I32, height : I32 }
-	default_test_size = RrtApp.default_test_size
 }
 
 default_width : I32
@@ -554,6 +662,11 @@ normalize_min_dimension = |value| if value > 0 value else 0
 
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
+expect App.default.frame_pacing() == Capped(240)
+expect App.default.frame_pacing() != Capped(60)
+expect App.default.frame_pacing() != VSync
+expect App.default.with_frame_pacing(VSync).frame_pacing() != Uncapped
+expect App.default.with_frame_pacing(Uncapped).frame_pacing() != Capped(240)
 expect App.default.with_cursor_mode(Hidden).cursor_mode() == Hidden
 expect App.default.with_title("Test").title() == "Test"
 expect App.default.size() == { width: 800, height: 600 }
@@ -565,6 +678,12 @@ expect App.default.with_min_size({ width: 400, height: 300 }).min_size() == { wi
 expect App.default.with_min_size({ width: -1, height: -20 }).min_size() == { width: 0, height: 0 }
 expect App.default.exit_key() == ExitKey(KeyEscape)
 expect App.default.with_exit_key(NoExitKey).exit_key() == NoExitKey
+expect App.default.exit_key() != ExitKey(KeySpace)
+expect App.default.exit_key() != NoExitKey
+expect App.default.with_exit_key(NoExitKey).exit_key() != ExitKey(KeyEscape)
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() == ExitKey(Raw(256))
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(Raw(257))
+expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(KeyEscape)
 expect App.default.with_resizable(Bool.True).resizable()
 expect App.default.with_fullscreen(Bool.True).fullscreen()
 expect App.default.visible()
@@ -572,7 +691,7 @@ expect !(App.default.with_visible(Bool.False).visible())
 expect App.default.output_dir() == "."
 expect App.default.with_output_dir("captures").output_dir() == "captures"
 expect App.default.recording() == NoRecording
-expect App.default.with_recording(RrtCapture.default).recording() == Record(RrtCapture.default)
+expect App.default.with_recording(Capture.default).recording() == Record(Capture.default)
 
 # --- Constructing a Input, so a pure test can exercise an app's update logic ------
 

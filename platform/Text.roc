@@ -24,7 +24,7 @@ import Draw
 import Host
 import Math
 import rrt.Font as RrtFont
-import rrt.Handle
+import rrt.TextPrepared as RrtTextPrepared
 
 Text := [].{
 
@@ -124,7 +124,7 @@ Text := [].{
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
 	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		resource : Host.TextPrepared,
+		resource : RrtTextPrepared.TextPrepared,
 		measured : Size,
 	}.{
 
@@ -171,7 +171,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: Handle.stub,
+				resource: RrtTextPrepared.stub,
 				measured: { width: 0, height: 0 },
 			},
 		)

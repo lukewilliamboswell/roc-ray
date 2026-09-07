@@ -50,7 +50,7 @@
 ## privileges, and report `PermissionDenied` when they are missing. Broadcast
 ## and multicast are not enabled.
 import Host
-import rrt.Handle
+import rrt.UdpSocket as RrtUdpSocket
 
 Udp := [].{
 
@@ -135,11 +135,15 @@ Udp := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	bind! : Address => Try(Socket, BindError)
 	bind! = |address| {
-		result = Host.udp_bind!({ ip: address.ip, port: address.port })
-		if result.err == 0 {
-			Ok(Socket.({ handle: result.handle, local: { ip: format_ip(result.ip), port: result.port } }))
-		} else {
-			Err(bind_error(result.err))
+		# closed error union to open error union
+		match Host.udp_bind!({ ip: address.ip, port: address.port }) {
+			Ok(bound) => Ok(Socket.({ handle: bound.handle, local: { ip: format_ip(bound.ip), port: bound.port } }))
+			Err(AddressInUse) => Err(AddressInUse)
+			Err(AddressUnavailable) => Err(AddressUnavailable)
+			Err(InvalidAddress) => Err(InvalidAddress)
+			Err(PermissionDenied) => Err(PermissionDenied)
+			Err(ResourceLimit) => Err(ResourceLimit)
+			Err(Unavailable) => Err(Unavailable)
 		}
 	}
 
@@ -148,7 +152,7 @@ Udp := [].{
 	## The handle is reference counted: copy it freely, and when the last copy
 	## goes -- out of the model, out of a task's captures, or at shutdown --
 	## the socket is closed. There is nothing to remember to close.
-	Socket := { handle : Host.UdpHandle, local : Address }.{
+	Socket := { handle : RrtUdpSocket.UdpSocket, local : Address }.{
 
 		## The address this socket is actually bound to, including the port the
 		## operating system chose when `bind!` was given `0`.
@@ -169,16 +173,22 @@ Udp := [].{
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		send! : Socket, Address, List(U8) => Try({}, SendError)
 		send! = |Socket.(socket), to, bytes| {
-			err = Host.udp_send!({
+			result = Host.udp_send!({
 				socket: socket.handle,
 				ip: to.ip,
 				port: to.port,
 				bytes,
 			})
-			if err == 0 {
-				Ok({})
-			} else {
-				Err(send_error(err))
+			# closed error union to open error union
+			match result {
+				Ok({}) => Ok({})
+				Err(InvalidAddress) => Err(InvalidAddress)
+				Err(PermissionDenied) => Err(PermissionDenied)
+				Err(SendFailed) => Err(SendFailed)
+				Err(TooLarge) => Err(TooLarge)
+				Err(Unavailable) => Err(Unavailable)
+				Err(NoRoute) => Err(Unreachable)
+				Err(WouldBlock) => Err(WouldBlock)
 			}
 		}
 
@@ -201,10 +211,13 @@ Udp := [].{
 				timeout_ms: config.timeout_ms,
 				max_datagrams: config.max_datagrams,
 			})
-			if result.err == 0 {
-				Ok(decode_batch(result.slices, result.payload))
-			} else {
-				Err(receive_error(result.err))
+			# closed error union to open error union
+			match result {
+				Ok(batch) => Ok(decode_batch(batch.slices, batch.payload))
+				Err(AlreadyReceiving) => Err(AlreadyReceiving)
+				Err(ReceiveFailed) => Err(ReceiveFailed)
+				Err(Timeout) => Err(Timeout)
+				Err(Unavailable) => Err(Unavailable)
 			}
 		}
 
@@ -217,7 +230,7 @@ Udp := [].{
 		## a pure `expect` build that model. Do not use it to test delivery or
 		## resource lifetime.
 		stub : Socket
-		stub = Socket.({ handle: Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
+		stub = Socket.({ handle: RrtUdpSocket.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
 }
 
@@ -239,56 +252,11 @@ format_ip = |ip| {
 	"${octet(24)}.${octet(16)}.${octet(8)}.${octet(0)}"
 }
 
-## Name a failed bind. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-bind_error : U8 -> Udp.BindError
-bind_error = |code|
-	match code {
-		2 => InvalidAddress
-		4 => ResourceLimit
-		8 => AddressInUse
-		9 => AddressUnavailable
-		10 => PermissionDenied
-		_ => Unavailable
-	}
-
-## Name a failed send. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-send_error : U8 -> Udp.SendError
-send_error = |code|
-	match code {
-		1 => Unavailable
-		2 => InvalidAddress
-		10 => PermissionDenied
-		11 => TooLarge
-		12 => WouldBlock
-		13 => Unreachable
-		_ => SendFailed
-	}
-
-## Name a failed receive. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-receive_error : U8 -> Udp.ReceiveError
-receive_error = |code|
-	match code {
-		1 => Unavailable
-		14 => Timeout
-		15 => AlreadyReceiving
-		_ => ReceiveFailed
-	}
-
 expect format_ip(0x7f000001) == "127.0.0.1"
 expect format_ip(0) == "0.0.0.0"
 expect format_ip(0xffffffff) == "255.255.255.255"
 expect format_ip(0xc0a80101) == "192.168.1.1"
 expect format_ip(0x08080808) == "8.8.8.8"
-
-expect bind_error(2) == InvalidAddress
-expect bind_error(8) == AddressInUse
-expect bind_error(1) == Unavailable
-expect send_error(12) == WouldBlock
-expect send_error(11) == TooLarge
-expect send_error(3) == SendFailed
-expect receive_error(14) == Timeout
-expect receive_error(15) == AlreadyReceiving
-expect receive_error(3) == ReceiveFailed
 
 ## Each datagram in a batch keeps its own bytes and its own sender: a decode
 ## that shared one slice, or lost the address, would make every reply go to the

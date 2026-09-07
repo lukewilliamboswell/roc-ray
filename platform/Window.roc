@@ -74,14 +74,14 @@ Window := [].{
 	## Content that is not text, or is larger than the host will copy into a
 	## `Str`, is refused rather than truncated.
 	read_clipboard! : () => Try(Str, ClipboardReadError)
-	read_clipboard! = || {
-		result = Host.window_read_clipboard!()
-		if result.err == 0 {
-			Ok(result.contents)
-		} else {
-			Err(clipboard_error(result.err))
+	read_clipboard! = ||
+		match Host.window_read_clipboard!() {
+			# closed error union to open error union
+			Ok(contents) => Ok(contents)
+			Err(Busy) => Err(Busy)
+			Err(TooLarge) => Err(TooLarge)
+			Err(Unavailable) => Err(Unavailable)
 		}
-	}
 
 	## Set raylib's CPU-side frame-rate cap.
 	##
@@ -175,19 +175,3 @@ expect {
 	monitor = monitor_from_host({ index: 1, name: "HDMI-1", width: 2560, height: 1440, x: 1920, y: 0, refresh_hz: 144 })
 	monitor.size == { width: 2560, height: 1440 } and monitor.position == { x: 1920, y: 0 }
 }
-
-## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
-clipboard_error : U8 -> Window.ClipboardReadError
-clipboard_error = |code|
-	if code == 5 {
-		TooLarge
-	} else if code == 3 {
-		Busy
-	} else {
-		Unavailable
-	}
-
-expect clipboard_error(5) == TooLarge
-expect clipboard_error(3) == Busy
-expect clipboard_error(4) == Unavailable
-expect clipboard_error(0) == Unavailable

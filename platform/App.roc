@@ -397,10 +397,12 @@ App := [].{
 	## reads the clipboard with `Window.read_clipboard!`, which names the
 	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
-	get_clipboard_text! = |_startup| {
-		result = Host.window_read_clipboard!()
-		if result.err == 0 Ok(result.contents) else Err(Unavailable)
-	}
+	get_clipboard_text! = |_startup|
+		match Host.window_read_clipboard!() {
+			# Startup deliberately collapses every refusal into one outcome.
+			Ok(contents) => Ok(contents)
+			Err(_) => Err(Unavailable)
+		}
 
 	## Replace the system clipboard contents with UTF-8 text.
 	##

@@ -47,9 +47,9 @@
 ## > `Udp`: bound sockets and bounded datagram send/receive batches.
 ## > `Sqlite`: connection and statement handles plus flattened query results.
 ##
-## Opaque `Handle(resource)` values erase to `Box(U64)` resource
-## tokens resolved and lifetime-checked by the host, never exposing native
-## addresses.
+## Resource values from the `roc-ray-types` package carry an opaque
+## `Handle(resource)` that erases to a `Box(U64)` token resolved and
+## lifetime-checked by the host, never exposing native addresses.
 ## Native pointers, backend objects, public unions, and application policy do
 ## not belong here.
 import rrt.Camera
@@ -59,6 +59,13 @@ import rrt.Math
 import rrt.Handle
 import rrt.Shader
 import rrt.Texture
+import rrt.Store
+import rrt.TextPrepared
+import rrt.AudioSound
+import rrt.AudioMusic
+import rrt.UdpSocket
+import rrt.SqliteDb
+import rrt.SqliteStmt
 
 Host := [].{
 
@@ -120,13 +127,23 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_generate_checked! : TextureGenerateChecked => Try(Texture, TextureGenerateError)
 
+	## Failures while replacing a texture's pixels.
+	##
+	## `NotMutable` is a handle that is not an app-owned texture at all -- a
+	## released one, a stub, or a render target, which the host writes only
+	## through `render!`.
+	TextureUpdateError : [NotMutable, PixelCountMismatch]
+
+	## Failures while replacing pixels inside a texture rectangle.
+	TextureUpdateRegionError : [NotMutable, PixelCountMismatch, RegionOutOfBounds]
+
 	## Replace all texture pixels.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_update! : TextureUpdate => U8
+	texture_update! : TextureUpdate => Try({}, TextureUpdateError)
 
 	## Replace pixels within a texture rectangle.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_update_region! : TextureUpdateRegion => U8
+	texture_update_region! : TextureUpdateRegion => Try({}, TextureUpdateRegionError)
 
 	## Set the texture scaling filter.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -152,13 +169,8 @@ Host := [].{
 	## Text resource interface
 	FontResource : [FontResource]
 
-	PreparedTextResource := {}
-
-	## Opaque ARC-owned prepared text.
-	TextPrepared : Handle(PreparedTextResource)
-
 	## Text-preparation parameters.
-	TextPrepare : { text : Str, size : F32, spacing : F32, font : Handle(FontResource) }
+	TextPrepare : { text : Str, size : F32, spacing : F32, font : Font.FontHandle }
 
 	## Failures while preparing text.
 	TextPrepareError : [ResourceLimit, InvalidResource]
@@ -242,9 +254,12 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	shader_load_store! : ShaderLoadStore => Try(Shader, ShaderLoadStoreError)
 
+	## Failures while looking up a shader uniform.
+	ShaderLocationError : [UniformNotFound]
+
 	## Get a shader uniform location.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_location! : ShaderLocation => I32
+	shader_location! : ShaderLocation => Try(I32, ShaderLocationError)
 
 	## Set a floating-point shader uniform.
 	## Legal in `render!` only.
@@ -271,10 +286,6 @@ Host := [].{
 	shader_set_texture! : ShaderTexture => {}
 
 	## Store resource interface
-	StoreResource := {}
-
-	## Opaque ARC-owned directory store; copies keep it open.
-	Store : Handle(StoreResource)
 
 	## Parameters for opening a confined asset store.
 	StoreOpen : {
@@ -364,14 +375,6 @@ Host := [].{
 	}
 
 	## Audio interface
-	SoundResource := {}
-	MusicResource := {}
-
-	## Opaque ARC-owned sound.
-	AudioSound : Handle(SoundResource)
-
-	## Opaque ARC-owned music stream.
-	AudioMusic : Handle(MusicResource)
 
 	## Failures while generating a sound.
 	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
@@ -496,54 +499,55 @@ Host := [].{
 	audio_set_master_volume! : F32 => {}
 
 	## Files interface
-	## Text contents when `err` is `0`; otherwise empty.
-	FilesTextResult : {
-		err : U8,
-		contents : Str,
-	}
+	## Failures while reading a file as validated UTF-8.
+	FilesReadTextError : [Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
-	## Read bytes or an encoded directory listing; empty on error.
-	##
-	## The host allocation transfers into Roc list ARC without copying.
-	FilesBytesResult : {
-		err : U8,
-		bytes : List(U8),
-	}
+	## Failures while reading a file as bytes.
+	FilesReadBytesError : [Busy, NotFound, ReadFailed, TooLarge, Unavailable]
 
-	## One `stat`; all payload fields are zero on error.
-	##
-	## Modification time uses the normalized `Time.Timestamp` parts.
-	FilesMetadataResult : {
-		err : U8,
+	## Failures while listing one directory.
+	FilesListError : [Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
+
+	## One `stat`. Modification time uses the normalized `Time.Timestamp` parts.
+	FilesMetadata : {
 		kind : U8,
 		size_bytes : U64,
 		modified_seconds : I64,
 		modified_nanosecond : U32,
 	}
 
+	## Failures while stating one path.
+	FilesMetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
+
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_text! : Str => FilesTextResult
+	files_read_text! : Str => Try(Str, FilesReadTextError)
 
 	## Stat one path, following symbolic links.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_metadata! : Str => FilesMetadataResult
+	files_metadata! : Str => Try(FilesMetadata, FilesMetadataError)
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Str => FilesBytesResult
+	files_read_bytes! : Str => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_list! : Str => FilesBytesResult
+	files_list! : Str => Try(List(U8), FilesListError)
 
-	## Replace a file with UTF-8; return `0` or a `Files` write-error code.
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_text! : Str, Str => U8
+	## Failures while replacing a whole file.
+	##
+	## A write fails for reasons a read cannot, so it has a union of its own
+	## rather than sharing one with `files_read_bytes!`.
+	FilesWriteError : [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
 
-	## Replace a file with bytes; use the same result codes as text writes.
+	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_bytes! : Str, List(U8) => U8
+	files_write_text! : Str, Str => Try({}, FilesWriteError)
+
+	## Replace a file with bytes; the same failures as a text write.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
+	files_write_bytes! : Str, List(U8) => Try({}, FilesWriteError)
 
 	## Http interface
 	## One ordered HTTP header.
@@ -569,18 +573,22 @@ Host := [].{
 		max_response_bytes : U64,
 	}
 
-	## A response when `err == 0`; otherwise only `err_message` is populated.
+	## A complete response. A non-2xx `status` is a reply, not a failure.
 	HttpResponseFromHost : {
-		err : U8,
-		err_message : Str,
 		status : U16,
 		headers : List(HttpHeaderPair),
 		body : List(U8),
 	}
 
+	## Failures while running one HTTP exchange.
+	##
+	## `Other` carries the host's own description, so a host that learns to
+	## distinguish a new failure still reports something an app can print.
+	HttpSendError : [MalformedResponse, NetworkError, Other(Str), Timeout]
+
 	## Send one request and wait for the whole response.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	http_send! : HttpRequestToHost => HttpResponseFromHost
+	http_send! : HttpRequestToHost => Try(HttpResponseFromHost, HttpSendError)
 
 	## Cmd interface
 	## One child-process environment variable.
@@ -606,59 +614,74 @@ Host := [].{
 		stderr_limit_bytes : U64,
 	}
 
-	## A finished child or launch failure.
-	##
-	## `err == 0` includes nonzero child exits. A timeout preserves captured
-	## output and sets `exit_code` to `-1`; other errors leave payloads empty.
-	CmdRunResult : {
-		err : U8,
+	## A finished child. A nonzero `exit_code` is a finished child, not a
+	## failure to run one.
+	CmdOutput : {
 		exit_code : I64,
 		stdout : List(U8),
 		stderr : List(U8),
 	}
 
+	## Failures while starting or waiting on a child process.
+	##
+	## `Timeout` carries the output captured before the deadline expired, which
+	## is why it is the one variant with a payload.
+	CmdRunError : [
+		Busy,
+		CommandNotFound,
+		PermissionDenied,
+		SpawnFailed,
+		StderrLimitExceeded,
+		StdoutLimitExceeded,
+		Timeout(CmdOutput),
+		Unavailable,
+	]
+
 	## Start one child process and wait for it to finish.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	cmd_run! : CmdRunArgs => CmdRunResult
+	cmd_run! : CmdRunArgs => Try(CmdOutput, CmdRunError)
 
 	## Stdio interface
-	## Queue UTF-8 atomically; return `0` or a stdio result code.
+	## Failures while queueing one atomic write.
+	##
+	## `TooLarge` is a payload past the whole ring and can never be queued;
+	## `BufferFull` is one that does not fit right now.
+	StdioWriteError : [BufferFull, TooLarge, Unavailable]
+
+	## Queue UTF-8 atomically.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_text! : U8, Str => U8
+	stdio_write_text! : U8, Str => Try({}, StdioWriteError)
 
 	## Queue UTF-8 and a newline as one reservation.
 	##
 	## Host-side appending avoids a copy and prevents interleaved writes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_line! : U8, Str => U8
+	stdio_write_line! : U8, Str => Try({}, StdioWriteError)
 
-	## Queue bytes atomically; use the text-write result codes.
+	## Queue bytes atomically; the same failures as a text write.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_bytes! : U8, List(U8) => U8
+	stdio_write_bytes! : U8, List(U8) => Try({}, StdioWriteError)
 
 	## Udp interface
-	UdpSocketResource := {}
-
-	## Opaque ARC-owned bound socket.
-	UdpHandle : Handle(UdpSocketResource)
-
 	## Bind a dotted-quad IPv4 literal; port `0` requests an assigned port.
 	UdpBindArgs : {
 		ip : Str,
 		port : U16,
 	}
 
-	## A bound socket and its assigned address, or an error.
-	UdpBindResult : {
-		handle : UdpHandle,
+	## A bound socket and the address the kernel assigned it.
+	UdpBound : {
+		handle : UdpSocket,
 		ip : U32,
 		port : U16,
-		err : U8,
 	}
+
+	## Failures while opening and binding a socket.
+	UdpBindError : [AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable]
 
 	## One outgoing datagram. `ip` is a dotted-quad IPv4 literal.
 	UdpSendArgs : {
-		socket : UdpHandle,
+		socket : UdpSocket,
 		ip : Str,
 		port : U16,
 		bytes : List(U8),
@@ -666,7 +689,7 @@ Host := [].{
 
 	## Receive request; zero timeout means none, and the host caps the batch.
 	UdpReceiveArgs : {
-		socket : UdpHandle,
+		socket : UdpSocket,
 		timeout_ms : U64,
 		max_datagrams : U32,
 	}
@@ -679,24 +702,32 @@ Host := [].{
 		len : U64,
 	}
 
-	## A received batch when `err == 0`; otherwise both lists are empty.
-	UdpReceiveResult : {
-		err : U8,
+	## One received batch: the datagram ranges and the payload they index into.
+	UdpBatch : {
 		slices : List(UdpDatagramSlice),
 		payload : List(U8),
 	}
 
+	## Failures while waiting for datagrams.
+	UdpReceiveError : [AlreadyReceiving, ReceiveFailed, Timeout, Unavailable]
+
 	## Open and bind one IPv4 UDP socket.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	udp_bind! : UdpBindArgs => UdpBindResult
+	udp_bind! : UdpBindArgs => Try(UdpBound, UdpBindError)
 
-	## Send one datagram; return `0` or a `Udp` error code.
+	## Failures while handing one datagram to the kernel.
+	## `NoRoute` is what `Udp` exposes as `Unreachable`; it is spelled
+	## differently here because `roc glue` lowers a tag to a Zig enum member
+	## and `unreachable` is a Zig keyword.
+	UdpSendError : [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
+
+	## Send one datagram.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	udp_send! : UdpSendArgs => U8
+	udp_send! : UdpSendArgs => Try({}, UdpSendError)
 
 	## Wait for at least one datagram, then drain what is already buffered.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	udp_receive! : UdpReceiveArgs => UdpReceiveResult
+	udp_receive! : UdpReceiveArgs => Try(UdpBatch, UdpReceiveError)
 
 	## App interface
 	## Zero-sized startup authority minted by the adapter.
@@ -735,15 +766,12 @@ Host := [].{
 	keys_set_exit_key! : I32 => {}
 
 	## Window interface
-	## Clipboard text when `err == 0`; otherwise empty.
-	WindowClipboardResult : {
-		err : U8,
-		contents : Str,
-	}
+	## Failures while reading the system clipboard as text.
+	WindowClipboardError : [Busy, TooLarge, Unavailable]
 
 	## Get clipboard text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	window_read_clipboard! : () => WindowClipboardResult
+	window_read_clipboard! : () => Try(Str, WindowClipboardError)
 
 	## Replace the clipboard with UTF-8 text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -904,14 +932,6 @@ Host := [].{
 	tilemap_draw! : TilemapRenderRequest => {}
 
 	## Sqlite interface
-	SqliteDbResource := {}
-	SqliteStmtResource := {}
-
-	## Opaque ARC-owned database connection.
-	SqliteDb : Handle(SqliteDbResource)
-
-	## Opaque statement that retains its connection.
-	SqliteStmt : Handle(SqliteStmtResource)
 
 	## One row-major query cell.
 	##
@@ -935,14 +955,23 @@ Host := [].{
 		blob : List(U8),
 	}
 
-	## A connection when `err == 0`; otherwise an invalid handle.
-	SqliteOpenResult : { err : I64, message : Str, db : SqliteDb }
+	## One failure SQLite itself reported: its own result code and message.
+	##
+	## The code stays numeric on the wire because it is SQLite's, not this
+	## host's; `Sqlite` names it in the app's vocabulary.
+	SqliteFailure : { code : I64, message : Str }
 
-	## A prepared statement or its failure.
-	SqlitePrepareResult : { err : I64, message : Str, stmt : SqliteStmt }
+	## Failures while opening a connection.
+	SqliteOpenError : [SqliteErr(SqliteFailure), TooManyConnections]
 
-	## An outcome without a payload.
-	SqliteStatusResult : { err : I64, message : Str }
+	## Failures with nothing to report but the failure itself.
+	SqliteStatusError : [SqliteErr(SqliteFailure)]
+
+	## Failures while compiling one statement.
+	SqlitePrepareError : [MultipleStatements, SqliteErr(SqliteFailure), TooManyStatements]
+
+	## Failures while running one statement to completion.
+	SqliteQueryError : [MultipleStatements, ResultTooLarge, SqliteErr(SqliteFailure)]
 
 	## One completed query.
 	##
@@ -950,9 +979,7 @@ Host := [].{
 	## is their shared byte buffer.
 	##
 	## `changes` and `last_insert_rowid` describe this statement.
-	SqliteQueryResult : {
-		err : I64,
-		message : Str,
+	SqliteRows : {
 		names : List(U8),
 		ncols : U64,
 		row_count : U64,
@@ -965,27 +992,27 @@ Host := [].{
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_open! : Str, U8, U64, U64 => SqliteOpenResult
+	sqlite_open! : Str, U8, U64, U64 => Try(SqliteDb, SqliteOpenError)
 
 	## Close early; final handle release remains the fallback.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_close! : SqliteDb => SqliteStatusResult
+	sqlite_close! : SqliteDb => Try({}, SqliteStatusError)
 
 	## Compile one statement for reuse.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_prepare! : SqliteDb, Str => SqlitePrepareResult
+	sqlite_prepare! : SqliteDb, Str => Try(SqliteStmt, SqlitePrepareError)
 
 	## Bind and run a prepared statement to completion, then reset it.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_run_stmt! : SqliteStmt, List(SqliteBindingWire) => SqliteQueryResult
+	sqlite_run_stmt! : SqliteStmt, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
 
 	## Prepare, bind, run, and finalize without retaining a statement.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_run_once! : SqliteDb, Str, List(SqliteBindingWire) => SqliteQueryResult
+	sqlite_run_once! : SqliteDb, Str, List(SqliteBindingWire) => Try(SqliteRows, SqliteQueryError)
 
 	## Run a script without bindings or returned rows.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_exec_script! : SqliteDb, Str => SqliteStatusResult
+	sqlite_exec_script! : SqliteDb, Str => Try({}, SqliteStatusError)
 
 	## Draw interface
 	## Zero-sized frame authority minted by the adapter.
@@ -1040,7 +1067,7 @@ Host := [].{
 	DrawFps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 
 	## Text-drawing parameters.
-	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Handle(FontResource) }
+	DrawText : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font.FontHandle }
 
 	## Prepared-text drawing parameters.
 	DrawPreparedTextDraw : { prepared : TextPrepared, pos : Math.Vec2, color : Color.Rgba }
@@ -1060,9 +1087,17 @@ Host := [].{
 	## Arbitrary textured-quad parameters.
 	DrawTextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 
+	## Failures while opening one drawing scope.
+	##
+	## `ScopeLimit` is the scope stack already at its bound. `ScopeUnavailable`
+	## is a handle that no longer resolves, or a flattened argument outside
+	## what the backend accepts; the scopes that take neither cannot produce
+	## it, and say so where they are used.
+	DrawScopeError : [ScopeLimit, ScopeUnavailable]
+
 	## Begin 2D drawing with a camera.
 	## Legal in `render!` only.
-	draw_begin_camera! : Camera.Camera2D => U8
+	draw_begin_camera! : Camera.Camera2D => Try({}, DrawScopeError)
 
 	## End 2D camera drawing.
 	## Legal in `render!` only.
@@ -1070,7 +1105,7 @@ Host := [].{
 
 	## Begin the flattened blend mode.
 	## Legal in `render!` only.
-	draw_begin_blend! : U8 => U8
+	draw_begin_blend! : U8 => Try({}, DrawScopeError)
 
 	## Restore alpha blending.
 	## Legal in `render!` only.
@@ -1078,7 +1113,7 @@ Host := [].{
 
 	## Begin drawing to a render target.
 	## Legal in `render!` only.
-	draw_begin_render_texture! : TextureRenderTarget => U8
+	draw_begin_render_texture! : TextureRenderTarget => Try({}, DrawScopeError)
 
 	## End render-target drawing.
 	## Legal in `render!` only.
@@ -1086,7 +1121,7 @@ Host := [].{
 
 	## Begin clipping to a screen rectangle.
 	## Legal in `render!` only.
-	draw_begin_scissor! : DrawScissor => U8
+	draw_begin_scissor! : DrawScissor => Try({}, DrawScopeError)
 
 	## End scissor clipping.
 	## Legal in `render!` only.
@@ -1094,7 +1129,7 @@ Host := [].{
 
 	## Begin custom-shader drawing.
 	## Legal in `render!` only.
-	draw_begin_shader! : Shader => U8
+	draw_begin_shader! : Shader => Try({}, DrawScopeError)
 
 	## Restore the default shader.
 	## Legal in `render!` only.
@@ -1203,12 +1238,14 @@ Host := [].{
 		quality : U8,
 	}
 
-	## Finalized recording when `err == 0`.
-	CaptureStopResult : {
-		err : U8,
+	## A finalized recording: the frames it holds and the file's size.
+	CaptureStopped : {
 		frames : U64,
 		bytes : U64,
 	}
+
+	## Failures while finalizing a running recording.
+	CaptureStopError : [BudgetExceeded, Busy, NotRecording, ReadbackFailed, TargetUnavailable, Unavailable]
 
 	## Scripted pointer state; inactive returns control to hardware.
 	CaptureVirtualMouse : {
@@ -1239,17 +1276,23 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	capture_set_virtual_text! : List(U32) => {}
 
+	## Failures while arming a recording.
+	CaptureStartError : [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, UnsupportedFormat, WriteFailed]
+
 	## Arm recording and latch its result for the next `Input`.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_start_recording! : CaptureStartRecording => U8
+	capture_start_recording! : CaptureStartRecording => Try({}, CaptureStartError)
 
 	## Finalize the running recording and write its file.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_stop_recording! : () => CaptureStopResult
+	capture_stop_recording! : () => Try(CaptureStopped, CaptureStopError)
+
+	## Failures while writing one framebuffer as PNG.
+	CaptureScreenshotError : [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, WriteFailed]
 
 	## Write the next framebuffer as PNG, parking until complete.
 	## Legal only in a task, where it parks the task; refused in `init!`, `update!`, and `render!`.
-	capture_screenshot! : Str => U8
+	capture_screenshot! : Str => Try({}, CaptureScreenshotError)
 
 	## A render target and output path.
 	CaptureTextureShot : {
@@ -1257,9 +1300,12 @@ Host := [].{
 		path : Str,
 	}
 
+	## Failures while exporting one render target as PNG.
+	CaptureTextureShotError : [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed]
+
 	## Read back a target, then park while encoding and writing its PNG.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	capture_screenshot_texture! : CaptureTextureShot => U8
+	capture_screenshot_texture! : CaptureTextureShot => Try({}, CaptureTextureShotError)
 
 	## Flattened screen-or-target source.
 	##
@@ -1269,14 +1315,16 @@ Host := [].{
 		screen : Bool,
 	}
 
-	## One RGBA pixel when `err == 0`; otherwise zeroed channels.
-	CapturePixelResult : {
-		err : U8,
+	## One RGBA pixel.
+	CapturePixel : {
 		r : U8,
 		g : U8,
 		b : U8,
 		a : U8,
 	}
+
+	## Failures while reading pixels back from a source.
+	CapturePixelError : [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable]
 
 	## A source-relative pixel coordinate.
 	CapturePixelProbe : {
@@ -1287,7 +1335,7 @@ Host := [].{
 
 	## Read one pixel synchronously.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_pixel_at! : CapturePixelProbe => CapturePixelResult
+	capture_pixel_at! : CapturePixelProbe => Try(CapturePixel, CapturePixelError)
 
 	## A source-relative pixel rectangle.
 	CaptureRegionProbe : {
@@ -1298,14 +1346,8 @@ Host := [].{
 		height : I32,
 	}
 
-	## Packed RGBA8 bytes transferred into Roc list ARC; empty on error.
-	CaptureRegionResult : {
-		err : U8,
-		bytes : List(U8),
-	}
-
 	## Read a rectangle of a source as row-major, top-down RGBA8 bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_read_region! : CaptureRegionProbe => CaptureRegionResult
+	capture_read_region! : CaptureRegionProbe => Try(List(U8), CapturePixelError)
 
 }

@@ -16,7 +16,7 @@
 ## This app opens a window, draws a circle, and exits on Escape:
 ##
 ## ```roc
-## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
 ##
 ## import rr.App
 ## import rr.Color
@@ -119,10 +119,9 @@ platform ""
 		"roc_draw_fps": Host.draw_fps!,
 		"roc_text_default_font_raw": Host.text_default_font!,
 		"roc_text_startup_default_font_raw": Host.text_startup_default_font!,
-		"roc_text_font_metrics_raw": Host.text_font_metrics!,
 		"roc_draw_frame_size": Host.draw_frame_size!,
 		"roc_draw_line_raw": Host.draw_line!,
-		"roc_text_load_font_bytes_raw": Host.text_load_font_bytes!,
+		"roc_text_load_font_raw": Host.text_load_font!,
 		"roc_text_load_store_font_raw": Host.text_load_store_font!,
 		"roc_text_prepare_raw": Host.text_prepare!,
 		"roc_draw_draw_prepared_text_raw": Host.draw_draw_prepared_text!,
@@ -155,7 +154,7 @@ platform ""
 		"roc_app_exit": Host.app_exit!,
 		"roc_app_args": Host.app_args!,
 		"roc_app_read_env": Host.app_read_env!,
-		"roc_app_read_file_raw": Host.app_read_file!,
+		"roc_app_read_text_raw": Host.app_read_text!,
 		"roc_random_entropy": Host.random_entropy!,
 		"roc_random_i32": Host.random_i32!,
 		"roc_keys_set_exit_key": Host.keys_set_exit_key!,

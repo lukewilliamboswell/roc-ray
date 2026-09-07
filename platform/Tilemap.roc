@@ -272,20 +272,15 @@ Tilemap :: {
 	## file: an external tileset is read the same way, so a map spread across
 	## several files parks once per file and parses in between.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
-	load_tmx! = |path| {
-		result = Host.tilemap_load_tmx!(path)
-		if result.ok {
-			Ok(result.map)
-		} else if result.err == err_not_found {
-			Err(NotFound)
-		} else if result.err == err_read_failed {
-			Err(ReadFailed)
-		} else if result.err == err_unsupported {
-			Err(Unsupported)
-		} else {
-			Err(ParseFailed)
+	load_tmx! = |path|
+	# closed error union to open error union
+		match Host.tilemap_load_tmx!(path) {
+			Ok(map) => Ok(map)
+			Err(NotFound) => Err(NotFound)
+			Err(ReadFailed) => Err(ReadFailed)
+			Err(ParseFailed) => Err(ParseFailed)
+			Err(Unsupported) => Err(Unsupported)
 		}
-	}
 
 	## Begin configuring a drawable and queryable tilemap from parsed TMX data.
 	from_raw : TilemapRawMap -> TilemapBuilder
@@ -613,15 +608,6 @@ Tilemap :: {
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
 	}
 }
-
-err_not_found : U8
-err_not_found = 1
-
-err_read_failed : U8
-err_read_failed = 2
-
-err_unsupported : U8
-err_unsupported = 4
 
 layer_role_for_rules : List(TilemapLayerRoleRule), Str -> TilemapLayerRole
 layer_role_for_rules = |rules, layer_name| {

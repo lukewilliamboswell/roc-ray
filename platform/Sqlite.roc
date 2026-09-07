@@ -17,6 +17,7 @@
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
 import Host
+import rrt.Handle
 
 Sqlite := [].{
 
@@ -241,7 +242,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(Box.box(U64.highest))
+		stub = Db.(Handle.stub)
 	}
 
 	## One row of a result, with its column names.
@@ -418,7 +419,7 @@ Sqlite := [].{
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(Box.box(U64.highest))
+		stub = Stmt.(Handle.stub)
 	}
 
 	## Compile one statement for repeated use.

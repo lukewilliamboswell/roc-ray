@@ -4,22 +4,16 @@
 ## immutable scalar metric snapshot. Reusable packages can retain and measure
 ## it without importing the platform or calling the host. The platform
 ## re-exports this type as `Text.Font`.
-import unicode.Scalar
+import Handle
 
 Font := {
-	handle : Handle,
+	handle : FontHandle,
 	metrics : FontMetrics,
 }.{
 
 	## Opaque native resource identity. Only a host can manufacture a live one,
 	## but applications can compare and hash handles they receive.
-	Handle :: Box(U64).{
-		is_eq : Handle, Handle -> Bool
-		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)
-
-		to_hash : Handle, Hasher -> Hasher
-		to_hash = |Handle.(value), hasher| U64.to_hash(Box.unbox(value), hasher)
-	}
+	FontHandle : Handle([FontResource])
 
 	## Scalar metrics for one glyph, in the atlas's own units.
 	GlyphMetrics : {
@@ -60,7 +54,7 @@ Font := {
 	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: Handle.(Box.box(U64.highest)),
+		handle: Handle.stub,
 		metrics: {
 			base_size: 1,
 			line_spacing: 0,
@@ -80,6 +74,7 @@ Font := {
 		if Str.is_empty(text) {
 			{ width: 0, height: 0 }
 		} else {
+			$state : { line_count : U64, line_width : F32, widest_count : U64, widest_width : F32, height : F32 }
 			var $state = {
 				# Codepoint count on the current line.
 				line_count: 0,
@@ -104,7 +99,7 @@ Font := {
 							widest_width: max_f32(current.widest_width, current.line_width),
 							line_count: 0,
 							widest_count: max_u64(current.widest_count, current.line_count),
-							height: current.height + size + font.metrics.line_spacing,
+							height: F32.plus(F32.plus(current.height, size), font.metrics.line_spacing),
 						}
 					} else {
 						# Other codepoints:
@@ -138,7 +133,51 @@ Font := {
 
 ## Iterate over the Unicode codepoints in a valid Roc string.
 text_codepoints : Str -> Iter(U32)
-text_codepoints = |text| Scalar.iter(text).map(|located| located.scalar.to_u32())
+# TODO(follow up): Restore unicode.Scalar.iter after a Unicode release compatible
+# with nightly-2026-09-06-d85e877. Unicode 4.1.0 emits mutable-name warnings.
+# Roc strings are valid UTF-8. Decode one scalar per step without allocating a
+# codepoint list; embedded NUL is a scalar, not a terminator.
+text_codepoints = |text| {
+	bytes = Str.to_utf8(text)
+	Iter.custom(
+		0.U64,
+		Unknown,
+		|offset| {
+			match List.get(bytes, offset) {
+				Err(OutOfBounds) => Err(NoMore)
+				Ok(first) => {
+					(width, prefix) = if first < 128 {
+						(1.U64, first.to_u32())
+					}
+						else if first < 224 {
+							(2, first.to_u32() - 192)
+						}
+							else if first < 240 {
+								(3, first.to_u32() - 224)
+							}
+								else {
+									(4, first.to_u32() - 240)
+								}
+					var $scalar = prefix
+					var $index = 1.U64
+					while $index < width {
+						byte = match List.get(bytes, offset + $index) {
+							Ok(value) => value
+							Err(OutOfBounds) => crash "Roc string contains truncated UTF-8"
+						}
+						$scalar = $scalar * 64 + byte.to_u32() - 128
+						$index = $index + 1
+					}
+					Ok(($scalar, offset + width))
+				}
+			}
+		},
+	)
+}
+
+expect List.from_iter(text_codepoints("")) == []
+expect List.from_iter(text_codepoints("a\u(0000)é€😀")) == [97, 0, 233, 8364, 128512]
+expect List.from_iter(text_codepoints("\u(007F)\u(0080)\u(07FF)\u(0800)\u(D7FF)\u(E000)\u(FFFF)\u(10000)\u(10FFFF)")) == [127, 128, 2047, 2048, 55295, 57344, 65535, 65536, 1114111]
 
 ## Iterate over bytes as codepoints when the text is known to be ASCII.
 text_codepoints_ascii : Str -> Iter(U32)
@@ -274,7 +313,7 @@ expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 3, |item| item.key
 # A key absent from a sorted collection reports NotFound.
 expect binary_search_by([{ key: 1 }, { key: 3 }, { key: 5 }], 4, |item| item.key) == Err(NotFound)
 
-# Font.Handle
+# Font.FontHandle
 
 # Handle equality and hashing support keyed collections.
 expect Dict.single(Font.stub.handle, 42).get(Font.stub.handle) == Ok(42)

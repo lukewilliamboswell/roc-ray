@@ -37,6 +37,7 @@
 ## `Music.is_playing!`, `Music.length!`, and `Music.time_played!` -- are legal
 ## in any callback, `render!` included.
 import Host
+import rrt.Handle
 
 Audio := [].{
 
@@ -94,7 +95,7 @@ Audio := [].{
 		## Put it in a model to reach the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
-		stub = { resource: Box.box(U64.highest) }
+		stub = { resource: Handle.stub }
 	}
 
 	## A sound together with the settings it should be played at.
@@ -217,7 +218,7 @@ Audio := [].{
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music
-		stub = { resource: Box.box(U64.highest) }
+		stub = { resource: Handle.stub }
 	}
 
 	## Procedural waveform used by `gen_sound!`.
@@ -295,17 +296,50 @@ Audio := [].{
 	expect waveform_code(Noise) == 4
 }
 
-loaded_sound_from_resource : Host.AudioSoundResult -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource : Try(Host.AudioSound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
 loaded_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundLoadFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Sound.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(SoundLoadFailed) => Err(SoundLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-generated_sound_from_resource : Host.AudioSoundResult -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource : Try(Host.AudioSound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
 generated_sound_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundGenerationFailed) else Ok({ resource: result.sound })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Sound.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(SoundGenerationFailed) => Err(SoundGenerationFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
-music_from_resource : Host.AudioMusicResult -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
+music_from_resource : Try(Host.AudioMusic, Host.AudioLoadMusicError) -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
 music_from_resource = |result|
-	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(MusicLoadFailed) else Ok({ resource: result.music })
+	match result {
+		# closed error union to open error union
+		Ok(resource) => Ok(
+			Audio.Music.(
+				{
+					resource: resource,
+				},
+			),
+		)
+		Err(MusicLoadFailed) => Err(MusicLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}
 
 waveform_code : Audio.Waveform -> U8
 waveform_code = |waveform|

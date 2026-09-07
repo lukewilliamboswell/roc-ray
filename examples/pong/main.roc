@@ -11,7 +11,7 @@
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
 ## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
 
 import rr.Draw
 import rr.Color
@@ -198,7 +198,7 @@ init! = App.init(
 		font = Draw.default_font!()
 		# Only scores 0..win_score can ever be shown, so the whole scoreboard is
 		# prepared here and a frame just picks the glyph it needs.
-		digits = List.map_try(
+		digits = List.map_try!(
 			List.map_with_index(List.repeat({}, win_score + 1), |_unit, index| U64.to_str(index)),
 			|glyph| Text.from(glyph, font).size(64).prepare!(),
 		)?

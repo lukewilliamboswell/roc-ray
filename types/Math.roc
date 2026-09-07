@@ -9,6 +9,8 @@
 ##
 Math := [].{
 
+	# TODO(follow up): Restore derived equality once Roc compiles comparisons
+	# through platform aliases without looping (nightly-2026-09-06-d85e877).
 	## Two-dimensional floating-point vector. `Math.Vec2` and `Draw.Vector2` on
 	## the platform are this same type, re-exported.
 	Vec2 := {
@@ -17,7 +19,8 @@ Math := [].{
 	}.{
 
 		## Compare two of these values.
-		is_eq : _
+		is_eq : Vec2, Vec2 -> Bool
+		is_eq = |a, b| a.x == b.x and a.y == b.y
 	}
 
 	## Axis-aligned rectangle represented by top-left position and size.
@@ -29,7 +32,8 @@ Math := [].{
 	}.{
 
 		## Compare two of these values.
-		is_eq : _
+		is_eq : Rect, Rect -> Bool
+		is_eq = |a, b| a.x == b.x and a.y == b.y and a.width == b.width and a.height == b.height
 	}
 
 	## Circle represented by center and radius.
@@ -39,7 +43,8 @@ Math := [].{
 	}.{
 
 		## Compare two of these values.
-		is_eq : _
+		is_eq : Circle, Circle -> Bool
+		is_eq = |a, b| a.center == b.center and a.radius == b.radius
 	}
 
 	## Construct a two-dimensional vector.
@@ -229,3 +234,10 @@ expect !(Math.circle_rect(Math.circle({ x: 14, y: 5 }, 5), Math.rect(20, 0, 10, 
 expect Math.vec2(3, 4).length() == 5
 expect Math.rect(10, 20, 30, 40).contains(Math.vec2(10, 20))
 expect Math.circle(Math.zero, 5).contains_point(Math.vec2(3, 4))
+
+expect Math.vec2(1, 2) == Math.vec2(1, 2)
+expect Math.vec2(1, 2) != Math.vec2(2, 2) and Math.vec2(1, 2) != Math.vec2(1, 3)
+expect Math.rect(1, 2, 3, 4) == Math.rect(1, 2, 3, 4)
+expect List.all([Math.rect(0, 2, 3, 4), Math.rect(1, 0, 3, 4), Math.rect(1, 2, 0, 4), Math.rect(1, 2, 3, 0)], |rect| rect != Math.rect(1, 2, 3, 4))
+expect Math.circle(Math.vec2(1, 2), 3) == Math.circle(Math.vec2(1, 2), 3)
+expect Math.circle(Math.vec2(1, 2), 3) != Math.circle(Math.vec2(0, 2), 3) and Math.circle(Math.vec2(1, 2), 3) != Math.circle(Math.vec2(1, 2), 4)

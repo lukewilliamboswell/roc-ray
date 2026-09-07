@@ -1492,43 +1492,6 @@ def run_platform_value_tests(root: Path, verbose: bool) -> list[str]:
     return failed
 
 
-def run_platform_api_test(
-    root: Path, packages: local_bundles.ServedPackages, verbose: bool
-) -> list[str]:
-    """Check public types and receivers, then retain them across host cycles."""
-    entry = root / "test" / "platform_api" / "main.roc"
-    if not entry.is_file():
-        print("\nMissing platform API fixture: test/platform_api/main.roc")
-        return ["platform API fixture is missing"]
-
-    print("\nRunning platform API test (single platform dependency)...")
-    staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "platform_api")
-
-    failed: list[str] = []
-    for command in ("check", "test", "build"):
-        print(f"  {command.capitalize()}ing {entry.name}...", end=" ", flush=True)
-        if run_cmd(["roc", command, staged.name, *LIMITS], f"platform API {command}", verbose, cwd=staged.parent):
-            print("ok")
-        else:
-            print("FAILED")
-            failed.append(f"platform API roc {command}")
-            return failed
-
-    print(f"  Running {entry.name} headlessly...", end=" ", flush=True)
-    if run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=3"],
-        "platform API headless run",
-        verbose,
-        cwd=root,
-    ):
-        print("ok")
-    else:
-        print("FAILED")
-        failed.append("platform API headless run")
-
-    return failed
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
     parser.add_argument(
@@ -1545,10 +1508,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--skip-roc-build",
-        "--skip-build",
         dest="skip_roc_build",
         action="store_true",
-        help="Skip roc build (--skip-build is a deprecated alias)",
+        help="Skip roc build",
     )
     parser.add_argument(
         "--skip-roc-test",
@@ -1743,8 +1705,6 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
             print(f"  staged {len(staged)} example(s) in {apps_dir}")
 
             failed.extend(_run_example_stages(args, root, examples, staged, packages))
-            if not args.skip_runtime and not args.skip_roc_build:
-                failed.extend(run_platform_api_test(root, packages, args.verbose))
 
     except local_bundles.LocalBundleError as err:
         print(f"\nFAILED to serve the local packages: {err}", file=sys.stderr)

@@ -27,7 +27,7 @@ Camera := [].{
 	}
 
 	## Immutable camera value accepted by drawing and coordinate transforms.
-	## `Draw.CameraMode` names this same type.
+	## `Draw.Camera2D` names this same type.
 	##
 	## Its representation is opaque so non-finite transform fields, or a zero
 	## zoom that has no inverse, cannot bypass the sanitizing every constructor

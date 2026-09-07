@@ -5,8 +5,8 @@
 ## values they exchange. It is deliberately not an application API: public
 ## modules own application-facing validation, naming, composition, and phase
 ## documentation. A hosted declaration may carry a shared pure type or the
-## same concrete outcome tags its public adapter exposes. `Host` is exposed as
-## `rr.Host` for direct structural interface access.
+## same concrete outcome tags its public adapter exposes. `Host` is omitted from
+## the platform exposes list; applications use the public adapters.
 ##
 ## Declarations are grouped into interfaces which contain, where applicable:
 ##

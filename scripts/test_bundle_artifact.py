@@ -76,7 +76,7 @@ def roc_version(roc: str) -> str | None:
 def find_roc(root: Path) -> str | None:
     """Resolve the compiler, preferring one that matches the pin.
 
-    A local `roc-src` build at a different revision than `.roc-version` used to
+    A local `roc-src` build at a different revision than `platform/main.roc` used to
     be picked silently, and produced a run of SIGSEGVs that looked like a fault
     in the bundle under test. Prefer a matching compiler, and say so loudly when
     falling back to one that does not match.
@@ -93,9 +93,8 @@ def find_roc(root: Path) -> str | None:
     if not candidates:
         return None
 
-    try:
-        pinned = (root / ".roc-version").read_text(encoding="utf-8").splitlines()[0].strip()
-    except (OSError, IndexError):
+    pinned = local_bundles.read_roc_pin(root)
+    if not pinned:
         return candidates[0]
 
     for candidate in candidates:
@@ -105,7 +104,7 @@ def find_roc(root: Path) -> str | None:
 
     chosen = candidates[0]
     print(
-        f"WARNING: no compiler matches .roc-version ({pinned}); using {chosen} "
+        f"WARNING: no compiler matches platform/main.roc ({pinned}); using {chosen} "
         f"({roc_version(chosen) or 'unknown version'}). Failures below may be the "
         "compiler, not the bundle.",
         file=sys.stderr,
@@ -170,6 +169,7 @@ def main() -> int:
                 print(f"Skipping rewrite for {example}: no platform reference")
                 continue
 
+            rewritten = local_bundles.rewrite_compiler_pin(rewritten, local_bundles.read_roc_pin(root))
             example.write_text(rewritten)
 
         for example in examples:

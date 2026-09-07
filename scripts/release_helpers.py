@@ -13,6 +13,9 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from local_bundles import rewrite_compiler_pin
+from roc_platform_abi import read_pin
+
 
 BUNDLE_SUFFIX = ".tar.zst"
 DEFAULT_TEST_OS = ["ubuntu-latest", "macos-15-intel", "macos-latest", "windows-latest"]
@@ -137,6 +140,8 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     lines = [
         f"Release {release_version}.",
         "",
+        f"Supported compiler: `{read_pin().nightly}`. Install this compiler before running the examples.",
+        "",
         "## Bundles",
         "",
         "### Default bundle",
@@ -206,6 +211,7 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
         raise RuntimeError(f"no Roc examples found in {examples_dir}")
 
     replacement = f'"{default_url}"'
+    compiler = read_pin(examples_dir.resolve().parent / "platform" / "main.roc").nightly
     for example in examples:
         original = example.read_text(encoding="utf-8")
         rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
@@ -213,6 +219,7 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
             raise RuntimeError(
                 f"expected one recognized platform reference in {example}, found {count}"
             )
+        rewritten = rewrite_compiler_pin(rewritten, compiler)
         example.write_text(rewritten, encoding="utf-8")
 
     print(f"Updated {len(examples)} example(s) to {default_url}")
@@ -231,6 +238,7 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
         raise RuntimeError(f"invalid release tag: {tag!r}")
 
     root = repo_root()
+    compiler = read_pin(root / "platform" / "main.roc").nightly
     examples_dir = Path(args.examples_dir)
     if len(examples_dir.parts) != 1:
         raise RuntimeError(f"examples dir must be a single top-level directory: {examples_dir}")
@@ -269,7 +277,7 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
                     raise RuntimeError(
                         f"expected one recognized platform reference in {entry}, found {count}"
                     )
-                data = rewritten.encode("utf-8")
+                data = rewrite_compiler_pin(rewritten, compiler).encode("utf-8")
                 rewritten_headers += 1
                 packaged_apps.add(parts[1])
             else:

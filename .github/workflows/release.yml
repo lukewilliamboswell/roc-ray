@@ -52,7 +52,7 @@ jobs:
           fetch-depth: 0
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -210,7 +210,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -307,7 +307,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427

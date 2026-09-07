@@ -108,21 +108,12 @@ Gamepad := [].{
 	## disconnect once, after which button and axis queries stay allocation-free.
 	lookup : Snapshot, Id -> [Connected(View), Disconnected]
 	lookup = |snapshot, gamepad|
-		if available(snapshot, gamepad) {
+		if is_connected(snapshot, gamepad) {
 			pad : View
 			pad = { snapshot, gamepad }
 			Connected(pad)
 		} else {
 			Disconnected
-		}
-
-	## Compatibility query for code that only needs connectivity. Prefer
-	## `snapshot.lookup(id)` before reading buttons or axes.
-	available : { connected : List(U8), ..state }, Id -> Bool
-	available = |snapshot, gamepad|
-		match List.get(snapshot.connected, index(gamepad)) {
-			Ok(value) => value != 0
-			Err(_) => False
 		}
 
 	## Whether a button is currently held.
@@ -165,7 +156,7 @@ Gamepad := [].{
 	expect index(One) == 0
 	expect index(Four) == 3
 	expect from_index(4) == Err(InvalidGamepadIndex)
-	expect available({ connected: [1, 0, 0, 0], buttons: [], axes: [] }, One)
+	expect is_connected({ connected: [1, 0, 0, 0], buttons: [], axes: [] }, One)
 	expect button_pressed({ connected: [], buttons: [0, 0, 7], axes: [] }, One, DpadRight)
 	expect axis({ connected: [], buttons: [], axes: [0.25, -0.5] }, One, LeftY) == -0.5
 	expect {
@@ -261,3 +252,10 @@ axis_value = |snapshot, gamepad, axis_name| {
 		Err(_) => 0
 	}
 }
+
+is_connected : { connected : List(U8), ..state }, Id -> Bool
+is_connected = |snapshot, gamepad|
+	match List.get(snapshot.connected, index(gamepad)) {
+		Ok(value) => value != 0
+		Err(_) => False
+	}

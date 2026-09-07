@@ -28,6 +28,10 @@ ROOT = Path(__file__).resolve().parent.parent
 ROC_ENV = {**os.environ, "NO_COLOR": "1"}
 CASES = (
     (
+        ROOT / "test" / "compile_fail" / "host_module.roc",
+        ("package module is private", "`rr.Host`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "sound_handle_manufacture.roc",
         ("cannot use opaque nominal type", "instance of Audio.Sound"),
     ),

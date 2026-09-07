@@ -79,11 +79,26 @@ class LocalBundleError(RuntimeError):
 
 
 def read_roc_pin(root: Path) -> str:
-    """The nightly tag in `.roc-version`, or "" when it cannot be read."""
+    """The development compiler declared by the platform header."""
+    from roc_platform_abi import GlueError, read_pin
     try:
-        return (root / ".roc-version").read_text(encoding="utf-8").splitlines()[0].strip()
-    except (OSError, IndexError):
+        return read_pin(root / "platform" / "main.roc").nightly
+    except GlueError:
         return ""
+
+
+
+def rewrite_compiler_pin(source: str, pin: str) -> str:
+    """Rebind an application header in a development or release-candidate copy."""
+    rewritten, count = re.subn(
+        r'(?m)^([^#\n]*\broc\s*:\s*)"[^"\n]+"',
+        lambda match: match.group(1) + '"' + pin + '"',
+        source,
+        count=1,
+    )
+    if count != 1:
+        raise LocalBundleError("application header must declare one roc compiler pin")
+    return rewritten
 
 
 def roc_version(roc: str = "roc") -> str:
@@ -117,7 +132,7 @@ def check_roc_pin(root: Path, roc: str = "roc") -> str | None:
     if observed and _matches_pin(observed, pinned):
         return None
     return (
-        f"WARNING: the Roc compiler on PATH does not match .roc-version ({pinned}); "
+        f"WARNING: the Roc compiler on PATH does not match platform/main.roc ({pinned}); "
         f"found {observed or '<unknown>'}. Failures below may be the compiler, "
         "not this repository."
     )
@@ -390,6 +405,7 @@ class ServedPackages:
     platform_source: Path | None  # staged main.roc, set in "source" mode
     served_dir: Path
     scratch_dir: Path
+    compiler_pin: str = ""
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -490,6 +506,7 @@ def serve_packages(
                 platform_source=platform_source,
                 served_dir=served,
                 scratch_dir=scratch,
+                compiler_pin=read_roc_pin(root),
                 notes=notes,
             )
     finally:
@@ -533,6 +550,7 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
     )
     if not did_rewrite:
         raise LocalBundleError(f"no platform reference to rewrite in {entry}")
+    rewritten = rewrite_compiler_pin(rewritten, packages.compiler_pin)
     staged_entry.write_text(rewritten, encoding="utf-8")
     return staged_entry
 

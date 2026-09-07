@@ -1270,7 +1270,7 @@ world_height = |lanes| F32.max(U64.to_f32(List.len(lanes)) * lane_height, lane_h
 ## `paint_glow!` and sampled by every one of the instances.
 ##
 ## A render texture's colour attachment is vertically flipped when it is
-## sampled, which normally means asking it for `render_texture_source`. This
+## sampled, which normally means asking it for `RenderTexture.source`. This
 ## sprite is radially symmetric, so its flip is its own reflection and the
 ## source rectangle can be the plain one -- which is what lets `plot_dot` stay a
 ## pure function that no test has to build a framebuffer to call.
@@ -1610,7 +1610,7 @@ init! = App.init_for_args(
 
 		# The sprite the whole batch is drawn from, painted by `paint_glow!` at
 		# the top of every frame.
-		glow = Draw.load_render_texture!({ width: 64, height: 64 })?
+		glow = Draw.RenderTexture.load!({ width: 64, height: 64 })?
 
 		eyebrow = Text.from("STREAMED FROM THE WORKING DIRECTORY", small_font).size(11).spacing(3.2).prepare!()?
 		title = Text.from("A tree, one line at a time", display_font).size(30).prepare!()?
@@ -1662,7 +1662,7 @@ init! = App.init_for_args(
 ## The batch's texture: the colour attachment of the sprite buffer, viewed
 ## without copying it. The reference keeps the framebuffer alive.
 sprite_of : Model -> Draw.Texture
-sprite_of = |model| Draw.render_texture(model.glow)
+sprite_of = |model| model.glow.texture()
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {

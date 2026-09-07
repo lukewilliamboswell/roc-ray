@@ -16,7 +16,7 @@ discussed first.
 Install:
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- The exact Roc nightly named in [`.roc-version`](.roc-version), available as
+- The exact Roc nightly named in [`platform/main.roc`](platform/main.roc), available as
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 - SQLite's `sqlite3` command-line tool for inspecting Observatory captures
@@ -122,15 +122,17 @@ rest.
 
 ### How the apps reach the platform
 
-Every app stage resolves the platform over localhost. `scripts/bundle.sh`
+Development checks use the compiler declared in the platform headers.
+They rebind both the platform URL and compiler pin in temporary app copies;
+public example headers and released starters retain their own compiler requirements.
+Release candidates and starters are pinned to the release compiler and exact bundle.
+
+Every development app stage resolves the platform over localhost. `scripts/bundle.sh`
 bundles the platform API and native inputs into a scratch directory,
 `scripts/local_bundles.py` serves that directory over HTTP, and each app is
 copied to a scratch directory with its header pointed at the served bundle.
 Examples are checked and built in the same dependency shape they ship in.
 No tracked file is rewritten, including when a run is interrupted.
-`test/platform_api` checks that public input and resource values can pass
-through application modules, stay in the model, and return to platform effects
-using only the platform dependency.
 
 Built executables land in the scratch directory rather than beside each
 `main.roc`; pass `--copy-executables` if you want them in place, and use
@@ -455,7 +457,7 @@ scripts/roc_platform_abi.py \
 ```
 
 The helper requires the compiler and Roc source revision to agree with
-`.roc-version`. Its focused tests run under `zig build test` or directly with:
+the compiler pin in `platform/main.roc`. Its focused tests run under `zig build test` or directly with:
 
 ```bash
 python3 scripts/test_roc_platform_abi.py

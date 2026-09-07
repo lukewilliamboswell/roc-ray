@@ -1,7 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const roc_compiler_pin = std.mem.trim(u8, @embedFile(".roc-version"), " \t\r\n");
+const roc_compiler_pin = blk: {
+    @setEvalBranchQuota(10_000);
+    const source = @embedFile("platform/main.roc");
+    const packages = std.mem.indexOf(u8, source, "\n\tpackages {") orelse @compileError("platform packages missing");
+    const field = packages + (std.mem.indexOf(u8, source[packages..], "roc: \"") orelse @compileError("platform compiler pin missing")) + "roc: \"".len;
+    const end = std.mem.indexOfScalar(u8, source[field..], '"') orelse @compileError("unterminated platform compiler pin");
+    break :blk source[field .. field + end];
+};
 
 fn addBuildMetadata(b: *std.Build, module: *std.Build.Module) void {
     const options = b.addOptions();

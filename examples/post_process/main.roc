@@ -3,7 +3,7 @@
 ##
 ## Press Escape to quit. This example shows drawing in stages, combining light
 ## additively, and changing a shader setting before using it.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-07-14d9829" }
 
 import rr.App
 import rr.Assets

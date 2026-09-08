@@ -12791,7 +12791,7 @@ test "observatory executable metadata basename is portable" {
     try std.testing.expectEqualStrings("particles", portableAppName("C:\\examples\\particles\\main.exe"));
     try std.testing.expectEqualStrings("particles", portableAppName("/opt/games/particles"));
     try std.testing.expectEqualStrings("main.roc", portableAppName("main.roc"));
-    try std.testing.expectEqualStrings("nightly-2026-09-06-d85e877", roc_compiler_pin);
+    try std.testing.expectEqualStrings("nightly-2026-09-07-14d9829", roc_compiler_pin);
 }
 
 test "disabled observatory path performs no recorder startup work" {

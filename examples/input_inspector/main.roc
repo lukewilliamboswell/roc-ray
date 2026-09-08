@@ -6,7 +6,7 @@
 ## `update!` can change the clipboard, cursor, and window or read a pixel from
 ## the previous drawing. Every cycle with events prints them to stdout in
 ## delivery order, which is what the windowed sweep asserts on.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-07-14d9829" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc5/8x22d4JXTKSiPvj3Bd3br2u7rEL3baUzEvmSBrCBDvqV.tar.zst", roc: "nightly-2026-09-07-14d9829" }
 
 import rr.Draw
 import rr.Text

@@ -114,8 +114,9 @@ def find_roc(root: Path) -> str | None:
 
 def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
+    build_opt = os.environ.get("ROC_BUILD_OPT", "speed")
     result = subprocess.run(
-        [roc, "build", "main.roc", *local_bundles.PACKAGE_LIMIT_ARGS],
+        [roc, "build", f"--opt={build_opt}", "main.roc", *local_bundles.PACKAGE_LIMIT_ARGS],
         cwd=example.parent,
     )
     return result.returncode == 0

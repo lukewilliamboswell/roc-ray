@@ -134,7 +134,7 @@ Font := {
 ## Iterate over the Unicode codepoints in a valid Roc string.
 text_codepoints : Str -> Iter(U32)
 # TODO(follow up): Restore unicode.Scalar.iter after a Unicode release compatible
-# with nightly-2026-09-06-d85e877. Unicode 4.1.0 emits mutable-name warnings.
+# with nightly-2026-09-07-14d9829. Unicode 4.1.0 emits mutable-name warnings.
 # Roc strings are valid UTF-8. Decode one scalar per step without allocating a
 # codepoint list; embedded NUL is a scalar, not a terminator.
 text_codepoints = |text| {

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-07-14d9829" }
 
 # `App.Input` is a pure platform value, so it has
 # no effectful receivers. `Task.spawn!(input, || ...)` is the only way to start

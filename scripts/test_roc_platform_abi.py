@@ -51,11 +51,11 @@ class RocPlatformAbiTests(unittest.TestCase):
 
     def test_staging_rebinds_the_app_pin_without_rewriting_module_docs(self) -> None:
         source = '## app [] { roc: "nightly-2026-08-23-fb208ba" }\napp [] { roc: "nightly-2026-08-23-fb208ba" }\n'
-        rebound = local_bundles.rewrite_compiler_pin(source, "nightly-2026-09-06-d85e877")
+        rebound = local_bundles.rewrite_compiler_pin(source, "nightly-2026-09-07-14d9829")
         self.assertEqual(source.splitlines()[0], rebound.splitlines()[0])
-        self.assertIn('roc: "nightly-2026-09-06-d85e877"', rebound.splitlines()[1])
+        self.assertIn('roc: "nightly-2026-09-07-14d9829"', rebound.splitlines()[1])
         with self.assertRaises(local_bundles.LocalBundleError):
-            local_bundles.rewrite_compiler_pin('app [] {}', "nightly-2026-09-06-d85e877")
+            local_bundles.rewrite_compiler_pin('app [] {}', "nightly-2026-09-07-14d9829")
 
     def test_rejects_compiler_from_a_different_nightly(self) -> None:
         pin = abi.RocPin(

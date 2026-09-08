@@ -46,7 +46,7 @@ class PackageExamplesTests(unittest.TestCase):
     def make_repo(self, root: Path) -> Path:
         """A miniature repository with two examples, an asset, and junk to exclude."""
         (root / "platform").mkdir()
-        (root / "platform" / "main.roc").write_text('platform "" packages { roc: "nightly-2026-09-06-d85e877" }\n')
+        (root / "platform" / "main.roc").write_text('platform "" packages { roc: "nightly-2026-09-07-14d9829" }\n')
         examples = root / "examples"
         (examples / "pong" / "assets").mkdir(parents=True)
         (examples / "gallery").mkdir(parents=True)
@@ -129,8 +129,8 @@ class PackageExamplesTests(unittest.TestCase):
             self.assertIn(f'platform "{NEXT_URL}"', snake)
             self.assertNotIn("../../platform/main.roc", pong)
             self.assertNotIn(BUNDLE_URL, snake)
-            self.assertIn('roc: "nightly-2026-09-06-d85e877"', pong)
-            self.assertIn('roc: "nightly-2026-09-06-d85e877"', snake)
+            self.assertIn('roc: "nightly-2026-09-07-14d9829"', pong)
+            self.assertIn('roc: "nightly-2026-09-07-14d9829"', snake)
             self.assertIn('nightly-2026-08-23-fb208ba', (root / "examples/pong/main.roc").read_text())
             self.assertEqual(b"\x89PNG ball", ball)
             self.assertNotIn("examples/gallery/pong.webp", names)

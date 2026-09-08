@@ -197,6 +197,10 @@ jobs:
     name: Test ${{ matrix.bundle_name }} bundle (${{ matrix.os }})
     needs: build
     runs-on: ${{ matrix.os }}
+    env:
+      # Exercise every bundled example without entering this nightly's
+      # resource-heavy LLVM speed pipeline on hosted runners.
+      ROC_BUILD_OPT: dev
     strategy:
       fail-fast: false
       matrix:

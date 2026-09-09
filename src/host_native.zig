@@ -7939,11 +7939,8 @@ fn hostedAppReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c)
     const effect = EffectScope.begin("App.Environment.read!", key_arg.asSlice().len);
     defer effect.end();
     // Windows doesn't link libc, so env var reading is not yet supported
-    var result: AppReadEnvResult = undefined;
-    result.tag = .Err;
-
-    key_arg.decref(roc_host);
-    return result;
+    defer key_arg.decref(roc_host);
+    return abiTryErr(AppReadEnvResult, abi.HostApp_read_envErr.not_found);
 }
 
 fn exportedAppReadEnvWindows(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
@@ -7954,21 +7951,29 @@ fn hostedAppReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) A
     enforcePhase("App.Environment.read!", during_startup);
     const effect = EffectScope.begin("App.Environment.read!", key_arg.asSlice().len);
     defer effect.end();
-    var result: AppReadEnvResult = undefined;
-    const key = key_arg.asSlice();
-    const value = hostGetEnv(key);
+    defer key_arg.decref(roc_host);
 
-    if (value) |v| {
-        result.payload = .{ .ok = abi.RocStr.fromSlice(v, roc_host) };
-        result.tag = .Ok;
-    } else {
-        result.tag = .Err;
+    const value = hostGetEnv(key_arg.asSlice()) orelse
+        return abiTryErr(AppReadEnvResult, abi.HostApp_read_envErr.not_found);
+    return abiTryOk(AppReadEnvResult, abi.RocStr.fromSlice(value, roc_host));
+}
+
+test "environment absence initializes the NotFound payload on both host paths" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+    const previous_environ = host_environ;
+    host_environ = &.{};
+    defer host_environ = previous_environ;
+
+    // Exercise the Windows fallback even on POSIX CI. This long key also
+    // verifies that both outcomes consume the transferred string allocation.
+    inline for (.{ hostedAppReadEnvWindows, hostedAppReadEnvPosix }) |read_env| {
+        const result = read_env(&roc_host, abi.RocStr.fromSlice("ROC_RAY_ABSENT_ENVIRONMENT_REGRESSION_PROBE", &roc_host));
+        try std.testing.expectEqual(.Err, result.tag);
+        try std.testing.expectEqual(abi.HostApp_read_envErr.not_found, result.payload_err());
     }
-
-    // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    // `key` (a slice into key_arg) is fully consumed above before key_arg is dropped.
-    key_arg.decref(roc_host);
-    return result;
 }
 
 fn exportedAppReadEnvPosix(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {

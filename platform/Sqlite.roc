@@ -95,7 +95,7 @@ Sqlite := [].{
 	##
 	## `TooManyConnections` means eight are already open; releasing a `Db` the
 	## app no longer needs frees a slot.
-	OpenErr : [SqliteErr(ErrCode, Str), TooManyConnections]
+	OpenErr : [PermissionDenied, SqliteErr(ErrCode, Str), TooManyConnections]
 
 	## Why a statement was not prepared.
 	##
@@ -174,40 +174,6 @@ Sqlite := [].{
 	## Keep it in the model, copy it freely, and let the last reference close
 	## it.
 	Db :: Resource.Db.{
-
-		## Open or create a database under `default_config`.
-		##
-		## The parent directory must already exist. Unlike `Files.write_text!`,
-		## which builds the tree on its way, opening a database does not create
-		## one: a database file is normally placed beside an application rather
-		## than into a directory the application is inventing, and a mistyped
-		## path should be `SqliteErr(CanNotOpen, _)` rather than a new empty
-		## tree. Create it with a write if the app owns that decision.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it
-		## parks the task; refused in `update!` and `render!`.
-		open! : Str => Try(Db, OpenErr)
-		open! = |path| Db.open_with!(path, default_config)
-
-		## Open a database with explicit limits and access mode.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it
-		## parks the task; refused in `update!` and `render!`.
-		open_with! : Str, Config => Try(Db, OpenErr)
-		open_with! = |path, config| {
-			result = Host.sqlite_open!(
-				path,
-				mode_code(config.mode),
-				config.busy_timeout_ms,
-				config.max_result_bytes,
-			)
-			# closed error union to open error union
-			match result {
-				Ok(db) => Ok(Db.(db))
-				Err(TooManyConnections) => Err(TooManyConnections)
-				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
-			}
-		}
 
 		## Close this connection now rather than when its last handle is
 		## released.
@@ -517,6 +483,37 @@ Sqlite := [].{
 			Done => "Done: the statement has finished"
 			Unknown(other) => "Unknown: result code ${I64.to_str(other)}"
 		}
+
+	## Opaque sqlite authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Service :: Resource.Authority.{
+
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Service
+		for_host = |authority| Service.(authority)
+
+		## Open or create a database under `default_config`.
+		##
+		## The parent directory must already exist. Unlike `Files.Access.write_text!`,
+		## which builds the tree on its way, opening a database does not create
+		## one: a database file is normally placed beside an application rather
+		## than into a directory the application is inventing, and a mistyped
+		## path should be `SqliteErr(CanNotOpen, _)` rather than a new empty
+		## tree. Create it with a write if the app owns that decision.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open! : Service, Str => Try(Db, OpenErr)
+		open! = |Service.(authority), path| perform_open!(authority, path)
+
+		## Open a database with explicit limits and access mode.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_with! : Service, Str, Config => Try(Db, OpenErr)
+		open_with! = |Service.(authority), path, config| perform_open_with!(authority, path, config)
+
+	}
+
 }
 
 ## Access mode as the host numbers it. Mirrored in `src/sqlite_effect.zig`.
@@ -835,3 +832,25 @@ expect Sqlite.Row.bytes(Sqlite.Row.for_tests(["b"], [Bytes([1, 2])]), "b") == Ok
 expect Sqlite.Row.names(Sqlite.Row.for_tests(["a", "b"], [Integer(1), Integer(2)])) == ["a", "b"]
 
 expect Sqlite.Row.values(Sqlite.Row.for_tests(["a"], [Integer(1)])) == [Integer(1)]
+
+## Private authority-taking implementations.
+perform_open! : Resource.Authority, Str => Try(Sqlite.Db, Sqlite.OpenErr)
+perform_open! = |authority, path| perform_open_with!(authority, path, Sqlite.default_config)
+
+perform_open_with! : Resource.Authority, Str, Sqlite.Config => Try(Sqlite.Db, Sqlite.OpenErr)
+perform_open_with! = |authority, path, config| {
+	result = Host.sqlite_open!(
+		authority,
+		path,
+		mode_code(config.mode),
+		config.busy_timeout_ms,
+		config.max_result_bytes,
+	)
+	# closed error union to open error union
+	match result {
+		Ok(db) => Ok(Sqlite.Db.(db))
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(TooManyConnections) => Err(TooManyConnections)
+		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
+	}
+}

@@ -114,10 +114,15 @@ responsive_config = |args| {
 	}
 }
 
-init! : App.Init(Model, [ResourceLimit])
+init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init_for_args(
 	responsive_config,
-	|startup| {
+	|io| {
+		match responsive_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		font = Draw.default_font!()
 		Ok({
 			ui: Box.box({
@@ -137,7 +142,7 @@ init! = App.init_for_args(
 			simulation_nanos: 0,
 			monitors: Window.monitors!(),
 			monitor_choice: 0,
-			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo: List.contains(io.args!(), record_demo_flag),
 		})
 	},
 )
@@ -320,8 +325,8 @@ Layout := {
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 
 	# Layout follows the window, pointing follows the mouse, and the preview

@@ -21,7 +21,7 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("file write"), |_startup| Ok({ checked: Bool.False }))
+init! = App.init(App.default.with_title("file write"), |_io| Ok({ checked: Bool.False }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which half of the probe went wrong.
@@ -48,29 +48,29 @@ expect score(Bool.False, 4) == 0
 expect 1 + 2 + 4 + 8 + 16 + 32 + 64 == expected_score
 
 ## Write, read back, compare. Runs on a task, where every call parks.
-check! : () => Msg
-check! = || {
-	wrote_text = Files.write_text!("probe_out/text.txt", probe_text) == Ok({})
-	read_text_back = Files.read_text!("probe_out/text.txt") == Ok(probe_text)
+check! : App.Io => Msg
+check! = |io| {
+	wrote_text = io.files().write_text!("probe_out/text.txt", probe_text) == Ok({})
+	read_text_back = io.files().read_text!("probe_out/text.txt") == Ok(probe_text)
 
-	wrote_bytes = Files.write_bytes!("probe_out/blob.bin", probe_bytes) == Ok({})
-	read_bytes_back = Files.read_bytes!("probe_out/blob.bin") == Ok(probe_bytes)
+	wrote_bytes = io.files().write_bytes!("probe_out/blob.bin", probe_bytes) == Ok({})
+	read_bytes_back = io.files().read_bytes!("probe_out/blob.bin") == Ok(probe_bytes)
 
 	# A second write replaces the file rather than appending to it or leaving
 	# the tail of the longer contents in place.
 	replaced =
-		Files.write_bytes!("probe_out/blob.bin", [1, 2, 3]) == Ok({})
-			and Files.read_bytes!("probe_out/blob.bin") == Ok([1, 2, 3])
+		io.files().write_bytes!("probe_out/blob.bin", [1, 2, 3]) == Ok({})
+			and io.files().read_bytes!("probe_out/blob.bin") == Ok([1, 2, 3])
 
 	# Missing parent directories are created, so a first save does not need a
 	# separate step to make its directory.
 	made_parents =
-		Files.write_text!("probe_out/nested/deep/save.json", "{}") == Ok({})
-			and Files.read_text!("probe_out/nested/deep/save.json") == Ok("{}")
+		io.files().write_text!("probe_out/nested/deep/save.json", "{}") == Ok({})
+			and io.files().read_text!("probe_out/nested/deep/save.json") == Ok("{}")
 
 	# A path whose parent is a file cannot be created, and says so with the
 	# named error rather than by pretending to succeed.
-	refused = Files.write_text!("probe_out/text.txt/nope.txt", "x") == Err(NotFound)
+	refused = io.files().write_text!("probe_out/text.txt/nope.txt", "x") == Err(NotFound)
 
 	Checked(
 		score(wrote_text, 1)
@@ -83,10 +83,10 @@ check! = || {
 	)
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	if input.time.cycle_count == 0 {
-		Task.spawn!(input, check!)
+		Task.spawn!(input, || check!(io))
 	}
 
 	match List.first(input.messages) {

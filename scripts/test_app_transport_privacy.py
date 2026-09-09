@@ -27,6 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # ask for plain text explicitly rather than inheriting it.
 ROC_ENV = {**os.environ, "NO_COLOR": "1"}
 CASES = (
+    (ROOT / "test/compile_fail/io_manufacture.roc", ("cannot use opaque nominal type", "instance of App.Io")),
+    (ROOT / "test/compile_fail/http_client_manufacture.roc", ("cannot use opaque nominal type", "instance of Http.Client")),
+    (ROOT / "test/compile_fail/service_kind_confusion.roc", ("type mismatch", "Http.Client", "Files.Access")),
     (
         ROOT / "test" / "compile_fail" / "host_module.roc",
         ("package module is private", "`rr.Host`"),

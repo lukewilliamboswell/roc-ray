@@ -114,10 +114,15 @@ initial_pixels = List.map_with_index(
 	},
 )
 
-init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
+init! : App.Init(Model, [PermissionDenied, PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init_for_args(
 	generated_assets_config,
-	|startup| {
+	|io| {
+		match generated_assets_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		font = Draw.default_font!()
 		texture = Assets.generate_color_texture!({ width: 16, height: 16, color: Color.white })?
 		Assets.update_texture!(texture, initial_pixels)?
@@ -132,7 +137,7 @@ init! = App.init_for_args(
 			palette: 1,
 			last_cell: Idle,
 			mouse: { x: 0, y: 0 },
-			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo: List.contains(io.args!(), record_demo_flag),
 			demo_frame: 0,
 			ui: Box.box({
 				title: Text.from("Pixel Workshop", font).size(26).prepare!()?,
@@ -316,8 +321,8 @@ perform_edit! = |texture, edit| {
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = if model.demo demo_input(model.demo_frame) else program_input.devices
 
 	next = update_editor(model, input)

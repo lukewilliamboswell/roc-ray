@@ -24,10 +24,10 @@ ALLOWLIST = {
 
 def function_blocks(source: str):
     """Yield (name, body) for Zig functions using brace-depth parsing."""
-    # Boundary effects consistently use the `hosted` prefix and single-line
+    # Boundary effects use `hosted` or `caps` prefixes and single-line
     # signatures. Restricting the audit to that production convention avoids
     # mistaking braces in arbitrary Zig return types for function bodies.
-    for match in re.finditer(r"(?m)^fn\s+(hosted[A-Za-z0-9_]+)\s*\([^\n]*\)\s*(?:callconv\([^\n]*\)\s*)?[^\n]*\{", source):
+    for match in re.finditer(r"(?m)^fn\s+((?:hosted|caps)[A-Za-z0-9_]+)\s*\([^\n]*\)\s*(?:callconv\([^\n]*\)\s*)?[^\n]*\{", source):
         opening = source.rfind("{", match.start(), match.end())
         if opening < 0:
             continue

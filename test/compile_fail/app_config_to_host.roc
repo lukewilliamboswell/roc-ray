@@ -8,12 +8,12 @@ Model : {}
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_startup| Ok({}))
+init! = App.init(App.default, |io| Ok({}))
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, io| {
 	_transport = App.default.to_host()
 	Ok(model)
 }

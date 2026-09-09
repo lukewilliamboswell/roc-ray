@@ -2,14 +2,16 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Draw
-import rr.Devices
+import rr.Http
 
-Model : { raw : List(Devices.RawEvent) }
+Model : {
+	db : Http.Client,
+}
 
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |io| Ok({ raw: [] }))
+init! = App.init(App.default, |io| Ok({ db: Http.Client.(0) }))
 
 Msg : []
 

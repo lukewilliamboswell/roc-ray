@@ -53,7 +53,7 @@ init! = App.init(
 		.with_title("RocRay Capture: Screenshot")
 		.with_size({ width: 720, height: 420 })
 		.with_output_dir("shots"),
-	|_startup|
+	|_io|
 		{
 			font = Draw.default_font!()
 			shot_path = "scene-${Time.now!().to_file_stamp()}.png"
@@ -74,8 +74,8 @@ init! = App.init(
 ## Screenshot saving may wait, so it runs in a Task instead of pausing
 ## `update!`. A Task is work that can wait and later returns one Message through
 ## `App.Input`. The captured pixels still come from the frame that requested it.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	input = program_input.devices
 	outcome = apply_messages(model.outcome, program_input.messages)
 
@@ -90,13 +90,13 @@ update! = |model, program_input| {
 	settled = outcome != NoCapture
 
 	if escape_requested {
-		Task.spawn!(program_input, || EscapingScreenshotFinished(Capture.screenshot!("../escaped.png")))
+		Task.spawn!(program_input, || EscapingScreenshotFinished(io.capture().screenshot!("../escaped.png")))
 	}
 	if save_requested {
 		# Read out of the model before spawning: the closure captures the name,
 		# and a task cannot reach into the model for it.
 		shot_path = model.shot_path
-		Task.spawn!(program_input, || SavedScreenshotFinished(Capture.screenshot!(shot_path)))
+		Task.spawn!(program_input, || SavedScreenshotFinished(io.capture().screenshot!(shot_path)))
 	}
 
 	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {

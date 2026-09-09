@@ -34,7 +34,7 @@ Model : {
 	## The frame this view describes. An input inspector's whole job is to show
 	## the snapshot, so here the snapshot genuinely is the model.
 	##
-	## `init!` cannot supply one: `App.Startup` is authority, and nothing has
+	## `init!` cannot supply one: `App.Io` is authority, and nothing has
 	## been sampled before the first cycle. `Devices.empty` is that "nothing" as a
 	## value -- every list empty, the pointer at the origin, and every receiver
 	## answering `False` rather than crashing.
@@ -79,7 +79,7 @@ program = { init!, update!, render! }
 Msg : []
 
 ## What a clipboard read can come back with.
-Paste : Try(Str, [Unavailable, TooLarge, Busy])
+Paste : Try(Str, [PermissionDenied, Unavailable, TooLarge, Busy])
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -91,7 +91,7 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			font,
@@ -151,8 +151,8 @@ ascii_typed = |codepoints|
 ## answers immediately -- the windowing backend hands over a pointer on the
 ## window's own thread -- so its result feeds the frame that asked for it and
 ## nothing has to be carried across a cycle boundary.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	input = program_input.devices
 
 	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
@@ -161,11 +161,14 @@ update! = |model, program_input| {
 
 	# One chain, so two shortcuts pressed together still resolve in this order.
 	clipboard = if ctrl_held and input.key_pressed(KeyC) {
-		Window.set_clipboard_text!(buffered)
-		{ typed: buffered, clipboard_status: "copied to clipboard" }
+		status = match io.clipboard().set_text!(buffered) {
+			Ok({}) => "copied to clipboard"
+			Err(PermissionDenied) => "clipboard access was not granted"
+		}
+		{ typed: buffered, clipboard_status: status }
 	} else if ctrl_held and input.key_pressed(KeyV) {
 		# The read returns its answer, so the pasted text lands on this frame.
-		apply_paste({ typed: buffered, clipboard_status: model.clipboard_status }, Window.read_clipboard!())
+		apply_paste({ typed: buffered, clipboard_status: model.clipboard_status }, io.clipboard().read_text!())
 	} else if ctrl_held and input.key_pressed(KeyX) {
 		{ typed: "", clipboard_status: "cleared" }
 	} else if ctrl_held and input.key_pressed(KeyE) {
@@ -209,7 +212,7 @@ update! = |model, program_input| {
 			model.events_line
 		} else {
 			line = describe_events(input.events, input.events_overflow)
-			_ = Stdout.line!(line)
+			_ = io.stdout().line!(line)
 			line
 		}
 
@@ -311,6 +314,7 @@ apply_paste = |state, result|
 		Ok(text) => { typed: Str.concat(state.typed, text), clipboard_status: "pasted from clipboard" }
 		# One error covers an empty clipboard and non-text content alike; the
 		# windowing backend does not tell them apart.
+		Err(PermissionDenied) => { ..state, clipboard_status: "clipboard access was not granted" }
 		Err(Unavailable) => { ..state, clipboard_status: "clipboard has no text" }
 		Err(TooLarge) => { ..state, clipboard_status: "clipboard holds too much text to paste" }
 		Err(Busy) => { ..state, clipboard_status: "host was busy -- press Ctrl+V again" }

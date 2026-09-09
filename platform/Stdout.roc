@@ -9,6 +9,7 @@
 ## order and are drained during orderly shutdown, but eventual delivery is not
 ## reported. Ordering against `dbg`, `expect`, and crash output is undefined.
 import Host
+import Resource
 
 Stdout := [].{
 
@@ -22,34 +23,44 @@ Stdout := [].{
 	## which no amount of draining will ever fit. `Unavailable` is there being
 	## no queue to write into: the reader on the other end has gone away, which
 	## is an ordinary way for a pipeline to end, or the host is shutting down.
-	WriteError : [BufferFull, TooLarge, Unavailable]
+	WriteError : [PermissionDenied, BufferFull, TooLarge, Unavailable]
 
-	## Write a string and then a newline.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	##
-	## The newline is always a single `\n`, on every platform. The text and its
-	## terminator are queued together, so nothing else can land between them. At
-	## most 256 kibibytes cross per call, counting the string's UTF-8 bytes and
-	## the newline; a longer string is `TooLarge` and nothing is queued.
-	line! : Str => Try({}, WriteError)
-	line! = |text| lifted(Host.stdio_write_line!(1, text))
+	## Opaque stdout authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Writer :: Resource.Authority.{
 
-	## Write a string with no newline after it. Bounded exactly as `line!` is.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	write! : Str => Try({}, WriteError)
-	write! = |text| lifted(Host.stdio_write_text!(1, text))
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Writer
+		for_host = |authority| Writer.(authority)
 
-	## Write bytes that are not necessarily text.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	##
-	## The bytes are passed through as they are: no encoding validation, no
-	## newline, no translation. Bounded exactly as `line!` is, counting the length
-	## of the list.
-	write_bytes! : List(U8) => Try({}, WriteError)
-	write_bytes! = |bytes| lifted(Host.stdio_write_bytes!(1, bytes))
+		## Write a string and then a newline.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		##
+		## The newline is always a single `\n`, on every platform. The text and its
+		## terminator are queued together, so nothing else can land between them. At
+		## most 256 kibibytes cross per call, counting the string's UTF-8 bytes and
+		## the newline; a longer string is `TooLarge` and nothing is queued.
+		line! : Writer, Str => Try({}, WriteError)
+		line! = |Writer.(authority), text| perform_line!(authority, text)
+
+		## Write a string with no newline after it. Bounded exactly as `line!` is.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		write! : Writer, Str => Try({}, WriteError)
+		write! = |Writer.(authority), text| perform_write!(authority, text)
+
+		## Write bytes that are not necessarily text.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		##
+		## The bytes are passed through as they are: no encoding validation, no
+		## newline, no translation. Bounded exactly as `line!` is, counting the length
+		## of the list.
+		write_bytes! : Writer, List(U8) => Try({}, WriteError)
+		write_bytes! = |Writer.(authority), bytes| perform_write_bytes!(authority, bytes)
+
+	}
+
 }
 
 ## Re-lift a queued write's closed error union onto the open one this module
@@ -58,7 +69,18 @@ lifted : Try({}, Host.StdioWriteError) -> Try({}, WriteError)
 lifted = |result|
 	match result {
 		Ok({}) => Ok({})
+		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(BufferFull) => Err(BufferFull)
 		Err(TooLarge) => Err(TooLarge)
 		Err(Unavailable) => Err(Unavailable)
 	}
+
+## Private authority-taking implementations.
+perform_line! : Resource.Authority, Str => Try({}, Stdout.WriteError)
+perform_line! = |authority, text| lifted(Host.stdio_write_line!(authority, 1, text))
+
+perform_write! : Resource.Authority, Str => Try({}, Stdout.WriteError)
+perform_write! = |authority, text| lifted(Host.stdio_write_text!(authority, 1, text))
+
+perform_write_bytes! : Resource.Authority, List(U8) => Try({}, Stdout.WriteError)
+perform_write_bytes! = |authority, bytes| lifted(Host.stdio_write_bytes!(authority, 1, bytes))

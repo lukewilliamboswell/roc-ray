@@ -133,13 +133,13 @@ air_drag = 0.35.F32
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
-	|_startup| {
-		assets = Assets.Store.open!(Assets.working_directory("examples/cave_climb/assets"))?
+	|io| {
+		assets = io.assets().open!(Assets.working_directory("examples/cave_climb/assets"))?
 		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
 		characters = Assets.load_texture!(assets, "kenney-platformer/spritesheet-characters-default.png")?
 		enemies_texture = Assets.load_texture!(assets, "kenney-platformer/spritesheet-enemies-default.png")?
 		background = Assets.load_texture!(assets, "kenney-platformer/background_color_hills.png")?
-		raw_map = Tilemap.load_tmx!(map_path)?
+		raw_map = io.tilemaps().load_tmx!(map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_tileset_texture(
@@ -756,8 +756,8 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 
 	restart = input.key_pressed(KeySpace)

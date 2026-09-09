@@ -626,3 +626,22 @@ Before opening a PR:
 - Check `git status --short`, `git diff`, and `git diff --cached` for untracked
   files, generated output, platform-reference churn, binaries, or unrelated
   local edits.
+
+## External service permissions
+
+The development host denies external services unless launched with
+`--host-caps-allow-all`. Pass it explicitly when running an example that reads
+assets, accesses files or the network, uses the clipboard, or writes capture
+output. `scripts/run-example.py` forwards it after `--`; it never grants it
+implicitly. Existing integration probes request it explicitly where they test
+external services. Permission probes also run without it to test refusal.
+
+`App.Io` is supplied to `init!` and as the third `update!` argument. Delegate
+narrow receivers (`Files.Access`, `Http.Client`, and so on) to helpers and tasks.
+Permission checks precede native work and consume transferred arguments on
+refusal. Selecting a receiver is pure and allocates no host resource. The
+private scalar identity belongs to one application lifetime, is not a native
+pointer, and is checked against the host's fixed launch policy.
+
+A recording in `App.Config` is a description. Start it explicitly with
+`io.capture().start!(recording)`; configuration does not authorize output.

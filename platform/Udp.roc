@@ -10,7 +10,7 @@
 ## ```roc
 ## Msg : [Arrived(List(Udp.Datagram)), ReceiveFailed(Udp.ReceiveError)]
 ##
-## update! = |model, input| {
+## update! = |model, input, io| {
 ##     socket = model.socket
 ##     if !model.listening {
 ##         Task.spawn!(
@@ -124,29 +124,6 @@ Udp := [].{
 	max_datagram_bytes : U64
 	max_datagram_bytes = 65507
 
-	## Bind a socket to a local address.
-	##
-	## `{ ip: "0.0.0.0", port: 0 }` takes any interface and lets the operating
-	## system choose the port; the returned socket's `local_address` reports
-	## what it chose. Bind once, in `init!` or when the app decides to start
-	## networking, and keep the socket in the model -- binding per frame would
-	## exhaust the eight-socket ceiling and change the port every time.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	bind! : Address => Try(Socket, BindError)
-	bind! = |address| {
-		# closed error union to open error union
-		match Host.udp_bind!({ ip: address.ip, port: address.port }) {
-			Ok(bound) => Ok(Socket.({ handle: bound.handle, local: { ip: format_ip(bound.ip), port: bound.port } }))
-			Err(AddressInUse) => Err(AddressInUse)
-			Err(AddressUnavailable) => Err(AddressUnavailable)
-			Err(InvalidAddress) => Err(InvalidAddress)
-			Err(PermissionDenied) => Err(PermissionDenied)
-			Err(ResourceLimit) => Err(ResourceLimit)
-			Err(Unavailable) => Err(Unavailable)
-		}
-	}
-
 	## An open datagram socket.
 	##
 	## The handle is reference counted: copy it freely, and when the last copy
@@ -232,6 +209,28 @@ Udp := [].{
 		stub : Socket
 		stub = Socket.({ handle: Resource.Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
+
+	## Opaque udp authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Network :: Resource.Authority.{
+
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Network
+		for_host = |authority| Network.(authority)
+
+		## Bind a socket to a local address.
+		##
+		## `{ ip: "0.0.0.0", port: 0 }` takes any interface and lets the operating
+		## system choose the port; the returned socket's `local_address` reports
+		## what it chose. Bind once, in `init!` or when the app decides to start
+		## networking, and keep the socket in the model -- binding per frame would
+		## exhaust the eight-socket ceiling and change the port every time.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		bind! : Network, Address => Try(Socket, BindError)
+		bind! = |Network.(authority), address| perform_bind!(authority, address)
+
+	}
+
 }
 
 ## Rebuild the datagrams from the flat batch the host delivered.
@@ -277,3 +276,18 @@ expect {
 }
 
 expect decode_batch([], []) == []
+
+## Private authority-taking implementations.
+perform_bind! : Resource.Authority, Udp.Address => Try(Udp.Socket, Udp.BindError)
+perform_bind! = |authority, address| {
+	# closed error union to open error union
+	match Host.udp_bind!(authority, { ip: address.ip, port: address.port }) {
+		Ok(bound) => Ok(Udp.Socket.({ handle: bound.handle, local: { ip: format_ip(bound.ip), port: bound.port } }))
+		Err(AddressInUse) => Err(AddressInUse)
+		Err(AddressUnavailable) => Err(AddressUnavailable)
+		Err(InvalidAddress) => Err(InvalidAddress)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(ResourceLimit) => Err(ResourceLimit)
+		Err(Unavailable) => Err(Unavailable)
+	}
+}

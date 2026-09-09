@@ -114,7 +114,7 @@ def measure(root: Path, pattern: str, frames: int, warmup: int) -> list[dict[str
         "ROC_RAY_MODEL_PATTERN": pattern,
     }
     result = subprocess.run(
-        [str(binary), "--host-headless", f"--host-headless-frames={frames}"],
+        [str(binary), "--host-headless", "--host-caps-allow-all", f"--host-headless-frames={frames}"],
         cwd=root,
         capture_output=True,
         text=True,

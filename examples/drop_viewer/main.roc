@@ -49,7 +49,7 @@ init! = App.init(
 		.with_title("RocRay Drop Viewer")
 		.with_size({ width: 900, height: 620 })
 		.with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			font,
@@ -65,13 +65,13 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	# One dropped path starts one read. If several files are dropped, the app
 	# displays the result whose message arrives last.
 	List.for_each!(
 		input.dropped,
-		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, Files.read_bytes!(drop.path))),
+		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, io.files().read_bytes!(drop.path))),
 	)
 
 	requested = match List.last(input.dropped) {
@@ -122,6 +122,7 @@ describe_read : Files.ReadBytesError -> Str
 describe_read = |reason|
 	match reason {
 		NotFound => "not found"
+		PermissionDenied => "file access was not granted"
 		ReadFailed => "could not be read"
 		Busy => "the host was busy"
 		Unavailable => "reads are unavailable"

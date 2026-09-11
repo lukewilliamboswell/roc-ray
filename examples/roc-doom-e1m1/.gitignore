@@ -1,0 +1,4 @@
+evidence/
+
+# ignore the executable
+main

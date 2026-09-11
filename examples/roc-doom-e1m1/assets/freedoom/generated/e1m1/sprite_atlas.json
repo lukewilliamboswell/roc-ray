@@ -1,0 +1,8193 @@
+{
+  "width": 2048,
+  "height": 1024,
+  "entries": [
+    {
+      "name": "AMMOA0",
+      "rect": {
+        "x": 1999,
+        "y": 476,
+        "width": 17,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "AMMOA0",
+      "sprite": "AMMO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ARM1A0",
+      "rect": {
+        "x": 235,
+        "y": 476,
+        "width": 37,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "ARM1A0",
+      "sprite": "ARM1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ARM1B0",
+      "rect": {
+        "x": 274,
+        "y": 476,
+        "width": 37,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "ARM1B0",
+      "sprite": "ARM1",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ARM2A0",
+      "rect": {
+        "x": 665,
+        "y": 476,
+        "width": 37,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "ARM2A0",
+      "sprite": "ARM2",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ARM2B0",
+      "rect": {
+        "x": 704,
+        "y": 476,
+        "width": 37,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "ARM2B0",
+      "sprite": "ARM2",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1A0",
+      "rect": {
+        "x": 156,
+        "y": 507,
+        "width": 15,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1A0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1B0",
+      "rect": {
+        "x": 173,
+        "y": 507,
+        "width": 15,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1B0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1C0",
+      "rect": {
+        "x": 1991,
+        "y": 387,
+        "width": 34,
+        "height": 33
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1C0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1D0",
+      "rect": {
+        "x": 1856,
+        "y": 387,
+        "width": 40,
+        "height": 35
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1D0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1E0",
+      "rect": {
+        "x": 1654,
+        "y": 387,
+        "width": 46,
+        "height": 39
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1E0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAR1A0",
+      "rect": {
+        "x": 431,
+        "y": 442,
+        "width": 23,
+        "height": 32
+      },
+      "kind": "sprite",
+      "doom_name": "BAR1A0",
+      "sprite": "BAR1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAR1B0",
+      "rect": {
+        "x": 456,
+        "y": 442,
+        "width": 23,
+        "height": 32
+      },
+      "kind": "sprite",
+      "doom_name": "BAR1B0",
+      "sprite": "BAR1",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPA0",
+      "rect": {
+        "x": 481,
+        "y": 442,
+        "width": 23,
+        "height": 32
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPA0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPB0",
+      "rect": {
+        "x": 717,
+        "y": 442,
+        "width": 25,
+        "height": 31
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPB0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPC0",
+      "rect": {
+        "x": 1536,
+        "y": 387,
+        "width": 36,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPC0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPD0",
+      "rect": {
+        "x": 768,
+        "y": 387,
+        "width": 56,
+        "height": 50
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPD0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPE0",
+      "rect": {
+        "x": 1702,
+        "y": 329,
+        "width": 59,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPE0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BKEYA0",
+      "rect": {
+        "x": 1062,
+        "y": 476,
+        "width": 14,
+        "height": 21
+      },
+      "kind": "sprite",
+      "doom_name": "BKEYA0",
+      "sprite": "BKEY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BKEYB0",
+      "rect": {
+        "x": 1078,
+        "y": 476,
+        "width": 14,
+        "height": 21
+      },
+      "kind": "sprite",
+      "doom_name": "BKEYB0",
+      "sprite": "BKEY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BLUDA0",
+      "rect": {
+        "x": 525,
+        "y": 507,
+        "width": 17,
+        "height": 8
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDA0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BLUDB0",
+      "rect": {
+        "x": 512,
+        "y": 507,
+        "width": 11,
+        "height": 10
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDB0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BLUDC0",
+      "rect": {
+        "x": 598,
+        "y": 507,
+        "width": 6,
+        "height": 7
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDC0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON1A0",
+      "rect": {
+        "x": 190,
+        "y": 507,
+        "width": 11,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BON1A0",
+      "sprite": "BON1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON1B0",
+      "rect": {
+        "x": 203,
+        "y": 507,
+        "width": 11,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BON1B0",
+      "sprite": "BON1",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON1C0",
+      "rect": {
+        "x": 216,
+        "y": 507,
+        "width": 11,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BON1C0",
+      "sprite": "BON1",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON1D0",
+      "rect": {
+        "x": 229,
+        "y": 507,
+        "width": 11,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BON1D0",
+      "sprite": "BON1",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON2A0",
+      "rect": {
+        "x": 1504,
+        "y": 476,
+        "width": 13,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "BON2A0",
+      "sprite": "BON2",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON2B0",
+      "rect": {
+        "x": 1519,
+        "y": 476,
+        "width": 13,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "BON2B0",
+      "sprite": "BON2",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON2C0",
+      "rect": {
+        "x": 1534,
+        "y": 476,
+        "width": 13,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "BON2C0",
+      "sprite": "BON2",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BON2D0",
+      "rect": {
+        "x": 1549,
+        "y": 476,
+        "width": 13,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "BON2D0",
+      "sprite": "BON2",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BPAKA0",
+      "rect": {
+        "x": 1395,
+        "y": 442,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "BPAKA0",
+      "sprite": "BPAK",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "CANDA0",
+      "rect": {
+        "x": 1486,
+        "y": 476,
+        "width": 16,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "CANDA0",
+      "sprite": "CAND",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "CELPA0",
+      "rect": {
+        "x": 1286,
+        "y": 476,
+        "width": 32,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "CELPA0",
+      "sprite": "CELP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "CLIPA0",
+      "rect": {
+        "x": 395,
+        "y": 507,
+        "width": 7,
+        "height": 12
+      },
+      "kind": "sprite",
+      "doom_name": "CLIPA0",
+      "sprite": "CLIP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "COLUA0",
+      "rect": {
+        "x": 992,
+        "y": 387,
+        "width": 18,
+        "height": 48
+      },
+      "kind": "sprite",
+      "doom_name": "COLUA0",
+      "sprite": "COLU",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "CSAWA0",
+      "rect": {
+        "x": 1403,
+        "y": 476,
+        "width": 47,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "CSAWA0",
+      "sprite": "CSAW",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ELECA0",
+      "rect": {
+        "x": 297,
+        "y": 2,
+        "width": 26,
+        "height": 128
+      },
+      "kind": "sprite",
+      "doom_name": "ELECA0",
+      "sprite": "ELEC",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "GOR4A0",
+      "rect": {
+        "x": 954,
+        "y": 387,
+        "width": 36,
+        "height": 48
+      },
+      "kind": "sprite",
+      "doom_name": "GOR4A0",
+      "sprite": "GOR4",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "LAUNA0",
+      "rect": {
+        "x": 1094,
+        "y": 476,
+        "width": 59,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "LAUNA0",
+      "sprite": "LAUN",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "MEDIA0",
+      "rect": {
+        "x": 1320,
+        "y": 476,
+        "width": 29,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "MEDIA0",
+      "sprite": "MEDI",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "MGUNA0",
+      "rect": {
+        "x": 613,
+        "y": 476,
+        "width": 50,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "MGUNA0",
+      "sprite": "MGUN",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISFA0",
+      "rect": {
+        "x": 1243,
+        "y": 442,
+        "width": 32,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "PISFA0",
+      "sprite": "PISF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGA0",
+      "rect": {
+        "x": 795,
+        "y": 2,
+        "width": 82,
+        "height": 92
+      },
+      "kind": "sprite",
+      "doom_name": "PISGA0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGB0",
+      "rect": {
+        "x": 711,
+        "y": 2,
+        "width": 82,
+        "height": 96
+      },
+      "kind": "sprite",
+      "doom_name": "PISGB0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGC0",
+      "rect": {
+        "x": 625,
+        "y": 2,
+        "width": 84,
+        "height": 100
+      },
+      "kind": "sprite",
+      "doom_name": "PISGC0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGD0",
+      "rect": {
+        "x": 539,
+        "y": 2,
+        "width": 84,
+        "height": 106
+      },
+      "kind": "sprite",
+      "doom_name": "PISGD0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGE0",
+      "rect": {
+        "x": 451,
+        "y": 2,
+        "width": 86,
+        "height": 120
+      },
+      "kind": "sprite",
+      "doom_name": "PISGE0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLASA0",
+      "rect": {
+        "x": 1946,
+        "y": 476,
+        "width": 51,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "PLASA0",
+      "sprite": "PLAS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYA1",
+      "rect": {
+        "x": 1113,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYA1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYA2A8",
+      "rect": {
+        "x": 153,
+        "y": 329,
+        "width": 26,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYA2A8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYA3A7",
+      "rect": {
+        "x": 1896,
+        "y": 271,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYA3A7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYA4A6",
+      "rect": {
+        "x": 1006,
+        "y": 329,
+        "width": 29,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYA4A6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYA5",
+      "rect": {
+        "x": 835,
+        "y": 271,
+        "width": 38,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYA5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYB1",
+      "rect": {
+        "x": 1151,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYB1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYB2B8",
+      "rect": {
+        "x": 1560,
+        "y": 271,
+        "width": 33,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYB2B8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYB3B7",
+      "rect": {
+        "x": 708,
+        "y": 271,
+        "width": 41,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYB3B7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYB4B6",
+      "rect": {
+        "x": 1035,
+        "y": 271,
+        "width": 37,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYB4B6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYB5",
+      "rect": {
+        "x": 1416,
+        "y": 271,
+        "width": 34,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYB5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYC1",
+      "rect": {
+        "x": 1189,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYC1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYC2C8",
+      "rect": {
+        "x": 181,
+        "y": 329,
+        "width": 26,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYC2C8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYC3C7",
+      "rect": {
+        "x": 1927,
+        "y": 271,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYC3C7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYC4C6",
+      "rect": {
+        "x": 1958,
+        "y": 271,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYC4C6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYC5",
+      "rect": {
+        "x": 1227,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYC5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYD1",
+      "rect": {
+        "x": 1379,
+        "y": 271,
+        "width": 35,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYD1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYD2D8",
+      "rect": {
+        "x": 1767,
+        "y": 271,
+        "width": 31,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYD2D8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYD3D7",
+      "rect": {
+        "x": 670,
+        "y": 329,
+        "width": 39,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYD3D7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYD4D6",
+      "rect": {
+        "x": 1074,
+        "y": 271,
+        "width": 37,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYD4D6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYD5",
+      "rect": {
+        "x": 1595,
+        "y": 271,
+        "width": 33,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYD5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYE1",
+      "rect": {
+        "x": 1989,
+        "y": 271,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYE1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYE2E8",
+      "rect": {
+        "x": 1265,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYE2E8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYE3E7",
+      "rect": {
+        "x": 1998,
+        "y": 211,
+        "width": 47,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYE3E7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYE4E6",
+      "rect": {
+        "x": 751,
+        "y": 271,
+        "width": 41,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYE4E6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYE5",
+      "rect": {
+        "x": 1800,
+        "y": 271,
+        "width": 30,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYE5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYF1",
+      "rect": {
+        "x": 2,
+        "y": 329,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYF1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYF2F8",
+      "rect": {
+        "x": 620,
+        "y": 271,
+        "width": 42,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYF2F8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYF3F7",
+      "rect": {
+        "x": 1941,
+        "y": 211,
+        "width": 55,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYF3F7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYF4F6",
+      "rect": {
+        "x": 2,
+        "y": 271,
+        "width": 47,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYF4F6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYF5",
+      "rect": {
+        "x": 1832,
+        "y": 271,
+        "width": 30,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYF5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYG1",
+      "rect": {
+        "x": 33,
+        "y": 329,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYG1",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYG2G8",
+      "rect": {
+        "x": 1630,
+        "y": 271,
+        "width": 33,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYG2G8",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYG3G7",
+      "rect": {
+        "x": 664,
+        "y": 271,
+        "width": 42,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYG3G7",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYG4G6",
+      "rect": {
+        "x": 1452,
+        "y": 271,
+        "width": 34,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYG4G6",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "PLAYG5",
+      "rect": {
+        "x": 64,
+        "y": 329,
+        "width": 29,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYG5",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYH0",
+      "rect": {
+        "x": 1665,
+        "y": 271,
+        "width": 32,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYH0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYI0",
+      "rect": {
+        "x": 738,
+        "y": 387,
+        "width": 28,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYI0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "I",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYJ0",
+      "rect": {
+        "x": 1574,
+        "y": 387,
+        "width": 27,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYJ0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "J",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYK0",
+      "rect": {
+        "x": 743,
+        "y": 476,
+        "width": 28,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYK0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "K",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYL0",
+      "rect": {
+        "x": 1025,
+        "y": 476,
+        "width": 35,
+        "height": 21
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYL0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "L",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYM0",
+      "rect": {
+        "x": 1248,
+        "y": 476,
+        "width": 36,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYM0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "M",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYN0",
+      "rect": {
+        "x": 1209,
+        "y": 476,
+        "width": 37,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYN0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "N",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYO0",
+      "rect": {
+        "x": 875,
+        "y": 271,
+        "width": 38,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYO0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "O",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYP0",
+      "rect": {
+        "x": 1952,
+        "y": 329,
+        "width": 41,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYP0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "P",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYQ0",
+      "rect": {
+        "x": 908,
+        "y": 387,
+        "width": 44,
+        "height": 49
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYQ0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "Q",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYR0",
+      "rect": {
+        "x": 1225,
+        "y": 387,
+        "width": 46,
+        "height": 45
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYR0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "R",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYS0",
+      "rect": {
+        "x": 1603,
+        "y": 387,
+        "width": 49,
+        "height": 39
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYS0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "S",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYT0",
+      "rect": {
+        "x": 1805,
+        "y": 387,
+        "width": 49,
+        "height": 35
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYT0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "T",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYU0",
+      "rect": {
+        "x": 449,
+        "y": 476,
+        "width": 53,
+        "height": 27
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYU0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "U",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYV0",
+      "rect": {
+        "x": 1836,
+        "y": 476,
+        "width": 53,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYV0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "V",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PLAYW0",
+      "rect": {
+        "x": 1891,
+        "y": 476,
+        "width": 53,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "PLAYW0",
+      "sprite": "PLAY",
+      "aliases": [
+        {
+          "frame": "W",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PMAPA0",
+      "rect": {
+        "x": 313,
+        "y": 476,
+        "width": 32,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "PMAPA0",
+      "sprite": "PMAP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PMAPB0",
+      "rect": {
+        "x": 347,
+        "y": 476,
+        "width": 32,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "PMAPB0",
+      "sprite": "PMAP",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PMAPC0",
+      "rect": {
+        "x": 381,
+        "y": 476,
+        "width": 32,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "PMAPC0",
+      "sprite": "PMAP",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PMAPD0",
+      "rect": {
+        "x": 415,
+        "y": 476,
+        "width": 32,
+        "height": 28
+      },
+      "kind": "sprite",
+      "doom_name": "PMAPD0",
+      "sprite": "PMAP",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POL5A0",
+      "rect": {
+        "x": 418,
+        "y": 507,
+        "width": 55,
+        "height": 10
+      },
+      "kind": "sprite",
+      "doom_name": "POL5A0",
+      "sprite": "POL5",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA1",
+      "rect": {
+        "x": 1538,
+        "y": 211,
+        "width": 41,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA2",
+      "rect": {
+        "x": 922,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA3",
+      "rect": {
+        "x": 966,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA4",
+      "rect": {
+        "x": 1010,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA5",
+      "rect": {
+        "x": 915,
+        "y": 271,
+        "width": 38,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA6",
+      "rect": {
+        "x": 483,
+        "y": 271,
+        "width": 45,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA7",
+      "rect": {
+        "x": 51,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSA8",
+      "rect": {
+        "x": 1303,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSA8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB1",
+      "rect": {
+        "x": 1581,
+        "y": 211,
+        "width": 41,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB2",
+      "rect": {
+        "x": 1054,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB3",
+      "rect": {
+        "x": 1098,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB4",
+      "rect": {
+        "x": 1142,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB5",
+      "rect": {
+        "x": 955,
+        "y": 271,
+        "width": 38,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB6",
+      "rect": {
+        "x": 99,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB7",
+      "rect": {
+        "x": 147,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSB8",
+      "rect": {
+        "x": 1341,
+        "y": 271,
+        "width": 36,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSB8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC1",
+      "rect": {
+        "x": 1186,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC2",
+      "rect": {
+        "x": 1230,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC3",
+      "rect": {
+        "x": 1274,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC4",
+      "rect": {
+        "x": 1318,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC5",
+      "rect": {
+        "x": 794,
+        "y": 271,
+        "width": 39,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC6",
+      "rect": {
+        "x": 195,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC7",
+      "rect": {
+        "x": 243,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSC8",
+      "rect": {
+        "x": 1665,
+        "y": 211,
+        "width": 36,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSC8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD1",
+      "rect": {
+        "x": 1362,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD2",
+      "rect": {
+        "x": 1406,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD3",
+      "rect": {
+        "x": 1450,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD4",
+      "rect": {
+        "x": 1494,
+        "y": 211,
+        "width": 42,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD5",
+      "rect": {
+        "x": 625,
+        "y": 387,
+        "width": 39,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD6",
+      "rect": {
+        "x": 291,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD7",
+      "rect": {
+        "x": 339,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSD8",
+      "rect": {
+        "x": 1703,
+        "y": 211,
+        "width": 36,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSD8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE1",
+      "rect": {
+        "x": 209,
+        "y": 329,
+        "width": 26,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE2",
+      "rect": {
+        "x": 623,
+        "y": 329,
+        "width": 45,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE3",
+      "rect": {
+        "x": 1155,
+        "y": 329,
+        "width": 50,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE4",
+      "rect": {
+        "x": 1995,
+        "y": 329,
+        "width": 37,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE5",
+      "rect": {
+        "x": 512,
+        "y": 387,
+        "width": 24,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE6",
+      "rect": {
+        "x": 150,
+        "y": 387,
+        "width": 32,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE7",
+      "rect": {
+        "x": 1207,
+        "y": 329,
+        "width": 50,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSE8",
+      "rect": {
+        "x": 680,
+        "y": 211,
+        "width": 48,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSE8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF1",
+      "rect": {
+        "x": 95,
+        "y": 329,
+        "width": 27,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF2",
+      "rect": {
+        "x": 387,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF3",
+      "rect": {
+        "x": 409,
+        "y": 329,
+        "width": 53,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF4",
+      "rect": {
+        "x": 1259,
+        "y": 329,
+        "width": 46,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF5",
+      "rect": {
+        "x": 184,
+        "y": 387,
+        "width": 26,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF6",
+      "rect": {
+        "x": 2,
+        "y": 387,
+        "width": 37,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF7",
+      "rect": {
+        "x": 1097,
+        "y": 329,
+        "width": 56,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSF8",
+      "rect": {
+        "x": 1883,
+        "y": 211,
+        "width": 56,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSF8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG1",
+      "rect": {
+        "x": 711,
+        "y": 329,
+        "width": 39,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG1",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG2",
+      "rect": {
+        "x": 791,
+        "y": 329,
+        "width": 36,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG2",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 2,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG3",
+      "rect": {
+        "x": 1354,
+        "y": 329,
+        "width": 40,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG3",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 3,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG4",
+      "rect": {
+        "x": 257,
+        "y": 387,
+        "width": 41,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG4",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 4,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG5",
+      "rect": {
+        "x": 78,
+        "y": 387,
+        "width": 34,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG5",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG6",
+      "rect": {
+        "x": 300,
+        "y": 387,
+        "width": 41,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG6",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 6,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG7",
+      "rect": {
+        "x": 1438,
+        "y": 329,
+        "width": 39,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG7",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 7,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSG8",
+      "rect": {
+        "x": 1624,
+        "y": 211,
+        "width": 39,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "POSSG8",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 8,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSH0",
+      "rect": {
+        "x": 574,
+        "y": 329,
+        "width": 47,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSH0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSI0",
+      "rect": {
+        "x": 1317,
+        "y": 387,
+        "width": 38,
+        "height": 42
+      },
+      "kind": "sprite",
+      "doom_name": "POSSI0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "I",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSJ0",
+      "rect": {
+        "x": 1945,
+        "y": 387,
+        "width": 44,
+        "height": 34
+      },
+      "kind": "sprite",
+      "doom_name": "POSSJ0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "J",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSK0",
+      "rect": {
+        "x": 504,
+        "y": 476,
+        "width": 48,
+        "height": 27
+      },
+      "kind": "sprite",
+      "doom_name": "POSSK0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "K",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSL0",
+      "rect": {
+        "x": 1351,
+        "y": 476,
+        "width": 50,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "POSSL0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "L",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSM0",
+      "rect": {
+        "x": 708,
+        "y": 147,
+        "width": 44,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "POSSM0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "M",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSN0",
+      "rect": {
+        "x": 435,
+        "y": 271,
+        "width": 46,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "POSSN0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "N",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSO0",
+      "rect": {
+        "x": 464,
+        "y": 329,
+        "width": 53,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "POSSO0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "O",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSP0",
+      "rect": {
+        "x": 1012,
+        "y": 387,
+        "width": 57,
+        "height": 47
+      },
+      "kind": "sprite",
+      "doom_name": "POSSP0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "P",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSQ0",
+      "rect": {
+        "x": 1357,
+        "y": 387,
+        "width": 65,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "POSSQ0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "Q",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSR0",
+      "rect": {
+        "x": 1873,
+        "y": 442,
+        "width": 67,
+        "height": 29
+      },
+      "kind": "sprite",
+      "doom_name": "POSSR0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "R",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSS0",
+      "rect": {
+        "x": 893,
+        "y": 476,
+        "width": 64,
+        "height": 23
+      },
+      "kind": "sprite",
+      "doom_name": "POSSS0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "S",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSST0",
+      "rect": {
+        "x": 1564,
+        "y": 476,
+        "width": 65,
+        "height": 17
+      },
+      "kind": "sprite",
+      "doom_name": "POSST0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "T",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "POSSU0",
+      "rect": {
+        "x": 1698,
+        "y": 476,
+        "width": 67,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "POSSU0",
+      "sprite": "POSS",
+      "aliases": [
+        {
+          "frame": "U",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PSTRA0",
+      "rect": {
+        "x": 1452,
+        "y": 476,
+        "width": 32,
+        "height": 19
+      },
+      "kind": "sprite",
+      "doom_name": "PSTRA0",
+      "sprite": "PSTR",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFA0",
+      "rect": {
+        "x": 753,
+        "y": 507,
+        "width": 5,
+        "height": 5
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFA0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFB0",
+      "rect": {
+        "x": 404,
+        "y": 507,
+        "width": 12,
+        "height": 11
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFB0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFC0",
+      "rect": {
+        "x": 242,
+        "y": 507,
+        "width": 15,
+        "height": 14
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFC0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFD0",
+      "rect": {
+        "x": 137,
+        "y": 507,
+        "width": 17,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFD0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PVISA0",
+      "rect": {
+        "x": 335,
+        "y": 507,
+        "width": 28,
+        "height": 13
+      },
+      "kind": "sprite",
+      "doom_name": "PVISA0",
+      "sprite": "PVIS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PVISB0",
+      "rect": {
+        "x": 365,
+        "y": 507,
+        "width": 28,
+        "height": 13
+      },
+      "kind": "sprite",
+      "doom_name": "PVISB0",
+      "sprite": "PVIS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "ROCKA0",
+      "rect": {
+        "x": 881,
+        "y": 476,
+        "width": 10,
+        "height": 24
+      },
+      "kind": "sprite",
+      "doom_name": "ROCKA0",
+      "sprite": "ROCK",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGA1",
+      "rect": {
+        "x": 1591,
+        "y": 147,
+        "width": 38,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "SARGA1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGA2A8",
+      "rect": {
+        "x": 301,
+        "y": 211,
+        "width": 54,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGA2A8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGA3A7",
+      "rect": {
+        "x": 1851,
+        "y": 147,
+        "width": 58,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGA3A7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGA4A6",
+      "rect": {
+        "x": 780,
+        "y": 211,
+        "width": 47,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGA4A6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGA5",
+      "rect": {
+        "x": 1313,
+        "y": 147,
+        "width": 38,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGA5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGB1",
+      "rect": {
+        "x": 1751,
+        "y": 147,
+        "width": 34,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "SARGB1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGB2B8",
+      "rect": {
+        "x": 57,
+        "y": 211,
+        "width": 49,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGB2B8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGB3B7",
+      "rect": {
+        "x": 1969,
+        "y": 147,
+        "width": 54,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGB3B7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGB4B6",
+      "rect": {
+        "x": 829,
+        "y": 211,
+        "width": 46,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGB4B6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGB5",
+      "rect": {
+        "x": 1741,
+        "y": 211,
+        "width": 34,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGB5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGC1",
+      "rect": {
+        "x": 1631,
+        "y": 147,
+        "width": 38,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "SARGC1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGC2C8",
+      "rect": {
+        "x": 256,
+        "y": 211,
+        "width": 43,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGC2C8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGC3C7",
+      "rect": {
+        "x": 357,
+        "y": 211,
+        "width": 54,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGC3C7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGC4C6",
+      "rect": {
+        "x": 730,
+        "y": 211,
+        "width": 48,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGC4C6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGC5",
+      "rect": {
+        "x": 1353,
+        "y": 147,
+        "width": 38,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGC5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGD1",
+      "rect": {
+        "x": 1671,
+        "y": 147,
+        "width": 38,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "SARGD1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGD2D8",
+      "rect": {
+        "x": 159,
+        "y": 211,
+        "width": 47,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGD2D8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGD3D7",
+      "rect": {
+        "x": 413,
+        "y": 211,
+        "width": 54,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGD3D7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGD4D6",
+      "rect": {
+        "x": 523,
+        "y": 211,
+        "width": 51,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGD4D6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGD5",
+      "rect": {
+        "x": 1777,
+        "y": 211,
+        "width": 34,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGD5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGE1",
+      "rect": {
+        "x": 1393,
+        "y": 147,
+        "width": 38,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGE1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGE2E8",
+      "rect": {
+        "x": 2,
+        "y": 211,
+        "width": 53,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGE2E8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGE3E7",
+      "rect": {
+        "x": 1911,
+        "y": 147,
+        "width": 56,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGE3E7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGE4E6",
+      "rect": {
+        "x": 629,
+        "y": 211,
+        "width": 49,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGE4E6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGE5",
+      "rect": {
+        "x": 1813,
+        "y": 211,
+        "width": 34,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGE5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGF1",
+      "rect": {
+        "x": 1433,
+        "y": 147,
+        "width": 38,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGF1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGF2F8",
+      "rect": {
+        "x": 469,
+        "y": 211,
+        "width": 52,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGF2F8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGF3F7",
+      "rect": {
+        "x": 1787,
+        "y": 147,
+        "width": 62,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGF3F7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGF4F6",
+      "rect": {
+        "x": 576,
+        "y": 211,
+        "width": 51,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGF4F6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGF5",
+      "rect": {
+        "x": 1488,
+        "y": 271,
+        "width": 34,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SARGF5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGG1",
+      "rect": {
+        "x": 1473,
+        "y": 147,
+        "width": 34,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGG1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGG2G8",
+      "rect": {
+        "x": 208,
+        "y": 211,
+        "width": 46,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGG2G8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGG3G7",
+      "rect": {
+        "x": 108,
+        "y": 211,
+        "width": 49,
+        "height": 58
+      },
+      "kind": "sprite",
+      "doom_name": "SARGG3G7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGG4G6",
+      "rect": {
+        "x": 877,
+        "y": 211,
+        "width": 43,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SARGG4G6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGG5",
+      "rect": {
+        "x": 1699,
+        "y": 271,
+        "width": 32,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SARGG5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGH1",
+      "rect": {
+        "x": 873,
+        "y": 387,
+        "width": 33,
+        "height": 50
+      },
+      "kind": "sprite",
+      "doom_name": "SARGH1",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGH2H8",
+      "rect": {
+        "x": 583,
+        "y": 387,
+        "width": 40,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "SARGH2H8",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGH3H7",
+      "rect": {
+        "x": 212,
+        "y": 387,
+        "width": 43,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SARGH3H7",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGH4H6",
+      "rect": {
+        "x": 538,
+        "y": 387,
+        "width": 43,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "SARGH4H6",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SARGH5",
+      "rect": {
+        "x": 703,
+        "y": 387,
+        "width": 33,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "SARGH5",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGI0",
+      "rect": {
+        "x": 1711,
+        "y": 147,
+        "width": 38,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "SARGI0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "I",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGJ0",
+      "rect": {
+        "x": 1271,
+        "y": 147,
+        "width": 40,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SARGJ0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "J",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGK0",
+      "rect": {
+        "x": 1862,
+        "y": 329,
+        "width": 43,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SARGK0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "K",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGL0",
+      "rect": {
+        "x": 1491,
+        "y": 387,
+        "width": 43,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "SARGL0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "L",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGM0",
+      "rect": {
+        "x": 1193,
+        "y": 442,
+        "width": 48,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "SARGM0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "M",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SARGN0",
+      "rect": {
+        "x": 2,
+        "y": 476,
+        "width": 49,
+        "height": 29
+      },
+      "kind": "sprite",
+      "doom_name": "SARGN0",
+      "sprite": "SARG",
+      "aliases": [
+        {
+          "frame": "N",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SBOXA0",
+      "rect": {
+        "x": 299,
+        "y": 507,
+        "width": 34,
+        "height": 13
+      },
+      "kind": "sprite",
+      "doom_name": "SBOXA0",
+      "sprite": "SBOX",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHELA0",
+      "rect": {
+        "x": 496,
+        "y": 507,
+        "width": 14,
+        "height": 10
+      },
+      "kind": "sprite",
+      "doom_name": "SHELA0",
+      "sprite": "SHEL",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHOTA0",
+      "rect": {
+        "x": 259,
+        "y": 507,
+        "width": 38,
+        "height": 13
+      },
+      "kind": "sprite",
+      "doom_name": "SHOTA0",
+      "sprite": "SHOT",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTFA0",
+      "rect": {
+        "x": 1130,
+        "y": 387,
+        "width": 36,
+        "height": 47
+      },
+      "kind": "sprite",
+      "doom_name": "SHTFA0",
+      "sprite": "SHTF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTFB0",
+      "rect": {
+        "x": 291,
+        "y": 329,
+        "width": 58,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SHTFB0",
+      "sprite": "SHTF",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGA0",
+      "rect": {
+        "x": 1711,
+        "y": 2,
+        "width": 67,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGA0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGB0",
+      "rect": {
+        "x": 207,
+        "y": 2,
+        "width": 88,
+        "height": 128
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGB0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGC0",
+      "rect": {
+        "x": 2,
+        "y": 2,
+        "width": 93,
+        "height": 143
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGC0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGD0",
+      "rect": {
+        "x": 97,
+        "y": 2,
+        "width": 108,
+        "height": 129
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGD0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SMITA0",
+      "rect": {
+        "x": 932,
+        "y": 2,
+        "width": 62,
+        "height": 69
+      },
+      "kind": "sprite",
+      "doom_name": "SMITA0",
+      "sprite": "SMIT",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SOULA0",
+      "rect": {
+        "x": 773,
+        "y": 476,
+        "width": 25,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "SOULA0",
+      "sprite": "SOUL",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SOULB0",
+      "rect": {
+        "x": 800,
+        "y": 476,
+        "width": 25,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "SOULB0",
+      "sprite": "SOUL",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SOULC0",
+      "rect": {
+        "x": 827,
+        "y": 476,
+        "width": 25,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "SOULC0",
+      "sprite": "SOUL",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SOULD0",
+      "rect": {
+        "x": 854,
+        "y": 476,
+        "width": 25,
+        "height": 25
+      },
+      "kind": "sprite",
+      "doom_name": "SOULD0",
+      "sprite": "SOUL",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSA1",
+      "rect": {
+        "x": 829,
+        "y": 329,
+        "width": 35,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSA1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSA2A8",
+      "rect": {
+        "x": 973,
+        "y": 329,
+        "width": 31,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSA2A8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSA3A7",
+      "rect": {
+        "x": 114,
+        "y": 387,
+        "width": 34,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSA3A7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSA4A6",
+      "rect": {
+        "x": 826,
+        "y": 387,
+        "width": 45,
+        "height": 50
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSA4A6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSA5",
+      "rect": {
+        "x": 666,
+        "y": 387,
+        "width": 35,
+        "height": 51
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSA5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSB1",
+      "rect": {
+        "x": 866,
+        "y": 329,
+        "width": 35,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSB1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSB2B8",
+      "rect": {
+        "x": 1068,
+        "y": 329,
+        "width": 27,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSB2B8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSB3B7",
+      "rect": {
+        "x": 1849,
+        "y": 211,
+        "width": 32,
+        "height": 57
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSB3B7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSB4B6",
+      "rect": {
+        "x": 1396,
+        "y": 329,
+        "width": 40,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSB4B6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSB5",
+      "rect": {
+        "x": 1595,
+        "y": 329,
+        "width": 34,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSB5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSC1",
+      "rect": {
+        "x": 1733,
+        "y": 271,
+        "width": 32,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSC1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSC2C8",
+      "rect": {
+        "x": 1037,
+        "y": 329,
+        "width": 29,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSC2C8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSC3C7",
+      "rect": {
+        "x": 995,
+        "y": 271,
+        "width": 38,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSC3C7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSC4C6",
+      "rect": {
+        "x": 1479,
+        "y": 329,
+        "width": 38,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSC4C6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSC5",
+      "rect": {
+        "x": 903,
+        "y": 329,
+        "width": 34,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSC5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSD1",
+      "rect": {
+        "x": 1524,
+        "y": 271,
+        "width": 34,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSD1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSD2D8",
+      "rect": {
+        "x": 124,
+        "y": 329,
+        "width": 27,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSD2D8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSD3D7",
+      "rect": {
+        "x": 1864,
+        "y": 271,
+        "width": 30,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSD3D7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSD4D6",
+      "rect": {
+        "x": 752,
+        "y": 329,
+        "width": 37,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSD4D6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSD5",
+      "rect": {
+        "x": 1558,
+        "y": 329,
+        "width": 35,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSD5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSE1",
+      "rect": {
+        "x": 265,
+        "y": 329,
+        "width": 24,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSE1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSE2E8",
+      "rect": {
+        "x": 1519,
+        "y": 329,
+        "width": 37,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSE2E8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSE3E7",
+      "rect": {
+        "x": 1816,
+        "y": 329,
+        "width": 44,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSE3E7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSE4E6",
+      "rect": {
+        "x": 386,
+        "y": 387,
+        "width": 34,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSE4E6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSE5",
+      "rect": {
+        "x": 458,
+        "y": 387,
+        "width": 25,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSE5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSF1",
+      "rect": {
+        "x": 237,
+        "y": 329,
+        "width": 26,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSF1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSF2F8",
+      "rect": {
+        "x": 530,
+        "y": 271,
+        "width": 43,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSF2F8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSF3F7",
+      "rect": {
+        "x": 1763,
+        "y": 329,
+        "width": 51,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSF3F7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSF4F6",
+      "rect": {
+        "x": 343,
+        "y": 387,
+        "width": 41,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSF4F6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSF5",
+      "rect": {
+        "x": 485,
+        "y": 387,
+        "width": 25,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSF5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSG1",
+      "rect": {
+        "x": 939,
+        "y": 329,
+        "width": 32,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSG1",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSG2G8",
+      "rect": {
+        "x": 1667,
+        "y": 329,
+        "width": 33,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSG2G8",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSG3G7",
+      "rect": {
+        "x": 1907,
+        "y": 329,
+        "width": 43,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSG3G7",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSG4G6",
+      "rect": {
+        "x": 422,
+        "y": 387,
+        "width": 34,
+        "height": 52
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSG4G6",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "SPOSG5",
+      "rect": {
+        "x": 1631,
+        "y": 329,
+        "width": 34,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSG5",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSH0",
+      "rect": {
+        "x": 1509,
+        "y": 147,
+        "width": 33,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSH0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSI0",
+      "rect": {
+        "x": 41,
+        "y": 387,
+        "width": 35,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSI0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "I",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSJ0",
+      "rect": {
+        "x": 1702,
+        "y": 387,
+        "width": 42,
+        "height": 39
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSJ0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "J",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSK0",
+      "rect": {
+        "x": 1898,
+        "y": 387,
+        "width": 45,
+        "height": 34
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSK0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "K",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSL0",
+      "rect": {
+        "x": 1155,
+        "y": 476,
+        "width": 52,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSL0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "L",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSM0",
+      "rect": {
+        "x": 892,
+        "y": 147,
+        "width": 41,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSM0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "M",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSN0",
+      "rect": {
+        "x": 575,
+        "y": 271,
+        "width": 43,
+        "height": 56
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSN0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "N",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSO0",
+      "rect": {
+        "x": 519,
+        "y": 329,
+        "width": 53,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSO0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "O",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSP0",
+      "rect": {
+        "x": 1071,
+        "y": 387,
+        "width": 57,
+        "height": 47
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSP0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "P",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSQ0",
+      "rect": {
+        "x": 1424,
+        "y": 387,
+        "width": 65,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSQ0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "Q",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSR0",
+      "rect": {
+        "x": 1056,
+        "y": 442,
+        "width": 67,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSR0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "R",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSS0",
+      "rect": {
+        "x": 959,
+        "y": 476,
+        "width": 64,
+        "height": 23
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSS0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "S",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOST0",
+      "rect": {
+        "x": 1631,
+        "y": 476,
+        "width": 65,
+        "height": 17
+      },
+      "kind": "sprite",
+      "doom_name": "SPOST0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "T",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SPOSU0",
+      "rect": {
+        "x": 1767,
+        "y": 476,
+        "width": 67,
+        "height": 16
+      },
+      "kind": "sprite",
+      "doom_name": "SPOSU0",
+      "sprite": "SPOS",
+      "aliases": [
+        {
+          "frame": "U",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "STARMS",
+      "rect": {
+        "x": 391,
+        "y": 442,
+        "width": 38,
+        "height": 32
+      },
+      "kind": "graphic",
+      "doom_name": "STARMS",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STBAR",
+      "rect": {
+        "x": 2,
+        "y": 442,
+        "width": 320,
+        "height": 32
+      },
+      "kind": "graphic",
+      "doom_name": "STBAR",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB0",
+      "rect": {
+        "x": 506,
+        "y": 442,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB1",
+      "rect": {
+        "x": 543,
+        "y": 442,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB2",
+      "rect": {
+        "x": 580,
+        "y": 442,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB3",
+      "rect": {
+        "x": 617,
+        "y": 442,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFDEAD0",
+      "rect": {
+        "x": 744,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFDEAD0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL0",
+      "rect": {
+        "x": 1535,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL1",
+      "rect": {
+        "x": 1561,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL2",
+      "rect": {
+        "x": 1587,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL3",
+      "rect": {
+        "x": 1613,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL4",
+      "rect": {
+        "x": 1639,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFGOD0",
+      "rect": {
+        "x": 53,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFGOD0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL0",
+      "rect": {
+        "x": 1665,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL1",
+      "rect": {
+        "x": 1691,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL2",
+      "rect": {
+        "x": 1717,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL3",
+      "rect": {
+        "x": 1743,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL4",
+      "rect": {
+        "x": 1769,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH0",
+      "rect": {
+        "x": 770,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH1",
+      "rect": {
+        "x": 796,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH2",
+      "rect": {
+        "x": 822,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH3",
+      "rect": {
+        "x": 848,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH4",
+      "rect": {
+        "x": 874,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST00",
+      "rect": {
+        "x": 79,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST01",
+      "rect": {
+        "x": 105,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST01",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST02",
+      "rect": {
+        "x": 131,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST02",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST10",
+      "rect": {
+        "x": 157,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST11",
+      "rect": {
+        "x": 183,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST11",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST12",
+      "rect": {
+        "x": 209,
+        "y": 476,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST12",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST20",
+      "rect": {
+        "x": 1795,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST21",
+      "rect": {
+        "x": 1821,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST21",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST22",
+      "rect": {
+        "x": 1847,
+        "y": 442,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST22",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST30",
+      "rect": {
+        "x": 900,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST31",
+      "rect": {
+        "x": 926,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST31",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST32",
+      "rect": {
+        "x": 952,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST32",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST40",
+      "rect": {
+        "x": 978,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST41",
+      "rect": {
+        "x": 1004,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST41",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST42",
+      "rect": {
+        "x": 1030,
+        "y": 442,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST42",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL00",
+      "rect": {
+        "x": 1423,
+        "y": 442,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL10",
+      "rect": {
+        "x": 1451,
+        "y": 442,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL20",
+      "rect": {
+        "x": 1337,
+        "y": 442,
+        "width": 27,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL30",
+      "rect": {
+        "x": 686,
+        "y": 442,
+        "width": 29,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL40",
+      "rect": {
+        "x": 654,
+        "y": 442,
+        "width": 30,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR00",
+      "rect": {
+        "x": 1479,
+        "y": 442,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR10",
+      "rect": {
+        "x": 1507,
+        "y": 442,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR20",
+      "rect": {
+        "x": 1366,
+        "y": 442,
+        "width": 27,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR30",
+      "rect": {
+        "x": 1277,
+        "y": 442,
+        "width": 28,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR40",
+      "rect": {
+        "x": 1307,
+        "y": 442,
+        "width": 28,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM0",
+      "rect": {
+        "x": 606,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM1",
+      "rect": {
+        "x": 612,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM2",
+      "rect": {
+        "x": 618,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM3",
+      "rect": {
+        "x": 624,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM4",
+      "rect": {
+        "x": 630,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM5",
+      "rect": {
+        "x": 636,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM6",
+      "rect": {
+        "x": 642,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM7",
+      "rect": {
+        "x": 648,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM8",
+      "rect": {
+        "x": 654,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM9",
+      "rect": {
+        "x": 660,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STIMA0",
+      "rect": {
+        "x": 475,
+        "y": 507,
+        "width": 19,
+        "height": 10
+      },
+      "kind": "sprite",
+      "doom_name": "STIMA0",
+      "sprite": "STIM",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "STKEYS0",
+      "rect": {
+        "x": 726,
+        "y": 507,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS1",
+      "rect": {
+        "x": 735,
+        "y": 507,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS2",
+      "rect": {
+        "x": 744,
+        "y": 507,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS3",
+      "rect": {
+        "x": 544,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS4",
+      "rect": {
+        "x": 553,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS5",
+      "rect": {
+        "x": 562,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS6",
+      "rect": {
+        "x": 571,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS7",
+      "rect": {
+        "x": 580,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS8",
+      "rect": {
+        "x": 589,
+        "y": 507,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM0",
+      "rect": {
+        "x": 2018,
+        "y": 476,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM1",
+      "rect": {
+        "x": 2033,
+        "y": 476,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM2",
+      "rect": {
+        "x": 2,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM3",
+      "rect": {
+        "x": 17,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM4",
+      "rect": {
+        "x": 32,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM5",
+      "rect": {
+        "x": 47,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM6",
+      "rect": {
+        "x": 62,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM7",
+      "rect": {
+        "x": 77,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM8",
+      "rect": {
+        "x": 92,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM9",
+      "rect": {
+        "x": 107,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTPRCNT",
+      "rect": {
+        "x": 122,
+        "y": 507,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTPRCNT",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM0",
+      "rect": {
+        "x": 666,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM1",
+      "rect": {
+        "x": 672,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM2",
+      "rect": {
+        "x": 678,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM3",
+      "rect": {
+        "x": 684,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM4",
+      "rect": {
+        "x": 690,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM5",
+      "rect": {
+        "x": 696,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM6",
+      "rect": {
+        "x": 702,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM7",
+      "rect": {
+        "x": 708,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM8",
+      "rect": {
+        "x": 714,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM9",
+      "rect": {
+        "x": 720,
+        "y": 507,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "TRE1A0",
+      "rect": {
+        "x": 879,
+        "y": 2,
+        "width": 51,
+        "height": 70
+      },
+      "kind": "sprite",
+      "doom_name": "TRE1A0",
+      "sprite": "TRE1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TRE2A0",
+      "rect": {
+        "x": 325,
+        "y": 2,
+        "width": 124,
+        "height": 124
+      },
+      "kind": "sprite",
+      "doom_name": "TRE2A0",
+      "sprite": "TRE2",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOA1",
+      "rect": {
+        "x": 1033,
+        "y": 147,
+        "width": 48,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOA1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOA2A8",
+      "rect": {
+        "x": 754,
+        "y": 147,
+        "width": 44,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOA2A8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOA3A7",
+      "rect": {
+        "x": 1133,
+        "y": 147,
+        "width": 46,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOA3A7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOA4A6",
+      "rect": {
+        "x": 314,
+        "y": 147,
+        "width": 46,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOA4A6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "A",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOA5",
+      "rect": {
+        "x": 1544,
+        "y": 147,
+        "width": 45,
+        "height": 59
+      },
+      "kind": "sprite",
+      "doom_name": "TROOA5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOB1",
+      "rect": {
+        "x": 2,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOB1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOB2B8",
+      "rect": {
+        "x": 800,
+        "y": 147,
+        "width": 44,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOB2B8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOB3B7",
+      "rect": {
+        "x": 1541,
+        "y": 2,
+        "width": 42,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOB3B7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOB4B6",
+      "rect": {
+        "x": 1178,
+        "y": 2,
+        "width": 40,
+        "height": 64
+      },
+      "kind": "sprite",
+      "doom_name": "TROOB4B6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "B",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOB5",
+      "rect": {
+        "x": 54,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOB5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOC1",
+      "rect": {
+        "x": 1083,
+        "y": 147,
+        "width": 48,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOC1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOC2C8",
+      "rect": {
+        "x": 935,
+        "y": 147,
+        "width": 39,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOC2C8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOC3C7",
+      "rect": {
+        "x": 846,
+        "y": 147,
+        "width": 44,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOC3C7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOC4C6",
+      "rect": {
+        "x": 490,
+        "y": 147,
+        "width": 39,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOC4C6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "C",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOC5",
+      "rect": {
+        "x": 1181,
+        "y": 147,
+        "width": 45,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOC5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOD1",
+      "rect": {
+        "x": 106,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOD1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOD2D8",
+      "rect": {
+        "x": 448,
+        "y": 147,
+        "width": 40,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOD2D8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOD3D7",
+      "rect": {
+        "x": 1629,
+        "y": 2,
+        "width": 39,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOD3D7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOD4D6",
+      "rect": {
+        "x": 1135,
+        "y": 2,
+        "width": 41,
+        "height": 64
+      },
+      "kind": "sprite",
+      "doom_name": "TROOD4D6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "D",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOD5",
+      "rect": {
+        "x": 158,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOD5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOE1",
+      "rect": {
+        "x": 569,
+        "y": 147,
+        "width": 29,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOE1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOE2E8",
+      "rect": {
+        "x": 1585,
+        "y": 2,
+        "width": 42,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOE2E8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOE3E7",
+      "rect": {
+        "x": 1670,
+        "y": 2,
+        "width": 39,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOE3E7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOE4E6",
+      "rect": {
+        "x": 362,
+        "y": 147,
+        "width": 41,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOE4E6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "E",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOE5",
+      "rect": {
+        "x": 531,
+        "y": 147,
+        "width": 36,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOE5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOF1",
+      "rect": {
+        "x": 600,
+        "y": 147,
+        "width": 54,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOF1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOF2F8",
+      "rect": {
+        "x": 1334,
+        "y": 2,
+        "width": 52,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOF2F8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOF3F7",
+      "rect": {
+        "x": 1780,
+        "y": 2,
+        "width": 60,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOF3F7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOF4F6",
+      "rect": {
+        "x": 1953,
+        "y": 2,
+        "width": 51,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOF4F6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "F",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOF5",
+      "rect": {
+        "x": 405,
+        "y": 147,
+        "width": 41,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOF5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "F",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOG1",
+      "rect": {
+        "x": 996,
+        "y": 2,
+        "width": 71,
+        "height": 64
+      },
+      "kind": "sprite",
+      "doom_name": "TROOG1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOG2G8",
+      "rect": {
+        "x": 1220,
+        "y": 2,
+        "width": 55,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOG2G8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOG3G7",
+      "rect": {
+        "x": 1277,
+        "y": 2,
+        "width": 55,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOG3G7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOG4G6",
+      "rect": {
+        "x": 210,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOG4G6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "G",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOG5",
+      "rect": {
+        "x": 1069,
+        "y": 2,
+        "width": 64,
+        "height": 64
+      },
+      "kind": "sprite",
+      "doom_name": "TROOG5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "G",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOH1",
+      "rect": {
+        "x": 1388,
+        "y": 2,
+        "width": 49,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOH1",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 1,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOH2H8",
+      "rect": {
+        "x": 656,
+        "y": 147,
+        "width": 50,
+        "height": 61
+      },
+      "kind": "sprite",
+      "doom_name": "TROOH2H8",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 2,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 8,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOH3H7",
+      "rect": {
+        "x": 976,
+        "y": 147,
+        "width": 55,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOH3H7",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 3,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 7,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOH4H6",
+      "rect": {
+        "x": 1898,
+        "y": 2,
+        "width": 53,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOH4H6",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 4,
+          "mirrored": false
+        },
+        {
+          "frame": "H",
+          "angle": 6,
+          "mirrored": true
+        }
+      ]
+    },
+    {
+      "name": "TROOH5",
+      "rect": {
+        "x": 1228,
+        "y": 147,
+        "width": 41,
+        "height": 60
+      },
+      "kind": "sprite",
+      "doom_name": "TROOH5",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "H",
+          "angle": 5,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOI0",
+      "rect": {
+        "x": 1439,
+        "y": 2,
+        "width": 49,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROOI0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "I",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOJ0",
+      "rect": {
+        "x": 1842,
+        "y": 2,
+        "width": 54,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOJ0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "J",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOK0",
+      "rect": {
+        "x": 1307,
+        "y": 329,
+        "width": 45,
+        "height": 54
+      },
+      "kind": "sprite",
+      "doom_name": "TROOK0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "K",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOL0",
+      "rect": {
+        "x": 1273,
+        "y": 387,
+        "width": 42,
+        "height": 43
+      },
+      "kind": "sprite",
+      "doom_name": "TROOL0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "L",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOM0",
+      "rect": {
+        "x": 554,
+        "y": 476,
+        "width": 57,
+        "height": 26
+      },
+      "kind": "sprite",
+      "doom_name": "TROOM0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "M",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROON0",
+      "rect": {
+        "x": 1490,
+        "y": 2,
+        "width": 49,
+        "height": 63
+      },
+      "kind": "sprite",
+      "doom_name": "TROON0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "N",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOO0",
+      "rect": {
+        "x": 262,
+        "y": 147,
+        "width": 50,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "TROOO0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "O",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOP0",
+      "rect": {
+        "x": 351,
+        "y": 329,
+        "width": 56,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "TROOP0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "P",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOQ0",
+      "rect": {
+        "x": 1168,
+        "y": 387,
+        "width": 55,
+        "height": 45
+      },
+      "kind": "sprite",
+      "doom_name": "TROOQ0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "Q",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOR0",
+      "rect": {
+        "x": 1746,
+        "y": 387,
+        "width": 57,
+        "height": 38
+      },
+      "kind": "sprite",
+      "doom_name": "TROOR0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "R",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOS0",
+      "rect": {
+        "x": 324,
+        "y": 442,
+        "width": 65,
+        "height": 32
+      },
+      "kind": "sprite",
+      "doom_name": "TROOS0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "S",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOT0",
+      "rect": {
+        "x": 1942,
+        "y": 442,
+        "width": 65,
+        "height": 29
+      },
+      "kind": "sprite",
+      "doom_name": "TROOT0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "T",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "TROOU0",
+      "rect": {
+        "x": 1125,
+        "y": 442,
+        "width": 66,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "TROOU0",
+      "sprite": "TROO",
+      "aliases": [
+        {
+          "frame": "U",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    }
+  ]
+}

@@ -10,7 +10,7 @@
 Math := [].{
 
 	# TODO(follow up): Restore derived equality once Roc compiles comparisons
-	# through platform aliases without looping (nightly-2026-09-07-14d9829).
+	# through platform aliases without looping (nightly-2026-09-10-a670e34).
 	## Two-dimensional floating-point vector, also named `Draw.Vector2`.
 	Vec2 := {
 		x : F32,
@@ -20,6 +20,12 @@ Math := [].{
 		## Compare two of these values.
 		is_eq : Vec2, Vec2 -> Bool
 		is_eq = |a, b| a.x == b.x and a.y == b.y
+	}
+
+	## Three-dimensional floating-point vector.
+	Vec3 := { x : F32, y : F32, z : F32 }.{
+		is_eq : Vec3, Vec3 -> Bool
+		is_eq = |a, b| a.x == b.x and a.y == b.y and a.z == b.z
 	}
 
 	## Axis-aligned rectangle represented by top-left position and size.
@@ -49,6 +55,10 @@ Math := [].{
 	## Construct a two-dimensional vector.
 	vec2 : F32, F32 -> Vec2
 	vec2 = |x, y| { x, y }
+
+	## Construct a three-dimensional vector.
+	vec3 : F32, F32, F32 -> Vec3
+	vec3 = |x, y, z| { x, y, z }
 
 	## The zero vector.
 	zero : Vec2

@@ -63,7 +63,7 @@ capture_scale_ratio = |value|
 		}
 
 # TODO(follow up): Restore derived equality when Roc handles it through type aliases
-# without looping during compilation (nightly-2026-09-07-14d9829).
+# without looping during compilation (nightly-2026-09-10-a670e34).
 CaptureFormat := [Png, Gif, WebM].{
 
 	## Compare two of these values.

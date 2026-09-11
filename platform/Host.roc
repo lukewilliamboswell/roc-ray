@@ -1083,6 +1083,21 @@ Host := [].{
 	## it, and say so where they are used.
 	DrawScopeError : [ScopeLimit, ScopeUnavailable]
 
+	## Begin perspective 3D drawing with a camera.
+	## Legal in `render!` only.
+	draw_begin_camera_3d! : Camera.Camera3D => Try({}, DrawScopeError)
+
+	## End 3D camera drawing and restore any outer 3D camera.
+	## Legal in `render!` only.
+	draw_end_camera_3d! : () => {}
+
+	DrawTexturedVertex3D : { position : Math.Vec3, uv : Math.Vec2, tint : Color.Rgba }
+	DrawTexturedTriangles3D : { texture : Texture, vertices : List(DrawTexturedVertex3D), indices : List(U32) }
+
+	## Draw an immediate indexed textured-triangle batch.
+	## Legal in `render!` only.
+	draw_draw_textured_triangles_3d! : DrawTexturedTriangles3D => {}
+
 	## Begin 2D drawing with a camera.
 	## Legal in `render!` only.
 	draw_begin_camera! : Camera.Camera2D => Try({}, DrawScopeError)

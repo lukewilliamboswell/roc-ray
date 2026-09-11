@@ -21,7 +21,7 @@
 ## This app opens a window, draws a circle, and exits on Escape:
 ##
 ## ```roc
-## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-07-14d9829" }
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 ##
 ## import rr.App
 ## import rr.Color
@@ -65,7 +65,7 @@ platform ""
 	}
 	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace]
 	packages {
-		roc: "nightly-2026-09-07-14d9829",
+		roc: "nightly-2026-09-10-a670e34",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	}
@@ -177,6 +177,9 @@ platform ""
 		"roc_task_spawn": Host.task_spawn!,
 		"roc_tilemap_load_tmx_raw": Host.tilemap_load_tmx!,
 		"roc_tilemap_draw_raw": Host.tilemap_draw!,
+		"roc_draw_begin_camera_3d": Host.draw_begin_camera_3d!,
+		"roc_draw_end_camera_3d": Host.draw_end_camera_3d!,
+		"roc_draw_draw_textured_triangles_3d_raw": Host.draw_draw_textured_triangles_3d!,
 		"roc_draw_begin_camera": Host.draw_begin_camera!,
 		"roc_draw_begin_blend_raw": Host.draw_begin_blend!,
 		"roc_draw_begin_render_texture_raw": Host.draw_begin_render_texture!,

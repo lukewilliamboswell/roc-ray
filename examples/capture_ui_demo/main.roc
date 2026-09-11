@@ -2,7 +2,7 @@
 ## `captures/ui_demo.gif`, then exits. This example shows how simulated mouse,
 ## key, and text input can exercise normal UI code, and how to include a cursor
 ## in a recording.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-07-14d9829" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Capture

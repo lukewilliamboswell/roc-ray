@@ -6,7 +6,7 @@
 ## copies of one texture in a single batch.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -152,10 +152,15 @@ initial_particles = List.map_with_index(
 	},
 )
 
-init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed])
+init! : App.Init(Model, [PermissionDenied, ResourceLimit, TextureGenerationFailed])
 init! = App.init_for_args(
 	particles_config,
-	|startup| {
+	|io| {
+		match particles_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		sprite = Assets.generate_color_texture!({ width: 8, height: 8, color: Color.white })?
 		font = Draw.default_font!()
 		Ok({
@@ -163,13 +168,13 @@ init! = App.init_for_args(
 			particles: initial_particles,
 			instances: List.map(initial_particles, Particle.to_instance),
 			hud: Text.from("4000 sprites, one hosted call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
-			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo: List.contains(io.args!(), record_demo_flag),
 		})
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
 	dt = F32.min(program_input.time.elapsed_seconds, 0.05)

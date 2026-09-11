@@ -2,7 +2,7 @@
 ## Move with WASD or the arrow keys, zoom with the mouse wheel, rotate with
 ## Q/E, reset with R, and quit with Escape. This example demonstrates camera
 ## drawing and converting positions between world and screen coordinates.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Camera
@@ -41,7 +41,7 @@ world_bottom = 1200.F32
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			player: { x: 400, y: 300 },
@@ -78,8 +78,8 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
 

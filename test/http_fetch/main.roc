@@ -1,7 +1,7 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -51,8 +51,8 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [])
 init! = App.init_for_args(
 	|_args| App.default,
-	|startup| {
-		args = App.args!(startup)
+	|io| {
+		args = io.args!()
 		expected_error = flag_value(args, "--http-expect-error", "")
 		Ok({
 			url: flag_value(args, "--http-url", ""),
@@ -92,12 +92,12 @@ flag_number = |args, flag, fallback| {
 	}
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	if model.cycle == 0 {
 		url = model.url
 		config = model.config
-		Task.spawn!(input, || fetch!(config, url))
+		Task.spawn!(input, || fetch!(io, config, url))
 	}
 	outcome = List.fold(input.messages, model.outcome, |current, message| judge(current, message, model.expectation))
 	next = { ..model, cycle: model.cycle + 1, outcome }
@@ -115,9 +115,9 @@ update! = |model, input| {
 
 ## The whole exchange, written as if it were synchronous. It is not: the host
 ## parks this coroutine on the socket and the frame loop keeps running.
-fetch! : Http.Config, Str => Msg
-fetch! = |config, url|
-	match Http.send_with!(config, Request.from_method(GET).with_uri(url)) {
+fetch! : App.Io, Http.Config, Str => Msg
+fetch! = |io, config, url|
+	match io.http().send_with!(config, Request.from_method(GET).with_uri(url)) {
 		Ok(response) =>
 			match Str.from_utf8(Response.body(response)) {
 				Ok(text) => Fetched(Response.status(response), text, List.len(Response.headers(response)))
@@ -156,9 +156,10 @@ judge = |current, message, expectation|
 		}
 
 ## Name a send failure without depending on how the platform renders it.
-describe : [InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str
+describe : [PermissionDenied, InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str
 describe = |err|
 	match err {
+		PermissionDenied => "HTTP access was not granted"
 		InvalidUrl(_) => "the URL was rejected before any host effect ran"
 		HttpErr(Timeout) => "the request timed out"
 		HttpErr(NetworkError) => "the request failed at the network layer"

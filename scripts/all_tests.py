@@ -97,6 +97,10 @@ _rewrite_platform_ref = local_bundles.rewrite_platform_ref
 # See `local_bundles.PACKAGE_LIMIT_ARGS`: a locally built platform bundle is
 # bigger than roc's default transitive-dependency budget.
 LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
+# Keep the ordinary developer/release path on Roc's default optimized backend.
+# CI may select the native dev backend when a pinned nightly's LLVM pipeline
+# exceeds hosted-runner memory or time limits.
+ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'speed')}"]
 
 # Examples to skip in the bundled-platform build test, mapping example name ->
 # reason. Use this when a specific example can't build against the bundled
@@ -204,6 +208,7 @@ def run_headless_examples(
             [
                 str(executable),
                 "--host-headless",
+                *([] if name == "hello_world" else ["--host-caps-allow-all"]),
                 f"--host-headless-frames={frames}",
             ],
             f"headless run {name}",
@@ -292,7 +297,7 @@ def _check_windowed_case(
         for stale in root.glob(expect_png["glob"]):
             stale.unlink()
 
-    cmd = [str(executable), "--host-hidden", f"--host-frames={frames}"]
+    cmd = [str(executable), "--host-hidden", "--host-caps-allow-all", f"--host-frames={frames}"]
     if "keys" in case:
         cmd.append(f"--host-keys={case['keys']}")
     if "text" in case:
@@ -433,7 +438,7 @@ def run_graphical_observatory_probe(
     graphical_run = subprocess.run(
         [
             str(executable),
-            "--host-hidden",
+            "--host-hidden", "--host-caps-allow-all",
             "--host-frames=3",
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
@@ -520,6 +525,35 @@ def run_graphical_observatory_probe(
     return failures
 
 
+def run_capability_probe(root: Path, packages: local_bundles.ServedPackages, verbose: bool) -> list[str]:
+    """The same app must deny by default and admit explicitly granted work."""
+    staged = local_bundles.stage_app(
+        root / "test/capabilities/main.roc", packages, packages.scratch_dir / "capabilities"
+    )
+    if not run_cmd(["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS],
+                   "build capability probe", verbose, cwd=staged.parent):
+        return ["build capability probe"]
+    failures = []
+    for allowed in (False, True):
+        cwd = staged.parent / ("allowed" if allowed else "denied")
+        cwd.mkdir()
+        command = [str(executable_for(staged)), "--host-headless", "--host-headless-frames=200"]
+        if allowed:
+            command.extend(["--host-caps-allow-all", "--expect-allowed"])
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
+        if result.returncode or "DENIED_OUTPUT_LEAK" in result.stdout + result.stderr:
+            failures.append(f"capability probe allowed={allowed}: {result.returncode} {result.stderr}")
+        if (cwd / "denied.txt").exists() or (cwd / "stub.txt").exists() or (cwd / "task.txt").exists() != allowed:
+            failures.append(f"capability probe touched unexpected files: allowed={allowed}")
+    crashed = subprocess.run(
+        [str(executable_for(staged)), "--host-headless", "--probe-crash"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    if crashed.returncode != 1 or "DENIED_OUTPUT_LEAK" in crashed.stdout + crashed.stderr:
+        failures.append("restricted crash diagnostics leaked a payload or lost the failure")
+    return failures
+
+
 def run_cli_args_integration(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -531,7 +565,7 @@ def run_cli_args_integration(
     print("\nRunning CLI argument integration probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cli_args")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build CLI argument probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build CLI argument probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build CLI argument probe"]
@@ -539,7 +573,7 @@ def run_cli_args_integration(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=3",
             "--cli-args-config",
             "--headless",
@@ -571,7 +605,7 @@ def run_task_delivery_probe(
     print("\nRunning task delivery probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_delivery")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build task delivery probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build task delivery probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build task delivery probe"]
@@ -579,7 +613,7 @@ def run_task_delivery_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=200",
         ],
         "run task delivery probe",
@@ -601,7 +635,7 @@ def run_observatory_probe(
     print("\nRunning Observatory capture probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "observatory")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build Observatory probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build Observatory probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build Observatory probe"]
@@ -610,7 +644,7 @@ def run_observatory_probe(
     recorded_run = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -641,7 +675,7 @@ def run_observatory_probe(
     unwritable = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=8",
             f"--host-stats-output={staged.parent / 'missing-parent' / 'capture.rrstats'}",
         ],
@@ -661,7 +695,7 @@ def run_observatory_probe(
     refusal = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -680,7 +714,7 @@ def run_observatory_probe(
     race_capture = staged.parent / "race.rrstats"
     race_command = [
         str(executable_for(staged)),
-        "--host-headless",
+        "--host-headless", "--host-caps-allow-all",
         "--host-headless-frames=8",
         f"--host-stats-output={race_capture}",
         "--host-stats-detail=summary",
@@ -928,7 +962,7 @@ def run_observatory_probe(
         abrupt_fixture, packages, packages.scratch_dir / "observatory-abrupt"
     )
     if not run_cmd(
-        ["roc", "build", abrupt_staged.name, *LIMITS],
+        ["roc", "build", *ROC_BUILD_ARGS, abrupt_staged.name, *LIMITS],
         "build abrupt Observatory probe",
         verbose,
         cwd=abrupt_staged.parent,
@@ -939,7 +973,7 @@ def run_observatory_probe(
         process = subprocess.Popen(
             [
                 str(executable_for(abrupt_staged)),
-                "--host-headless",
+                "--host-headless", "--host-caps-allow-all",
                 "--host-headless-frames=1000000000",
                 f"--host-stats-output={abrupt_capture}",
                 "--host-stats-detail=summary",
@@ -1025,7 +1059,7 @@ def run_task_cap_probe(
     print("\nRunning task cap probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_cap")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build task cap probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build task cap probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build task cap probe"]
@@ -1033,7 +1067,7 @@ def run_task_cap_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=400",
         ],
         "run task cap probe",
@@ -1067,7 +1101,7 @@ def run_file_write_probe(
     print("\nRunning file write probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "file_write")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build file write probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build file write probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build file write probe"]
@@ -1075,7 +1109,7 @@ def run_file_write_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'file-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1111,7 +1145,7 @@ def run_cmd_probe(
     print("\nRunning subprocess probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cmd")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build cmd probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build cmd probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build cmd probe"]
@@ -1119,7 +1153,7 @@ def run_cmd_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=400",
             f"--host-stats-output={staged.parent / 'cmd-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1164,7 +1198,7 @@ def run_udp_probe(
     print("\nRunning UDP socket probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "udp")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build udp probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build udp probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build udp probe"]
@@ -1174,7 +1208,7 @@ def run_udp_probe(
         ok = run_cmd(
             [
                 str(executable_for(staged)),
-                "--host-headless",
+                "--host-headless", "--host-caps-allow-all",
                 "--host-headless-frames=300",
                 *extra,
             ],
@@ -1208,13 +1242,13 @@ def run_virtual_keys_probe(
     print("\nRunning virtual keyboard probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "virtual_keys")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build virtual keys probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build virtual keys probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build virtual keys probe"]
 
     ok = run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
+        [str(executable_for(staged)), "--host-headless", "--host-caps-allow-all", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
         "run virtual keys probe",
         verbose,
         cwd=staged.parent,
@@ -1247,7 +1281,7 @@ def run_sqlite_probe(
     print("\nRunning sqlite probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "sqlite")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build sqlite probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build sqlite probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build sqlite probe"]
@@ -1255,7 +1289,7 @@ def run_sqlite_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless",
+            "--host-headless", "--host-caps-allow-all",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'sqlite-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1294,7 +1328,7 @@ def run_model_allocation_check(
     print("\nMeasuring model collection allocation per frame...", end=" ", flush=True)
     staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "model_inplace")
     if not run_cmd(
-        ["roc", "build", staged.name, *LIMITS], "build model allocation probe", verbose, cwd=staged.parent
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build model allocation probe", verbose, cwd=staged.parent
     ):
         print("FAILED (build)")
         return ["model allocation probe build"]
@@ -1383,8 +1417,9 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
                 example, packages, packages.scratch_dir / "wayland-example"
             )
             command = "build" if IS_LINUX else "check"
+            build_args = ROC_BUILD_ARGS if command == "build" else []
             ok = run_cmd(
-                ["roc", command, staged.name, *LIMITS],
+                ["roc", command, *build_args, staged.name, *LIMITS],
                 f"wayland bundle {command} {name}",
                 verbose,
                 cwd=staged.parent,
@@ -1801,7 +1836,7 @@ def _run_example_stages(
 
             print(f"  Building {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "build", staged[example].name, *LIMITS],
+                ["roc", "build", *ROC_BUILD_ARGS, staged[example].name, *LIMITS],
                 f"build {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -1851,6 +1886,7 @@ def _run_example_stages(
     if args.skip_integration_probes:
         print("\nSkipping repository integration probes (--skip-integration-probes)")
     elif not (args.skip_runtime or args.skip_roc_build):
+        failed.extend(run_capability_probe(root, packages, args.verbose))
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_observatory_probe(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))

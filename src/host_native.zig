@@ -61,7 +61,6 @@ const FontMetrics = abi.FontMetrics;
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const Color = abi.ColorRgba;
 const AppReadEnvResult = abi.HostApp_read_envResult;
-const AppReadTextResult = abi.HostApp_read_textResult;
 const TilemapLoadTmxResult = abi.HostTilemap_load_tmxResult;
 const AppConfig = abi.App_config_for_host;
 // One cycle of observations handed to update. Unions do not cross this
@@ -88,7 +87,7 @@ const TilemapRawTileset = abi.HostTilemap_load_tmxOkTilesets;
 /// application can say whether its installation or one optional asset failed.
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_ASSET_MANIFEST_BYTES: usize = 1024 * 1024;
-/// The largest file `Audio.load_sound!` and `Audio.load_music!` will read. It
+/// The largest file `Audio.Loader.load_sound!` and `Audio.Loader.load_music!` will read. It
 /// bounds host memory per resource, not per frame: a sound is decoded whole
 /// onto the device, and a music stream holds its encoded bytes for as long as
 /// it exists. A larger file fails to load rather than being read.
@@ -111,8 +110,8 @@ const MAX_FILE_READ_BYTES: usize = 16 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
-extern fn init_for_host() callconv(.c) RocResult;
-extern fn update_for_host(arg0: RocBox, arg1: InputFromHost) callconv(.c) UpdateResult;
+extern fn init_for_host(authority: u64) callconv(.c) RocResult;
+extern fn update_for_host(arg0: RocBox, arg1: InputFromHost, authority: u64) callconv(.c) UpdateResult;
 extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
 extern fn run_task_for_host(arg0: abi.RocErasedCallable) callconv(.c) abi.RocErasedCallable;
@@ -166,8 +165,8 @@ const DIR_ENTRY_OTHER: u8 = 3;
 /// The most the host will copy into a Roc string in one operation.
 ///
 /// Converting the bytes into a `Str` allocates and copies, which is why only
-/// the reads that produce a string carry this limit: `Files.read_text!`
-/// reports `TooLarge` above it, while `Files.read_bytes!` transfers its
+/// the reads that produce a string carry this limit: `Files.Access.read_text!`
+/// reports `TooLarge` above it, while `Files.Access.read_bytes!` transfers its
 /// allocation as an owning Roc byte list without copying and is bounded by the
 /// much larger `MAX_FILE_READ_BYTES` instead.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
@@ -642,9 +641,9 @@ const Phase = enum {
 /// Callback phases in which an operation is valid.
 const PhaseSet = std.EnumSet(Phase);
 
-/// Startup-only operations: the `App.Startup` capabilities (blocking reads,
-/// the clipboard read, the random seed), which exist so that `init!` can do
-/// one-off setup work with the window already open.
+/// Startup-only operations: process arguments, environment, startup font,
+/// startup exit, and random seeds. Other Io receivers retain the phase sets
+/// of their corresponding host effects.
 const during_startup = PhaseSet.initOne(.startup);
 
 /// Drawing, and anything that changes how the draws after it are interpreted.
@@ -1009,14 +1008,14 @@ fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize,
     };
 }
 
-/// `Files.read_text!`: read a bounded UTF-8 file into a `Str`.
+/// `Files.Access.read_text!`: read a bounded UTF-8 file into a `Str`.
 ///
 /// The whole file is copied into the string, so the ceiling is the small one:
 /// this is the only read whose cost on the frame thread is proportional to the
 /// file. A file that is not valid UTF-8 is reported rather than delivered,
 /// because `RocStr.fromSlice` only copies and every later string operation on
 /// an invalid one would be undefined.
-/// Name a read code in `Files.read_text!`'s vocabulary.
+/// Name a read code in `Files.Access.read_text!`'s vocabulary.
 fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1030,8 +1029,8 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
 
 fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
     const Result = abi.HostFiles_read_textResult;
-    enforcePhase("Files.read_text!", during_wait);
-    var effect = EffectScope.begin("Files.read_text!", path_arg.asSlice().len);
+    enforcePhase("Files.Access.read_text!", during_wait);
+    var effect = EffectScope.begin("Files.Access.read_text!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
 
@@ -1064,14 +1063,14 @@ fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_t
     return hostedFilesReadText(activeHost(), path_arg);
 }
 
-/// `Files.read_bytes!`: read a bounded file without copying its payload.
+/// `Files.Access.read_bytes!`: read a bounded file without copying its payload.
 ///
 /// The buffer the read filled is the buffer Roc gets: it moves into the typed
 /// byte-list heap and out again as an owning seamless `List(U8)`, so a 16 MiB
 /// file costs one allocation and no copy. A delivery slot is reserved before
 /// any I/O starts, so a full heap answers `Busy` rather than reading a file and
 /// discarding it.
-/// Name a read code in `Files.read_bytes!`'s vocabulary.
+/// Name a read code in `Files.Access.read_bytes!`'s vocabulary.
 fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1084,8 +1083,8 @@ fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
 
 fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
     const Result = abi.HostFiles_read_bytesResult;
-    enforcePhase("Files.read_bytes!", during_wait);
-    var effect = EffectScope.begin("Files.read_bytes!", path_arg.asSlice().len);
+    enforcePhase("Files.Access.read_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.Access.read_bytes!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     const result = readByteListWaiting(roc_host, path_arg.asSlice(), .read);
@@ -1101,12 +1100,12 @@ fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_
     return hostedFilesReadBytes(activeHost(), path_arg);
 }
 
-/// `Files.list!`: one directory's entries, encoded into the same byte list a
+/// `Files.Access.list!`: one directory's entries, encoded into the same byte list a
 /// read delivers and decoded by `Files`.
-/// Name a read code in `Files.list!`'s vocabulary.
+/// Name a read code in `Files.Access.list!`'s vocabulary.
 ///
 /// A listing is the only one of the three that can be refused for not being a
-/// directory, which is why it does not share `Files.read_bytes!`'s union.
+/// directory, which is why it does not share `Files.Access.read_bytes!`'s union.
 fn filesListError(code: u8) abi.HostFiles_listErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1120,8 +1119,8 @@ fn filesListError(code: u8) abi.HostFiles_listErr {
 
 fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
     const Result = abi.HostFiles_listResult;
-    enforcePhase("Files.list!", during_wait);
-    var effect = EffectScope.begin("Files.list!", path_arg.asSlice().len);
+    enforcePhase("Files.Access.list!", during_wait);
+    var effect = EffectScope.begin("Files.Access.list!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
@@ -1190,7 +1189,7 @@ const StatOutcome = struct {
     found: abi.HostFiles_metadataOk,
 };
 
-/// Name a stat code in `Files.metadata!`'s vocabulary.
+/// Name a stat code in `Files.Access.metadata!`'s vocabulary.
 fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1200,11 +1199,11 @@ fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
     };
 }
 
-/// `Files.metadata!`: what one path is, how big it is, and when it changed.
+/// `Files.Access.metadata!`: what one path is, how big it is, and when it changed.
 fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
     const Result = abi.HostFiles_metadataResult;
-    enforcePhase("Files.metadata!", during_wait);
-    var effect = EffectScope.begin("Files.metadata!", path_arg.asSlice().len);
+    enforcePhase("Files.Access.metadata!", during_wait);
+    var effect = EffectScope.begin("Files.Access.metadata!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     const scope = WaitScope.enter();
@@ -1266,10 +1265,10 @@ fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []c
     return 0;
 }
 
-/// `Files.write_text!`: replace a file's contents with a UTF-8 string.
+/// `Files.Access.write_text!`: replace a file's contents with a UTF-8 string.
 fn hostedFilesWriteTextCode(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) u8 {
-    enforcePhase("Files.write_text!", during_wait);
-    var effect = EffectScope.begin("Files.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
+    enforcePhase("Files.Access.write_text!", during_wait);
+    var effect = EffectScope.begin("Files.Access.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     defer contents_arg.decref(roc_host);
@@ -1308,10 +1307,10 @@ fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callco
     return hostedFilesWriteText(activeHost(), path_arg, contents_arg);
 }
 
-/// `Files.write_bytes!`: replace a file's contents with the app's bytes.
+/// `Files.Access.write_bytes!`: replace a file's contents with the app's bytes.
 fn hostedFilesWriteBytesCode(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) u8 {
-    enforcePhase("Files.write_bytes!", during_wait);
-    var effect = EffectScope.begin("Files.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
+    enforcePhase("Files.Access.write_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.Access.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     defer bytes_arg.decref(roc_host);
@@ -1383,7 +1382,7 @@ fn queueStreamWrite(stream: u8, head: []const u8, tail: []const u8) u8 {
     return stdio_effect.write(streamRing(stream), head, tail);
 }
 
-/// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
+/// `Stdout.Writer.write!` and `Stderr.Writer.write!`: the app's string, with nothing added.
 /// Name a queued-write code in `Stdout`'s and `Stderr`'s vocabulary.
 fn stdioWriteResult(comptime Result: type, code: u8) Result {
     const Union = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
@@ -1396,7 +1395,7 @@ fn stdioWriteResult(comptime Result: type, code: u8) Result {
 }
 
 fn hostedStdioWriteTextCode(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) u8 {
-    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!";
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write!" else "Stderr.Writer.write!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, text_arg.asSlice().len);
     defer effect.end();
@@ -1414,12 +1413,12 @@ fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) abi.Hos
     return hostedStdioWriteText(activeHost(), stream, text_arg);
 }
 
-/// `Stdout.line!` and `Stderr.line!`: the app's string and one newline.
+/// `Stdout.Writer.line!` and `Stderr.Writer.line!`: the app's string and one newline.
 ///
 /// The newline is the host's byte rather than a copy of the app's string with
 /// one appended, so a line costs no allocation and is queued as one payload.
 fn hostedStdioWriteLineCode(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) u8 {
-    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!";
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.line!" else "Stderr.Writer.line!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, text_arg.asSlice().len);
     defer effect.end();
@@ -1437,9 +1436,9 @@ fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) abi.Hos
     return hostedStdioWriteLine(activeHost(), stream, text_arg);
 }
 
-/// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
+/// `Stdout.Writer.write_bytes!` and `Stderr.Writer.write_bytes!`: bytes, passed through.
 fn hostedStdioWriteBytesCode(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) u8 {
-    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!";
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write_bytes!" else "Stderr.Writer.write_bytes!";
     enforcePhase(name, during_update);
     var effect = EffectScope.begin(name, bytes_arg.items().len);
     defer effect.end();
@@ -1457,7 +1456,7 @@ fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) ca
     return hostedStdioWriteBytes(activeHost(), stream, bytes_arg);
 }
 
-/// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
+/// `Capture.Writer.screenshot!`: one PNG of the frame the caller is waiting on.
 ///
 /// The readback has to happen on the frame thread inside the drawing scope, so
 /// the effect registers the request, parks the task, and is woken by
@@ -1500,17 +1499,17 @@ fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     return captureWriteResult(abi.HostCapture_screenshotResult, hostedCaptureScreenshotCode(roc_host, path_arg));
 }
 
-fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArgs) callconv(.c) abi.HostCapture_screenshot_textureResult {
+fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArg1) callconv(.c) abi.HostCapture_screenshot_textureResult {
     return captureWriteResult(abi.HostCapture_screenshot_textureResult, hostedCaptureScreenshotTextureCode(roc_host, args));
 }
 
-fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.HostCapture_start_recordingArgs) callconv(.c) abi.HostCapture_start_recordingResult {
+fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.HostCapture_start_recordingArg1) callconv(.c) abi.HostCapture_start_recordingResult {
     return captureWriteResult(abi.HostCapture_start_recordingResult, hostedCaptureStartRecordingCode(roc_host, args));
 }
 
 fn hostedCaptureScreenshotCode(roc_host: *RocHost, path_arg: abi.RocStr) u8 {
-    enforcePhase("Capture.screenshot!", during_frame_wait);
-    var effect = EffectScope.begin("Capture.screenshot!", path_arg.asSlice().len);
+    enforcePhase("Capture.Writer.screenshot!", during_frame_wait);
+    var effect = EffectScope.begin("Capture.Writer.screenshot!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
     const path = path_arg.asSlice();
@@ -1601,17 +1600,17 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) abi.HostCapture_
     return hostedCaptureScreenshot(activeHost(), path_arg);
 }
 
-/// `Capture.screenshot_texture!`: one PNG of what a render target holds.
+/// `Capture.Writer.screenshot_texture!`: one PNG of what a render target holds.
 ///
 /// Unlike a screenshot this waits for nothing on the frame loop. The readback
 /// needs the graphics context, which lives on this thread, and Roc only ever
 /// runs on this thread -- so the pixels are taken synchronously, here, from
 /// whatever the last completed `render!` left in the target. Only the encode
 /// and the write park, on zio's blocking pool, which is why `init!` is a legal
-/// place to call this and is not for `Capture.screenshot!`.
-fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArgs) u8 {
-    enforcePhase("Capture.screenshot_texture!", during_wait);
-    var effect = EffectScope.begin("Capture.screenshot_texture!", 0);
+/// place to call this and is not for `Capture.Writer.screenshot!`.
+fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_screenshot_textureArg1) u8 {
+    enforcePhase("Capture.Writer.screenshot_texture!", during_wait);
+    var effect = EffectScope.begin("Capture.Writer.screenshot_texture!", 0);
     defer effect.end();
     defer args.path.decref(roc_host);
     const path = args.path.asSlice();
@@ -1637,7 +1636,7 @@ fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_
 
         // A headless render target has no pixels at all -- every draw into it
         // was a no-op -- so there is nothing to write. Answering `Ok` with no
-        // file is what `Capture.screenshot!` does for the same reason, and it
+        // file is what `Capture.Writer.screenshot!` does for the same reason, and it
         // keeps an exporting app runnable under `--host-headless`.
         const target = switch (resource.*) {
             .headless => break :readback capture.err_none,
@@ -1705,7 +1704,7 @@ fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_
     return blocking.join();
 }
 
-fn exportedCaptureScreenshotTexture(args: abi.HostCapture_screenshot_textureArgs) callconv(.c) abi.HostCapture_screenshot_textureResult {
+fn exportedCaptureScreenshotTexture(args: abi.HostCapture_screenshot_textureArg1) callconv(.c) abi.HostCapture_screenshot_textureResult {
     return hostedCaptureScreenshotTexture(activeHost(), args);
 }
 
@@ -1844,7 +1843,7 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
     }
 
     // The target's own dimensions rather than the ones the Roc value carries,
-    // for the reason `Capture.screenshot_texture!` gives: the readback is
+    // for the reason `Capture.Writer.screenshot_texture!` gives: the readback is
     // sized by what the GPU holds. A target too large for the whole budget and
     // one that would fit but for other work in flight are both `err_busy`
     // here; a readback reports one "not now" and the difference between them
@@ -1928,7 +1927,7 @@ fn exportedCapturePixelAt(args: abi.HostCapture_pixel_atArgs) callconv(.c) abi.H
 /// The order of the checks is the point. A region no source could satisfy is
 /// refused before anything is read, and a delivery slot is reserved before the
 /// readback, so the expensive part never runs for a read that has nowhere to
-/// put its answer -- the same admission `Files.read_bytes!` does before it
+/// put its answer -- the same admission `Files.Access.read_bytes!` does before it
 /// opens a path, and for the same reason.
 fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_regionArgs) abi.HostCapture_read_regionResult {
     enforcePhase("Capture.read_region!", during_update);
@@ -2046,7 +2045,7 @@ fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) ByteListOutcome {
     return .{ .err = 0, .bytes = seamlessByteList(resource, bytes) };
 }
 
-/// `Http.send!`: run one HTTP exchange, parking the task while it waits.
+/// `Http.Client.send!`: run one HTTP exchange, parking the task while it waits.
 ///
 /// The phase handling mirrors `hostedTaskSleep`: the request parks this
 /// coroutine, the frame loop runs in between and sets phases of its own, and
@@ -2054,8 +2053,8 @@ fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) ByteListOutcome {
 fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendResult {
     const Result = abi.HostHttp_sendResult;
     const Union = abi.HostHttp_sendErr;
-    enforcePhase("Http.send!", during_wait);
-    var effect = EffectScope.begin("Http.send!", 0);
+    enforcePhase("Http.Client.send!", during_wait);
+    var effect = EffectScope.begin("Http.Client.send!", 0);
     defer effect.end();
     const roc_host = activeHost();
     const resume_phase = active_phase;
@@ -2097,7 +2096,7 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendRe
 
 /// This process's own environment, as `std.process.Environ`.
 ///
-/// `Cmd.run!` needs it twice over: it is where a bare program name is resolved
+/// `Cmd.Runner.run!` needs it twice over: it is where a bare program name is resolved
 /// against `PATH`, and it is what a child inherits unless the command replaces
 /// it. `host_environ` is what `platform_main` captured off the process stack;
 /// under `zig test` no `platform_main` ran, so the libc-linked test binary
@@ -2118,7 +2117,7 @@ fn hostProcessEnviron() std.process.Environ {
     return .empty;
 }
 
-/// Name a run code in `Cmd.run!`'s vocabulary.
+/// Name a run code in `Cmd.Runner.run!`'s vocabulary.
 ///
 /// `Timeout` is absent: it is the one variant carrying the output captured
 /// before the deadline, so only the caller holding that output can build it.
@@ -2146,7 +2145,7 @@ fn cmdRunFailure(code: u8) abi.HostCmd_runResult {
 /// worker may not read a Roc value. Everything it needs -- the program, the
 /// arguments, the environment pairs, the working directory -- is duplicated
 /// into an arena the frame thread owns and discards when the run returns.
-fn copyCmdSpec(arena: std.mem.Allocator, args: abi.HostCmd_runArgs) ?cmd_effect.Spec {
+fn copyCmdSpec(arena: std.mem.Allocator, args: abi.HostCmd_runArg1) ?cmd_effect.Spec {
     const program = arena.dupe(u8, args.program.asSlice()) catch return null;
     const working_dir = arena.dupe(u8, args.working_dir.asSlice()) catch return null;
 
@@ -2177,7 +2176,7 @@ fn copyCmdSpec(arena: std.mem.Allocator, args: abi.HostCmd_runArgs) ?cmd_effect.
     };
 }
 
-/// `Cmd.run!`: start one child process and park until it has finished.
+/// `Cmd.Runner.run!`: start one child process and park until it has finished.
 ///
 /// A child slot is reserved before anything is copied or started, so a
 /// terminal `Busy` means precisely that no process was created.
@@ -2192,10 +2191,10 @@ fn copyCmdSpec(arena: std.mem.Allocator, args: abi.HostCmd_runArgs) ?cmd_effect.
 /// Both streams cross as ordinary copies rather than through the byte-list
 /// transfer path. A run produces two payloads where that path hands over one
 /// allocation per slot, and both are already bounded by limits the app stated.
-fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runResult {
+fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArg1) callconv(.c) abi.HostCmd_runResult {
     const Result = abi.HostCmd_runResult;
-    enforcePhase("Cmd.run!", during_wait);
-    var effect = EffectScope.begin("Cmd.run!", 0);
+    enforcePhase("Cmd.Runner.run!", during_wait);
+    var effect = EffectScope.begin("Cmd.Runner.run!", 0);
     defer effect.end();
     defer args.decref(roc_host);
 
@@ -2259,7 +2258,7 @@ fn hostedCmdRun(roc_host: *RocHost, args: abi.HostCmd_runArgs) callconv(.c) abi.
     return abiTryOk(Result, captured);
 }
 
-fn exportedCmdRun(args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runResult {
+fn exportedCmdRun(args: abi.HostCmd_runArg1) callconv(.c) abi.HostCmd_runResult {
     return hostedCmdRun(activeHost(), args);
 }
 
@@ -2272,7 +2271,7 @@ fn exportedCmdRun(args: abi.HostCmd_runArgs) callconv(.c) abi.HostCmd_runResult 
 /// can hand a turn to the executor, which runs other tasks' Roc code; the
 /// `PhaseScope` restore is what keeps the rest of this `update!` in the right
 /// phase afterwards, exactly as `Task.spawn!` does.
-fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindResult {
+fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArg1) callconv(.c) abi.HostUdp_bindResult {
     enforcePhase("Udp.bind!", during_load);
     var effect = EffectScope.begin("Udp.bind!", args.ip.asSlice().len);
     defer effect.end();
@@ -2311,7 +2310,7 @@ fn hostedUdpBind(host: *RocHost, args: abi.HostUdp_bindArgs) callconv(.c) abi.Ho
     });
 }
 
-fn exportedUdpBind(args: abi.HostUdp_bindArgs) callconv(.c) abi.HostUdp_bindResult {
+fn exportedUdpBind(args: abi.HostUdp_bindArg1) callconv(.c) abi.HostUdp_bindResult {
     return hostedUdpBind(activeHost(), args);
 }
 
@@ -2556,8 +2555,8 @@ fn hostedSqliteOpen(
     max_result_bytes: u64,
 ) callconv(.c) abi.HostSqlite_openResult {
     const Result = abi.HostSqlite_openResult;
-    enforcePhase("Sqlite.Db.open!", during_wait);
-    var effect = EffectScope.begin("Sqlite.Db.open!", path_arg.asSlice().len);
+    enforcePhase("Sqlite.Service.open!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Service.open!", path_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer path_arg.decref(roc_host);
@@ -2760,7 +2759,7 @@ fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
         describePhases(allowed, &buffer),
         active_phase.label(),
         if (allowed.eql(during_startup))
-            " It is an App.Startup capability: call it in init! and keep what it returns in your model."
+            " It is an App.Io capability: call it in init! and keep what it returns in your model."
         else if (allowed.eql(during_update))
             " It changes host state rather than drawing: call it from init!, update!, or a task, not from render!."
         else if (allowed.eql(during_render))
@@ -3268,7 +3267,7 @@ test "full draw detail names map to stable non-payload categories" {
     try std.testing.expectEqual(@as(?u8, 3), drawDetailKind("Draw.with_shader!"));
     try std.testing.expectEqual(@as(?u8, 4), drawDetailKind("Capture.read_region!"));
     try std.testing.expectEqual(@as(?u8, 5), drawDetailKind("Draw.with_render_texture!"));
-    try std.testing.expect(drawDetailKind("Http.send!") == null);
+    try std.testing.expect(drawDetailKind("Http.Client.send!") == null);
     try std.testing.expectEqual(@as(u64, 12), drawByteCount(u32, 3));
     try std.testing.expectEqual(@as(u64, 4), drawByteCount(abi.ColorRgba, 1));
 
@@ -3629,7 +3628,7 @@ var capture_recording_path_len: usize = 0;
 var capture_screenshot_path: [capture.path_capacity]u8 = undefined;
 var capture_screenshot_path_len: usize = 0;
 var capture_screenshot_pending: bool = false;
-/// The task waiting for `Capture.screenshot!` to finish, and its answer.
+/// The task waiting for `Capture.Writer.screenshot!` to finish, and its answer.
 ///
 /// One slot, because the host reads the framebuffer back once per frame and
 /// keeps one pending path. A second concurrent screenshot is `AlreadyPending`
@@ -3646,7 +3645,7 @@ const ScreenshotWait = struct {
     err: u8 = 0,
 };
 var screenshot_wait: ?*ScreenshotWait = null;
-/// Readback memory held by `Capture.screenshot_texture!` calls in flight.
+/// Readback memory held by `Capture.Writer.screenshot_texture!` calls in flight.
 ///
 /// Several tasks can export at once -- nothing serializes them the way the
 /// single end-of-frame readback serializes screenshots -- so this is what keeps
@@ -3982,7 +3981,7 @@ fn seamlessByteList(resource: *u64, bytes: []u8) abi.RocListWith(u8, false) {
 }
 
 /// Slots promised to reads that have started but have not yet handed their
-/// bytes over. `Files.read_bytes!` has to reserve one before it opens the
+/// bytes over. `Files.Access.read_bytes!` has to reserve one before it opens the
 /// path: otherwise a full heap could let `MAX_LIVE_FILE_BYTE_LISTS` large
 /// files be read only to discard each one when there is no slot to install it
 /// in, so the app would pay for the I/O and still get `Busy`.
@@ -4114,6 +4113,11 @@ fn activeHost() *RocHost {
 
 /// Custom dbg handler that sets flag and prints to stderr.
 fn nativeDbg(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
+    if (!external_caps_allowed) {
+        debug_or_expect_called.store(true, .release);
+        std.debug.print("roc-ray: debug message suppressed\n", .{});
+        return;
+    }
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[36m[ROC DBG]\x1b[0m {s}\n", .{msg});
@@ -4121,6 +4125,11 @@ fn nativeDbg(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
 
 /// Custom expect handler that sets flag and prints to stderr.
 fn nativeExpectFailed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
+    if (!external_caps_allowed) {
+        debug_or_expect_called.store(true, .release);
+        std.debug.print("roc-ray: expectation failed (details suppressed)\n", .{});
+        return;
+    }
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[33m[ROC EXPECT]\x1b[0m {s}\n", .{msg});
@@ -4128,6 +4137,11 @@ fn nativeExpectFailed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) 
 
 /// Crash handler - prints to stderr and exits.
 fn nativeCrashed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
+    if (!external_caps_allowed) {
+        debug_or_expect_called.store(true, .release);
+        std.debug.print("roc-ray: application crashed (details suppressed)\n", .{});
+        std.process.exit(1);
+    }
     const msg = bytes[0..len];
     std.debug.print("\x1b[31m[ROC CRASHED]\x1b[0m {s}\n", .{msg});
     std.process.exit(1);
@@ -4416,13 +4430,13 @@ fn abiTryErr(comptime Result: type, err: anytype) Result {
 }
 
 test "ABI Try constructors preserve typed success and error payloads" {
-    const ok = abiTryOk(AppReadTextResult, abi.RocStr.empty());
-    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Ok, ok.tag);
+    const ok = abiTryOk(abi.HostFiles_read_textResult, abi.RocStr.empty());
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, ok.tag);
     try std.testing.expectEqualStrings("", ok.payload_ok().asSlice());
 
-    const err = abiTryErr(AppReadTextResult, abi.HostApp_read_textErr.not_found);
-    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, err.tag);
-    try std.testing.expectEqual(abi.HostApp_read_textErr.not_found, err.payload_err());
+    const err = abiTryErr(abi.HostFiles_read_textResult, abi.HostFiles_read_textErr.not_found);
+    try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Err, err.tag);
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.not_found, err.payload_err());
 }
 
 fn tilemapLoadError(err: tmx_loader.LoadError) abi.HostTilemap_load_tmxErr {
@@ -5981,8 +5995,8 @@ fn releaseStartupFontHandle(host: *RocHost) void {
 fn configuredStartupFont(host: *RocHost) abi.HostText_startup_default_fontResult {
     const Result = abi.HostText_startup_default_fontResult;
     const Error = abi.HostText_startup_default_fontErr;
-    enforcePhase("App.Startup.default_font!", during_startup);
-    const effect = EffectScope.begin("App.Startup.default_font!", startup_font_config.path.len);
+    enforcePhase("App.Io.default_font!", during_startup);
+    const effect = EffectScope.begin("App.Io.default_font!", startup_font_config.path.len);
     defer effect.end();
     if (startup_font_config.path.len == 0) return abiTryOk(Result, completeFont(host, defaultFontHandle()));
     if (!isSafeStoreRelativePath(startup_font_config.path)) return abiTryErr(Result, Error.asset_path_invalid);
@@ -6183,6 +6197,7 @@ fn openStoreRootRelative(io: std.Io, base: std.Io.Dir, root: []const u8) !std.Io
 
 fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
+        .permission_denied => "external access was not granted",
         .root_not_found => "root directory was not found",
         .root_not_directory => "root is not a directory",
         .root_unreadable => "root directory is not readable",
@@ -6340,7 +6355,7 @@ fn matchAssetManifest(manifest: ParsedAssetManifest, asset_set: []const u8, sche
     return null;
 }
 
-fn expectedManifestHash(args: abi.HostStore_openArgs) union(enum) { any, hash: []const u8, invalid } {
+fn expectedManifestHash(args: abi.HostStore_openArg1) union(enum) { any, hash: []const u8, invalid } {
     const hash = args.content_hash.asSlice();
     return switch (args.content_hash_mode) {
         0 => if (hash.len == 0) .any else .invalid,
@@ -6349,7 +6364,7 @@ fn expectedManifestHash(args: abi.HostStore_openArgs) union(enum) { any, hash: [
     };
 }
 
-fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.HostStore_openArgs) ?abi.HostStore_openErr {
+fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.HostStore_openArg1) ?abi.HostStore_openErr {
     if (!args.manifest_required) return null;
     const bytes = switch (readDirFileWaiting(allocator, root.*, "roc-assets.manifest", MAX_ASSET_MANIFEST_BYTES)) {
         .failed => |err| return switch (err) {
@@ -6445,7 +6460,7 @@ test "asset store owns its directory capability through typed ARC" {
     try std.testing.expectEqual(@as(usize, 0), heap.active());
 }
 
-fn testStoreOpenArgs(host: *RocHost, root: []const u8, manifest_required: bool, content_hash_mode: u8, content_hash: []const u8) abi.HostStore_openArgs {
+fn testStoreOpenArgs(host: *RocHost, root: []const u8, manifest_required: bool, content_hash_mode: u8, content_hash: []const u8) abi.HostStore_openArg1 {
     return .{
         .asset_set = abi.RocStr.fromSlice("test-assets", host),
         .content_hash = abi.RocStr.fromSlice(content_hash, host),
@@ -6542,7 +6557,7 @@ test "opening a store and loading a texture from it wait rather than load" {
         last_phase_violation = null;
         _ = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Assets.Store.open!", violation.operation);
+        try std.testing.expectEqualStrings("Assets.Loader.open!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(Phase.update, violation.actual);
     }
@@ -6634,16 +6649,16 @@ test "embedded texture and font bytes are consumed exactly once" {
     bad_font_bytes.decref(&roc_host);
 }
 
-/// `Assets.Store.open!`: open a store root and check its manifest.
+/// `Assets.Loader.open!`: open a store root and check its manifest.
 ///
 /// Opening a directory and reading a manifest are both filesystem work, so
 /// this waits: it parks a task and blocks `init!`. The validation that follows
 /// is pure and runs on the frame thread once the read has come back.
-fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openResult {
+fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
     const Result = abi.HostStore_openResult;
     const Error = abi.HostStore_openErr;
-    enforcePhase("Assets.Store.open!", during_wait);
-    const effect = EffectScope.begin("Assets.Store.open!", 0);
+    enforcePhase("Assets.Loader.open!", during_wait);
+    const effect = EffectScope.begin("Assets.Loader.open!", 0);
     defer effect.end();
     defer args.root.decref(host);
     defer args.asset_set.decref(host);
@@ -6682,7 +6697,7 @@ fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArgs) callconv(.c)
     return abiTryOk(Result, stored);
 }
 
-fn exportedStoreOpenRaw(args: abi.HostStore_openArgs) callconv(.c) abi.HostStore_openResult {
+fn exportedStoreOpenRaw(args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
     return hostedStoreOpenRaw(activeHost(), args);
 }
 
@@ -8007,8 +8022,8 @@ var exit_requested: ?i64 = null;
 var active_app_args: []const [*:0]u8 = &.{};
 
 fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
-    enforcePhase("App.Startup.args!", during_load);
-    const effect = EffectScope.begin("App.Startup.args!", 0);
+    enforcePhase("App.Io.args!", during_load);
+    const effect = EffectScope.begin("App.Io.args!", 0);
     defer effect.end();
 
     const result = abi.RocList(abi.RocStr).allocate(active_app_args.len, roc_host);
@@ -8033,15 +8048,12 @@ fn exportedArgs() callconv(.c) abi.RocList(abi.RocStr) {
 }
 
 fn hostedAppReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
-    enforcePhase("App.Startup.read_env!", during_startup);
-    const effect = EffectScope.begin("App.Startup.read_env!", key_arg.asSlice().len);
+    enforcePhase("App.Environment.read!", during_startup);
+    const effect = EffectScope.begin("App.Environment.read!", key_arg.asSlice().len);
     defer effect.end();
     // Windows doesn't link libc, so env var reading is not yet supported
-    var result: AppReadEnvResult = undefined;
-    result.tag = .Err;
-
-    key_arg.decref(roc_host);
-    return result;
+    defer key_arg.decref(roc_host);
+    return abiTryErr(AppReadEnvResult, abi.HostApp_read_envErr.not_found);
 }
 
 fn exportedAppReadEnvWindows(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
@@ -8049,79 +8061,36 @@ fn exportedAppReadEnvWindows(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult 
 }
 
 fn hostedAppReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
-    enforcePhase("App.Startup.read_env!", during_startup);
-    const effect = EffectScope.begin("App.Startup.read_env!", key_arg.asSlice().len);
+    enforcePhase("App.Environment.read!", during_startup);
+    const effect = EffectScope.begin("App.Environment.read!", key_arg.asSlice().len);
     defer effect.end();
-    var result: AppReadEnvResult = undefined;
-    const key = key_arg.asSlice();
-    const value = hostGetEnv(key);
+    defer key_arg.decref(roc_host);
 
-    if (value) |v| {
-        result.payload = .{ .ok = abi.RocStr.fromSlice(v, roc_host) };
-        result.tag = .Ok;
-    } else {
-        result.tag = .Err;
+    const value = hostGetEnv(key_arg.asSlice()) orelse
+        return abiTryErr(AppReadEnvResult, abi.HostApp_read_envErr.not_found);
+    return abiTryOk(AppReadEnvResult, abi.RocStr.fromSlice(value, roc_host));
+}
+
+test "environment absence initializes the NotFound payload on both host paths" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+    const previous_environ = host_environ;
+    host_environ = &.{};
+    defer host_environ = previous_environ;
+
+    // Exercise the Windows fallback even on POSIX CI. This long key also
+    // verifies that both outcomes consume the transferred string allocation.
+    inline for (.{ hostedAppReadEnvWindows, hostedAppReadEnvPosix }) |read_env| {
+        const result = read_env(&roc_host, abi.RocStr.fromSlice("ROC_RAY_ABSENT_ENVIRONMENT_REGRESSION_PROBE", &roc_host));
+        try std.testing.expectEqual(.Err, result.tag);
+        try std.testing.expectEqual(abi.HostApp_read_envErr.not_found, result.payload_err());
     }
-
-    // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    // `key` (a slice into key_arg) is fully consumed above before key_arg is dropped.
-    key_arg.decref(roc_host);
-    return result;
 }
 
 fn exportedAppReadEnvPosix(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
     return hostedAppReadEnvPosix(activeHost(), key_arg);
-}
-
-fn hostedAppReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) AppReadTextResult {
-    enforcePhase("App.Startup.read_text!", during_startup);
-    const effect = EffectScope.begin("App.Startup.read_text!", path_arg.asSlice().len);
-    defer effect.end();
-    defer path_arg.decref(roc_host);
-
-    const allocator = allocatorFromHost(roc_host);
-    const path = path_arg.asSlice();
-    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_FILE_READ_BYTES)) catch |err| {
-        return abiTryErr(AppReadTextResult, switch (err) {
-            error.FileNotFound => abi.HostApp_read_textErr.not_found,
-            else => abi.HostApp_read_textErr.read_failed,
-        });
-    };
-    defer allocator.free(bytes);
-
-    return abiTryOk(AppReadTextResult, abi.RocStr.fromSlice(bytes, roc_host));
-}
-
-fn exportedAppReadText(path_arg: abi.RocStr) callconv(.c) AppReadTextResult {
-    return hostedAppReadText(activeHost(), path_arg);
-}
-
-test "startup text reads return typed success missing and read-failure outcomes" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    roc_host.roc_dealloc = &nativeRocDealloc;
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "startup.txt", .data = "startup contents" });
-
-    const startup = PhaseScope.enter(.startup);
-    defer startup.leave();
-
-    var path_buffer: [256]u8 = undefined;
-    const loaded = hostedAppReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "startup.txt"));
-    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Ok, loaded.tag);
-    try std.testing.expectEqualStrings("startup contents", loaded.payload_ok().asSlice());
-    loaded.decref(&roc_host);
-
-    const missing = hostedAppReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "missing.txt"));
-    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, missing.tag);
-    try std.testing.expectEqual(abi.HostApp_read_textErr.not_found, missing.payload_err());
-
-    const directory_path = std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}", .{tmp.sub_path}) catch unreachable;
-    const unreadable = hostedAppReadText(&roc_host, abi.RocStr.fromSlice(directory_path, &roc_host));
-    try std.testing.expectEqual(abi.HostApp_read_textResultTag.Err, unreadable.tag);
-    try std.testing.expectEqual(abi.HostApp_read_textErr.read_failed, unreadable.payload_err());
 }
 
 /// Read one TMX or TSX file on the waiting path.
@@ -8137,13 +8106,13 @@ fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []
     return bytes;
 }
 
-/// `Tilemap.load_tmx!`: read a Tiled map and parse it into flat records.
+/// `Tilemap.Loader.load_tmx!`: read a Tiled map and parse it into flat records.
 ///
 /// Every read waits -- parking a task, blocking `init!` -- and the XML parse
 /// and the conversion into Roc values run on the frame thread between them.
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
-    enforcePhase("Tilemap.load_tmx!", during_wait);
-    const effect = EffectScope.begin("Tilemap.load_tmx!", path_arg.asSlice().len);
+    enforcePhase("Tilemap.Loader.load_tmx!", during_wait);
+    const effect = EffectScope.begin("Tilemap.Loader.load_tmx!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(roc_host);
 
@@ -8232,8 +8201,8 @@ fn exportedTilemapDrawRaw(args: abi.HostTilemap_drawArgs) callconv(.c) void {
 }
 
 fn hostedExit(code: i32) callconv(.c) void {
-    enforcePhase("App.Startup.exit!", during_update);
-    const effect = EffectScope.begin("App.Startup.exit!", 0);
+    enforcePhase("App.Io.exit!", during_update);
+    const effect = EffectScope.begin("App.Io.exit!", 0);
     defer effect.end();
     exit_requested = @as(i64, code);
 }
@@ -8453,7 +8422,7 @@ fn prepareCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
 /// Write one captured image to a validated path, returning a capture error code.
 ///
 /// `bytes_out`, when given, receives the size of the file that was written --
-/// the encoded size, not the pixel count, since that is what `Capture.stop!`
+/// the encoded size, not the pixel count, since that is what `Capture.Writer.stop!`
 /// reports as the recording's size on disk.
 fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8, bytes_out: ?*u64) u8 {
     var path_storage: [capture.path_capacity]u8 = undefined;
@@ -8487,13 +8456,13 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
     return std.fmt.bufPrint(buffer, "{s}_{d:0>5}{s}", .{ stem, index, extension }) catch null;
 }
 
-/// `Capture.start!`: begin a recording.
+/// `Capture.Writer.start!`: begin a recording.
 ///
 /// Refusals are latched in the session for the next `input.capture`. The return
 /// code preserves the hosted ABI and supports direct tests.
-fn hostedCaptureStartRecordingCode(roc_host: *RocHost, args: abi.HostCapture_start_recordingArgs) u8 {
-    enforcePhase("Capture.start!", during_update);
-    const effect = EffectScope.begin("Capture.start!", 0);
+fn hostedCaptureStartRecordingCode(roc_host: *RocHost, args: abi.HostCapture_start_recordingArg1) u8 {
+    enforcePhase("Capture.Writer.start!", during_update);
+    const effect = EffectScope.begin("Capture.Writer.start!", 0);
     defer effect.end();
     defer args.path.decref(roc_host);
     const result = startCaptureRecording(.{
@@ -8512,14 +8481,14 @@ fn hostedCaptureStartRecordingCode(roc_host: *RocHost, args: abi.HostCapture_sta
     return result;
 }
 
-fn exportedCaptureStartRecording(args: abi.HostCapture_start_recordingArgs) callconv(.c) abi.HostCapture_start_recordingResult {
+fn exportedCaptureStartRecording(args: abi.HostCapture_start_recordingArg1) callconv(.c) abi.HostCapture_start_recordingResult {
     return hostedCaptureStartRecording(activeHost(), args);
 }
 
 /// Validate a recording request and arm the session.
 ///
-/// Shared by the runtime effect and the startup config so a recording declared
-/// in `App.Config` is checked exactly as strictly as one started from `render!`.
+/// Called only through the authorized capture effect; a configuration is a
+/// description and does not start recording by itself.
 fn startCaptureRecording(request: capture.Request) u8 {
     // A recording that failed mid-run leaves its session latched and its sink
     // open, and retrying after observing `Failed` is the natural thing for an
@@ -8640,10 +8609,12 @@ fn captureErrorCode(err: gif_encoder.Error) u8 {
 /// left holding an unfinalized file and a live descriptor.
 ///
 /// This is also where the GPU downscale targets go. Every way a recording can
-/// end -- `Capture.stop!`, the frame cap, a failed session being restarted, and
+/// end -- `Capture.Writer.stop!`, the frame cap, a failed session being restarted, and
 /// shutdown -- funnels through here, and shutdown reaches it while the window
 /// is still open, which releasing GPU memory requires.
 fn closeCaptureSink(finished: bool) u8 {
+    // Headless sessions have no encoder or GPU sink to finalize.
+    if (headlessMode()) return capture.err_none;
     var result = capture.err_none;
 
     releaseCaptureDownscaler();
@@ -8810,8 +8781,8 @@ fn exportedCaptureSetVirtualText(text: abi.RocListWith(u32, false)) callconv(.c)
 
 fn hostedCaptureStopRecording() callconv(.c) abi.HostCapture_stop_recordingResult {
     const Result = abi.HostCapture_stop_recordingResult;
-    enforcePhase("Capture.stop!", during_update);
-    const effect = EffectScope.begin("Capture.stop!", 0);
+    enforcePhase("Capture.Writer.stop!", during_update);
+    const effect = EffectScope.begin("Capture.Writer.stop!", 0);
     defer effect.end();
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
@@ -8855,7 +8826,7 @@ fn captureStateForStep() CaptureFromHost {
     };
 }
 
-/// `Window.read_clipboard!`: the clipboard as text, or why not.
+/// `Window.Clipboard.read_text!`: the clipboard as text, or why not.
 ///
 /// The windowing backend only answers on the thread that owns the window, and
 /// the read is a pointer copy rather than I/O, so there is nothing to move off
@@ -8868,9 +8839,9 @@ fn captureStateForStep() CaptureFromHost {
 /// reason.
 fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clipboardResult {
     const Result = abi.HostWindow_read_clipboardResult;
-    const Error = abi.BusyOrTooLargeOrUnavailable;
-    enforcePhase("Window.read_clipboard!", during_update);
-    const effect = EffectScope.begin("Window.read_clipboard!", 0);
+    const Error = abi.HostWindow_read_clipboardErr;
+    enforcePhase("Window.Clipboard.read_text!", during_update);
+    const effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
     defer effect.end();
 
     if (headlessMode()) {
@@ -8892,8 +8863,8 @@ fn exportedReadClipboard() callconv(.c) abi.HostWindow_read_clipboardResult {
 }
 
 fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
-    enforcePhase("Window.set_clipboard_text!", during_update);
-    const effect = EffectScope.begin("Window.set_clipboard_text!", text_arg.asSlice().len);
+    enforcePhase("Window.Clipboard.set_text!", during_update);
+    const effect = EffectScope.begin("Window.Clipboard.set_text!", text_arg.asSlice().len);
     defer effect.end();
     // Roc transfers ownership of refcounted args to the hosted fn; release it
     // on every path, including the early returns below.
@@ -9085,7 +9056,7 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     try std.testing.expectEqualStrings("copied", unchanged.payload_ok().asSlice());
 }
 
-/// `App.Startup.entropy!`: one draw from the operating system's entropy.
+/// `App.Io.entropy!`: one draw from the operating system's entropy.
 ///
 /// The only thing in this host that makes a run differ from the last one by
 /// itself. It answers with real entropy in headless runs too: an app that must
@@ -9094,8 +9065,8 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 /// making it. Obtaining it does not block, so this needs none of the parking
 /// machinery a waiting effect has.
 fn hostedEntropy() callconv(.c) u64 {
-    enforcePhase("App.Startup.entropy!", during_startup);
-    const effect = EffectScope.begin("App.Startup.entropy!", 0);
+    enforcePhase("App.Io.entropy!", during_startup);
+    const effect = EffectScope.begin("App.Io.entropy!", 0);
     defer effect.end();
     var bytes: [8]u8 = undefined;
     std.Io.random(waitingIo(), &bytes);
@@ -9103,8 +9074,8 @@ fn hostedEntropy() callconv(.c) u64 {
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
-    enforcePhase("App.Startup.random_i32!", during_startup);
-    const effect = EffectScope.begin("App.Startup.random_i32!", 0);
+    enforcePhase("App.Io.random_i32!", during_startup);
+    const effect = EffectScope.begin("App.Io.random_i32!", 0);
     defer effect.end();
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
@@ -9177,7 +9148,7 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
     return null;
 }
 
-/// `Audio.load_sound!`: read an audio file and decode it onto the device.
+/// `Audio.Loader.load_sound!`: read an audio file and decode it onto the device.
 ///
 /// The read waits -- it parks a task and blocks `init!` -- and the decode and
 /// the upload run on the frame thread once the bytes are back. Nothing of the
@@ -9185,8 +9156,8 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
     const Result = abi.HostAudio_load_soundResult;
     const Error = abi.HostAudio_load_soundErr;
-    enforcePhase("Audio.load_sound!", during_wait);
-    const effect = EffectScope.begin("Audio.load_sound!", path_arg.asSlice().len);
+    enforcePhase("Audio.Loader.load_sound!", during_wait);
+    const effect = EffectScope.begin("Audio.Loader.load_sound!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(host);
 
@@ -9218,7 +9189,7 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_
     return hostedAudioLoadSound(activeHost(), path_arg);
 }
 
-/// `Audio.load_music!`: read an audio file and open a stream over it.
+/// `Audio.Loader.load_music!`: read an audio file and open a stream over it.
 ///
 /// The read waits the same way `load_sound!` does, but the bytes are not
 /// released afterwards: raylib's memory decoders read out of that buffer for
@@ -9227,8 +9198,8 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
     const Result = abi.HostAudio_load_musicResult;
     const Error = abi.HostAudio_load_musicErr;
-    enforcePhase("Audio.load_music!", during_wait);
-    const effect = EffectScope.begin("Audio.load_music!", path_arg.asSlice().len);
+    enforcePhase("Audio.Loader.load_music!", during_wait);
+    const effect = EffectScope.begin("Audio.Loader.load_music!", path_arg.asSlice().len);
     defer effect.end();
     defer path_arg.decref(host);
 
@@ -9290,14 +9261,14 @@ test "headless audio loaders preserve phases without native work" {
         last_phase_violation = null;
         _ = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Audio.load_sound!", violation.operation);
+        try std.testing.expectEqualStrings("Audio.Loader.load_sound!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(Phase.update, violation.actual);
 
         last_phase_violation = null;
         _ = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
         const music_violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Audio.load_music!", music_violation.operation);
+        try std.testing.expectEqualStrings("Audio.Loader.load_music!", music_violation.operation);
         try std.testing.expect(music_violation.allowed.eql(during_wait));
     }
 
@@ -9677,7 +9648,7 @@ comptime {
         @export(&exportedRocExpectFailed, .{ .name = "roc_expect_failed" });
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
 
-        @export(&hostedSqliteOpen, .{ .name = "roc_sqlite_open" });
+        @export(&capsHostedSqliteOpen, .{ .name = "roc_sqlite_open" });
         @export(&hostedSqliteClose, .{ .name = "roc_sqlite_close" });
         @export(&hostedSqlitePrepare, .{ .name = "roc_sqlite_prepare" });
         @export(&hostedSqliteRunStmt, .{ .name = "roc_sqlite_run_stmt" });
@@ -9689,7 +9660,7 @@ comptime {
         @export(&hostedTraceSampleI64, .{ .name = "roc_trace_sample_i64" });
         @export(&hostedTraceSampleF64, .{ .name = "roc_trace_sample_f64" });
 
-        @export(&exportedStoreOpenRaw, .{ .name = "roc_store_open_raw" });
+        @export(&capsExportedStoreOpenRaw, .{ .name = "roc_store_open_raw" });
         @export(&exportedTextureLoadStoreRaw, .{ .name = "roc_texture_load_store_raw" });
         @export(&exportedTextureLoadBytesRaw, .{ .name = "roc_texture_load_bytes_raw" });
         @export(&hostedTextureGenerateColorRaw, .{ .name = "roc_texture_generate_color_raw" });
@@ -9700,8 +9671,8 @@ comptime {
         @export(&hostedTextureSetWrapRaw, .{ .name = "roc_texture_set_wrap_raw" });
         @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
-        @export(&exportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
-        @export(&exportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
+        @export(&capsExportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
+        @export(&capsExportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
         @export(&hostedAudioPauseMusic, .{ .name = "roc_audio_pause_music_raw" });
         @export(&hostedAudioPause, .{ .name = "roc_audio_pause_raw" });
         @export(&hostedAudioPlayMusic, .{ .name = "roc_audio_play_music_raw" });
@@ -9746,7 +9717,7 @@ comptime {
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&exportedTextDefaultFontRaw, .{ .name = "roc_text_default_font_raw" });
-        @export(&exportedTextStartupDefaultFontRaw, .{ .name = "roc_text_startup_default_font_raw" });
+        @export(&capsExportedTextStartupDefaultFontRaw, .{ .name = "roc_text_startup_default_font_raw" });
         @export(&hostedDrawFrameSizeRaw, .{ .name = "roc_draw_frame_size" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedTextLoadFontRaw, .{ .name = "roc_text_load_font_raw" });
@@ -9777,26 +9748,26 @@ comptime {
         @export(&hostedEntropy, .{ .name = "roc_random_entropy" });
         @export(&hostedExit, .{ .name = "roc_app_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
-        @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
-        @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
-        @export(&exportedFilesList, .{ .name = "roc_files_list" });
-        @export(&exportedFilesMetadata, .{ .name = "roc_files_metadata" });
-        @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
-        @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
+        @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });
+        @export(&capsExportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
+        @export(&capsExportedFilesList, .{ .name = "roc_files_list" });
+        @export(&capsExportedFilesMetadata, .{ .name = "roc_files_metadata" });
+        @export(&capsExportedFilesWriteText, .{ .name = "roc_files_write_text" });
+        @export(&capsExportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
-        @export(&exportedReadClipboard, .{ .name = "roc_window_read_clipboard" });
+        @export(&capsExportedReadClipboard, .{ .name = "roc_window_read_clipboard" });
         @export(&hostedRandomI32, .{ .name = "roc_random_i32" });
-        @export(if (builtin.os.tag == .windows) &exportedAppReadEnvWindows else &exportedAppReadEnvPosix, .{ .name = "roc_app_read_env" });
-        @export(&exportedAppReadText, .{ .name = "roc_app_read_text_raw" });
-        @export(&exportedSetClipboardText, .{ .name = "roc_window_set_clipboard_text" });
+        @export(if (builtin.os.tag == .windows) &capsExportedAppReadEnvWindows else &capsExportedAppReadEnvPosix, .{ .name = "roc_app_read_env" });
+
+        @export(&capsExportedSetClipboardText, .{ .name = "roc_window_set_clipboard_text" });
         @export(&hostedSetExitKey, .{ .name = "roc_keys_set_exit_key" });
-        @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
+        @export(&capsExportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
         @export(&exportedCaptureSetVirtualKeys, .{ .name = "roc_capture_set_virtual_keys" });
         @export(&exportedCaptureSetVirtualText, .{ .name = "roc_capture_set_virtual_text" });
-        @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
-        @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
-        @export(&exportedCaptureScreenshotTexture, .{ .name = "roc_capture_screenshot_texture" });
+        @export(&capsHostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
+        @export(&capsExportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
+        @export(&capsExportedCaptureScreenshotTexture, .{ .name = "roc_capture_screenshot_texture" });
         @export(&exportedCapturePixelAt, .{ .name = "roc_capture_pixel_at" });
         @export(&exportedCaptureReadRegion, .{ .name = "roc_capture_read_region" });
         @export(&hostedSuggestWindowSize, .{ .name = "roc_window_suggest_size" });
@@ -9809,22 +9780,23 @@ comptime {
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
-        @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
-        @export(&hostedHttpSend, .{ .name = "roc_http_send" });
+        @export(&capsExportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
+        @export(&capsHostedHttpSend, .{ .name = "roc_http_send" });
         @export(&hostedTimeNow, .{ .name = "roc_time_now" });
-        @export(&exportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
-        @export(&exportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
-        @export(&exportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
-        @export(&exportedUdpBind, .{ .name = "roc_udp_bind" });
+        @export(&capsExportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
+        @export(&capsExportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
+        @export(&capsExportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
+        @export(&capsExportedUdpBind, .{ .name = "roc_udp_bind" });
         @export(&exportedUdpSend, .{ .name = "roc_udp_send" });
         @export(&exportedUdpReceive, .{ .name = "roc_udp_receive" });
-        @export(&exportedCmdRun, .{ .name = "roc_cmd_run" });
+        @export(&capsExportedCmdRun, .{ .name = "roc_cmd_run" });
     }
 }
 
 const RuntimeOptions = struct {
     const StatsDetail = enum { summary, standard, full };
 
+    caps_allow_all: bool = false,
     headless: bool = false,
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
     /// Cycles a windowed run is allowed before it exits by itself, or null for
@@ -10219,6 +10191,7 @@ fn printUsage() void {
         \\           [--host-stats-buffer-mib=N] [--host-stats-max-mib=N]
         \\           [app arguments...]
         \\
+        \\  --host-caps-allow-all  allow external services under existing resource limits
         \\  --host-frames=N   exit after N cycles of a real windowed run
         \\  --host-hidden     open the real window hidden (needs a display server)
         \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32";
@@ -10500,7 +10473,9 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
     var i: usize = 1;
     while (i < argc) : (i += 1) {
         const arg = std.mem.span(argv[i]);
-        if (std.mem.eql(u8, arg, "--host-headless")) {
+        if (std.mem.eql(u8, arg, "--host-caps-allow-all")) {
+            options.caps_allow_all = true;
+        } else if (std.mem.eql(u8, arg, "--host-headless")) {
             options.headless = true;
         } else if (std.mem.startsWith(u8, arg, "--host-headless-frames=")) {
             options.headless = true;
@@ -10596,6 +10571,7 @@ test "runtime options reserve host switches and preserve complete app argv" {
     var argv = [_][*:0]u8{
         @constCast("breakout"),
         @constCast("--record-demo"),
+        @constCast("--host-caps-allow-all"),
         @constCast("--host-headless"),
         @constCast("--host-headless-frames=7"),
         @constCast("--headless"),
@@ -10604,6 +10580,7 @@ test "runtime options reserve host switches and preserve complete app argv" {
     defer options.deinit(std.testing.allocator);
 
     try std.testing.expect(options.headless);
+    try std.testing.expect(options.caps_allow_all);
     try std.testing.expectEqual(@as(u64, 7), options.headless_frames);
     try std.testing.expectEqual(@as(usize, 3), options.app_args.len);
     try std.testing.expectEqualStrings("breakout", std.mem.span(options.app_args[0]));
@@ -10744,13 +10721,13 @@ fn updateOnce(boxed_model: *RocBox, input: InputFromHost) UpdateResult {
     // Off unless ROC_RAY_ALLOC_STATS asked for metering; one branch per frame.
     const metered = allocMeterMark();
     defer allocMeterRecordUpdate(metered);
-    return update_for_host(takeModel(boxed_model), input);
+    return update_for_host(takeModel(boxed_model), input, active_io_authority);
 }
 
 /// Apply the startup capture configuration once the window exists.
 ///
 /// A recording declared in `App.Config` goes through the same validation as
-/// `Capture.start!`, so a bad path or an over-budget request is reported the
+/// `Capture.Writer.start!`, so a bad path or an over-budget request is reported the
 /// same way rather than being trusted because it came from config.
 fn configureCapture(app_config: AppConfig) void {
     capture_session.reset();
@@ -10772,29 +10749,11 @@ fn configureCapture(app_config: AppConfig) void {
         std.log.warn("output directory path too long; capturing into the working directory", .{});
         capture_output_dir_len = 0;
     }
-
-    if (!app_config.record_enabled) return;
-
-    const result = startCaptureRecording(.{
-        .path = app_config.record_path.asSlice(),
-        .format = app_config.record_format,
-        .fps = app_config.record_fps,
-        .max_frames = app_config.record_max_frames,
-        .scale_numerator = app_config.record_scale_numerator,
-        .scale_denominator = app_config.record_scale_denominator,
-        .every_nth = app_config.record_every_nth,
-        .timing = app_config.record_timing,
-        .cursor = app_config.record_cursor,
-        .quality = app_config.record_quality,
-    });
-    if (result != capture.err_none) {
-        std.log.err("could not start the recording declared in App.Config (capture error {d})", .{result});
-    }
 }
 
 /// Finalize an unfinished recording at shutdown.
 ///
-/// Reaching the frame cap, calling `Capture.stop!`, and simply exiting all have
+/// Reaching the frame cap, calling `Capture.Writer.stop!`, and simply exiting all have
 /// to produce a complete file, so every exit path funnels through here.
 fn finalizeCapture() void {
     if (capture_session.status == capture.status_idle or
@@ -10910,7 +10869,7 @@ fn serviceCaptureRequests() void {
     finishRecordingAtFrameCap();
 }
 
-/// Copy the readback out for the task parked on `Capture.screenshot!`.
+/// Copy the readback out for the task parked on `Capture.Writer.screenshot!`.
 ///
 /// The pixels are copied rather than moved because the readback buffer belongs
 /// to the graphics backend, which frees it on this thread as soon as the
@@ -10948,7 +10907,7 @@ fn writeRecordingFrame(image: raylib.CaptureImage) void {
 
 /// Finalize a recording that has just written its last permitted frame.
 ///
-/// Reaching the frame cap finalizes the file, which is what `Capture.start!`
+/// Reaching the frame cap finalizes the file, which is what `Capture.Writer.start!`
 /// and `App.with_recording` both promise. Without this a capped recording stays
 /// `Active` forever, counts every later frame as dropped, and only reaches disk
 /// when the process exits.
@@ -11918,7 +11877,7 @@ test "completing a large read transfers the read's allocation without copying" {
     const small = installReadBytes(std.testing.allocator, small_bytes);
     try std.testing.expectEqual(large_cost, counter.allocated_bytes);
 
-    // The control. `Files.read_text!` copies its whole payload through the Roc
+    // The control. `Files.Access.read_text!` copies its whole payload through the Roc
     // allocator, so the number above is a result and not a broken meter.
     const inline_bytes = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES);
     defer std.testing.allocator.free(inline_bytes);
@@ -12258,7 +12217,7 @@ test "an offscreen export called from update! is rejected" {
     });
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-    try std.testing.expectEqualStrings("Capture.screenshot_texture!", violation.operation);
+    try std.testing.expectEqualStrings("Capture.Writer.screenshot_texture!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_wait));
     try std.testing.expectEqual(Phase.update, violation.actual);
 }
@@ -12338,7 +12297,7 @@ test "loading a map from a frame or an update is rejected, and from a task is no
         try std.testing.expectEqual(abi.HostTilemap_load_tmxResultTag.Err, result.tag);
 
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
+        try std.testing.expectEqualStrings("Tilemap.Loader.load_tmx!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(phase, violation.actual);
     }
@@ -12655,14 +12614,14 @@ test "an operation called from its own phase is not rejected" {
 
 /// Run the app's startup callback.
 ///
-/// It takes no snapshot: `App.Startup` is authority, not observation. Nothing
+/// It takes no snapshot: `App.Io` is authority, not observation. Nothing
 /// has been sampled when this runs, so there is nothing to hand over -- an app
 /// seeds its model with `Devices.empty` and waits for the first `App.Input`.
 fn initModel() RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
     const phase = PhaseScope.enter(.startup);
     defer phase.leave();
-    const init_result = init_for_host();
+    const init_result = init_for_host(active_io_authority);
     if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
     return init_result;
 }
@@ -12996,7 +12955,7 @@ test "observatory executable metadata basename is portable" {
     try std.testing.expectEqualStrings("particles", portableAppName("C:\\examples\\particles\\main.exe"));
     try std.testing.expectEqualStrings("particles", portableAppName("/opt/games/particles"));
     try std.testing.expectEqualStrings("main.roc", portableAppName("main.roc"));
-    try std.testing.expectEqualStrings("nightly-2026-09-06-d85e877", roc_compiler_pin);
+    try std.testing.expectEqualStrings("nightly-2026-09-10-a670e34", roc_compiler_pin);
 }
 
 test "disabled observatory path performs no recorder startup work" {
@@ -13328,12 +13287,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         app_tasks.setObserver(taskObserver(session));
     }
     // Registered after the registry's own teardown, so LIFO runs it first:
-    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // a task parked in `Cmd.Runner.run!` cannot be cancelled out of a child it is
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
     app_tasks.activate();
-    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
     // tears the runtime down, so a late send reports a stopped app instead of
     // reaching a dead event loop.
@@ -13554,12 +13513,12 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         app_tasks.setObserver(taskObserver(session));
     }
     // Registered after the registry's own teardown, so LIFO runs it first:
-    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // a task parked in `Cmd.Runner.run!` cannot be cancelled out of a child it is
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
     app_tasks.activate();
-    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
     // tears the runtime down, so a late send reports a stopped app instead of
     // reaching a dead event loop.
@@ -13737,6 +13696,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         printUsage();
         return 0;
     }
+
+    beginIoLifetime(options.caps_allow_all);
+    defer endIoLifetime();
 
     // Capture envp on Linux. Roc links with -nostdlib, so glibc's
     // __libc_start_main (which normally initializes environ) doesn't run. We
@@ -14203,7 +14165,7 @@ test "writing to a stream is queued, so update! is allowed and render! is not" {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
-        enforcePhase("Stdout.line!", during_update);
+        enforcePhase("Stdout.Writer.line!", during_update);
         const violation = last_phase_violation orelse return error.StreamWriteWasNotRejected;
         try std.testing.expectEqual(phase, violation.actual);
     }
@@ -14214,7 +14176,7 @@ test "writing to a stream is queued, so update! is allowed and render! is not" {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
-        enforcePhase("Stdout.line!", during_update);
+        enforcePhase("Stdout.Writer.line!", during_update);
         try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
 }
@@ -14629,4 +14591,489 @@ test "a pixel readback called from render! is rejected" {
     const region_violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Capture.read_region!", region_violation.operation);
     try std.testing.expect(region_violation.allowed.eql(during_update));
+}
+
+/// Authority owns no native resource. A private nominal scalar carries this
+/// application-lifetime identity; copying/accessing it allocates nothing.
+/// Zero denotes a test stub. The sequence prevents reuse across hosted lifetimes.
+var io_generation: u64 = 0;
+var active_io_authority: u64 = 0;
+var external_caps_allowed: bool = false;
+
+fn beginIoLifetime(allow_all: bool) void {
+    io_generation = std.math.add(u64, io_generation, 1) catch @panic("IO authority generation exhausted");
+    active_io_authority = io_generation;
+    external_caps_allowed = allow_all;
+}
+
+fn endIoLifetime() void {
+    active_io_authority = 0;
+    external_caps_allowed = false;
+}
+
+fn allowsExternal(authority: u64) bool {
+    return authority != 0 and authority == active_io_authority and external_caps_allowed;
+}
+
+/// Hosted calls consume their arguments even when admission is refused.
+fn releaseDeniedArgument(value: anytype) void {
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .@"struct" => {
+            if (@hasDecl(T, "decref")) {
+                value.decref(activeHost());
+            } else {
+                inline for (std.meta.fields(T)) |field| releaseDeniedArgument(@field(value, field.name));
+            }
+        },
+        else => {},
+    }
+}
+
+/// Capability boundary for files_read_text!; the implementation below it is trusted host code.
+fn capsExportedFilesReadText(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
+    enforcePhase("Files.Access.read_text!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.read_text!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostFiles_read_textResult);
+    }
+    return exportedFilesReadText(path_arg);
+}
+
+/// Capability boundary for files_read_bytes!; the implementation below it is trusted host code.
+fn capsExportedFilesReadBytes(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+    enforcePhase("Files.Access.read_bytes!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.read_bytes!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostFiles_read_bytesResult);
+    }
+    return exportedFilesReadBytes(path_arg);
+}
+
+/// Capability boundary for files_list!; the implementation below it is trusted host code.
+fn capsExportedFilesList(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
+    enforcePhase("Files.Access.list!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.list!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostFiles_listResult);
+    }
+    return exportedFilesList(path_arg);
+}
+
+/// Capability boundary for files_metadata!; the implementation below it is trusted host code.
+fn capsExportedFilesMetadata(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
+    enforcePhase("Files.Access.metadata!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.metadata!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostFiles_metadataResult);
+    }
+    return exportedFilesMetadata(path_arg);
+}
+
+/// Capability boundary for files_write_text!; the implementation below it is trusted host code.
+fn capsExportedFilesWriteText(authority: u64, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
+    enforcePhase("Files.Access.write_text!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.write_text!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        releaseDeniedArgument(contents_arg);
+        return permissionDenied(abi.HostFiles_write_textResult);
+    }
+    return exportedFilesWriteText(path_arg, contents_arg);
+}
+
+/// Capability boundary for files_write_bytes!; the implementation below it is trusted host code.
+fn capsExportedFilesWriteBytes(authority: u64, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
+    enforcePhase("Files.Access.write_bytes!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Files.Access.write_bytes!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        releaseDeniedArgument(bytes_arg);
+        return permissionDenied(abi.HostFiles_write_bytesResult);
+    }
+    return exportedFilesWriteBytes(path_arg, bytes_arg);
+}
+
+/// Capability boundary for http_send!; the implementation below it is trusted host code.
+fn capsHostedHttpSend(authority: u64, request: http_effect.Request) callconv(.c) abi.HostHttp_sendResult {
+    enforcePhase("Http.Client.send!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Http.Client.send!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(request);
+        return permissionDenied(abi.HostHttp_sendResult);
+    }
+    return hostedHttpSend(request);
+}
+
+/// Capability boundary for cmd_run!; the implementation below it is trusted host code.
+fn capsExportedCmdRun(authority: u64, args: abi.HostCmd_runArg1) callconv(.c) abi.HostCmd_runResult {
+    enforcePhase("Cmd.Runner.run!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Cmd.Runner.run!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(args);
+        return permissionDenied(abi.HostCmd_runResult);
+    }
+    return exportedCmdRun(args);
+}
+
+/// Capability boundary for stdio_write_line!; the implementation below it is trusted host code.
+fn capsExportedStdioWriteLine(authority: u64, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_lineResult {
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.line!" else "Stderr.Writer.line!";
+    enforcePhase(name, during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin(name, 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(stream);
+        releaseDeniedArgument(text_arg);
+        return permissionDenied(abi.HostStdio_write_lineResult);
+    }
+    return exportedStdioWriteLine(stream, text_arg);
+}
+
+/// Capability boundary for stdio_write_text!; the implementation below it is trusted host code.
+fn capsExportedStdioWriteText(authority: u64, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_textResult {
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write!" else "Stderr.Writer.write!";
+    enforcePhase(name, during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin(name, 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(stream);
+        releaseDeniedArgument(text_arg);
+        return permissionDenied(abi.HostStdio_write_textResult);
+    }
+    return exportedStdioWriteText(stream, text_arg);
+}
+
+/// Capability boundary for stdio_write_bytes!; the implementation below it is trusted host code.
+fn capsExportedStdioWriteBytes(authority: u64, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostStdio_write_bytesResult {
+    const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write_bytes!" else "Stderr.Writer.write_bytes!";
+    enforcePhase(name, during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin(name, 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(stream);
+        releaseDeniedArgument(bytes_arg);
+        return permissionDenied(abi.HostStdio_write_bytesResult);
+    }
+    return exportedStdioWriteBytes(stream, bytes_arg);
+}
+
+/// Capability boundary for udp_bind!; the implementation below it is trusted host code.
+fn capsExportedUdpBind(authority: u64, args: abi.HostUdp_bindArg1) callconv(.c) abi.HostUdp_bindResult {
+    enforcePhase("Udp.Network.bind!", during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Udp.Network.bind!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(args);
+        return permissionDenied(abi.HostUdp_bindResult);
+    }
+    return exportedUdpBind(args);
+}
+
+/// Capability boundary for sqlite_open!; the implementation below it is trusted host code.
+fn capsHostedSqliteOpen(authority: u64, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
+    enforcePhase("Sqlite.Service.open!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Sqlite.Service.open!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        releaseDeniedArgument(mode);
+        releaseDeniedArgument(busy_timeout_ms);
+        releaseDeniedArgument(max_result_bytes);
+        return permissionDenied(abi.HostSqlite_openResult);
+    }
+    return hostedSqliteOpen(path_arg, mode, busy_timeout_ms, max_result_bytes);
+}
+
+/// Capability boundary for store_open!; the implementation below it is trusted host code.
+fn capsExportedStoreOpenRaw(authority: u64, args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
+    enforcePhase("Assets.Loader.open!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Assets.Loader.open!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(args);
+        return permissionDenied(abi.HostStore_openResult);
+    }
+    return exportedStoreOpenRaw(args);
+}
+
+/// Capability boundary for audio_load_sound!; the implementation below it is trusted host code.
+fn capsExportedAudioLoadSound(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
+    enforcePhase("Audio.Loader.load_sound!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Audio.Loader.load_sound!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostAudio_load_soundResult);
+    }
+    return exportedAudioLoadSound(path_arg);
+}
+
+/// Capability boundary for audio_load_music!; the implementation below it is trusted host code.
+fn capsExportedAudioLoadMusic(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
+    enforcePhase("Audio.Loader.load_music!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Audio.Loader.load_music!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostAudio_load_musicResult);
+    }
+    return exportedAudioLoadMusic(path_arg);
+}
+
+/// Capability boundary for tilemap_load_tmx!; the implementation below it is trusted host code.
+fn capsExportedTilemapLoadTmxRaw(authority: u64, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
+    enforcePhase("Tilemap.Loader.load_tmx!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Tilemap.Loader.load_tmx!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(TilemapLoadTmxResult);
+    }
+    return exportedTilemapLoadTmxRaw(path_arg);
+}
+
+/// Capability boundary for window_read_clipboard!; the implementation below it is trusted host code.
+fn capsExportedReadClipboard(authority: u64) callconv(.c) abi.HostWindow_read_clipboardResult {
+    enforcePhase("Window.Clipboard.read_text!", during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        return permissionDenied(abi.HostWindow_read_clipboardResult);
+    }
+    return exportedReadClipboard();
+}
+
+/// Capability boundary for window_set_clipboard_text!; the implementation below it is trusted host code.
+fn capsExportedSetClipboardText(authority: u64, text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
+    enforcePhase("Window.Clipboard.set_text!", during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Window.Clipboard.set_text!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(text_arg);
+        return permissionDenied(abi.HostWindow_set_clipboard_textResult);
+    }
+    exportedSetClipboardText(text_arg);
+    return .ok;
+}
+
+/// Capability boundary for capture_screenshot!; the implementation below it is trusted host code.
+fn capsExportedCaptureScreenshot(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostCapture_screenshotResult {
+    enforcePhase("Capture.Writer.screenshot!", during_frame_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Capture.Writer.screenshot!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(path_arg);
+        return permissionDenied(abi.HostCapture_screenshotResult);
+    }
+    return exportedCaptureScreenshot(path_arg);
+}
+
+/// Capability boundary for capture_screenshot_texture!; the implementation below it is trusted host code.
+fn capsExportedCaptureScreenshotTexture(authority: u64, args: abi.HostCapture_screenshot_textureArg1) callconv(.c) abi.HostCapture_screenshot_textureResult {
+    enforcePhase("Capture.Writer.screenshot_texture!", during_wait);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Capture.Writer.screenshot_texture!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(args);
+        return permissionDenied(abi.HostCapture_screenshot_textureResult);
+    }
+    return exportedCaptureScreenshotTexture(args);
+}
+
+/// Capability boundary for capture_start_recording!; the implementation below it is trusted host code.
+fn capsExportedCaptureStartRecording(authority: u64, args: abi.HostCapture_start_recordingArg1) callconv(.c) abi.HostCapture_start_recordingResult {
+    enforcePhase("Capture.Writer.start!", during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Capture.Writer.start!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(args);
+        return permissionDenied(abi.HostCapture_start_recordingResult);
+    }
+    return exportedCaptureStartRecording(args);
+}
+
+/// Capability boundary for capture_stop_recording!; the implementation below it is trusted host code.
+fn capsHostedCaptureStopRecording(authority: u64) callconv(.c) abi.HostCapture_stop_recordingResult {
+    enforcePhase("Capture.Writer.stop!", during_update);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("Capture.Writer.stop!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        return permissionDenied(abi.HostCapture_stop_recordingResult);
+    }
+    return hostedCaptureStopRecording();
+}
+
+/// Capability boundary for app_read_env!; the implementation below it is trusted host code.
+fn capsExportedAppReadEnvWindows(authority: u64, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
+    enforcePhase("App.Environment.read!", during_startup);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("App.Environment.read!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(key_arg);
+        return permissionDenied(AppReadEnvResult);
+    }
+    return exportedAppReadEnvWindows(key_arg);
+}
+
+/// Capability boundary for app_read_env!; the implementation below it is trusted host code.
+fn capsExportedAppReadEnvPosix(authority: u64, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
+    enforcePhase("App.Environment.read!", during_startup);
+    if (!allowsExternal(authority)) {
+        var effect = EffectScope.begin("App.Environment.read!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        releaseDeniedArgument(key_arg);
+        return permissionDenied(AppReadEnvResult);
+    }
+    return exportedAppReadEnvPosix(key_arg);
+}
+
+/// Capability boundary for text_startup_default_font!; the implementation below it is trusted host code.
+fn capsExportedTextStartupDefaultFontRaw(authority: u64) callconv(.c) abi.HostText_startup_default_fontResult {
+    enforcePhase("App.Io.default_font!", during_startup);
+    if (startup_font_config.path.len != 0 and !allowsExternal(authority)) {
+        var effect = EffectScope.begin("App.Io.default_font!", 0);
+        defer effect.end();
+        effect.setOutcome(.refused);
+        return permissionDenied(abi.HostText_startup_default_fontResult);
+    }
+    return exportedTextStartupDefaultFontRaw();
+}
+
+fn permissionDenied(comptime Result: type) Result {
+    if (@typeInfo(Result) == .@"enum") return .err;
+    const Error = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    if (@typeInfo(Error) == .@"enum") return abiTryErr(Result, @as(Error, .permission_denied));
+    var err = std.mem.zeroes(Error);
+    err.tag = .PermissionDenied;
+    return abiTryErr(Result, err);
+}
+
+test "external authority is fixed for one lifetime and never accepts a stub or stale identity" {
+    try std.testing.expect(!(RuntimeOptions{}).caps_allow_all);
+    beginIoLifetime(false);
+    const denied = active_io_authority;
+    try std.testing.expect(!allowsExternal(denied));
+    endIoLifetime();
+    beginIoLifetime(true);
+    defer endIoLifetime();
+    try std.testing.expect(allowsExternal(active_io_authority));
+    try std.testing.expect(!allowsExternal(0));
+    try std.testing.expect(!allowsExternal(denied));
+    const granted = active_io_authority;
+    endIoLifetime();
+    try std.testing.expect(!allowsExternal(granted));
+}
+
+fn expectPermissionDenied(result: anytype) !void {
+    if (@typeInfo(@TypeOf(result)) == .@"enum") {
+        try std.testing.expectEqual(.err, result);
+    } else {
+        try std.testing.expectEqual(.Err, result.tag);
+        const err = result.payload_err();
+        if (@typeInfo(@TypeOf(err)) == .@"enum") {
+            try std.testing.expectEqual(.permission_denied, err);
+        } else {
+            try std.testing.expectEqual(.PermissionDenied, err.tag);
+        }
+    }
+}
+
+// A static resource reference is sufficient here: denial must release the
+// transferred reference without looking up a backend resource or doing I/O.
+var denied_test_resource = [_]u64{ 0, std.math.maxInt(u64) };
+fn deniedTestArgument(comptime T: type) T {
+    if (T == *u64) return &denied_test_resource[1];
+    if (@typeInfo(T) == .@"struct") {
+        var value: T = undefined;
+        inline for (std.meta.fields(T)) |field| @field(value, field.name) = deniedTestArgument(field.type);
+        return value;
+    }
+    return std.mem.zeroes(T);
+}
+
+test "every external entry point denies before touching the backend and consumes arguments" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    beginIoLifetime(false);
+    defer endIoLifetime();
+    const previous_font = startup_font_config;
+    startup_font_config.path = "denied-font.ttf";
+    defer startup_font_config = previous_font;
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+    try expectPermissionDenied(capsExportedFilesReadText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesReadBytes(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesList(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesMetadata(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsHostedHttpSend(active_io_authority, deniedTestArgument(http_effect.Request)));
+    try expectPermissionDenied(capsExportedCmdRun(active_io_authority, deniedTestArgument(abi.HostCmd_runArg1)));
+    try expectPermissionDenied(capsExportedStdioWriteLine(active_io_authority, deniedTestArgument(u8), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedStdioWriteText(active_io_authority, deniedTestArgument(u8), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedUdpBind(active_io_authority, deniedTestArgument(abi.HostUdp_bindArg1)));
+    try expectPermissionDenied(capsHostedSqliteOpen(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host), deniedTestArgument(u8), deniedTestArgument(u64), deniedTestArgument(u64)));
+    try expectPermissionDenied(capsExportedStoreOpenRaw(active_io_authority, deniedTestArgument(abi.HostStore_openArg1)));
+    try expectPermissionDenied(capsExportedAudioLoadSound(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedAudioLoadMusic(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    try expectPermissionDenied(capsExportedReadClipboard(active_io_authority));
+    try expectPermissionDenied(capsExportedSetClipboardText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    {
+        const task = PhaseScope.enter(.task);
+        defer task.leave();
+        try expectPermissionDenied(capsExportedCaptureScreenshot(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    }
+    try expectPermissionDenied(capsExportedCaptureScreenshotTexture(active_io_authority, deniedTestArgument(abi.HostCapture_screenshot_textureArg1)));
+    try expectPermissionDenied(capsExportedCaptureStartRecording(active_io_authority, deniedTestArgument(abi.HostCapture_start_recordingArg1)));
+    try expectPermissionDenied(capsHostedCaptureStopRecording(active_io_authority));
+    if (builtin.os.tag == .windows) {
+        try expectPermissionDenied(capsExportedAppReadEnvWindows(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    }
+    if (builtin.os.tag != .windows) {
+        try expectPermissionDenied(capsExportedAppReadEnvPosix(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    }
+    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(active_io_authority));
+    try expectPermissionDenied(capsExportedFilesWriteBytes(active_io_authority, abi.RocStr.fromSlice("denied-long-file-name-never-opened", &roc_host), abi.RocListWith(u8, false).empty()));
+    try expectPermissionDenied(capsExportedStdioWriteBytes(active_io_authority, 0, abi.RocListWith(u8, false).empty()));
 }

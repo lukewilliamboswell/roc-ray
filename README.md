@@ -82,6 +82,29 @@ A RocRay app provides three functions:
   state.
 - `render!` draws that state on the screen.
 
+`init!` receives `App.Io`; the update signature is
+`update!(model, input, io)`. Select a service and call its receivers:
+
+```roc
+files = io.files()
+Task.spawn!(input, || Loaded(files.read_text!("data.json")))
+# In a task or init!:
+response = io.http().send!(request)?
+```
+
+Development builds deny external services by default. Launch a trusted app with
+`--host-caps-allow-all` to grant the previous broad behavior:
+
+```sh
+scripts/run-example.py examples/http_fetch -- --host-caps-allow-all
+```
+
+Files (including cwd and asset files), networking, processes, SQLite,
+environment, clipboard, stdout/stderr, and capture output otherwise return
+`PermissionDenied`. Drawing, input, generated resources, audio playback, clocks,
+and timers remain available. This is a host API policy, not an OS sandbox;
+allow-all does not confine files, network destinations, or child processes.
+
 Reading a file or waiting for a network reply can take time. Start that work as
 a task so the app can keep updating and drawing; when it finishes, `update!`
 receives the result.
@@ -92,11 +115,12 @@ complete app, then choose a project from the
 [API reference](https://lukewilliamboswell.github.io/roc-ray/) documents the
 available features and functions.
 
-Configure a shared startup font when one font serves most of the app:
+Configure a shared startup font when one font serves most of the app. Loading
+a font file requires `--host-caps-allow-all`; the built-in font does not:
 
 ```roc
 config = App.default.with_default_font({ path: "assets/body.ttf", size: 32 })
-font = startup.default_font!()?
+font = io.default_font!()?
 ```
 
 `Text.Font` carries both its opaque host handle and an immutable metric

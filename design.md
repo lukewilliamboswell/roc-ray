@@ -188,7 +188,7 @@ A RocRay program has three responsibilities:
 - `init!` validates startup configuration, performs one-time startup effects,
   and creates the initial model. Startup may load or allocate resources, and
   may use waiting effects, before interactive cycling begins.
-- `update!` receives the current model and one `App.Input`. It folds that input
+- `update!` receives the current model, one `App.Input`, and `App.Io`. It folds that input
   into the next model, calls host effects directly, and starts tasks. It
   returns the next model, or `Err(Exit(code))` to stop the application.
 - `render!` receives the resulting model and a `Draw.Frame`. It may issue
@@ -205,7 +205,7 @@ sequenceDiagram
 
     loop Each host cycle
         Host->>Host: give tasks a turn, collect finished messages
-        Host->>App: update!(model, App.Input with those messages)
+        Host->>App: update!(model, App.Input with those messages, App.Io)
         App->>Host: direct effects, in program order
         App->>Task: Task.spawn!(input, closure) -- it may start at once
         App-->>Host: next model, or Err(Exit(code))
@@ -306,7 +306,7 @@ failure semantics.
 
 | Protocol | Direction | Timing and cardinality |
 | --- | --- | --- |
-| Startup authority | Host to `init!`, with direct startup operations | Once, before cycling |
+| Host authority: `App.Io` | Host to `init!` and `update!` | At initialization and once per host cycle; the same lifetime authority |
 | `App.Input(msg)` | Host to `update!` | Exactly once per host cycle |
 | Effects | Application to host, in program order | Any number, synchronously, from the phases each effect permits |
 | `Draw.Frame` | Host to `render!`, with draw calls back to host | Zero or one per host cycle; exactly one per presentation frame |
@@ -733,19 +733,51 @@ queries, domain caching, and interpretation remain in Roc unless the host must
 own a narrowly defined piece for device or operating-system ownership, memory
 or concurrency safety, or a measured boundary-performance need.
 
-Every external facility states its authority boundary. A write or capture
-destination is confined to an application-selected root or capability. A
-process capability states what executable and environment it may use. Network
-and device capabilities state their platform permission behavior. The
-platform does not turn a convenient feature into ambient, undocumented access
-to the machine.
+The host supplies opaque `App.Io` authority to initialization and every
+`update!(model, input, io)` callback. `Input` remains observations and messages;
+rendering receives only its `Draw.Frame`. Pure receiver accessors select a
+service, such as `io.http()` or `io.files()`, and effects use receiver dispatch:
+`io.http().send!(request)`. Helpers and task closures should receive the narrow
+service they need. Selecting or copying a service neither performs I/O nor
+widens its authority. Captured services remain valid for the application
+lifetime; phase restrictions apply independently of possession.
+
+External services are denied by default. Their operations return typed
+`PermissionDenied` before admitting work or touching the external system.
+The launcher flag `--host-caps-allow-all` explicitly grants the existing broad
+external services, subject to the same phase rules and resource bounds.
+There are no per-service launch flags, interactive prompts, or revocation in
+this policy. The flag is host-owned and is removed from application arguments.
+
+The default profile retains the interactive surface, input, window control,
+audio playback, resource construction from app-owned bytes, clocks, entropy,
+timers, and reads of the app's own framebuffer. Filesystem access (including
+cwd writes and packaged assets), HTTP, UDP, processes, SQLite, environment,
+clipboard, stdout/stderr, and capture output require external authority.
+Indirect file loaders and configured file fonts obey the same policy. Dropped
+file paths are observations, not grants. Configuration may describe a recording
+but cannot start external work: the application explicitly starts it through
+its capture capability during initialization or another permitted phase.
+
+Each service states the extent of its authority. The initial allow-all grant
+is broad: files are not directory-confined, HTTP is not origin-confined,
+processes are not executable-confined, and SQLite is not a restricted VFS.
+An asset store still enforces its relative path contract, but this is not a
+general filesystem sandbox. These typed boundaries prepare for narrower future
+grants without claiming operating-system isolation today. Derived resources
+retain the authority required for their documented operations.
+
+App-controlled diagnostic payloads cannot bypass denied raw output. Restricted
+runs suppress payloads from debug, failed expectations, and crash text while
+retaining fixed host diagnostics. An operator may separately request host
+Observatory output; that is launcher authority, not an application grant.
 
 There is no arbitrary native-call facility. Effectful closures exist for
 exactly one purpose — the body of a task — and a task runs on the frame thread
 under the same phase guard as every other application code. No API accepts a
 closure the host will run at an unspecified time, on an unspecified thread, or
 outside a phase. New host work is represented by a typed effect, waiting
-effect, input field, render operation, or startup capability.
+effect, input field, render operation, or host authority.
 
 ## Targets and capability profiles
 

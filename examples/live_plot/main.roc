@@ -8,7 +8,7 @@
 ## points efficiently.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -685,11 +685,11 @@ walk_root : Str
 walk_root = "."
 
 ## Run one unit of work as a task. The only effectful line in the walk.
-start_work! : App.Input(Msg), Work => {}
-start_work! = |input, work|
+start_work! : Files.Access, App.Input(Msg), Work => {}
+start_work! = |files, input, work|
 	match work {
-		ListDir(path) => Task.spawn!(input, || Listed(path, Files.list!(path)))
-		ReadFile(path, slot) => Task.spawn!(input, || FileRead(path, slot, Files.read_bytes!(path)))
+		ListDir(path) => Task.spawn!(input, || Listed(path, files.list!(path)))
+		ReadFile(path, slot) => Task.spawn!(input, || FileRead(path, slot, files.read_bytes!(path)))
 	}
 
 ## Turn one directory's entries into the work they imply.
@@ -752,6 +752,7 @@ describe_list_error = |reason|
 	match reason {
 		NotFound => "not found"
 		NotADirectory => "not a directory"
+		PermissionDenied => "file access was not granted"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "listings unavailable"
@@ -762,6 +763,7 @@ describe_read_error : Files.ReadBytesError -> Str
 describe_read_error = |reason|
 	match reason {
 		NotFound => "not found"
+		PermissionDenied => "file access was not granted"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "reads unavailable"
@@ -1599,7 +1601,12 @@ other_mode = |mode|
 init! : App.Init(Model, _)
 init! = App.init_for_args(
 	live_plot_config,
-	|startup| {
+	|io| {
+		match live_plot_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
 		# is rasterised at the size it is loaded at, so a masthead drawn from a
 		# 15-pixel atlas is soft and a table label drawn from a 34-pixel one is
@@ -1625,7 +1632,7 @@ init! = App.init_for_args(
 				.prepare!()?
 
 		Ok({
-			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo: List.contains(io.args!(), record_demo_flag),
 			glow: glow,
 			queue: WorkQueue.new(),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
@@ -1664,8 +1671,8 @@ init! = App.init_for_args(
 sprite_of : Model -> Draw.Texture
 sprite_of = |model| model.glow.texture()
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
@@ -1731,7 +1738,7 @@ update! = |model, program_input| {
 		}
 
 	for work in ready.starting {
-		start_work!(program_input, work)
+		start_work!(io.files(), program_input, work)
 	}
 
 	exit =

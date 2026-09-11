@@ -4,7 +4,7 @@
 ## and press Escape to quit. This example introduces the three app functions:
 ## `init!` creates the starting state, `update!` responds to each `Input`, and
 ## `render!` draws the current state into a `Frame`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Color
@@ -33,15 +33,14 @@ Layout : {
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("Hello RocRay")
 		.with_size({ width: 800, height: 600 })
-		.with_frame_pacing(Capped(120))
-		.with_default_font({ path: "examples/live_plot/assets/fonts/LiberationSans-Regular.ttf", size: 38 }),
-	|startup| {
-		font = startup.default_font!()?
+		.with_frame_pacing(Capped(120)),
+	|_io| {
+		font = Draw.default_font!()
 		Ok({
 			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
 			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
@@ -58,8 +57,8 @@ init! = App.init(
 ## tasks answer with; see the `task_sleep` and `async_read` examples.
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	if input.key_pressed(KeyEscape) {
 		Err(Exit(0))

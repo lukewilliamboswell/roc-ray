@@ -7,7 +7,7 @@
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -69,9 +69,9 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init_for_args(
 	|_args| App.default.with_title("RocRay HTTP Fetch").with_size({ width: 900, height: 640 }).with_frame_pacing(Capped(60)),
-	|startup| {
+	|io| {
 		font = Draw.default_font!()
-		url = chosen_url(App.args!(startup), App.read_env!(startup, "ROC_RAY_HTTP_URL"))
+		url = chosen_url(io.args!(), io.env().read!("ROC_RAY_HTTP_URL"))
 		Ok({
 			url,
 			state: Waiting,
@@ -106,8 +106,8 @@ chosen_url = |args, from_env| {
 	}
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	elapsed = model.elapsed + input.time.elapsed_seconds
 
 	# Cycle 0 starts the first fetch; R starts another one. Both are the same
@@ -122,7 +122,8 @@ update! = |model, input| {
 	if refetch {
 		url = model.url
 		id = fetch
-		Task.spawn!(input, || fetch!(id, url))
+		http = io.http()
+		Task.spawn!(input, || fetch!(http, id, url))
 	}
 
 	if input.devices.key_pressed(KeyEscape) {
@@ -145,14 +146,15 @@ update! = |model, input| {
 ## string: `get_utf8!` takes an already-validated `Url`, which is what a quoted
 ## literal in the source becomes. `send!` does the parsing itself and reports
 ## `InvalidUrl` when the string is not one.
-fetch! : U64, Str => Msg
-fetch! = |id, url|
-	match Http.send!(Request.from_method(GET).with_uri(url)) {
+fetch! : Http.Client, U64, Str => Msg
+fetch! = |http, id, url|
+	match http.send!(Request.from_method(GET).with_uri(url)) {
 		Ok(response) =>
 			match Str.from_utf8(Response.body(response)) {
 				Ok(body) => Arrived(id, Response.status(response), body)
 				Err(_) => Broke(id, "the response body was not valid UTF-8")
 			}
+		Err(PermissionDenied) => Broke(id, "HTTP access was not granted")
 		Err(InvalidUrl(_)) => Broke(id, "that is not a URL this platform will fetch")
 		Err(HttpErr(Timeout)) => Broke(id, "the request timed out")
 		Err(HttpErr(NetworkError)) => Broke(id, "the request failed at the network layer")

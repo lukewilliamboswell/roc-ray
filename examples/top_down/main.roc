@@ -12,7 +12,7 @@
 ## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -84,11 +84,16 @@ top_down_config = |args| {
 init! : App.Init(Model, _)
 init! = App.init_for_args(
 	top_down_config,
-	|startup| {
-		assets = GameAssets.load!()?
-		level = Level.load!(assets.tiles)?
+	|io| {
+		match top_down_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
+		assets = GameAssets.load!(io)?
+		level = Level.load!(io, assets.tiles)?
 		assets.sounds.music.play!()
-		Ok({ assets, level, world: Game.new(level), demo: List.contains(App.args!(startup), record_demo_flag), demo_frame: 0 })
+		Ok({ assets, level, world: Game.new(level), demo: List.contains(io.args!(), record_demo_flag), demo_frame: 0 })
 	},
 )
 
@@ -167,8 +172,8 @@ play_event! = |assets, level, previous_world, world, event| {
 Msg : []
 
 ## Advances pure gameplay, performs its events, and handles capture or quit.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	controls = if model.demo demo_controls(model.demo_frame) else read_controls(program_input.devices)
 	dt = program_input.time.elapsed_seconds
 	(world, events) = Game.update(model.level, model.world, controls, dt)

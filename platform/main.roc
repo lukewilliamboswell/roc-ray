@@ -2,8 +2,13 @@
 ## Roc applications.
 ##
 ## An app provides `init!`, `update!`, and `render!`. `init!` creates the first
-## model. Each host cycle, `update!` folds one `App.Input` into the next model;
+## model with `App.Io` authority. Each host cycle, `update!` receives that same
+## authority and folds one `App.Input` into the next model;
 ## `render!` may then draw that model through a `Draw.Frame`.
+##
+## Select external services with receivers such as `io.files()` and `io.http()`.
+## External effects return `PermissionDenied` unless the launcher grants
+## `--host-caps-allow-all`. Phase rules and resource bounds still apply.
 ##
 ## Host-state effects are legal in `init!`, `update!`, and tasks. Drawing is
 ## legal only in `render!`. Waiting effects are legal in `init!`, where they
@@ -16,7 +21,7 @@
 ## This app opens a window, draws a circle, and exits on Escape:
 ##
 ## ```roc
-## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 ##
 ## import rr.App
 ## import rr.Color
@@ -29,10 +34,10 @@
 ## program = { init!, update!, render! }
 ##
 ## init! : App.Init(Model, [])
-## init! = App.init(App.default.with_title("Hello"), |_startup| Ok({ frames: 0 }))
+## init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
 ##
-## update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-## update! = |model, input|
+## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+## update! = |model, input, _io|
 ##     if input.devices.key_pressed(KeyEscape) {
 ##         Err(Exit(0))
 ##     } else {
@@ -52,15 +57,15 @@ platform ""
 		[Model : model, Msg : msg] for program : {
 			init! : {
 				config : List(Str) -> App.Config,
-				run! : App.Startup => Try(model, [Exit(I64), ..]),
+				run! : App.Io => Try(model, [Exit(I64), ..]),
 			},
-			update! : model, App.Input(msg) => Try(model, [Exit(I64), ..]),
+			update! : model, App.Input(msg), App.Io => Try(model, [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
 	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace]
 	packages {
-		roc: "nightly-2026-09-06-d85e877",
+		roc: "nightly-2026-09-10-a670e34",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	}
@@ -154,7 +159,6 @@ platform ""
 		"roc_app_exit": Host.app_exit!,
 		"roc_app_args": Host.app_args!,
 		"roc_app_read_env": Host.app_read_env!,
-		"roc_app_read_text_raw": Host.app_read_text!,
 		"roc_random_entropy": Host.random_entropy!,
 		"roc_random_i32": Host.random_i32!,
 		"roc_keys_set_exit_key": Host.keys_set_exit_key!,
@@ -348,9 +352,9 @@ app_input_from_raw = |devices, window, time, capture, messages, dropped, dropped
 ## Run the app's startup callback with the platform's startup authority.
 ##
 ## No input, window, or timing observations have been sampled at this point.
-init_for_host! : () => Try(Box(Model), I64)
-init_for_host! = ||
-	match (program.init!.run!)(App.Startup.for_host({})) {
+init_for_host! : Host.AppIo => Try(Box(Model), I64)
+init_for_host! = |authority|
+	match (program.init!.run!)(App.Io.for_host(authority)) {
 		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
@@ -370,12 +374,12 @@ init_for_host! = ||
 ## referenced and mutates them rather than copying. `test/model_inplace` holds
 ## that to under a hundred bytes per frame for a million-element `List(F32)`,
 ## under `scripts/test_model_allocation.py`.
-update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
-update_for_host! = |boxed_model, { devices, window, time, task_results, capture, dropped, dropped_overflow }| {
+update_for_host! : Box(Model), InputFromHostCycle(Msg), Host.AppIo => Try(Box(Model), I64)
+update_for_host! = |boxed_model, { devices, window, time, task_results, capture, dropped, dropped_overflow }, authority| {
 	messages = receive_task_results(task_results)
 	input = app_input_from_raw(devices, window, time, capture, messages, dropped, dropped_overflow)
 	model = Box.unbox(boxed_model)
-	match (program.update!)(model, input) {
+	match (program.update!)(model, input, App.Io.for_host(authority)) {
 		Ok(next) => Ok(Box.box(next))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

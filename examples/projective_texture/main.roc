@@ -4,7 +4,7 @@
 ## the mouse cursor after calculating what the pointer is over.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -75,7 +75,7 @@ initial_corners = {
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 init! = App.init(
 	App.default.with_title("Projective Texture").with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		texture = Assets.generate_checked_texture!({
 			width: 512,
 			height: 512,
@@ -94,8 +94,8 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	dragged = model.drag_corner(program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })

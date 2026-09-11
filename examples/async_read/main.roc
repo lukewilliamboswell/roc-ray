@@ -1,7 +1,7 @@
 ## Reads text, bytes, and file details while continuing to animate the window.
 ## Press Escape to quit. This example introduces tasks for work that may take
 ## time, messages that return task results to `update!`, and typed file errors.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Files
@@ -51,7 +51,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)),
-	|_host| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			small: Waiting,
@@ -65,13 +65,13 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
-		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
-		Task.spawn!(program_input, || MetadataFinished(Files.metadata!(small_path)))
+		Task.spawn!(program_input, || SmallReadFinished(io.files().read_text!(small_path)))
+		Task.spawn!(program_input, || BytesReadFinished(io.files().read_bytes!(large_path)))
+		Task.spawn!(program_input, || MetadataFinished(io.files().metadata!(small_path)))
 	}
 
 	if program_input.devices.key_pressed(KeyEscape) {
@@ -121,6 +121,7 @@ string_state = |result|
 	match result {
 		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
 		Err(NotFound) => Failed("not found")
+		Err(PermissionDenied) => Failed("file access was not granted")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")
@@ -133,6 +134,7 @@ bytes_state = |result|
 	match result {
 		Ok(bytes) => Held(bytes)
 		Err(NotFound) => Failed("not found")
+		Err(PermissionDenied) => Failed("file access was not granted")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")

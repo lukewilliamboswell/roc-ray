@@ -1,6 +1,15 @@
 ## Private typed ARC identities shared by public adapters and hosted declarations.
 ## Only the host creates live resources; the public APIs supply resource-free stubs.
 Resource := [].{
+
+	## Host-issued application-lifetime authority. Its representation never escapes the platform.
+	Authority :: U64.{
+
+		## Inert value for pure tests; never accepted by the host.
+		stub : Authority
+		stub = Authority.(0)
+	}
+
 	Handle(_resource) :: Box(U64).{
 		is_eq : Handle(_resource), Handle(_resource) -> Bool
 		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)

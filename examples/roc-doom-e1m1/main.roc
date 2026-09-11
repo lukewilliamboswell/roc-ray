@@ -3,7 +3,7 @@
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -78,15 +78,15 @@ init! = App.init(
 		.with_size({ width: 1280, height: 720 })
 		.with_frame_pacing(VSync)
 		.with_cursor_mode(Locked),
-	|_startup| {
-		store = Assets.Store.open!(Assets.working_directory("examples/roc-doom-e1m1/assets"))?
+	|io| {
+		store = io.assets().open!(Assets.working_directory("examples/roc-doom-e1m1/assets"))?
 		world_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/world_atlas.png")?
 		sprite_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/sprite_atlas.png")?
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
 		logical_target = Draw.RenderTexture.load!({ width: 320.I32, height: 200.I32 })?
-		sounds = load_sounds!()?
+		sounds = load_sounds!(io.audio())?
 		title_font = Draw.default_font!()
 
 		map = RocDoomMap.e1m1
@@ -114,9 +114,9 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
-	write_geometry_debug!(model, input, debug_geometry)
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
+	write_geometry_debug!(model, input, io.stdout(), debug_geometry)
 	if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else if model.title {
@@ -201,14 +201,14 @@ update! = |model, input| {
 	}
 }
 
-write_geometry_debug! = |model, input, enabled| if enabled and input.devices.key_pressed(KeyF3) {
+write_geometry_debug! = |model, input, stdout, enabled| if enabled and input.devices.key_pressed(KeyF3) {
 	state = model.world.doom.player.sim.state
 	match RocDoomDebug.trace(RocDoomMap.e1m1, model.level, state.pos, state.angle) {
 		Ok(hit) => for line in hit.lines {
-			_ = Stdout.line!(line)
+			_ = stdout.line!(line)
 		}
 		Err(_) => {
-			_ = Stdout.line!("GEOMETRY DEBUG: crosshair ray hit no linedef")
+			_ = stdout.line!("GEOMETRY DEBUG: crosshair ray hit no linedef")
 		}
 	}
 } else {}
@@ -744,23 +744,23 @@ max_cues_per_cycle = 16.U64
 
 spatial_max_distance = 1200
 
-load_sounds! = || {
+load_sounds! = |audio| {
 	base = "examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/sounds"
-	fire = Audio.load_sound!("${base}/weapon_pistol.wav")?
-	pickup = Audio.load_sound!("${base}/pickup_item.wav")?
-	pain = Audio.load_sound!("${base}/monster_former_human_pain.wav")?
-	death = Audio.load_sound!("${base}/monster_former_human_death_1.wav")?
-	alert = Audio.load_sound!("${base}/monster_former_human_sight_1.wav")?
-	door = Audio.load_sound!("${base}/world_door_open.wav")?
-	switch_on = Audio.load_sound!("${base}/world_switch_on.wav")?
-	switch_off = Audio.load_sound!("${base}/world_switch_off.wav")?
-	monster_attack = Audio.load_sound!("${base}/monster_imp_ranged_attack.wav")?
-	projectile = Audio.load_sound!("${base}/effect_imp_projectile.wav")?
-	explosion = Audio.load_sound!("${base}/effect_imp_explosion.wav")?
-	oof = Audio.load_sound!("${base}/player_oof.wav")?
-	no_way = Audio.load_sound!("${base}/player_no_way.wav")?
-	platform_move = Audio.load_sound!("${base}/world_platform_move.wav")?
-	music = Audio.load_music!("examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/music/e1m1.wav")?
+	fire = audio.load_sound!("${base}/weapon_pistol.wav")?
+	pickup = audio.load_sound!("${base}/pickup_item.wav")?
+	pain = audio.load_sound!("${base}/monster_former_human_pain.wav")?
+	death = audio.load_sound!("${base}/monster_former_human_death_1.wav")?
+	alert = audio.load_sound!("${base}/monster_former_human_sight_1.wav")?
+	door = audio.load_sound!("${base}/world_door_open.wav")?
+	switch_on = audio.load_sound!("${base}/world_switch_on.wav")?
+	switch_off = audio.load_sound!("${base}/world_switch_off.wav")?
+	monster_attack = audio.load_sound!("${base}/monster_imp_ranged_attack.wav")?
+	projectile = audio.load_sound!("${base}/effect_imp_projectile.wav")?
+	explosion = audio.load_sound!("${base}/effect_imp_explosion.wav")?
+	oof = audio.load_sound!("${base}/player_oof.wav")?
+	no_way = audio.load_sound!("${base}/player_no_way.wav")?
+	platform_move = audio.load_sound!("${base}/world_platform_move.wav")?
+	music = audio.load_music!("examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/music/e1m1.wav")?
 	music.set_looping!(Bool.True)
 	music.set_volume!(0.45)
 	music.play!()

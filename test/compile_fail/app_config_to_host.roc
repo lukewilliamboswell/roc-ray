@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Draw
@@ -8,12 +8,12 @@ Model : {}
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_startup| Ok({}))
+init! = App.init(App.default, |io| Ok({}))
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, io| {
 	_transport = App.default.to_host()
 	Ok(model)
 }

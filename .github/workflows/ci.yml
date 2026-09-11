@@ -151,6 +151,10 @@ jobs:
   build-and-test:
     name: Build and Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      # This nightly's LLVM speed pipeline exceeds hosted-runner limits on the
+      # larger examples. The native backend still validates linking and runtime.
+      ROC_BUILD_OPT: dev
     strategy:
       fail-fast: false
       matrix:

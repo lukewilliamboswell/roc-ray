@@ -2,7 +2,7 @@
 ## the task finishes, or press Escape to quit. This example introduces Tasks as
 ## work that may wait without pausing drawing, and Messages as the values
 ## completed tasks deliver to a later Input.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Task
@@ -38,7 +38,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Task Sleep").with_frame_pacing(Capped(60)),
-	|_host| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			state: Waiting,
@@ -51,8 +51,8 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	cycle = input.time.cycle_count
 	settled = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
 	if cycle == 0 {
@@ -68,7 +68,7 @@ update! = |model, input| {
 			},
 		)
 		# Printed from `update!` too, one line before any of the waiting starts.
-		_ = Stdout.line!(start_line)
+		_ = io.stdout().line!(start_line)
 	}
 
 	match settled {
@@ -76,7 +76,7 @@ update! = |model, input| {
 			# The line is queued here and written by the host's own thread, so
 			# exiting on the next expression does not race it out of the
 			# process: shutdown drains the queue.
-			_ = Stdout.line!(report_line(arrived_on))
+			_ = io.stdout().line!(report_line(arrived_on))
 			Err(Exit(0))
 		}
 		Waiting =>

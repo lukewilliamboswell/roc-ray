@@ -1,4 +1,5 @@
 ## Spark Run textures, font, music, and sound effects loaded at startup.
+import rr.App
 import rr.Assets
 import rr.Audio
 import rr.Draw
@@ -22,12 +23,12 @@ GameAssets := {
 	}
 
 	## Loads every texture, font, sound, and music stream before the first frame.
-	load! = || {
-		store = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
+	load! = |io| {
+		store = io.assets().open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = Assets.load_texture!(store, "kenney-topdown/characters.png")?
 		tiles = Assets.load_texture!(store, "kenney-topdown/tiles.png")?
 		font = Draw.default_font!()
-		sounds = load_sounds!()?
+		sounds = load_sounds!(io)?
 		Ok({ characters, tiles, font, sounds })
 	}
 }
@@ -54,23 +55,23 @@ make_sound! = |waveform, from, to, ms, volume|
 	Audio.gen_sound!({ waveform, freq_start: from, freq_end: to, ms, attack_ms: 2, decay_ms: 24, sustain: 0.45, release_ms: 45, volume })
 
 ## Loads a sound file or retains its generated fallback.
-load_sound_or! : Str, Audio.Sound => Audio.Sound
-load_sound_or! = |path, fallback|
-	match Audio.load_sound!(path) {
+load_sound_or! : App.Io, Str, Audio.Sound => Audio.Sound
+load_sound_or! = |io, path, fallback|
+	match io.audio().load_sound!(path) {
 		Ok(sound) => sound
 		Err(_) => fallback
 	}
 
 ## Loads the complete sound set and configures looping background music.
-load_sounds! = || {
-	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
-	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
-	win = load_sound_or!(win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
-	lose = load_sound_or!(lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
-	gate = load_sound_or!(gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
-	dash = load_sound_or!(dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
+load_sounds! = |io| {
+	collect = load_sound_or!(io, collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
+	hurt = load_sound_or!(io, hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
+	win = load_sound_or!(io, win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
+	lose = load_sound_or!(io, lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
+	gate = load_sound_or!(io, gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
+	dash = load_sound_or!(io, dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
 	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)?
-	music = Audio.load_music!(music_path)?
+	music = io.audio().load_music!(music_path)?
 	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Task
@@ -21,7 +21,7 @@ Msg : [Done(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("task cap"), |_startup| Ok({ seen: 0, sum: 0 }))
+init! = App.init(App.default.with_title("task cap"), |_io| Ok({ seen: 0, sum: 0 }))
 
 ## Comfortably past the host's 32 live tasks.
 wanted : U64
@@ -43,8 +43,8 @@ build_ids = |acc, n| if n > wanted acc else build_ids(List.append(acc, n), n + 1
 expect List.len(ids) == wanted
 expect List.fold(ids, 0, |acc, n| acc + n) == expected_sum
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	if input.time.cycle_count == 0 {
 		for id in ids {
 			# Each task parks, so the queue drains over several cycles rather

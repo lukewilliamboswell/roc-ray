@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Files
@@ -13,17 +13,20 @@ Msg : [TaskDone(Str)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, Msg)
-init! = App.init(App.default.with_title("Observatory probe"), |_startup| {
-	_init_sentinel = Files.write_text!("observatory-init-ran", "init")
-	Trace.mark!("probe init")
-	startup_zone = Trace.begin!("probe startup wait")
-	Task.sleep!(2)
-	Trace.end!(startup_zone)
-	Ok({ cycles: 0 })
-})
+init! = App.init(
+	App.default.with_title("Observatory probe"),
+	|io| {
+		_init_sentinel = io.files().write_text!("observatory-init-ran", "init")
+		Trace.mark!("probe init")
+		startup_zone = Trace.begin!("probe startup wait")
+		Task.sleep!(2)
+		Trace.end!(startup_zone)
+		Ok({ cycles: 0 })
+	},
+)
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	zone = Trace.begin!("probe update")
 	Trace.sample_i64!("probe items", 7, Count)
 	Trace.sample_f64!("load ratio", 0.5, Ratio)
@@ -51,7 +54,12 @@ update! = |model, input| {
 			},
 		)
 	}
-	done = List.any(input.messages, |msg| match msg { TaskDone(_) => Bool.True })
+	done = List.any(
+		input.messages,
+		|msg| match msg {
+			TaskDone(_) => Bool.True
+		},
+	)
 	if input.time.cycle_count >= 2 and done {
 		Err(Exit(0))
 	} else {

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 
@@ -21,12 +21,12 @@ config_for_args = |args|
 	}
 
 init! : App.Init(Model, [])
-init! = App.init_for_args(config_for_args, |startup| Ok({ args: App.args!(startup) }))
+init! = App.init_for_args(config_for_args, |io| Ok({ args: io.args!() }))
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	passed =
 		List.len(model.args) == 3
 			and List.contains(model.args, config_flag)

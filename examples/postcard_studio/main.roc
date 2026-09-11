@@ -4,7 +4,7 @@
 ##
 ## This example shows how to draw a large composition into a render texture,
 ## display a scaled preview, and use a Task for an export that may take time.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Capture
@@ -80,10 +80,15 @@ postcard_config = |args| {
 	}
 }
 
-init! : App.Init(Model, [ResourceLimit, RenderTextureLoadFailed])
+init! : App.Init(Model, [PermissionDenied, ResourceLimit, RenderTextureLoadFailed])
 init! = App.init_for_args(
 	postcard_config,
-	|startup| {
+	|io| {
+		match postcard_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		font = Draw.default_font!()
 		idle = Text.from("Ready to export 1440x960", font).size(14).prepare!()?
 		Ok({
@@ -102,13 +107,13 @@ init! = App.init_for_args(
 			theme: 0,
 			sun: { x: 520, y: 170 },
 			status: idle,
-			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo: List.contains(io.args!(), record_demo_flag),
 		})
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	input = program_input.devices
 	chrome = Box.unbox(model.chrome)
 	resolved = List.fold(
@@ -148,7 +153,7 @@ update! = |model, program_input| {
 	}
 
 	if save {
-		Task.spawn!(program_input, || PostcardExported(Capture.screenshot_texture!(next.poster, "sunrise.png")))
+		Task.spawn!(program_input, || PostcardExported(io.capture().screenshot_texture!(next.poster, "sunrise.png")))
 	}
 
 	if resolved.demo {

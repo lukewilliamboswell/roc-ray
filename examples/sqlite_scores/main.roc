@@ -2,7 +2,7 @@
 ## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
 ## This example shows startup database setup, prepared statements, and Tasks:
 ## work that may wait runs separately and returns rows as a later Message.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Color
@@ -78,12 +78,12 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit, ..])
 init! = App.init(
 	App.default.with_title("RocRay SQLite Scores").with_size({ width: 880, height: 560 }).with_frame_pacing(Capped(60)),
-	|startup| {
+	|io| {
 		# A write builds the tree on its way, which is how the directory the
 		# database lives in comes to exist.
-		_ = Files.write_bytes!("${db_dir}/.keep", [])
+		_ = io.files().write_bytes!("${db_dir}/.keep", [])
 
-		rng = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
+		rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 		font = Draw.default_font!()
 		title = Text.from("High scores that outlive the process", font).size(26).prepare!()?
 		subtitle = Text.from("the write and the re-read share one task, so the board is told what the database holds", font).size(15).prepare!()?
@@ -92,7 +92,7 @@ init! = App.init(
 		# A store that will not open is shown rather than fatal: the stub
 		# handles keep the model well-formed, every later call through them
 		# answers `Misuse`, and the status line says what went wrong.
-		match open_board!() {
+		match open_board!(io) {
 			Err(reason) =>
 				Ok({
 					db: Sqlite.Db.stub,
@@ -126,9 +126,9 @@ init! = App.init(
 )
 
 ## Open the store and read the first board. Waits, which `init!` permits.
-open_board! : () => Try({ db : Sqlite.Db, insert : Sqlite.Stmt, rows : List(Entry) }, Str)
-open_board! = || {
-	db = Sqlite.Db.open!(db_path) ? |err| describe(err)
+open_board! : App.Io => Try({ db : Sqlite.Db, insert : Sqlite.Stmt, rows : List(Entry) }, Str)
+open_board! = |io| {
+	db = io.sqlite().open!(db_path) ? |err| describe(err)
 	Sqlite.exec_script!(db, schema) ? |err| describe(err)
 	insert = Sqlite.prepare!(db, insert_run) ? |err| describe(err)
 	rows = read_board!(db)?
@@ -281,8 +281,8 @@ next_run = |state| {
 	}
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	folded = List.fold(input.messages, { ..model, elapsed: model.elapsed + input.time.elapsed_seconds }, apply_message)
 
 	if input.devices.key_pressed(KeyEscape) {

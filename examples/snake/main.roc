@@ -10,7 +10,7 @@
 ## - Rendering (`Render.roc`): board, HUD, snake, food, glow, and game over
 ## - Gameplay (`Snake.roc`, `Board.roc`): legal turns, growth, collisions, and food
 ## - Tests (`main.roc`, `Board.roc`, `Game.roc`): controls, turns, food placement, movement, eating, and crashes
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Devices
@@ -32,8 +32,8 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Snake").with_size({ width: 800, height: 600 }).with_frame_pacing(Capped(120)),
-	|startup| {
-		rng = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
+	|io| {
+		rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 		Ok({ assets: Assets.load!()?, world: Game.new_world(rng), elapsed: 0 })
 	},
 )
@@ -68,8 +68,8 @@ play_event! = |assets, event|
 Msg : []
 
 ## Advances pure rules, plays their events, and handles the quit control.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	controls = read_controls(program_input.devices)
 	dt = Math.clamp(program_input.time.elapsed_seconds, 0, 0.25)
 	(world, events) = Game.update(model.world, controls, dt)

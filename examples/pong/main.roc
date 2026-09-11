@@ -11,7 +11,7 @@
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
 ## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.Draw
 import rr.Color
@@ -193,7 +193,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Pong").with_size({ width: 800, height: 600 }),
-	|startup| {
+	|io| {
 		# Generate and prepare every host resource before the first cycle.
 		font = Draw.default_font!()
 		# Only scores 0..win_score can ever be shown, so the whole scoreboard is
@@ -225,7 +225,7 @@ init! = App.init(
 			# model state that `update!` advances without an effect, so this
 			# whole run reproduces from the one number below. Replace it with
 			# a constant to get the same game every time.
-			rng: Random.seed(U64.to_u32_wrap(App.entropy!(startup))),
+			rng: Random.seed(U64.to_u32_wrap(io.entropy!())),
 		}
 
 		Ok({ assets, world: new_match(world_seed) })
@@ -245,8 +245,8 @@ play_event! = |assets, event|
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	controls = read_controls(program_input.devices)
 
 	# Seconds since the previous frame - the basis for all motion this frame.

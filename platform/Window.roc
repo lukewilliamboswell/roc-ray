@@ -11,6 +11,7 @@
 ## decline; a later `Snapshot` is authoritative. `set_*` effects change state
 ## controlled by the host.
 import Host
+import Resource
 
 Window := [].{
 
@@ -65,25 +66,7 @@ Window := [].{
 	## `Unavailable` is an empty clipboard, non-text content, or a backend that
 	## refused. `TooLarge` is content past what the host will copy into a `Str`,
 	## and `Busy` is another process holding the clipboard.
-	ClipboardReadError : [Unavailable, TooLarge, Busy]
-
-	## Read the system clipboard as text.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
-	## backend only answers on the thread that owns the window, and the read is a
-	## pointer copy rather than I/O, so this does not wait.
-	##
-	## Content that is not text, or is larger than the host will copy into a
-	## `Str`, is refused rather than truncated.
-	read_clipboard! : () => Try(Str, ClipboardReadError)
-	read_clipboard! = ||
-		match Host.window_read_clipboard!() {
-			# closed error union to open error union
-			Ok(contents) => Ok(contents)
-			Err(Busy) => Err(Busy)
-			Err(TooLarge) => Err(TooLarge)
-			Err(Unavailable) => Err(Unavailable)
-		}
+	ClipboardReadError : [PermissionDenied, Unavailable, TooLarge, Busy]
 
 	## Set raylib's CPU-side frame-rate cap.
 	##
@@ -93,14 +76,6 @@ Window := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_target_fps! : I32 => {}
 	set_target_fps! = |fps| Host.window_set_target_fps!(fps)
-
-	## Replace the system clipboard contents.
-	##
-	## Read it back with `Window.read_clipboard!`.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	set_clipboard_text! : Str => {}
-	set_clipboard_text! = |text| Host.window_set_clipboard_text!(text)
 
 	## How many framebuffer pixels one logical unit is, per axis.
 	##
@@ -161,6 +136,35 @@ Window := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	suggest_monitor! : I32 => {}
 	suggest_monitor! = |index| Host.window_suggest_monitor!(index)
+
+	## Opaque clipboard authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Clipboard :: Resource.Authority.{
+
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Clipboard
+		for_host = |authority| Clipboard.(authority)
+
+		## Read the system clipboard as text.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
+		## backend only answers on the thread that owns the window, and the read is a
+		## pointer copy rather than I/O, so this does not wait.
+		##
+		## Content that is not text, or is larger than the host will copy into a
+		## `Str`, is refused rather than truncated.
+		read_text! : Clipboard => Try(Str, ClipboardReadError)
+		read_text! = |Clipboard.(authority)| perform_read_clipboard!(authority)
+
+		## Replace the system clipboard contents.
+		##
+		## Read it back with `Window.Clipboard.read_text!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		set_text! : Clipboard, Str => Try({}, [PermissionDenied, ..])
+		set_text! = |Clipboard.(authority), text| perform_set_clipboard_text!(authority, text)
+
+	}
+
 }
 
 ## Group the host's flat monitor record into the shape applications read.
@@ -176,4 +180,22 @@ monitor_from_host = |info| {
 expect {
 	monitor = monitor_from_host({ index: 1, name: "HDMI-1", width: 2560, height: 1440, x: 1920, y: 0, refresh_hz: 144 })
 	monitor.size == { width: 2560, height: 1440 } and monitor.position == { x: 1920, y: 0 }
+}
+
+## Private authority-taking implementations.
+perform_read_clipboard! : Resource.Authority => Try(Str, Window.ClipboardReadError)
+perform_read_clipboard! = |authority|
+	match Host.window_read_clipboard!(authority) {
+		# closed error union to open error union
+		Ok(contents) => Ok(contents)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Busy) => Err(Busy)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied, ..])
+perform_set_clipboard_text! = |authority, text| match Host.window_set_clipboard_text!(authority, text) {
+	Ok({}) => Ok({})
+	Err(PermissionDenied) => Err(PermissionDenied)
 }

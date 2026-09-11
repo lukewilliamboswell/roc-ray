@@ -1,4 +1,4 @@
-//! The `Http.send!` effect: one HTTP exchange on the app's zio runtime.
+//! The `Http.Client.send!` effect: one HTTP exchange on the app's zio runtime.
 //!
 //! `std.http.Client` is handed `rt.io()`, so every socket wait it does parks
 //! the calling coroutine instead of blocking the thread. Inside `Task.spawn!`
@@ -32,7 +32,7 @@ const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
 
 /// The flattened request `Http` hands the host, as `roc glue` generated it.
-pub const Request = abi.HostHttp_sendArgs;
+pub const Request = abi.HostHttp_sendArg1;
 
 /// A finished exchange, before it is named in the app's vocabulary.
 ///
@@ -170,7 +170,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request)
     const rt = runtime orelse return failure(
         roc_host,
         ERR_OTHER,
-        "Http.send! is only available while the app is running",
+        "Http.Client.send! is only available while the app is running",
     );
 
     var arena_state = std.heap.ArenaAllocator.init(allocator);
@@ -334,7 +334,7 @@ fn copyHeaders(arena: std.mem.Allocator, head: std.http.Client.Response.Head) Ex
 /// any `Unknown(ext)` method cannot be put on the wire from here and are
 /// reported rather than silently rewritten.
 ///
-/// `Http.send_with!` refuses both before the effect runs, so this is kept as
+/// `Http.Client.send_with!` refuses both before the effect runs, so this is kept as
 /// defence rather than as the reachable path: the host is a separate trust
 /// boundary from the Roc code above it, and code `2` is the one the wire can
 /// still carry. `request.method_ext` names the method Roc meant; nothing here
@@ -526,7 +526,7 @@ test "a method code outside the nine standard methods is refused" {
     try std.testing.expectEqual(std.http.Method.GET, try methodFromCode(3));
     try std.testing.expectEqual(std.http.Method.POST, try methodFromCode(7));
     // 2 is basic-cli's code for QUERY and for every Unknown(ext) method.
-    // `Http.send_with!` refuses those first; this is the host's own guard.
+    // `Http.Client.send_with!` refuses those first; this is the host's own guard.
     try std.testing.expectError(error.UnsupportedMethod, methodFromCode(2));
 }
 

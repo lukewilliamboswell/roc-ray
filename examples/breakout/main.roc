@@ -11,7 +11,7 @@
 ## - Rendering (`Render.roc`): cabinet, brick wall, HUD, bodies, and prompts
 ## - Gameplay (`Ball.roc`, `Paddle.roc`, `Bricks.roc`): motion and collisions
 ## - Tests (`main.roc`): key mapping, launch, wall bounce, and last life lost
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-06-d85e877" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Capture
@@ -63,11 +63,16 @@ breakout_config = |args| {
 }
 
 ## Loads presentation assets and creates the first ready-to-launch world.
-init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
+init! : App.Init(Model, [PermissionDenied, ResourceLimit, SoundGenerationFailed])
 init! = App.init_for_args(
 	breakout_config,
-	|startup| {
-		demo = List.contains(App.args!(startup), record_demo_flag)
+	|io| {
+		match breakout_config(io.args!()).recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
+		demo = List.contains(io.args!(), record_demo_flag)
 		Ok({ assets: Assets.load!()?, world: Game.new_world(), demo, elapsed: 0 })
 	},
 )
@@ -114,8 +119,8 @@ play_event! = |assets, event|
 Msg : []
 
 ## Advances the world, plays its events, and handles quitting or recording end.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	dt = program_input.time.elapsed_seconds
 	controls = if model.demo demo_controls(model.world) else read_controls(program_input.devices)
 	(world, events) = Game.update(model.world, controls, dt)

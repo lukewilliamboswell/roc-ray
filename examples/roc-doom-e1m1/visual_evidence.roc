@@ -3,8 +3,8 @@
 ## player simulation and map policy in Roc; the host retains textures and draws
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
-	roc: "nightly-2026-09-06-d85e877",
+	rr: platform "../../platform/main.roc",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -94,15 +94,28 @@ init! = App.init_for_args(
 		}
 	},
 	|startup| {
-		evidence_active = List.contains(App.args!(startup), "--capture-evidence")
-		store = Assets.Store.open!(Assets.working_directory("examples/roc-doom-e1m1/assets"))?
+		args = startup.args!()
+		evidence_active = List.contains(args, "--capture-evidence")
+		if evidence_active {
+			startup.capture().start!(
+				Capture.default
+					.with_path(if List.contains(args, "--long-evidence") "doom-scripted-long.webm" else "doom-scripted-fast.webm")
+					.with_format(WebM)
+					.with_fps(35)
+					.with_max_frames(0)
+					.with_scale(Full)
+					.with_timing(FixedStep)
+					.with_cursor(NoCursor),
+			)?
+		}
+		store = startup.assets().open!(Assets.working_directory("examples/roc-doom-e1m1/assets"))?
 		world_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/world_atlas.png")?
 		sprite_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/sprite_atlas.png")?
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
 		logical_target = Draw.RenderTexture.load!({ width: 320.I32, height: 200.I32 })?
-		sounds = load_sounds!()?
+		sounds = load_sounds!(startup.audio())?
 
 		map = RocDoomMap.e1m1
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
@@ -125,16 +138,16 @@ init! = App.init_for_args(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: RocDoomView.initial, sounds, evidence: { active: evidence_active, long: List.contains(App.args!(startup), "--long-evidence"), stage: 0, tic: 0, mouse_x: 100, requested: [], saved: 0, hold_until: 0, start_pos: position, start_angle: angle } })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: RocDoomView.initial, sounds, evidence: { active: evidence_active, long: List.contains(args, "--long-evidence"), stage: 0, tic: 0, mouse_x: 100, requested: [], saved: 0, hold_until: 0, start_pos: position, start_angle: angle } })
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), PermissionDenied, ..])
+update! = |model, input, io| {
 	saved = model.evidence.saved + List.len(input.messages)
 	model0 = { ..model, evidence: { ..model.evidence, saved } }
 	if model0.evidence.active {
-		update_evidence!(model0, input)
+		update_evidence!(model0, input, io.capture(), io.stdout())
 	} else if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else if input.devices.key_pressed(KeyR) {
@@ -193,7 +206,8 @@ update! = |model, input| {
 	}
 }
 
-update_evidence! = |model, input| {
+update_evidence! : Model, App.Input(Msg), Capture.Writer, Stdout.Writer => Try(Model, [Exit(I64), PermissionDenied, ..])
+update_evidence! = |model, input, capture, stdout| {
 	required = if model.evidence.long 13 else 12
 	# A capture task completes only after the returned model has had a
 	# presentation frame. Never place the next scenario while that task is
@@ -213,13 +227,13 @@ update_evidence! = |model, input| {
 	} else if model.evidence.saved >= required {
 		# Finalize explicitly and wait for the following sampled status. This
 		# makes a successful exit proof that the shareable WebM was closed.
-		Capture.stop!()
+		capture.stop!()?
 		Ok({ ..model, evidence: { ..model.evidence, stage: 26 } })
 	} else if input.time.cycle_count > 1400 {
 		Err(Exit(2))
 	} else if model.evidence.stage == 0 {
 		if !(valid_spawn(model)) return Err(Exit(3))
-		next = capture_state!(model, input, "spawn")
+		next = capture_state!(capture, stdout, model, input, "spawn")
 		Ok({ ..next, evidence: { ..next.evidence, stage: 1 } })
 	} else if model.evidence.stage == 1 {
 		Keys.set_source!(Keys.holding([KeyA]))
@@ -229,7 +243,7 @@ update_evidence! = |model, input| {
 		next = advance_from_input(model, input)
 		delta = RocDoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
 		if !(input.devices.key_pressed(KeyA) and input.devices.key_down(KeyA) and RocDoomSim.dot(delta, RocDoomControls.visual_right(model.evidence.start_angle)) < 0) return Err(Exit(3))
-		captured = capture_state!(next, input, "strafe-left")
+		captured = capture_state!(capture, stdout, next, input, "strafe-left")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 3 } })
 	} else if model.evidence.stage == 3 {
 		Keys.set_source!(Keys.holding([KeyD]))
@@ -239,7 +253,7 @@ update_evidence! = |model, input| {
 		next = advance_from_input(model, input)
 		delta = RocDoomSim.sub(next.world.doom.player.sim.state.pos, model.evidence.start_pos)
 		if !(input.devices.key_released(KeyA) and input.devices.key_pressed(KeyD) and RocDoomSim.dot(delta, RocDoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
-		captured = capture_state!(next, input, "strafe-right")
+		captured = capture_state!(capture, stdout, next, input, "strafe-right")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 5 } })
 	} else if model.evidence.stage == 5 {
 		Keys.set_source!(Keys.holding([]))
@@ -249,7 +263,7 @@ update_evidence! = |model, input| {
 	} else if model.evidence.stage == 6 {
 		next = advance_from_input(model, input)
 		if !(input.devices.mouse.delta().x > 0 and RocDoomSim.dot(next.world.doom.player.sim.state.angle.forward(), RocDoomControls.visual_right(model.evidence.start_angle)) > 0) return Err(Exit(3))
-		captured = capture_state!(next, input, "mouse-turn")
+		captured = capture_state!(capture, stdout, next, input, "mouse-turn")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 7 } })
 	} else if model.evidence.stage == 7 {
 		# Face the intentional null-texture gap at linedef 1049. Both adjoining
@@ -259,14 +273,14 @@ update_evidence! = |model, input| {
 		Keys.set_source!(Keys.holding([]))
 		Ok({ ..west_sky, evidence: { ..west_sky.evidence, stage: 8 } })
 	} else if model.evidence.stage == 8 {
-		captured = capture_state!(model, input, "west-sky-portal")
+		captured = capture_state!(capture, stdout, model, input, "west-sky-portal")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 9 } })
 	} else if model.evidence.stage == 9 {
 		corridor = at_scenario(model, { x: -288, y: 256 }, RocDoomSim.Angle.from_turns(0))
 		Keys.set_source!(Keys.holding([]))
 		Ok({ ..corridor, evidence: { ..corridor.evidence, stage: 10 } })
 	} else if model.evidence.stage == 10 {
-		captured = capture_state!(model, input, "first-corridor-wall-hole")
+		captured = capture_state!(capture, stdout, model, input, "first-corridor-wall-hole")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 11 } })
 	} else if model.evidence.stage == 11 {
 		Keys.set_source!(Keys.holding([KeyW]))
@@ -274,7 +288,7 @@ update_evidence! = |model, input| {
 	} else if model.evidence.stage == 12 {
 		next = advance_from_input(model, input)
 		if current_sector(next) == 141 {
-			captured = capture_state!(next, input, "open-portal-collision")
+			captured = capture_state!(capture, stdout, next, input, "open-portal-collision")
 			Ok({ ..captured, evidence: { ..captured.evidence, stage: 13 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
@@ -288,7 +302,7 @@ update_evidence! = |model, input| {
 		Keys.set_source!(Keys.holding([]))
 		Ok({ ..aperture, evidence: { ..aperture.evidence, stage: 14 } })
 	} else if model.evidence.stage == 14 {
-		captured = capture_state!(model, input, "sector141-aperture")
+		captured = capture_state!(capture, stdout, model, input, "sector141-aperture")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 15 } })
 	} else if model.evidence.stage == 15 {
 		colu = at_scenario(model, { x: 752, y: 608 }, RocDoomSim.Angle.from_turns(0.5))
@@ -297,7 +311,7 @@ update_evidence! = |model, input| {
 	} else if model.evidence.stage == 16 {
 		next = advance_from_input(model, input)
 		if next.world.doom.player.sim.state.tic >= 7 {
-			captured = capture_state!(next, input, "colu-portal-navigation")
+			captured = capture_state!(capture, stdout, next, input, "colu-portal-navigation")
 			Ok({ ..captured, evidence: { ..captured.evidence, stage: 17 } })
 		} else {
 			Keys.set_source!(Keys.holding([KeyW]))
@@ -308,7 +322,7 @@ update_evidence! = |model, input| {
 		Keys.set_source!(Keys.holding([]))
 		Ok({ ..door, evidence: { ..door.evidence, stage: 18 } })
 	} else if model.evidence.stage == 18 {
-		captured = capture_state!(model, input, "door-closed")
+		captured = capture_state!(capture, stdout, model, input, "door-closed")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 19 } })
 	} else if model.evidence.stage == 19 {
 		Keys.set_source!(Keys.holding([KeyE]))
@@ -317,7 +331,7 @@ update_evidence! = |model, input| {
 		next = advance_from_input(model, input)
 		if List.is_empty(next.level.doors) return Err(Exit(3))
 		if next.world.doom.player.sim.state.tic >= 20 {
-			captured = capture_state!(next, input, "door-open")
+			captured = capture_state!(capture, stdout, next, input, "door-open")
 			Ok({ ..captured, evidence: { ..captured.evidence, stage: 21 } })
 		} else {
 			Keys.set_source!(Keys.holding([]))
@@ -329,7 +343,7 @@ update_evidence! = |model, input| {
 	} else if model.evidence.stage == 22 {
 		next = advance_from_input(model, input)
 		if next.world.weapon.phase == 0 return Err(Exit(3))
-		captured = capture_state!(next, input, "combat")
+		captured = capture_state!(capture, stdout, next, input, "combat")
 		Ok({ ..captured, evidence: { ..captured.evidence, stage: 23 } })
 	} else if model.evidence.stage == 23 {
 		if model.evidence.long {
@@ -345,7 +359,7 @@ update_evidence! = |model, input| {
 		sector = current_sector(next)
 		special = (List.get(RocDoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
 		if special == 7 {
-			captured = capture_state!(next, input, "damaging-floor")
+			captured = capture_state!(capture, stdout, next, input, "damaging-floor")
 			Keys.set_source!(Keys.holding([]))
 			Ok({ ..captured, evidence: { ..captured.evidence, stage: 25 } })
 		} else {
@@ -413,17 +427,17 @@ valid_spawn = |model| {
 current_sector = |model|
 	RocDoomLevel.sector_at(RocDoomMap.e1m1, { x: F32.to_f64(model.world.doom.player.sim.state.pos.x), y: F32.to_f64(model.world.doom.player.sim.state.pos.y) }) ?? crash "evidence player outside BSP"
 
-capture_state! = |model, input, checkpoint| {
+capture_state! = |capture, stdout, model, input, checkpoint| {
 	sector = current_sector(model)
 	heights = RocDoomLevel.heights_for(model.level, sector) ?? crash "evidence sector missing"
 	special = (List.get(RocDoomMap.e1m1.raw().sectors, sector) ?? crash "validated sector missing").special
 	line = nearest_blocking_line(model, sector)
 	state = model.world.doom.player.sim.state
-	_ = Stdout.line!("{\"checkpoint\":\"${checkpoint}\",\"cycle\":${U64.to_str(input.time.cycle_count)},\"tic\":${U64.to_str(state.tic)},\"x\":${F32.to_str(state.pos.x)},\"y\":${F32.to_str(state.pos.y)},\"angle\":${F32.to_str(state.angle.turns())},\"sector\":${U64.to_str(sector)},\"floor\":${I64.to_str(heights.floor)},\"ceiling\":${I64.to_str(heights.ceiling)},\"special\":${U64.to_str(special)},\"health\":${I64.to_str(model.world.doom.player.health)},\"blocking_linedef\":${U64.to_str(line)}}")
+	_ = stdout.line!("{\"checkpoint\":\"${checkpoint}\",\"cycle\":${U64.to_str(input.time.cycle_count)},\"tic\":${U64.to_str(state.tic)},\"x\":${F32.to_str(state.pos.x)},\"y\":${F32.to_str(state.pos.y)},\"angle\":${F32.to_str(state.angle.turns())},\"sector\":${U64.to_str(sector)},\"floor\":${I64.to_str(heights.floor)},\"ceiling\":${I64.to_str(heights.ceiling)},\"special\":${U64.to_str(special)},\"health\":${I64.to_str(model.world.doom.player.health)},\"blocking_linedef\":${U64.to_str(line)}}")
 	Task.spawn!(
 		input,
 		|| {
-			_ = Capture.screenshot!("${checkpoint}.png")
+			_ = capture.screenshot!("${checkpoint}.png")
 			EvidenceSaved
 		},
 	)
@@ -825,23 +839,23 @@ play_cue! = |sounds, cue|
 		PlatformCue => sounds.platform_move.play!()
 	}
 
-load_sounds! = || {
+load_sounds! = |audio| {
 	base = "examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/sounds"
-	fire = Audio.load_sound!("${base}/weapon_pistol.wav")?
-	pickup = Audio.load_sound!("${base}/pickup_item.wav")?
-	pain = Audio.load_sound!("${base}/monster_former_human_pain.wav")?
-	death = Audio.load_sound!("${base}/monster_former_human_death_1.wav")?
-	alert = Audio.load_sound!("${base}/monster_former_human_sight_1.wav")?
-	door = Audio.load_sound!("${base}/world_door_open.wav")?
-	switch_on = Audio.load_sound!("${base}/world_switch_on.wav")?
-	switch_off = Audio.load_sound!("${base}/world_switch_off.wav")?
-	monster_attack = Audio.load_sound!("${base}/monster_imp_ranged_attack.wav")?
-	projectile = Audio.load_sound!("${base}/effect_imp_projectile.wav")?
-	explosion = Audio.load_sound!("${base}/effect_imp_explosion.wav")?
-	oof = Audio.load_sound!("${base}/player_oof.wav")?
-	no_way = Audio.load_sound!("${base}/player_no_way.wav")?
-	platform_move = Audio.load_sound!("${base}/world_platform_move.wav")?
-	music = Audio.load_music!("examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/music/e1m1.wav")?
+	fire = audio.load_sound!("${base}/weapon_pistol.wav")?
+	pickup = audio.load_sound!("${base}/pickup_item.wav")?
+	pain = audio.load_sound!("${base}/monster_former_human_pain.wav")?
+	death = audio.load_sound!("${base}/monster_former_human_death_1.wav")?
+	alert = audio.load_sound!("${base}/monster_former_human_sight_1.wav")?
+	door = audio.load_sound!("${base}/world_door_open.wav")?
+	switch_on = audio.load_sound!("${base}/world_switch_on.wav")?
+	switch_off = audio.load_sound!("${base}/world_switch_off.wav")?
+	monster_attack = audio.load_sound!("${base}/monster_imp_ranged_attack.wav")?
+	projectile = audio.load_sound!("${base}/effect_imp_projectile.wav")?
+	explosion = audio.load_sound!("${base}/effect_imp_explosion.wav")?
+	oof = audio.load_sound!("${base}/player_oof.wav")?
+	no_way = audio.load_sound!("${base}/player_no_way.wav")?
+	platform_move = audio.load_sound!("${base}/world_platform_move.wav")?
+	music = audio.load_music!("examples/roc-doom-e1m1/assets/freedoom/generated/e1m1/music/e1m1.wav")?
 	music.set_looping!(Bool.True)
 	music.set_volume!(0.45)
 	music.play!()

@@ -2,7 +2,7 @@
 ## This deliberately executes RocDoomRuntime and RocDoomLevel in ordinary Roc app
 ## code. It is not a completion fixture: until it reports Exited, its summary,
 ## visited sectors and RLE stream are navigation diagnostics only.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-10-a670e34" }
 
 import rr.App
 import rr.Draw
@@ -27,13 +27,13 @@ program = { init!, update!, render! }
 init! : App.Init(Model, _)
 init! = App.init(App.default.with_title("E1M1 replay author").with_visible(Bool.False), |_host| Ok({ run: author(initial({}), 0), printed: Bool.False }))
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, io| {
 	if model.printed {
 		Err(Exit(if model.run.world.phase == Exited 0 else 1))
 	} else {
-		_ = Stdout.line!(summary(model.run))
-		_ = Stdout.line!(encode_runs(model.run.runs, 0, ""))
+		_ = io.stdout().line!(summary(model.run))
+		_ = io.stdout().line!(encode_runs(model.run.runs, 0, ""))
 		Ok({ ..model, printed: Bool.True })
 	}
 }

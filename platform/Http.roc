@@ -17,17 +17,18 @@
 ## import http.Request
 ## ```
 ##
-## `Http.get!` and `Http.get_utf8!` take a URL and hand back decoded data, so
+## `Http.Client.get!` and `Http.Client.get_utf8!` take a URL and hand back decoded data, so
 ## an app that uses only those needs no package dependency of its own.
 ##
-## `Http.send!` waits, so it belongs inside `Task.spawn!`:
+## `Http.Client.send!` waits, so it belongs inside `Task.spawn!`:
 ##
 ## ```roc
-## update! = |model, input| {
+## update! = |model, input, io| {
 ##     if input.devices.key_pressed(KeyR) {
+##         http = io.http()
 ##         Task.spawn!(
 ##             input,
-##             || match Http.get_utf8!("http://127.0.0.1:8000/data.json") {
+##             || match http.get_utf8!("http://127.0.0.1:8000/data.json") {
 ##                 Ok(body) => Loaded(body)
 ##                 Err(InvalidUrl(_)) => Failed("that is not a URL this platform will fetch")
 ##                 Err(HttpErr(Timeout)) => Failed("the request timed out")
@@ -66,6 +67,7 @@
 ## HTTPS verifies peers with the operating system's certificate store. Custom
 ## certificate authorities and disabling verification are not supported.
 import Host
+import Resource
 import Url
 import http.Request
 import http.Response
@@ -120,57 +122,6 @@ Http := [].{
 		max_response_bytes: 8 * 1024 * 1024,
 	}
 
-	## Validate and send an HTTP request under `default_config`.
-	##
-	## The request URI must be an absolute HTTP or HTTPS URL accepted by `Url`.
-	## An invalid URL answers `InvalidUrl` before any host effect occurs.
-	## Fragments are removed, because they are client-side identifiers and are
-	## not sent.
-	##
-	## The method must be one of the nine RFC methods. `QUERY` and any
-	## `Unknown(ext)` method fail as `HttpErr(Other(...))` naming the method,
-	## also before any host effect occurs: the host's method type has no
-	## representation for either, and reporting it as `Other` keeps an app's
-	## exhaustive match over `TransportErr` from breaking over a request no
-	## host could send.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	##
-	## ```roc
-	## request = Request.from_method(GET).with_uri("https://www.roc-lang.org")
-	## response = Http.send!(request)?
-	## ```
-	send! : Request => Try(Response, [InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
-	send! = |request| send_with!(default_config, request)
-
-	## Validate and send an HTTP request under explicit limits.
-	##
-	## The same validation, the same phases, and the same outcomes as `send!`;
-	## only the deadline and the body cap differ.
-	##
-	## ```roc
-	## slow = { ..Http.default_config, timeout_ms: 2_000 }
-	## response = Http.send_with!(slow, request)?
-	## ```
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
-	## task; refused in `update!` and `render!`.
-	send_with! : Config, Request => Try(Response, [InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
-	send_with! = |config, request| {
-		check_method(Request.method(request)) ? HttpErr
-		url = Url.parse(Request.uri(request)) ? InvalidUrl
-		canonical = Url.without_fragment(url)
-		# closed error union to open error union
-		match Host.http_send!(to_host_request(config, request, Url.to_str(canonical))) {
-			Ok(raw) => Ok(from_host_response(raw))
-			Err(MalformedResponse) => Err(HttpErr(MalformedResponse))
-			Err(NetworkError) => Err(HttpErr(NetworkError))
-			Err(Other(message)) => Err(HttpErr(Other(Str.to_utf8(message))))
-			Err(Timeout) => Err(HttpErr(Timeout))
-		}
-	}
-
 	## Encode a value as JSON and set it as the request body.
 	##
 	## This uses Roc's builtin JSON encoder, so the value's type determines the
@@ -187,43 +138,6 @@ Http := [].{
 		)
 	}
 
-	## Encode a value as JSON, attach it to the request body, and send it.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
-	## task; refused in `update!` and `render!`.
-	send_json! : Request, _ => Try(Response, [JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
-	send_json! = |request, value| {
-		json_request = with_json_body(request, value)?
-
-		send!(json_request)
-	}
-
-	## Perform an HTTP GET and decode the response body as a UTF-8 `Str`.
-	##
-	## The argument is a validated `Url`. Quoted literals work through
-	## `Url.from_quote`, so a URL written out in the source is checked at compile
-	## time; a string built at runtime goes through `Url.parse`.
-	##
-	## A body that is not valid UTF-8 answers `BadBody(Str)`. That is this
-	## function's own decoding failure, and is not the transport's
-	## `MalformedResponse`: the reply arrived and was a well-formed HTTP
-	## response, it just is not text. The status is not inspected, so an error
-	## page comes back as the `Str` the server sent.
-	##
-	## ```roc
-	## hello_str = Http.get_utf8!("http://localhost:8000")?
-	## ```
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
-	## task; refused in `update!` and `render!`.
-	get_utf8! : Url.Url => Try(Str, [BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
-	get_utf8! = |url| {
-		response = send!(Request.from_method(GET).with_uri(Url.to_str(url)))?
-		body = Str.from_utf8(Response.body(response)) ? |_| BadBody("get_utf8!: response body was not valid UTF-8")
-
-		Ok(body)
-	}
-
 	## Decode a response body as JSON.
 	##
 	## This uses Roc's builtin JSON parser, so the expected result type
@@ -236,25 +150,98 @@ Http := [].{
 		Ok(decoded)
 	}
 
-	## Perform an HTTP GET and decode the response body as JSON.
-	##
-	## The expected result type selects the parser through static dispatch. The
-	## status is not inspected, so a JSON error page decodes if it happens to fit
-	## the expected shape. Same phases as `send!`.
-	##
-	## ```roc
-	## payload : Try({ foo : Str }, _)
-	## payload = Http.get!("http://localhost:8000")
-	## ```
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
-	## task; refused in `update!` and `render!`.
-	get! : Url.Url => Try(_, [BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_), ..])
-	get! = |url| {
-		response = send!(Request.from_method(GET).with_uri(Url.to_str(url)))?
+	## Opaque http authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Client :: Resource.Authority.{
 
-		decode_json_response(response)
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Client
+		for_host = |authority| Client.(authority)
+
+		## Validate and send an HTTP request under `default_config`.
+		##
+		## The request URI must be an absolute HTTP or HTTPS URL accepted by `Url`.
+		## An invalid URL answers `InvalidUrl` before any host effect occurs.
+		## Fragments are removed, because they are client-side identifiers and are
+		## not sent.
+		##
+		## The method must be one of the nine RFC methods. `QUERY` and any
+		## `Unknown(ext)` method fail as `HttpErr(Other(...))` naming the method,
+		## also before any host effect occurs: the host's method type has no
+		## representation for either, and reporting it as `Other` keeps an app's
+		## exhaustive match over `TransportErr` from breaking over a request no
+		## host could send.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		##
+		## ```roc
+		## request = Request.from_method(GET).with_uri("https://www.roc-lang.org")
+		## response = io.http().send!(request)?
+		## ```
+		send! : Client, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send! = |Client.(authority), request| perform_send!(authority, request)
+
+		## Validate and send an HTTP request under explicit limits.
+		##
+		## The same validation, the same phases, and the same outcomes as `send!`;
+		## only the deadline and the body cap differ.
+		##
+		## ```roc
+		## slow = { ..Http.default_config, timeout_ms: 2_000 }
+		## response = io.http().send_with!(slow, request)?
+		## ```
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+		## task; refused in `update!` and `render!`.
+		send_with! : Client, Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send_with! = |Client.(authority), config, request| perform_send_with!(authority, config, request)
+
+		## Encode a value as JSON, attach it to the request body, and send it.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+		## task; refused in `update!` and `render!`.
+		send_json! : Client, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send_json! = |Client.(authority), request, value| perform_send_json!(authority, request, value)
+
+		## Perform an HTTP GET and decode the response body as a UTF-8 `Str`.
+		##
+		## The argument is a validated `Url`. Quoted literals work through
+		## `Url.from_quote`, so a URL written out in the source is checked at compile
+		## time; a string built at runtime goes through `Url.parse`.
+		##
+		## A body that is not valid UTF-8 answers `BadBody(Str)`. That is this
+		## function's own decoding failure, and is not the transport's
+		## `MalformedResponse`: the reply arrived and was a well-formed HTTP
+		## response, it just is not text. The status is not inspected, so an error
+		## page comes back as the `Str` the server sent.
+		##
+		## ```roc
+		## hello_str = io.http().get_utf8!("http://localhost:8000")?
+		## ```
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+		## task; refused in `update!` and `render!`.
+		get_utf8! : Client, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		get_utf8! = |Client.(authority), url| perform_get_utf8!(authority, url)
+
+		## Perform an HTTP GET and decode the response body as JSON.
+		##
+		## The expected result type selects the parser through static dispatch. The
+		## status is not inspected, so a JSON error page decodes if it happens to fit
+		## the expected shape. Same phases as `send!`.
+		##
+		## ```roc
+		## payload : Try({ foo : Str }, _)
+		## payload = io.http().get!("http://localhost:8000")
+		## ```
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+		## task; refused in `update!` and `render!`.
+		get! : Client, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_), ..])
+		get! = |Client.(authority), url| perform_get!(authority, url)
+
 	}
+
 }
 
 ## Refuse a method this platform cannot put on the wire.
@@ -368,3 +355,45 @@ expect to_host_method_ext(GET) == ""
 # ordinary `Request.from_method(GET)` is never sent without one.
 expect to_host_timeout(NoTimeout, 30_000) == 30_000
 expect to_host_timeout(TimeoutMilliseconds(250), 30_000) == 250
+
+## Private authority-taking implementations.
+perform_send! : Resource.Authority, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send! = |authority, request| perform_send_with!(authority, Http.default_config, request)
+
+perform_send_with! : Resource.Authority, Http.Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send_with! = |authority, config, request| {
+	check_method(Request.method(request)) ? HttpErr
+	url = Url.parse(Request.uri(request)) ? InvalidUrl
+	canonical = Url.without_fragment(url)
+	# closed error union to open error union
+	match Host.http_send!(authority, to_host_request(config, request, Url.to_str(canonical))) {
+		Ok(raw) => Ok(from_host_response(raw))
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(MalformedResponse) => Err(HttpErr(MalformedResponse))
+		Err(NetworkError) => Err(HttpErr(NetworkError))
+		Err(Other(message)) => Err(HttpErr(Other(Str.to_utf8(message))))
+		Err(Timeout) => Err(HttpErr(Timeout))
+	}
+}
+
+perform_send_json! : Resource.Authority, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send_json! = |authority, request, value| {
+	json_request = Http.with_json_body(request, value)?
+
+	perform_send!(authority, json_request)
+}
+
+perform_get_utf8! : Resource.Authority, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_get_utf8! = |authority, url| {
+	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
+	body = Str.from_utf8(Response.body(response)) ? |_| BadBody("perform_get_utf8!: response body was not valid UTF-8")
+
+	Ok(body)
+}
+
+perform_get! : Resource.Authority, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), JsonErr(_), ..])
+perform_get! = |authority, url| {
+	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
+
+	Http.decode_json_response(response)
+}

@@ -1,6 +1,6 @@
 app [Model, program] {
 	rr: platform "../platform/main.roc",
-	roc: "nightly-2026-09-06-d85e877",
+	roc: "nightly-2026-09-10-a670e34",
 }
 
 import rr.App
@@ -15,8 +15,8 @@ program = { init!, update!, render! }
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default,
-	|_startup| {
-		store = Assets.Store.open!(
+	|io| {
+		store = io.assets().open!(
 			Assets.with_manifest(
 				Assets.beside_executable("assets"),
 				{
@@ -36,8 +36,8 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| Ok(model)
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, _io| Ok(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

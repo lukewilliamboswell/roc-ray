@@ -7,8 +7,8 @@
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
 ## containing `..` -- is refused rather than rewritten. Capture is the only
-## path-sandboxed writer the platform grants: `Files.write_text!` and
-## `Files.write_bytes!` write wherever the process may write, while everything
+## path-sandboxed writer the platform grants: `Files.Access.write_text!` and
+## `Files.Access.write_bytes!` write wherever the process may write, while everything
 ## here is confined to the output directory.
 ##
 ## `start!` and `stop!` control recording. `screenshot!` writes a presented
@@ -19,6 +19,7 @@
 ## or a render texture without writing a file. Both are refused in `render!`.
 ##
 import Host
+import Resource
 import Color
 import Draw
 
@@ -323,47 +324,7 @@ Capture := [].{
 	## the app is shutting down and the wait was cancelled before the frame
 	## ended. It is not what a call from the wrong callback gets: that is a
 	## programmer error and stops the app. See `screenshot!`.
-	ScreenshotError : [PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
-
-	## Write one PNG of the app's rendered output.
-	##
-	## The framebuffer is read back at the end of the frame that asked -- after
-	## the draw batch is flushed and before the buffers are swapped, so the
-	## pixels are the ones just drawn -- and the PNG is encoded and written off
-	## the frame thread. This call waits for that write, so it parks the task
-	## until the file exists and answers with the write's own outcome.
-	##
-	## Legal only in a task, where it parks the task; refused in `init!`,
-	## `update!`, and `render!`. Every other waiting effect also works in
-	## `init!`, where it blocks; a screenshot cannot, because what it waits for
-	## is the end of a frame and `init!` runs before the frame loop has drawn
-	## one. Spawn a task from `update!` instead -- on the first cycle if the
-	## shot is meant to be of the first frame:
-	##
-	## ```roc
-	## if input.time.cycle_count == 0 {
-	##     Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
-	## }
-	## ```
-	##
-	## A headless run has no framebuffer at all and answers `Ok({})` without
-	## writing, so a screenshotting app still runs under `--host-headless`.
-	##
-	## Only one screenshot can be in flight: a second one while the first is
-	## still waiting for its frame is `AlreadyPending`.
-	screenshot! : Str => Try({}, ScreenshotError)
-	screenshot! = |path| {
-		# closed error union to open error union
-		match Host.capture_screenshot!(path) {
-			Ok({}) => Ok({})
-			Err(AlreadyPending) => Err(AlreadyPending)
-			Err(Busy) => Err(Busy)
-			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
-			Err(PathInvalid) => Err(PathInvalid)
-			Err(Unavailable) => Err(Unavailable)
-			Err(WriteFailed) => Err(WriteFailed)
-		}
-	}
+	ScreenshotError : [PermissionDenied, PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
 
 	## Why an offscreen export did not become a file.
 	##
@@ -374,6 +335,7 @@ Capture := [].{
 	## not in flight, so a later frame may take it. `Unavailable` is the app
 	## shutting down before the write started.
 	TextureExportError : [
+		PermissionDenied,
 		PathInvalid,
 		PathEscapesOutputDir,
 		TargetUnavailable,
@@ -384,47 +346,6 @@ Capture := [].{
 		WriteFailed,
 		Unavailable,
 	]
-
-	## Write one PNG of what a render target holds, at the target's own size.
-	##
-	## This is how an app exports an image larger than its window: draw the
-	## composition into a `Draw.RenderTexture` of the size the output needs and
-	## export the target rather than the frame. Transparency survives, unlike a
-	## `screenshot!`, whose framebuffer readback is always opaque.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`. Nothing here waits on the
-	## frame loop, which is why `init!` is allowed where a `screenshot!` cannot
-	## be -- but drawing into a target is only possible during `render!`, so a
-	## target no `render!` has drawn into holds undefined pixels.
-	##
-	## The pixels are the ones the last completed `render!` left in the target,
-	## so an app that draws its composition every frame exports what it last
-	## showed. The path is resolved under the output directory exactly as
-	## `screenshot!` resolves one.
-	##
-	## A headless run has no pixels to read and answers `Ok({})` without writing,
-	## so an exporting app still runs under `--host-headless`.
-	##
-	## ```roc
-	## Task.spawn!(input, || Exported(Capture.screenshot_texture!(poster, "poster.png")))
-	## ```
-	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
-	screenshot_texture! = |target, path| {
-		# closed error union to open error union
-		match Host.capture_screenshot_texture!({ target: target.for_host(), path }) {
-			Ok({}) => Ok({})
-			Err(BudgetExceeded) => Err(BudgetExceeded)
-			Err(Busy) => Err(Busy)
-			Err(OutOfMemory) => Err(OutOfMemory)
-			Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
-			Err(PathInvalid) => Err(PathInvalid)
-			Err(ReadbackFailed) => Err(ReadbackFailed)
-			Err(TargetUnavailable) => Err(TargetUnavailable)
-			Err(Unavailable) => Err(Unavailable)
-			Err(WriteFailed) => Err(WriteFailed)
-		}
-	}
 
 	## Where a pixel readback takes its pixels from.
 	##
@@ -553,47 +474,92 @@ Capture := [].{
 	max_readback_bytes : U64
 	max_readback_bytes = 128 * 1024 * 1024
 
-	## Begin recording.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	##
-	## Frames accumulate until the recording hits its frame cap, `Capture.stop!`
-	## is called, or the app exits -- all three finalize the file.
-	##
-	## A rejected start appears as `Failed` in `input.capture` on the next cycle;
-	## the call itself reports nothing, so the recording's outcome is observed
-	## the same way whichever phase started it.
-	start! : Recording => {}
-	start! = |recording| {
-		ratio = capture_scale_ratio(recording.scale())
-		# The host latches the refusal for the next `Input` to report, so there
-		# is nothing to answer with here.
-		_refusal = Host.capture_start_recording!({
-			path: recording.path(),
-			format: capture_format_code(recording.format()),
-			fps: recording.fps(),
-			max_frames: recording.max_frames(),
-			scale_numerator: ratio.numerator,
-			scale_denominator: ratio.denominator,
-			every_nth: recording.every_nth(),
-			timing: capture_timing_code(recording.timing()),
-			cursor: capture_cursor_code(recording.cursor()),
-			quality: capture_quality_code(recording.quality()),
-		})
-		{}
-	}
+	## Opaque capture authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Writer :: Resource.Authority.{
 
-	## Finish the current recording and write its file.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`. An encode and
-	## a file write would otherwise land in the middle of drawing a frame.
-	##
-	## Stopping while idle does nothing. The next input reports the frame count
-	## and file size as `Finished`.
-	stop! : () => {}
-	stop! = || {
-		_finished = Host.capture_stop_recording!()
-		{}
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Writer
+		for_host = |authority| Writer.(authority)
+
+		## Write one PNG of the app's rendered output.
+		##
+		## The framebuffer is read back at the end of the frame that asked -- after
+		## the draw batch is flushed and before the buffers are swapped, so the
+		## pixels are the ones just drawn -- and the PNG is encoded and written off
+		## the frame thread. This call waits for that write, so it parks the task
+		## until the file exists and answers with the write's own outcome.
+		##
+		## Legal only in a task, where it parks the task; refused in `init!`,
+		## `update!`, and `render!`. Every other waiting effect also works in
+		## `init!`, where it blocks; a screenshot cannot, because what it waits for
+		## is the end of a frame and `init!` runs before the frame loop has drawn
+		## one. Spawn a task from `update!` instead -- on the first cycle if the
+		## shot is meant to be of the first frame:
+		##
+		## ```roc
+		## if input.time.cycle_count == 0 {
+		##     Task.spawn!(input, || Shot(io.capture().screenshot!("frame0.png")))
+		## }
+		## ```
+		##
+		## A headless run has no framebuffer at all and answers `Ok({})` without
+		## writing, so a screenshotting app still runs under `--host-headless`.
+		##
+		## Only one screenshot can be in flight: a second one while the first is
+		## still waiting for its frame is `AlreadyPending`.
+		screenshot! : Writer, Str => Try({}, ScreenshotError)
+		screenshot! = |Writer.(authority), path| perform_screenshot!(authority, path)
+
+		## Write one PNG of what a render target holds, at the target's own size.
+		##
+		## This is how an app exports an image larger than its window: draw the
+		## composition into a `Draw.RenderTexture` of the size the output needs and
+		## export the target rather than the frame. Transparency survives, unlike a
+		## `screenshot!`, whose framebuffer readback is always opaque.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`. Nothing here waits on the
+		## frame loop, which is why `init!` is allowed where a `screenshot!` cannot
+		## be -- but drawing into a target is only possible during `render!`, so a
+		## target no `render!` has drawn into holds undefined pixels.
+		##
+		## The pixels are the ones the last completed `render!` left in the target,
+		## so an app that draws its composition every frame exports what it last
+		## showed. The path is resolved under the output directory exactly as
+		## `screenshot!` resolves one.
+		##
+		## A headless run has no pixels to read and answers `Ok({})` without writing,
+		## so an exporting app still runs under `--host-headless`.
+		##
+		## ```roc
+		## Task.spawn!(input, || Exported(io.capture().screenshot_texture!(poster, "poster.png")))
+		## ```
+		screenshot_texture! : Writer, Draw.RenderTexture, Str => Try({}, TextureExportError)
+		screenshot_texture! = |Writer.(authority), target, path| perform_screenshot_texture!(authority, target, path)
+
+		## Begin recording.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		##
+		## Frames accumulate until the recording hits its frame cap, `Capture.Writer.stop!`
+		## is called, or the app exits -- all three finalize the file.
+		##
+		## A rejected start appears as `Failed` in `input.capture` on the next cycle;
+		## the call itself reports nothing, so the recording's outcome is observed
+		## the same way whichever phase started it.
+		start! : Writer, Recording => Try({}, [PermissionDenied, ..])
+		start! = |Writer.(authority), recording| perform_start!(authority, recording)
+
+		## Finish the current recording and write its file.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`. An encode and
+		## a file write would otherwise land in the middle of drawing a frame.
+		##
+		## Stopping while idle does nothing. The next input reports the frame count
+		## and file size as `Finished`.
+		stop! : Writer => Try({}, [PermissionDenied, ..])
+		stop! = |Writer.(authority)| perform_stop!(authority)
+
 	}
 
 }
@@ -696,3 +662,72 @@ expect capture_scale_ratio(Quarter) == { numerator: 1, denominator: 4 }
 expect capture_scale_ratio(Ratio({ numerator: 2, denominator: 3 })) == { numerator: 2, denominator: 3 }
 expect capture_scale_ratio(Ratio({ numerator: 1, denominator: 0 })) == { numerator: 1, denominator: 1 }
 expect capture_scale_ratio(Ratio({ numerator: 0, denominator: 4 })) == { numerator: 1, denominator: 1 }
+
+## Private authority-taking implementations.
+perform_screenshot! : Resource.Authority, Str => Try({}, Capture.ScreenshotError)
+perform_screenshot! = |authority, path| {
+	# closed error union to open error union
+	match Host.capture_screenshot!(authority, path) {
+		Ok({}) => Ok({})
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(AlreadyPending) => Err(AlreadyPending)
+		Err(Busy) => Err(Busy)
+		Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(Unavailable) => Err(Unavailable)
+		Err(WriteFailed) => Err(WriteFailed)
+	}
+}
+
+perform_screenshot_texture! : Resource.Authority, Draw.RenderTexture, Str => Try({}, Capture.TextureExportError)
+perform_screenshot_texture! = |authority, target, path| {
+	# closed error union to open error union
+	match Host.capture_screenshot_texture!(authority, { target: target.for_host(), path }) {
+		Ok({}) => Ok({})
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(BudgetExceeded) => Err(BudgetExceeded)
+		Err(Busy) => Err(Busy)
+		Err(OutOfMemory) => Err(OutOfMemory)
+		Err(PathEscapesOutputDir) => Err(PathEscapesOutputDir)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(ReadbackFailed) => Err(ReadbackFailed)
+		Err(TargetUnavailable) => Err(TargetUnavailable)
+		Err(Unavailable) => Err(Unavailable)
+		Err(WriteFailed) => Err(WriteFailed)
+	}
+}
+
+perform_start! : Resource.Authority, Capture.Recording => Try({}, [PermissionDenied, ..])
+perform_start! = |authority, recording| {
+	ratio = capture_scale_ratio(recording.scale())
+	# The host latches the refusal for the next `Input` to report, so there
+	# is nothing to answer with here.
+	result = Host.capture_start_recording!(
+		authority,
+		{
+			path: recording.path(),
+			format: capture_format_code(recording.format()),
+			fps: recording.fps(),
+			max_frames: recording.max_frames(),
+			scale_numerator: ratio.numerator,
+			scale_denominator: ratio.denominator,
+			every_nth: recording.every_nth(),
+			timing: capture_timing_code(recording.timing()),
+			cursor: capture_cursor_code(recording.cursor()),
+			quality: capture_quality_code(recording.quality()),
+		},
+	)
+	match result {
+		Err(PermissionDenied) => Err(PermissionDenied)
+		_ => Ok({})
+	}
+}
+
+perform_stop! : Resource.Authority => Try({}, [PermissionDenied, ..])
+perform_stop! = |authority| {
+	result = Host.capture_stop_recording!(authority)
+	match result {
+		Err(PermissionDenied) => Err(PermissionDenied)
+		_ => Ok({})
+	}
+}

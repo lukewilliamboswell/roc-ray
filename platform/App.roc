@@ -19,7 +19,7 @@
 ## Each effect documents its legal phases. Host-state effects are legal in
 ## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
 ## Waiting effects are legal in `init!`, where they block startup, and in tasks,
-## where they park the task. `Capture.screenshot!` is task-only because it
+## where they park the task. `Capture.Writer.screenshot!` is task-only because it
 ## waits for a frame to finish.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
@@ -37,6 +37,15 @@
 ## receivers. Host resource types provide inert `stub` values for constructing
 ## models; stubs cannot test loading or resource lifetime.
 import Host
+import Resource
+import Tilemap
+import Assets
+import Sqlite
+import Udp
+import Stderr
+import Stdout
+import Cmd
+import Http
 import Keys
 import Mouse
 
@@ -79,7 +88,7 @@ App := [].{
 	## handled by starting a task:
 	##
 	## ```roc
-	## Task.spawn!(input, || Opened(Files.read_bytes!(drop.path)))
+	## Task.spawn!(input, || Opened(io.files().read_bytes!(drop.path)))
 	## ```
 	##
 	## `position` is the pointer position the host sampled for the cycle the
@@ -323,12 +332,9 @@ App := [].{
 		with_output_dir : Config, Str -> Config
 		with_output_dir = |cfg, value| { ..cfg, output_dir: value }
 
-		## Return a config that starts recording before the first frame.
-		##
-		## This is how an app captures itself with no runtime code at all, so a
-		## visualization can be rendered straight to a file. The recording
-		## finalizes when it reaches its frame cap, when `Capture.stop!` is
-		## called, or when the app exits.
+		## Store a recording description in the configuration. This is pure data;
+		## start it explicitly with `io.capture().start!(recording)` in `init!`.
+		## Starting requires external authority and may return PermissionDenied.
 		with_recording : Config, Capture.Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: Record(value) }
 
@@ -338,7 +344,7 @@ App := [].{
 
 		## Load the startup default font from a working-directory-relative asset
 		## path at the requested base pixel size. The path is validated and loaded
-		## once before `Startup.default_font!` returns it.
+		## once before `Io.default_font!` returns it.
 		with_default_font : Config, { path : Str, size : I32 } -> Config
 		with_default_font = |cfg, value| { ..cfg, default_font: value }
 
@@ -393,210 +399,196 @@ App := [].{
 		default_font = |cfg| cfg.default_font
 	}
 
-	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
-	##
-	## The signature renders as `Startup : Startup` because this is an alias of
-	## an identically named private nominal. There is nothing to construct: the
-	## host hands one to the `init!` callback and that is the only one there is.
-	##
-	## Every effect that takes a `Startup` is legal only in `init!`. Startup
-	## provides one-shot system effects but no input, window, or timing
-	## observations: seed models that require devices with `Devices.empty`, and
-	## the first `App.Input` supplies the first sampled values. After
-	## initialization, change host state by calling effects from `update!`, and
-	## ask for work that waits with `Task.spawn!`.
-	Startup :: Host.AppStartup.{
+	## Application-lifetime authority supplied by the host to init! and update!.
+	## Accessors are pure, allocation-free selections. Keep individual capabilities
+	## in helpers and task closures; effects retain their documented phase rules.
+	Io :: Resource.Authority.{
 
-		## Return the configured startup font. Legal only in `init!`.
-		default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
-		default_font! = |startup| App.default_font!(startup)
+		## Private adapter construction. The argument cannot be manufactured by applications.
+		for_host : Resource.Authority -> Io
+		for_host = |authority| Io.(authority)
 
-		## Construct the public startup capability at the private host boundary.
-		for_host : Host.AppStartup -> Startup
-		for_host = |startup| Startup.(startup)
+		## IO for pure tests; it never grants access to external services.
+		stub : Io
+		stub = Io.(Resource.Authority.stub)
+
+		## Select files authority without performing an effect.
+		files : Io -> Files.Access
+		files = |Io.(authority)| Files.Access.for_host(authority)
+
+		## Select http authority without performing an effect.
+		http : Io -> Http.Client
+		http = |Io.(authority)| Http.Client.for_host(authority)
+
+		## Select commands authority without performing an effect.
+		commands : Io -> Cmd.Runner
+		commands = |Io.(authority)| Cmd.Runner.for_host(authority)
+
+		## Select stdout authority without performing an effect.
+		stdout : Io -> Stdout.Writer
+		stdout = |Io.(authority)| Stdout.Writer.for_host(authority)
+
+		## Select stderr authority without performing an effect.
+		stderr : Io -> Stderr.Writer
+		stderr = |Io.(authority)| Stderr.Writer.for_host(authority)
+
+		## Select udp authority without performing an effect.
+		udp : Io -> Udp.Network
+		udp = |Io.(authority)| Udp.Network.for_host(authority)
+
+		## Select sqlite authority without performing an effect.
+		sqlite : Io -> Sqlite.Service
+		sqlite = |Io.(authority)| Sqlite.Service.for_host(authority)
+
+		## Select assets authority without performing an effect.
+		assets : Io -> Assets.Loader
+		assets = |Io.(authority)| Assets.Loader.for_host(authority)
+
+		## Select audio authority without performing an effect.
+		audio : Io -> Audio.Loader
+		audio = |Io.(authority)| Audio.Loader.for_host(authority)
+
+		## Select tilemaps authority without performing an effect.
+		tilemaps : Io -> Tilemap.Loader
+		tilemaps = |Io.(authority)| Tilemap.Loader.for_host(authority)
+
+		## Select clipboard authority without performing an effect.
+		clipboard : Io -> Window.Clipboard
+		clipboard = |Io.(authority)| Window.Clipboard.for_host(authority)
+
+		## Select capture authority without performing an effect.
+		capture : Io -> Capture.Writer
+		capture = |Io.(authority)| Capture.Writer.for_host(authority)
+
+		## Select environment access.
+		env : Io -> Environment
+		env = |Io.(authority)| Environment.(authority)
+
+		## Exit the application with the given exit code.
+		##
+		## The exit happens after startup completes, so `init!` finishes and the
+		## host shuts down in the ordinary way. Legal only in `init!`.
+		exit! : Io, I32 => {}
+		exit! = |io, code| app_exit!(io, code)
+
+		## Return the complete process argument list supplied by the launcher.
+		##
+		## The first element is `argv[0]`, followed by application-owned arguments
+		## in order. The host removes its reserved `--host-*` switches before this
+		## list reaches the app. The value is stable for the process lifetime.
+		##
+		## Legal only in `init!`. `App.init_for_args` is the other way to read
+		## argv, before the window exists.
+		args! : Io => List(Str)
+		args! = |io| app_args!(io)
+
+		## Draw one number from the operating system's entropy source.
+		##
+		## This is the only thing in the platform that makes a run differ from the
+		## last one by itself, and it is deliberately the app's decision:
+		##
+		## ```roc
+		## seed = Random.seed(U64.to_u32_wrap(io.entropy!()))
+		## ```
+		##
+		## Keep the returned `Random.State` in the model and draw with pure
+		## `Random.Generator` values during `update!`, so the run is reproducible
+		## from its seed. A run that must reproduce writes a constant seed instead
+		## and never calls this; a run that should vary calls it once. Nothing else
+		## about the platform is affected either way, because the generator's state
+		## is the model's rather than the host's.
+		##
+		## The entropy is real in every mode, including headless: determinism comes
+		## from an app choosing a fixed seed, not from the host quietly handing out
+		## the same "random" number on every run.
+		##
+		## Legal only in `init!`.
+		entropy! : Io => U64
+		entropy! = |io| app_entropy!(io)
+
+		## Get a varying startup number in the inclusive range `[min, max]`.
+		##
+		## Legal only in `init!`. `entropy!` is the one to seed a generator from:
+		## it draws on the operating system rather than on the backend's own
+		## generator, and it says what it is for. This remains for a one-off value
+		## in a range, such as a jittered start position that nothing else depends
+		## on.
+		random_i32! : Io, I32, I32 => I32
+		random_i32! = |io, min, max| app_random_i32!(io, min, max)
+
+		## Suggest positive initial window dimensions to the window manager.
+		##
+		## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
+		## Call as `io.suggest_window_size!(size)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## A running app resizes itself with `Window.suggest_size!`, which reaches
+		## the same host call, and only this spelling can report a refusal.
+		suggest_window_size! : Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+		suggest_window_size! = |io, size| app_suggest_window_size!(io, size)
+
+		## Suggest the smallest window size the user can drag the window down to.
+		##
+		## Each negative dimension is clamped to `0`, which leaves that axis
+		## unconstrained. The minimum only applies to a resizable window, so pair it
+		## with `App.default.with_resizable(Bool.True)`. Call as
+		## `io.suggest_window_min_size!(size)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		suggest_window_min_size! : Io, { width : I32, height : I32 } => {}
+		suggest_window_min_size! = |io, size| app_suggest_window_min_size!(io, size)
+
+		## Set raylib's CPU-side frame-rate cap.
+		##
+		## Values at or below zero render uncapped. This neither selects a software
+		## renderer nor controls VSync. Call as `io.set_target_fps!(fps)`.
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`. A running app changes the cap with
+		## `Window.set_target_fps!`.
+		set_target_fps! : Io, I32 => {}
+		set_target_fps! = |io, fps| app_set_target_fps!(io, fps)
+
+		## Set which key closes the window, or `NoExitKey` to stop any key from
+		## closing it.
+		##
+		## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
+		## unaffected either way, so an app that disables the exit key should still
+		## handle shutdown itself by returning `Err(Exit(code))`. Call as
+		## `io.set_exit_key!(NoExitKey)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		set_exit_key! : Io, ExitKey => {}
+		set_exit_key! = |io, key| app_set_exit_key!(io, key)
+
+		## Apply cursor visibility and capture atomically through one tagged
+		## operation. Legal in `init!`, `update!`, and tasks; refused in `render!`. `Mouse.set_cursor_mode!` is the same
+		## change from `update!` or a task.
+		set_cursor_mode! : Io, Mouse.CursorMode => {}
+		set_cursor_mode! = |io, mode| app_set_cursor_mode!(io, mode)
+
+		## Set the native operating-system cursor shape. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## `Mouse.set_cursor!` is the same change from `update!` or a task.
+		set_cursor! : Io, Mouse.Cursor => {}
+		set_cursor! = |io, cursor| app_set_cursor!(io, cursor)
+
+		## Return the configured startup font, or the backend's built-in font when
+		## none was configured. A configured path is resolved from the process
+		## working directory. The host loads it once; repeat calls return retained
+		## aliases of the same resource. Legal only in `init!`.
+		## A configured file requires external authority; otherwise PermissionDenied.
+		default_font! : Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+		default_font! = |io| app_default_font!(io)
 	}
 
-	## Exit the application with the given exit code.
-	##
-	## The exit happens after startup completes, so `init!` finishes and the
-	## host shuts down in the ordinary way. Legal only in `init!`.
-	exit! : Startup, I32 => {}
-	exit! = |_startup, code| Host.app_exit!(code)
+	## Opaque access to startup environment variables.
+	Environment :: Resource.Authority.{
 
-	## Return the complete process argument list supplied by the launcher.
-	##
-	## The first element is `argv[0]`, followed by application-owned arguments
-	## in order. The host removes its reserved `--host-*` switches before this
-	## list reaches the app. The value is stable for the process lifetime.
-	##
-	## Legal only in `init!`. `App.init_for_args` is the other way to read
-	## argv, before the window exists.
-	args! : Startup => List(Str)
-	args! = |_startup| Host.app_args!()
-
-	## Read an environment variable by key.
-	##
-	## Answers `Err(NotFound)` when the variable is not set. Legal only in
-	## `init!`.
-	read_env! : Startup, Str => Try(Str, [NotFound, ..])
-	read_env! = |_startup, key|
-	# closed error union to open error union
-		match Host.app_read_env!(key) {
+		## Read a variable; denied access is `PermissionDenied`. Legal only in `init!`.
+		read! : Environment, Str => Try(Str, [NotFound, PermissionDenied, ..])
+		read! = |Environment.(authority), key| match Host.app_read_env!(authority, key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
+			Err(PermissionDenied) => Err(PermissionDenied)
 		}
-
-	## Read a UTF-8 text file from disk, blocking until it is read.
-	##
-	## Call as `App.read_text!(startup, path)`. Legal only in `init!`. Use
-	## `Files.read_text!` inside a task to read a file while the app runs, and
-	## for the fuller error report.
-	read_text! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
-	read_text! = |_startup, path|
-	# closed error union to open error union
-		match Host.app_read_text!(path) {
-			Ok(contents) => Ok(contents)
-			Err(NotFound) => Err(NotFound)
-			Err(ReadFailed) => Err(ReadFailed)
-		}
-
-	## Draw one number from the operating system's entropy source.
-	##
-	## This is the only thing in the platform that makes a run differ from the
-	## last one by itself, and it is deliberately the app's decision:
-	##
-	## ```roc
-	## seed = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
-	## ```
-	##
-	## Keep the returned `Random.State` in the model and draw with pure
-	## `Random.Generator` values during `update!`, so the run is reproducible
-	## from its seed. A run that must reproduce writes a constant seed instead
-	## and never calls this; a run that should vary calls it once. Nothing else
-	## about the platform is affected either way, because the generator's state
-	## is the model's rather than the host's.
-	##
-	## The entropy is real in every mode, including headless: determinism comes
-	## from an app choosing a fixed seed, not from the host quietly handing out
-	## the same "random" number on every run.
-	##
-	## Legal only in `init!`.
-	entropy! : Startup => U64
-	entropy! = |_startup| Host.random_entropy!()
-
-	## Get a varying startup number in the inclusive range `[min, max]`.
-	##
-	## Legal only in `init!`. `entropy!` is the one to seed a generator from:
-	## it draws on the operating system rather than on the backend's own
-	## generator, and it says what it is for. This remains for a one-off value
-	## in a range, such as a jittered start position that nothing else depends
-	## on.
-	random_i32! : Startup, I32, I32 => I32
-	random_i32! = |_startup, min, max| Host.random_i32!(min, max)
-
-	## Suggest positive initial window dimensions to the window manager.
-	##
-	## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
-	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`.
-	## A running app resizes itself with `Window.suggest_size!`, which reaches
-	## the same host call, and only this spelling can report a refusal.
-	suggest_window_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
-	suggest_window_size! = |_startup, size|
-		if size.width <= 0 or size.height <= 0 {
-			Err(InvalidSize)
-		} else {
-			match Host.window_suggest_size!(size) {
-				Ok({}) => Ok({})
-				Err(NotSupported) => Err(NotSupported)
-			}
-		}
-
-	## Suggest the smallest window size the user can drag the window down to.
-	##
-	## Each negative dimension is clamped to `0`, which leaves that axis
-	## unconstrained. The minimum only applies to a resizable window, so pair it
-	## with `App.default.with_resizable(Bool.True)`. Call as
-	## `App.suggest_window_min_size!(startup, size)`. Legal only in `init!`.
-	suggest_window_min_size! : Startup, { width : I32, height : I32 } => {}
-	suggest_window_min_size! = |_startup, size|
-		Host.window_suggest_min_size!({
-			width: if size.width > 0 size.width else 0,
-			height: if size.height > 0 size.height else 0,
-		})
-
-	## Set raylib's CPU-side frame-rate cap.
-	##
-	## Values at or below zero render uncapped. This neither selects a software
-	## renderer nor controls VSync. Call as `App.set_target_fps!(startup, fps)`.
-	## Legal only in `init!`. A running app changes the cap with
-	## `Window.set_target_fps!`.
-	set_target_fps! : Startup, I32 => {}
-	set_target_fps! = |_startup, fps| Host.window_set_target_fps!(fps)
-
-	## Set which key closes the window, or `NoExitKey` to stop any key from
-	## closing it.
-	##
-	## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
-	## unaffected either way, so an app that disables the exit key should still
-	## handle shutdown itself by returning `Err(Exit(code))`. Call as
-	## `App.set_exit_key!(startup, NoExitKey)`. Legal only in `init!`.
-	set_exit_key! : Startup, ExitKey => {}
-	set_exit_key! = |_startup, key| Host.keys_set_exit_key!(Keys.exit_key_code(key))
-
-	## Read UTF-8 text from the system clipboard.
-	##
-	## Answers `Err(Unavailable)` when the clipboard is empty, holds non-text
-	## content, or the windowing backend refuses the request -- the underlying
-	## platform does not distinguish these cases. Call as
-	## `App.get_clipboard_text!(startup)`. Legal only in `init!`. A running app
-	## reads the clipboard with `Window.read_clipboard!`, which names the
-	## refusals separately.
-	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
-	get_clipboard_text! = |_startup|
-		match Host.window_read_clipboard!() {
-			# Startup deliberately collapses every refusal into one outcome.
-			Ok(contents) => Ok(contents)
-			Err(_) => Err(Unavailable)
-		}
-
-	## Replace the system clipboard contents with UTF-8 text.
-	##
-	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`.
-	## A running app writes it with `Window.set_clipboard_text!`.
-	set_clipboard_text! : Startup, Str => {}
-	set_clipboard_text! = |_startup, text| Host.window_set_clipboard_text!(text)
-
-	## Apply cursor visibility and capture atomically through one tagged
-	## operation. Legal only in `init!`. `Mouse.set_cursor_mode!` is the same
-	## change from `update!` or a task.
-	set_cursor_mode! : Startup, Mouse.CursorMode => {}
-	set_cursor_mode! = |_startup, mode| Host.mouse_set_cursor_mode!(Mouse.cursor_mode_code(mode))
-
-	## Set the native operating-system cursor shape. Legal only in `init!`.
-	## `Mouse.set_cursor!` is the same change from `update!` or a task.
-	set_cursor! : Startup, Mouse.Cursor => {}
-	set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cursor))
-
-	## Return the configured startup font, or the backend's built-in font when
-	## none was configured. A configured path is resolved from the process
-	## working directory. The host loads it once; repeat calls return retained
-	## aliases of the same resource. Legal only in `init!`.
-	default_font! : Startup => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
-	default_font! = |_startup|
-	# closed error union to open error union
-		match Host.text_startup_default_font!() {
-			Ok(font) => Ok(font)
-			Err(AssetPathInvalid) => Err(AssetPathInvalid)
-			Err(AssetNotFound) => Err(AssetNotFound)
-			Err(AssetReadFailed) => Err(AssetReadFailed)
-			Err(FontLoadFailed) => Err(FontLoadFailed)
-			Err(ResourceLimit) => Err(ResourceLimit)
-		}
+	}
 
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
 	## before the first frame, or let other initialization errors propagate.
-	InitCallback(model, errors) : Startup => Try(model, [Exit(I64), ..errors])
+	InitCallback(model, errors) : Io => Try(model, [Exit(I64), ..errors])
 
 	## Pure startup configuration chosen from the complete process argv before
 	## the host creates its native window. This is where an app can opt into a
@@ -793,3 +785,59 @@ expect counter_step(fresh_counter, neutral_input) == Continue(fresh_counter)
 
 ## Delivered messages are folded in, in the order the input carries them.
 expect counter_step(fresh_counter, neutral_input.with_messages([Tick, Tick, Tick])) == Continue({ ticks: 3, quitting: Bool.False })
+
+## Private IO implementations.
+app_exit! : App.Io, I32 => {}
+app_exit! = |_startup, code| Host.app_exit!(code)
+
+app_args! : App.Io => List(Str)
+app_args! = |_startup| Host.app_args!()
+
+app_entropy! : App.Io => U64
+app_entropy! = |_startup| Host.random_entropy!()
+
+app_random_i32! : App.Io, I32, I32 => I32
+app_random_i32! = |_startup, min, max| Host.random_i32!(min, max)
+
+app_suggest_window_size! : App.Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+app_suggest_window_size! = |_startup, size|
+	if size.width <= 0 or size.height <= 0 {
+		Err(InvalidSize)
+	} else {
+		match Host.window_suggest_size!(size) {
+			Ok({}) => Ok({})
+			Err(NotSupported) => Err(NotSupported)
+		}
+	}
+
+app_suggest_window_min_size! : App.Io, { width : I32, height : I32 } => {}
+app_suggest_window_min_size! = |_startup, size|
+	Host.window_suggest_min_size!({
+		width: if size.width > 0 size.width else 0,
+		height: if size.height > 0 size.height else 0,
+	})
+
+app_set_target_fps! : App.Io, I32 => {}
+app_set_target_fps! = |_startup, fps| Host.window_set_target_fps!(fps)
+
+app_set_exit_key! : App.Io, App.ExitKey => {}
+app_set_exit_key! = |_startup, key| Host.keys_set_exit_key!(Keys.exit_key_code(key))
+
+app_set_cursor_mode! : App.Io, Mouse.CursorMode => {}
+app_set_cursor_mode! = |_startup, mode| Host.mouse_set_cursor_mode!(Mouse.cursor_mode_code(mode))
+
+app_set_cursor! : App.Io, Mouse.Cursor => {}
+app_set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cursor))
+
+app_default_font! : App.Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+app_default_font! = |App.Io.(authority)|
+# closed error union to open error union
+	match Host.text_startup_default_font!(authority) {
+		Ok(font) => Ok(font)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(AssetPathInvalid) => Err(AssetPathInvalid)
+		Err(AssetNotFound) => Err(AssetNotFound)
+		Err(AssetReadFailed) => Err(AssetReadFailed)
+		Err(FontLoadFailed) => Err(FontLoadFailed)
+		Err(ResourceLimit) => Err(ResourceLimit)
+	}

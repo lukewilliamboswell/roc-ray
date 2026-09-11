@@ -5,9 +5,9 @@
 ## `render!`.
 ##
 ## ```roc
-## update! = |model, input| {
+## update! = |model, input, io| {
 ##     if input.devices.key_pressed(KeyEnter) {
-##         Task.spawn!(input, || SaveLoaded(Files.read_text!("save.json")))
+##         Task.spawn!(input, || SaveLoaded(io.files().read_text!("save.json")))
 ##     }
 ##     Ok(model)
 ## }
@@ -17,6 +17,7 @@
 ## directory. Filesystem access is not sandboxed; `Capture` confines only its
 ## own outputs.
 import Host
+import Resource
 import Time
 
 Files := [].{
@@ -42,7 +43,7 @@ Files := [].{
 	## not have is one of them: the host does not distinguish it from a read
 	## that failed for any other reason. `metadata!` does, so a path that may be
 	## unreadable can be stat'd first to tell the two apart.
-	ReadTextError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
+	ReadTextError : [PermissionDenied, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
 
 	## Why `read_bytes!` produced no byte list.
 	##
@@ -50,7 +51,7 @@ Files := [].{
 	## the bytes is inspected, and with a much larger ceiling: `TooLarge` here
 	## is a file past 16 mebibytes. `ReadFailed` covers a permission denial in
 	## exactly the same way.
-	ReadBytesError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge]
+	ReadBytesError : [PermissionDenied, NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## Why `list!` produced no directory entries.
 	##
@@ -58,7 +59,7 @@ Files := [].{
 	## directory whose listing would exceed 8192 entries or one mebibyte of
 	## encoded names, whichever binds first. The rest mean what they mean for a
 	## read, `ReadFailed` included.
-	ListError : [NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+	ListError : [PermissionDenied, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## What one path is, how big it is, and when it last changed.
 	##
@@ -93,193 +94,157 @@ Files := [].{
 	## is every other refusal the host cannot name more precisely.
 	WriteError : [NotFound, PermissionDenied, NoSpace, WriteFailed, Unavailable]
 
-	## Read a bounded UTF-8 file into a `Str`.
-	##
-	## The whole file is copied into the string, so this is capped well below
-	## what `read_bytes!` will read: at most 64 kibibytes, and a file past that
-	## is `TooLarge` rather than truncated. One that is not valid UTF-8 is
-	## `NotUtf8` rather than an invalid `Str`.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	read_text! : Str => Try(Str, ReadTextError)
-	read_text! = |path|
-		match Host.files_read_text!(path) {
-			# closed error union to open error union
-			Ok(contents) => Ok(contents)
-			Err(Busy) => Err(Busy)
-			Err(NotFound) => Err(NotFound)
-			Err(NotUtf8) => Err(NotUtf8)
-			Err(ReadFailed) => Err(ReadFailed)
-			Err(TooLarge) => Err(TooLarge)
-			Err(Unavailable) => Err(Unavailable)
-		}
+	## Opaque files authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Access :: Resource.Authority.{
 
-	## Read a bounded file as ordinary Roc bytes.
-	##
-	## At most 16 mebibytes, and a file past that is `TooLarge`. The ceiling is
-	## far above `read_text!`'s because nothing is copied: the buffer the read
-	## filled is the buffer Roc gets.
-	##
-	## That is also why there is a second bound. The delivered list owns
-	## host-backed storage through Roc ARC, and at most 32 such allocations are
-	## live at once; a read made while all 32 are held answers `Busy` without
-	## touching the disk. Retaining a sublist retains the complete source
-	## allocation and so holds a slot, which `List.release_excess_capacity`
-	## releases by copying out the part worth keeping.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	read_bytes! : Str => Try(List(U8), ReadBytesError)
-	read_bytes! = |path|
-		match Host.files_read_bytes!(path) {
-			# closed error union to open error union
-			Ok(bytes) => Ok(bytes)
-			Err(Busy) => Err(Busy)
-			Err(NotFound) => Err(NotFound)
-			Err(ReadFailed) => Err(ReadFailed)
-			Err(TooLarge) => Err(TooLarge)
-			Err(Unavailable) => Err(Unavailable)
-		}
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Access
+		for_host = |authority| Access.(authority)
 
-	## List one directory without recursively walking its children.
-	##
-	## Entry order is the filesystem's observed order and is not sorted.
-	## Recursion is the app's to drive: only the app knows which subtrees are
-	## worth descending into, and a host-side walk would be one unbounded wait.
-	##
-	## A listing is bounded at 8192 entries and at one mebibyte of encoded
-	## names, whichever binds first; a directory past either is `TooLarge`
-	## rather than a partial listing. It is delivered through the same 32
-	## file-byte slots a byte read uses, so it can answer `Busy` for the same
-	## reason.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	list! : Str => Try(List(Entry), ListError)
-	list! = |path|
-		match Host.files_list!(path) {
-			# closed error union to open error union
-			Ok(bytes) => Ok(decode_listing(bytes))
-			Err(Busy) => Err(Busy)
-			Err(NotADirectory) => Err(NotADirectory)
-			Err(NotFound) => Err(NotFound)
-			Err(ReadFailed) => Err(ReadFailed)
-			Err(TooLarge) => Err(TooLarge)
-			Err(Unavailable) => Err(Unavailable)
-		}
+		## Read a bounded UTF-8 file into a `Str`.
+		##
+		## The whole file is copied into the string, so this is capped well below
+		## what `read_bytes!` will read: at most 64 kibibytes, and a file past that
+		## is `TooLarge` rather than truncated. One that is not valid UTF-8 is
+		## `NotUtf8` rather than an invalid `Str`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		read_text! : Access, Str => Try(Str, ReadTextError)
+		read_text! = |Access.(authority), path| perform_read_text!(authority, path)
 
-	## What one path is, how big it is, and when it last changed.
-	##
-	## Symbolic links are followed, so a link to a file is `File` and a link to
-	## nothing is `NotFound`. That differs from `list!`, which reports the kind
-	## the directory itself records and so calls a symbolic link `Other`;
-	## `metadata!` answers about the thing at the end of the path, which is
-	## what an app deciding whether to read it wants to know.
-	##
-	## Polling `modified` is how an app hot-reloads a shader, a level, or a
-	## dataset it did not write. Do it inside a task, and sleep between stats,
-	## so the watching costs a parked task rather than a stat every frame:
-	##
-	## ```roc
-	## watch! : Str, Time.Timestamp => Msg
-	## watch! = |path, seen| {
-	##     var $outcome = Unchanged
-	##     while $outcome == Unchanged {
-	##         Task.sleep!(250)
-	##         $outcome = match Files.metadata!(path) {
-	##             Ok(meta) if meta.modified != seen => Modified(meta.modified)
-	##             Ok(_) => Unchanged
-	##             Err(NotFound) => Unchanged
-	##             Err(other) => Stopped(other)
-	##         }
-	##     }
-	##     match $outcome {
-	##         Modified(at) => Changed(path, at)
-	##         Stopped(err) => WatchFailed(err)
-	##         Unchanged => crash("watch!: the loop only ends once the path changed or the stat failed")
-	##     }
-	## }
-	## ```
-	##
-	## The loop carries a sentinel tag rather than the message itself, so its
-	## `while` condition can compare it, and the `match` after the loop turns
-	## that sentinel into the one message the task owes.
-	##
-	## A loop rather than a recursive call, because a task runs on a
-	## fixed-size coroutine stack. `NotFound` keeps waiting rather than giving
-	## up: an editor saving a file often replaces it, so the path can be
-	## missing for a moment. `update!` spawns the watcher again when it handles
-	## `Changed`, and each live watcher holds one of the host's thirty-two task
-	## slots for as long as it watches.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	metadata! : Str => Try(Metadata, MetadataError)
-	metadata! = |path|
-		match Host.files_metadata!(path) {
-			# closed error union to open error union
-			Ok(stat) =>
-			# The host normalizes the instant before it crosses, so the only
-			# way this fails is a host that is wrong about its own contract.
-			# Saying so is more use than reporting it as a filesystem error an
-			# app could act on.
-				match Time.Timestamp.from_parts({ seconds: stat.modified_seconds, nanosecond: stat.modified_nanosecond }) {
-					Ok(modified) => Ok({ kind: entry_kind(stat.kind), size_bytes: stat.size_bytes, modified: modified })
-					Err(InvalidNanosecond) => crash ("roc-ray: Files.metadata! received a modification time the host had not normalized")
-				}
-			Err(NotFound) => Err(NotFound)
-			Err(PermissionDenied) => Err(PermissionDenied)
-			Err(ReadFailed) => Err(ReadFailed)
-			Err(Unavailable) => Err(Unavailable)
-		}
+		## Read a bounded file as ordinary Roc bytes.
+		##
+		## At most 16 mebibytes, and a file past that is `TooLarge`. The ceiling is
+		## far above `read_text!`'s because nothing is copied: the buffer the read
+		## filled is the buffer Roc gets.
+		##
+		## That is also why there is a second bound. The delivered list owns
+		## host-backed storage through Roc ARC, and at most 32 such allocations are
+		## live at once; a read made while all 32 are held answers `Busy` without
+		## touching the disk. Retaining a sublist retains the complete source
+		## allocation and so holds a slot, which `List.release_excess_capacity`
+		## releases by copying out the part worth keeping.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		read_bytes! : Access, Str => Try(List(U8), ReadBytesError)
+		read_bytes! = |Access.(authority), path| perform_read_bytes!(authority, path)
 
-	## Replace a file's contents with a `Str`, creating it if it is not there.
-	##
-	## The write replaces the whole file: there is no append, and no partial
-	## write is reported as success. Missing parent directories are created,
-	## the same as for every file the host writes itself, so an app's first
-	## `write_text!("saves/slot1.json", ...)` does not need a separate step to
-	## make `saves/`.
-	##
-	## The path is used as the app gave it, resolved against the process
-	## working directory, exactly as `read_text!` resolves one. `Files` is not
-	## sandboxed in either direction: an app that can read `/etc/hosts` can
-	## write `/tmp/out.txt`. The one output root this platform enforces belongs
-	## to `Capture`, whose paths are computed by recording machinery rather
-	## than written out by the app, and it confines captures only.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	##
-	## ```roc
-	## update! = |model, input| {
-	##     if input.devices.key_pressed(KeyS) {
-	##         Task.spawn!(
-	##             input,
-	##             || match Files.write_text!("saves/slot1.json", encode(model)) {
-	##                 Ok({}) => Saved
-	##                 Err(err) => SaveFailed(err)
-	##             },
-	##         )
-	##     }
-	##     Ok(model)
-	## }
-	## ```
-	write_text! : Str, Str => Try({}, WriteError)
-	write_text! = |path, contents| lifted(Host.files_write_text!(path, contents))
+		## List one directory without recursively walking its children.
+		##
+		## Entry order is the filesystem's observed order and is not sorted.
+		## Recursion is the app's to drive: only the app knows which subtrees are
+		## worth descending into, and a host-side walk would be one unbounded wait.
+		##
+		## A listing is bounded at 8192 entries and at one mebibyte of encoded
+		## names, whichever binds first; a directory past either is `TooLarge`
+		## rather than a partial listing. It is delivered through the same 32
+		## file-byte slots a byte read uses, so it can answer `Busy` for the same
+		## reason.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		list! : Access, Str => Try(List(Entry), ListError)
+		list! = |Access.(authority), path| perform_list!(authority, path)
 
-	## Replace a file's contents with ordinary Roc bytes.
-	##
-	## The same path rules, the same whole-file replacement, and the same
-	## parent-directory creation as `write_text!`; only the payload differs.
-	## Nothing about the bytes is inspected, so this is the call for a PNG, a
-	## save blob, or anything else that is not text.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	write_bytes! : Str, List(U8) => Try({}, WriteError)
-	write_bytes! = |path, bytes| lifted(Host.files_write_bytes!(path, bytes))
+		## What one path is, how big it is, and when it last changed.
+		##
+		## Symbolic links are followed, so a link to a file is `File` and a link to
+		## nothing is `NotFound`. That differs from `list!`, which reports the kind
+		## the directory itself records and so calls a symbolic link `Other`;
+		## `metadata!` answers about the thing at the end of the path, which is
+		## what an app deciding whether to read it wants to know.
+		##
+		## Polling `modified` is how an app hot-reloads a shader, a level, or a
+		## dataset it did not write. Do it inside a task, and sleep between stats,
+		## so the watching costs a parked task rather than a stat every frame:
+		##
+		## ```roc
+		## watch! : Str, Time.Timestamp => Msg
+		## watch! = |path, seen| {
+		##     var $outcome = Unchanged
+		##     while $outcome == Unchanged {
+		##         Task.sleep!(250)
+		##         $outcome = match io.files().metadata!(path) {
+		##             Ok(meta) if meta.modified != seen => Modified(meta.modified)
+		##             Ok(_) => Unchanged
+		##             Err(NotFound) => Unchanged
+		##             Err(other) => Stopped(other)
+		##         }
+		##     }
+		##     match $outcome {
+		##         Modified(at) => Changed(path, at)
+		##         Stopped(err) => WatchFailed(err)
+		##         Unchanged => crash("watch!: the loop only ends once the path changed or the stat failed")
+		##     }
+		## }
+		## ```
+		##
+		## The loop carries a sentinel tag rather than the message itself, so its
+		## `while` condition can compare it, and the `match` after the loop turns
+		## that sentinel into the one message the task owes.
+		##
+		## A loop rather than a recursive call, because a task runs on a
+		## fixed-size coroutine stack. `NotFound` keeps waiting rather than giving
+		## up: an editor saving a file often replaces it, so the path can be
+		## missing for a moment. `update!` spawns the watcher again when it handles
+		## `Changed`, and each live watcher holds one of the host's thirty-two task
+		## slots for as long as it watches.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		metadata! : Access, Str => Try(Metadata, MetadataError)
+		metadata! = |Access.(authority), path| perform_metadata!(authority, path)
+
+		## Replace a file's contents with a `Str`, creating it if it is not there.
+		##
+		## The write replaces the whole file: there is no append, and no partial
+		## write is reported as success. Missing parent directories are created,
+		## the same as for every file the host writes itself, so an app's first
+		## `io.files().write_text!("saves/slot1.json", ...)` does not need a separate step to
+		## make `saves/`.
+		##
+		## The path is used as the app gave it, resolved against the process
+		## working directory, exactly as `read_text!` resolves one. `Files` is not
+		## sandboxed in either direction: an app that can read `/etc/hosts` can
+		## write `/tmp/out.txt`. The one output root this platform enforces belongs
+		## to `Capture`, whose paths are computed by recording machinery rather
+		## than written out by the app, and it confines captures only.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		##
+		## ```roc
+		## update! = |model, input, io| {
+		##     if input.devices.key_pressed(KeyS) {
+		##         Task.spawn!(
+		##             input,
+		##             || match io.files().write_text!("saves/slot1.json", encode(model)) {
+		##                 Ok({}) => Saved
+		##                 Err(err) => SaveFailed(err)
+		##             },
+		##         )
+		##     }
+		##     Ok(model)
+		## }
+		## ```
+		write_text! : Access, Str, Str => Try({}, WriteError)
+		write_text! = |Access.(authority), path, contents| perform_write_text!(authority, path, contents)
+
+		## Replace a file's contents with ordinary Roc bytes.
+		##
+		## The same path rules, the same whole-file replacement, and the same
+		## parent-directory creation as `write_text!`; only the payload differs.
+		## Nothing about the bytes is inspected, so this is the call for a PNG, a
+		## save blob, or anything else that is not text.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		write_bytes! : Access, Str, List(U8) => Try({}, WriteError)
+		write_bytes! = |Access.(authority), path, bytes| perform_write_bytes!(authority, path, bytes)
+
+	}
 
 }
 
@@ -379,3 +344,70 @@ expect decode_listing([2, 's', 'r', 'c', 0, 1, 'a', '.', 't', 0]) == [
 ## A kind byte with no terminator after it ends the listing rather than being
 ## guessed at, so a truncated buffer still yields the entries that were whole.
 expect decode_listing([1, 'a', 0, 2, 'b']) == [{ name: "a", kind: File }]
+
+## Private authority-taking implementations.
+perform_read_text! : Resource.Authority, Str => Try(Str, Files.ReadTextError)
+perform_read_text! = |authority, path|
+	match Host.files_read_text!(authority, path) {
+		# closed error union to open error union
+		Ok(contents) => Ok(contents)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Busy) => Err(Busy)
+		Err(NotFound) => Err(NotFound)
+		Err(NotUtf8) => Err(NotUtf8)
+		Err(ReadFailed) => Err(ReadFailed)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_read_bytes! : Resource.Authority, Str => Try(List(U8), Files.ReadBytesError)
+perform_read_bytes! = |authority, path|
+	match Host.files_read_bytes!(authority, path) {
+		# closed error union to open error union
+		Ok(bytes) => Ok(bytes)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Busy) => Err(Busy)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_list! : Resource.Authority, Str => Try(List(Files.Entry), Files.ListError)
+perform_list! = |authority, path|
+	match Host.files_list!(authority, path) {
+		# closed error union to open error union
+		Ok(bytes) => Ok(decode_listing(bytes))
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Busy) => Err(Busy)
+		Err(NotADirectory) => Err(NotADirectory)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
+		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_metadata! : Resource.Authority, Str => Try(Files.Metadata, Files.MetadataError)
+perform_metadata! = |authority, path|
+	match Host.files_metadata!(authority, path) {
+		# closed error union to open error union
+		Ok(stat) =>
+		# The host normalizes the instant before it crosses, so the only
+		# way this fails is a host that is wrong about its own contract.
+		# Saying so is more use than reporting it as a filesystem error an
+		# app could act on.
+			match Time.Timestamp.from_parts({ seconds: stat.modified_seconds, nanosecond: stat.modified_nanosecond }) {
+				Ok(modified) => Ok({ kind: entry_kind(stat.kind), size_bytes: stat.size_bytes, modified: modified })
+				Err(InvalidNanosecond) => crash ("roc-ray: Files.Access.metadata! received a modification time the host had not normalized")
+			}
+		Err(NotFound) => Err(NotFound)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(ReadFailed) => Err(ReadFailed)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_write_text! : Resource.Authority, Str, Str => Try({}, Files.WriteError)
+perform_write_text! = |authority, path, contents| lifted(Host.files_write_text!(authority, path, contents))
+
+perform_write_bytes! : Resource.Authority, Str, List(U8) => Try({}, Files.WriteError)
+perform_write_bytes! = |authority, path, bytes| lifted(Host.files_write_bytes!(authority, path, bytes))

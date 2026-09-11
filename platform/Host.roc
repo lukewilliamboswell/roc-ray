@@ -36,7 +36,7 @@
 ##
 ## Host-service interfaces:
 ##
-## > `App`: startup authority, process inputs, startup file reads, and exit.
+## > `App`: host authority, process inputs, and startup exit.
 ## > `Task`: sleeping, spawning, and delivery of one finished message.
 ## > `Time`: normalized wall-clock timestamps.
 ## > `Trace`: bounded diagnostic marks, zones, and numeric samples.
@@ -188,7 +188,7 @@ Host := [].{
 
 	## Get the default font during startup.
 	## Legal only in `init!`.
-	text_startup_default_font! : () => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
+	text_startup_default_font! : Resource.Authority => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 
 	## Load a font from encoded bytes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -292,11 +292,11 @@ Host := [].{
 	}
 
 	## Failures while opening and validating an asset store.
-	StoreOpenError : [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
+	StoreOpenError : [PermissionDenied, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	store_open! : StoreOpen => Try(Resource.Store, StoreOpenError)
+	store_open! : Resource.Authority, StoreOpen => Try(Resource.Store, StoreOpenError)
 
 	## Mouse interface
 	## Apply the flattened cursor visibility and capture mode.
@@ -372,10 +372,10 @@ Host := [].{
 	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
 
 	## Failures while loading a sound.
-	AudioLoadSoundError : [ResourceLimit, SoundLoadFailed]
+	AudioLoadSoundError : [PermissionDenied, ResourceLimit, SoundLoadFailed]
 
 	## Failures while loading a music stream.
-	AudioLoadMusicError : [MusicLoadFailed, ResourceLimit]
+	AudioLoadMusicError : [PermissionDenied, MusicLoadFailed, ResourceLimit]
 
 	## Parameters for a generated sound envelope.
 	AudioGenSound : {
@@ -400,11 +400,11 @@ Host := [].{
 
 	## Load a sound from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Str => Try(Resource.Sound, AudioLoadSoundError)
+	audio_load_sound! : Resource.Authority, Str => Try(Resource.Sound, AudioLoadSoundError)
 
 	## Load a music stream from a file.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Str => Try(Resource.Music, AudioLoadMusicError)
+	audio_load_music! : Resource.Authority, Str => Try(Resource.Music, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -492,13 +492,13 @@ Host := [].{
 
 	## Files interface
 	## Failures while reading a file as validated UTF-8.
-	FilesReadTextError : [Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
+	FilesReadTextError : [PermissionDenied, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while reading a file as bytes.
-	FilesReadBytesError : [Busy, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesReadBytesError : [PermissionDenied, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while listing one directory.
-	FilesListError : [Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesListError : [PermissionDenied, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## One `stat`. Modification time uses the normalized `Time.Timestamp` parts.
 	FilesMetadata : {
@@ -513,19 +513,19 @@ Host := [].{
 
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_text! : Str => Try(Str, FilesReadTextError)
+	files_read_text! : Resource.Authority, Str => Try(Str, FilesReadTextError)
 
 	## Stat one path, following symbolic links.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_metadata! : Str => Try(FilesMetadata, FilesMetadataError)
+	files_metadata! : Resource.Authority, Str => Try(FilesMetadata, FilesMetadataError)
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Str => Try(List(U8), FilesReadBytesError)
+	files_read_bytes! : Resource.Authority, Str => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_list! : Str => Try(List(U8), FilesListError)
+	files_list! : Resource.Authority, Str => Try(List(U8), FilesListError)
 
 	## Failures while replacing a whole file.
 	##
@@ -535,11 +535,11 @@ Host := [].{
 
 	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_text! : Str, Str => Try({}, FilesWriteError)
+	files_write_text! : Resource.Authority, Str, Str => Try({}, FilesWriteError)
 
 	## Replace a file with bytes; the same failures as a text write.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_bytes! : Str, List(U8) => Try({}, FilesWriteError)
+	files_write_bytes! : Resource.Authority, Str, List(U8) => Try({}, FilesWriteError)
 
 	## Http interface
 	## One ordered HTTP header.
@@ -576,11 +576,11 @@ Host := [].{
 	##
 	## `Other` carries the host's own description, so a host that learns to
 	## distinguish a new failure still reports something an app can print.
-	HttpSendError : [MalformedResponse, NetworkError, Other(Str), Timeout]
+	HttpSendError : [PermissionDenied, MalformedResponse, NetworkError, Other(Str), Timeout]
 
 	## Send one request and wait for the whole response.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	http_send! : HttpRequestToHost => Try(HttpResponseFromHost, HttpSendError)
+	http_send! : Resource.Authority, HttpRequestToHost => Try(HttpResponseFromHost, HttpSendError)
 
 	## Cmd interface
 	## One child-process environment variable.
@@ -631,28 +631,28 @@ Host := [].{
 
 	## Start one child process and wait for it to finish.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	cmd_run! : CmdRunArgs => Try(CmdOutput, CmdRunError)
+	cmd_run! : Resource.Authority, CmdRunArgs => Try(CmdOutput, CmdRunError)
 
 	## Stdio interface
 	## Failures while queueing one atomic write.
 	##
 	## `TooLarge` is a payload past the whole ring and can never be queued;
 	## `BufferFull` is one that does not fit right now.
-	StdioWriteError : [BufferFull, TooLarge, Unavailable]
+	StdioWriteError : [PermissionDenied, BufferFull, TooLarge, Unavailable]
 
 	## Queue UTF-8 atomically.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_text! : U8, Str => Try({}, StdioWriteError)
+	stdio_write_text! : Resource.Authority, U8, Str => Try({}, StdioWriteError)
 
 	## Queue UTF-8 and a newline as one reservation.
 	##
 	## Host-side appending avoids a copy and prevents interleaved writes.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_line! : U8, Str => Try({}, StdioWriteError)
+	stdio_write_line! : Resource.Authority, U8, Str => Try({}, StdioWriteError)
 
 	## Queue bytes atomically; the same failures as a text write.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	stdio_write_bytes! : U8, List(U8) => Try({}, StdioWriteError)
+	stdio_write_bytes! : Resource.Authority, U8, List(U8) => Try({}, StdioWriteError)
 
 	## Udp interface
 	## Bind a dotted-quad IPv4 literal; port `0` requests an assigned port.
@@ -705,7 +705,7 @@ Host := [].{
 
 	## Open and bind one IPv4 UDP socket.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	udp_bind! : UdpBindArgs => Try(UdpBound, UdpBindError)
+	udp_bind! : Resource.Authority, UdpBindArgs => Try(UdpBound, UdpBindError)
 
 	## Failures while handing one datagram to the kernel.
 	## `NoRoute` is what `Udp` exposes as `Unreachable`; it is spelled
@@ -722,8 +722,8 @@ Host := [].{
 	udp_receive! : UdpReceiveArgs => Try(UdpBatch, UdpReceiveError)
 
 	## App interface
-	## Zero-sized startup authority minted by the adapter.
-	AppStartup : {}
+	## Private application-lifetime authority supplied by the host.
+	AppIo : Resource.Authority
 
 	## Stop after `init!` returns.
 	## Legal only in `init!`.
@@ -735,11 +735,7 @@ Host := [].{
 
 	## Read an environment variable.
 	## Legal only in `init!`.
-	app_read_env! : Str => Try(Str, [NotFound])
-
-	## Read a whole UTF-8 file during startup.
-	## Legal only in `init!`.
-	app_read_text! : Str => Try(Str, [NotFound, ReadFailed])
+	app_read_env! : Resource.Authority, Str => Try(Str, [PermissionDenied, NotFound])
 
 	## Random interface
 	## Draw from operating-system entropy.
@@ -759,15 +755,15 @@ Host := [].{
 
 	## Window interface
 	## Failures while reading the system clipboard as text.
-	WindowClipboardError : [Busy, TooLarge, Unavailable]
+	WindowClipboardError : [PermissionDenied, Busy, TooLarge, Unavailable]
 
 	## Get clipboard text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	window_read_clipboard! : () => Try(Str, WindowClipboardError)
+	window_read_clipboard! : Resource.Authority => Try(Str, WindowClipboardError)
 
 	## Replace the clipboard with UTF-8 text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	window_set_clipboard_text! : Str => {}
+	window_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied])
 
 	## Suggest a logical size; `NotSupported` means a fixed-size target.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -918,7 +914,7 @@ Host := [].{
 	}
 
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	tilemap_load_tmx! : Str => Try(TilemapMap, [NotFound, ParseFailed, ReadFailed, Unsupported])
+	tilemap_load_tmx! : Resource.Authority, Str => Try(TilemapMap, [PermissionDenied, NotFound, ParseFailed, ReadFailed, Unsupported])
 
 	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}
@@ -954,7 +950,7 @@ Host := [].{
 	SqliteFailure : { code : I64, message : Str }
 
 	## Failures while opening a connection.
-	SqliteOpenError : [SqliteErr(SqliteFailure), TooManyConnections]
+	SqliteOpenError : [PermissionDenied, SqliteErr(SqliteFailure), TooManyConnections]
 
 	## Failures with nothing to report but the failure itself.
 	SqliteStatusError : [SqliteErr(SqliteFailure)]
@@ -984,7 +980,7 @@ Host := [].{
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_open! : Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
+	sqlite_open! : Resource.Authority, Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
 
 	## Close early; final handle release remains the fallback.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -1237,7 +1233,7 @@ Host := [].{
 	}
 
 	## Failures while finalizing a running recording.
-	CaptureStopError : [BudgetExceeded, Busy, NotRecording, ReadbackFailed, TargetUnavailable, Unavailable]
+	CaptureStopError : [PermissionDenied, BudgetExceeded, Busy, NotRecording, ReadbackFailed, TargetUnavailable, Unavailable]
 
 	## Scripted pointer state; inactive returns control to hardware.
 	CaptureVirtualMouse : {
@@ -1269,22 +1265,22 @@ Host := [].{
 	capture_set_virtual_text! : List(U32) => {}
 
 	## Failures while arming a recording.
-	CaptureStartError : [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, UnsupportedFormat, WriteFailed]
+	CaptureStartError : [PermissionDenied, AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, UnsupportedFormat, WriteFailed]
 
 	## Arm recording and latch its result for the next `Input`.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_start_recording! : CaptureStartRecording => Try({}, CaptureStartError)
+	capture_start_recording! : Resource.Authority, CaptureStartRecording => Try({}, CaptureStartError)
 
 	## Finalize the running recording and write its file.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	capture_stop_recording! : () => Try(CaptureStopped, CaptureStopError)
+	capture_stop_recording! : Resource.Authority => Try(CaptureStopped, CaptureStopError)
 
 	## Failures while writing one framebuffer as PNG.
-	CaptureScreenshotError : [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, WriteFailed]
+	CaptureScreenshotError : [PermissionDenied, AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, Unavailable, WriteFailed]
 
 	## Write the next framebuffer as PNG, parking until complete.
 	## Legal only in a task, where it parks the task; refused in `init!`, `update!`, and `render!`.
-	capture_screenshot! : Str => Try({}, CaptureScreenshotError)
+	capture_screenshot! : Resource.Authority, Str => Try({}, CaptureScreenshotError)
 
 	## A render target and output path.
 	CaptureTextureShot : {
@@ -1293,11 +1289,11 @@ Host := [].{
 	}
 
 	## Failures while exporting one render target as PNG.
-	CaptureTextureShotError : [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed]
+	CaptureTextureShotError : [PermissionDenied, BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed]
 
 	## Read back a target, then park while encoding and writing its PNG.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	capture_screenshot_texture! : CaptureTextureShot => Try({}, CaptureTextureShotError)
+	capture_screenshot_texture! : Resource.Authority, CaptureTextureShot => Try({}, CaptureTextureShotError)
 
 	## Flattened screen-or-target source.
 	##

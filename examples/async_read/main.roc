@@ -51,7 +51,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)),
-	|_host| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			small: Waiting,
@@ -65,13 +65,13 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, io| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
-		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
-		Task.spawn!(program_input, || MetadataFinished(Files.metadata!(small_path)))
+		Task.spawn!(program_input, || SmallReadFinished(io.files().read_text!(small_path)))
+		Task.spawn!(program_input, || BytesReadFinished(io.files().read_bytes!(large_path)))
+		Task.spawn!(program_input, || MetadataFinished(io.files().metadata!(small_path)))
 	}
 
 	if program_input.devices.key_pressed(KeyEscape) {
@@ -121,6 +121,7 @@ string_state = |result|
 	match result {
 		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
 		Err(NotFound) => Failed("not found")
+		Err(PermissionDenied) => Failed("file access was not granted")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")
@@ -133,6 +134,7 @@ bytes_state = |result|
 	match result {
 		Ok(bytes) => Held(bytes)
 		Err(NotFound) => Failed("not found")
+		Err(PermissionDenied) => Failed("file access was not granted")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")

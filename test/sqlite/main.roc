@@ -23,7 +23,7 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("sqlite"), |_startup| Ok({ checked: Bool.False }))
+init! = App.init(App.default.with_title("sqlite"), |_io| Ok({ checked: Bool.False }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which property went wrong.
@@ -52,17 +52,17 @@ schema : Str
 schema = "CREATE TABLE kinds(i INTEGER NOT NULL, r REAL NOT NULL, s TEXT NOT NULL, b BLOB NOT NULL, n TEXT); CREATE TABLE unique_names(name TEXT NOT NULL UNIQUE);"
 
 ## Write every `Value` kind, read them back, and compare.
-check! : () => Msg
-check! = || {
+check! : App.Io => Msg
+check! = |io| {
 	# Opening a database does not create its parent directory, so make one the
 	# way an app would. A write creates the tree on its way.
-	match Files.write_bytes!("probe_out/.keep", []) {
+	match io.files().write_bytes!("probe_out/.keep", []) {
 		Ok({}) => {}
 		Err(_) => return Checked(0)
 	}
 
 	db =
-		match Sqlite.Db.open!("probe_out/probe.db") {
+		match io.sqlite().open!("probe_out/probe.db") {
 			Ok(opened) => opened
 			Err(_) => return Checked(0)
 		}
@@ -202,10 +202,10 @@ error_paths! = |db| {
 	)
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	if !model.checked {
-		Task.spawn!(input, check!)
+		Task.spawn!(input, || check!(io))
 		Ok({ checked: Bool.True })
 	} else {
 		match List.first(input.messages) {

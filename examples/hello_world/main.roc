@@ -33,15 +33,14 @@ Layout : {
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("Hello RocRay")
 		.with_size({ width: 800, height: 600 })
-		.with_frame_pacing(Capped(120))
-		.with_default_font({ path: "examples/live_plot/assets/fonts/LiberationSans-Regular.ttf", size: 38 }),
-	|startup| {
-		font = startup.default_font!()?
+		.with_frame_pacing(Capped(120)),
+	|_io| {
+		font = Draw.default_font!()
 		Ok({
 			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
 			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
@@ -58,8 +57,8 @@ init! = App.init(
 ## tasks answer with; see the `task_sleep` and `async_read` examples.
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	if input.key_pressed(KeyEscape) {
 		Err(Exit(0))

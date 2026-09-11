@@ -19,7 +19,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
-	|_startup| {
+	|io| {
 		handle : Box(U64)
 		handle = Box.box(0)
 		Ok({
@@ -30,8 +30,8 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| Ok(model)
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, _io| Ok(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

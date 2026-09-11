@@ -92,10 +92,10 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [])
 init! = App.init_for_args(
 	|_args| App.default,
-	|startup| {
-		args = App.args!(startup)
+	|io| {
+		args = io.args!()
 		mode = if List.contains(args, "--udp-expect-timeout") ExpectTimeout else RoundTrip
-		match (Udp.bind!(loopback(0)), Udp.bind!(loopback(0))) {
+		match (io.udp().bind!(loopback(0)), io.udp().bind!(loopback(0))) {
 			(Ok(socket_a), Ok(socket_b)) =>
 				Ok({
 					mode,
@@ -115,8 +115,8 @@ init! = App.init_for_args(
 loopback : U16 -> Udp.Address
 loopback = |port| { ip: "127.0.0.1", port }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	cycle = input.time.cycle_count
 	started = if model.state == Idle {
 		start!(model, input, cycle)
@@ -270,10 +270,10 @@ reply! = |model, input, local, datagrams, cycle, started| {
 	match List.first(datagrams) {
 		Err(_) => { outcome: FailedWith("a receive answered Ok with no datagrams"), state: model.state }
 		Ok(datagram) =>
-			# The latency assertion, and the reason the start cycle rides along
-			# on `Received` as well as on `ReceiveFailed`. The bytes and the
-			# sender can all be right and the exchange still be several frames
-			# behind where the datagram was ready.
+		# The latency assertion, and the reason the start cycle rides along
+		# on `Received` as well as on `ReceiveFailed`. The bytes and the
+		# sender can all be right and the exchange still be several frames
+		# behind where the datagram was ready.
 			if cycle > started + max_delivery_cycles {
 				{
 					outcome: FailedWith("${U64.to_str(cycle - started)} cycle(s) passed before the batch was delivered"),

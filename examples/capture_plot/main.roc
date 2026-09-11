@@ -30,24 +30,31 @@ bar_count = 12.U64
 ## Frames recorded before the host finalizes the files and the app exits.
 recorded_frames = 75.U64
 
-init! : App.Init(Model, [ResourceLimit])
+startup_config = App.default
+	.with_title("RocRay Capture: Plot")
+	.with_size({ width: 640, height: 360 })
+	.with_frame_pacing(Capped(60))
+	.with_visible(Bool.False)
+	.with_output_dir("captures")
+	.with_recording(
+		Capture.default
+			.with_path("plot.webm")
+			.with_format(WebM)
+			.with_fps(25)
+			.with_max_frames(recorded_frames)
+			.with_scale(Half)
+			.with_timing(FixedStep),
+	)
+
+init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Capture: Plot")
-		.with_size({ width: 640, height: 360 })
-		.with_frame_pacing(Capped(60))
-		.with_visible(Bool.False)
-		.with_output_dir("captures")
-		.with_recording(
-			Capture.default
-				.with_path("plot.webm")
-				.with_format(WebM)
-				.with_fps(25)
-				.with_max_frames(recorded_frames)
-				.with_scale(Half)
-				.with_timing(FixedStep),
-		),
-	|_startup| {
+	startup_config,
+	|io| {
+		match startup_config.recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		font = Draw.default_font!()
 		Ok({
 			elapsed: 0,
@@ -66,8 +73,8 @@ init! = App.init(
 ## the devices and the clock, not asked for with an effect.
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. Match on that rather than on `Idle`:
 	# `Idle` is also what a run with no recording at all looks like -- a

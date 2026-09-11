@@ -7,7 +7,7 @@
 ## references.
 ##
 ## ```roc
-## body = Http.get_utf8!("http://127.0.0.1:8000/data.json")?
+## body = io.http().get_utf8!("http://127.0.0.1:8000/data.json")?
 ## ```
 ##
 ## Parsing is deliberately stricter than a browser's. Hosts must be ASCII DNS

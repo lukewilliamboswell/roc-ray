@@ -25,7 +25,7 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("cmd"), |_startup| Ok({ started_cycle: 0 }))
+init! = App.init(App.default.with_title("cmd"), |_io| Ok({ started_cycle: 0 }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code's companion -- the score -- says which one.
@@ -62,13 +62,13 @@ expect score(Bool.False, 4) == 0
 
 ## Run every command and score what came back. Runs on a task, where `run!`
 ## parks rather than blocking.
-check! : () => Msg
-check! = || {
+check! : App.Io => Msg
+check! = |io| {
 	# Which shell this machine has. `/bin/sh` is on every POSIX target and on
 	# none of the Windows ones, so one stat decides it without the platform
 	# having to name the operating system.
 	posix =
-		match Files.metadata!("/bin/sh") {
+		match io.files().metadata!("/bin/sh") {
 			Ok(_) => Bool.True
 			Err(_) => Bool.False
 		}
@@ -82,7 +82,7 @@ check! = || {
 	# on Windows, so this asks whether the text is in the output rather than
 	# whether it is the whole of it.
 	echoed =
-		match Cmd.run!(Cmd.new(shell).with_args(echo_args)) {
+		match io.commands().run!(Cmd.new(shell).with_args(echo_args)) {
 			Ok(output) =>
 				output.exit_code == 0 and Str.contains(Str.from_utf8_lossy(output.stdout), probe_text)
 
@@ -91,17 +91,17 @@ check! = || {
 
 	# A program that is not there is named, rather than reported as a generic
 	# failure or as a child that exited non-zero.
-	missing = Cmd.run!(Cmd.new("roc-ray-definitely-not-a-program")) == Err(CommandNotFound)
+	missing = io.commands().run!(Cmd.new("roc-ray-definitely-not-a-program")) == Err(CommandNotFound)
 
 	# More output than the command allowed is refused outright: no truncated
 	# prefix, and no `Ok`.
 	bounded =
-		Cmd.run!(Cmd.new(shell).with_args(echo_args).with_stdout_limit(2))
+		io.commands().run!(Cmd.new(shell).with_args(echo_args).with_stdout_limit(2))
 			== Err(StdoutLimitExceeded)
 
 	# A non-zero exit status is data. It arrives as `Ok`, carrying the code.
 	exited =
-		match Cmd.run!(Cmd.new(shell).with_args(exit_args)) {
+		match io.commands().run!(Cmd.new(shell).with_args(exit_args)) {
 			Ok(output) => output.exit_code == 3
 			Err(_) => Bool.False
 		}
@@ -109,7 +109,7 @@ check! = || {
 	# The deadline expires and the host kills the child, rather than waiting
 	# out the thirty seconds the command asked for.
 	timed_out =
-		match Cmd.run!(Cmd.new(shell).with_args(sleep_args).with_timeout_ms(timeout_ms)) {
+		match io.commands().run!(Cmd.new(shell).with_args(sleep_args).with_timeout_ms(timeout_ms)) {
 			Err(Timeout(_)) => Bool.True
 			Ok(_) => Bool.False
 			Err(_) => Bool.False
@@ -118,7 +118,7 @@ check! = || {
 	# A working directory that is not there is refused, and is not confused
 	# with the program being missing.
 	no_such_dir =
-		Cmd.run!(Cmd.new(shell).with_args(exit_args).with_working_dir("roc-ray-no-such-dir"))
+		io.commands().run!(Cmd.new(shell).with_args(exit_args).with_working_dir("roc-ray-no-such-dir"))
 			== Err(SpawnFailed)
 
 	Checked(
@@ -131,11 +131,11 @@ check! = || {
 	)
 }
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	cycle = input.time.cycle_count
 	if cycle == 0 {
-		Task.spawn!(input, check!)
+		Task.spawn!(input, || check!(io))
 	}
 
 	match List.first(input.messages) {

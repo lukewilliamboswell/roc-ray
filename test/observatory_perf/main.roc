@@ -17,12 +17,14 @@ Msg : []
 program = { init!, update!, render! }
 
 init! : App.Init(Model, Msg)
-init! = App.init(App.default.with_title("Observatory performance probe"), |_startup|
-	Ok({ cycle: 0, values: List.repeat(0, 64) }),
+init! = App.init(
+	App.default.with_title("Observatory performance probe"),
+	|_io|
+		Ok({ cycle: 0, values: List.repeat(0, 64) }),
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, _io| {
 	zone = Trace.begin!("benchmark update")
 	index = model.cycle % List.len(model.values)
 	values = match List.set(model.values, index, model.cycle) {

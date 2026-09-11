@@ -84,25 +84,32 @@ backspace_frame = 215.U64
 expect backspace_frame > first_type_frame + (List.len(field_text) - 1) * type_every
 expect backspace_frame < recorded_frames
 
-init! : App.Init(Model, [ResourceLimit])
+startup_config = App.default
+	.with_title("RocRay Capture: UI demo")
+	.with_size({ width: 490, height: 380 })
+	.with_frame_pacing(Capped(60))
+	.with_visible(Bool.False)
+	.with_output_dir("captures")
+	.with_recording(
+		Capture.default
+			.with_path("ui_demo.gif")
+			.with_format(Gif)
+			.with_fps(25)
+			.with_max_frames(recorded_frames)
+			.with_scale(Full)
+			.with_timing(FixedStep)
+			.with_cursor(DrawCursor),
+	)
+
+init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Capture: UI demo")
-		.with_size({ width: 490, height: 380 })
-		.with_frame_pacing(Capped(60))
-		.with_visible(Bool.False)
-		.with_output_dir("captures")
-		.with_recording(
-			Capture.default
-				.with_path("ui_demo.gif")
-				.with_format(Gif)
-				.with_fps(25)
-				.with_max_frames(recorded_frames)
-				.with_scale(Full)
-				.with_timing(FixedStep)
-				.with_cursor(DrawCursor),
-		),
-	|_startup| {
+	startup_config,
+	|io| {
+		match startup_config.recording() {
+			NoRecording => {}
+			Record(recording) => io.capture().start!(recording)?
+		}
+
 		font = Draw.default_font!()
 		Ok({
 			frame: 0,
@@ -157,8 +164,8 @@ expect field_prefix(List.len(field_text)) == "roc-ray!"
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)

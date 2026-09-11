@@ -59,7 +59,7 @@ PHASE_SENTENCES = (
     "Legal in any callback, `render!` included.",
     # One-way diagnostic annotations, the deliberate render exception.
     "Legal in `init!`, `update!`, `render!`, and tasks.",
-    # One-off startup work, holding an `App.Startup`.
+    # One-off startup work, holding an `App.Io`.
     "Legal only in `init!`.",
     # Hands the host deferred work.
     "Legal in `update!` and in tasks; refused in `init!` and `render!`.",

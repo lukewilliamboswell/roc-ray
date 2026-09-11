@@ -5,7 +5,7 @@
 ## serially on the frame thread, so pure computation still blocks frames.
 ##
 ## ```roc
-## update! = |model, input| {
+## update! = |model, input, io| {
 ##     if input.devices.key_pressed(KeyEnter) {
 ##         Task.spawn!(
 ##             input,

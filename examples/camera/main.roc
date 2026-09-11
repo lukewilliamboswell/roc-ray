@@ -41,7 +41,7 @@ world_bottom = 1200.F32
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			player: { x: 400, y: 300 },
@@ -78,8 +78,8 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
 

@@ -31,7 +31,7 @@ ChildMsg : [Loaded(Str), Ticked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("task delivery"), |_startup| Ok({ received: 0, count: 0 }))
+init! = App.init(App.default.with_title("task delivery"), |_io| Ok({ received: 0, count: 0 }))
 
 ## What each spawned task is expected to answer, and the distinct power of two
 ## that stands for it. Eight tasks, so a correct run sums to 255 with a count of
@@ -80,8 +80,8 @@ expect score(Child(Ticked(4242))) == 128
 expect score(Child(Ticked(0))) == 0
 expect 1 + 32 + 2 + 4 + 8 + 16 + 64 + 128 == expected_total
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	if input.time.cycle_count == 0 {
 		Task.spawn!(input, || Num(77))
 		Task.spawn!(input, || Text("the quick brown fox"))

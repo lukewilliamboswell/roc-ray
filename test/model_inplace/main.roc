@@ -57,21 +57,22 @@ point_count = 1_000_000
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [PermissionDenied])
 init! = App.init(
 	App.default.with_title("Model allocation probe"),
-	|startup| {
+	|io| {
 		requested =
-			match App.read_env!(startup, "ROC_RAY_MODEL_PATTERN") {
-				Ok(value) => value
-				Err(NotFound) => "set"
+			match io.env().read!("ROC_RAY_MODEL_PATTERN") {
+				Ok(value) => Ok(value)
+				Err(NotFound) => Ok("set")
+				Err(PermissionDenied) => Err(PermissionDenied)
 			}
 
 		Ok({
 			points: List.repeat(0.0, point_count),
 			trail: [],
 			cursor: 0,
-			pattern: parse_pattern(requested),
+			pattern: parse_pattern(requested?),
 		})
 	},
 )
@@ -100,8 +101,8 @@ parse_pattern = |name|
 ##
 ## Every branch uses the ordinary record-update spread an app would write,
 ## except `SetWithoutSpread`, which exists to price the spread itself.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input|
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, _input, _io|
 	match model.pattern {
 		SetInPlace =>
 			Ok({ ..model, points: set_point(model.points, model.cursor), cursor: model.cursor + 1 })

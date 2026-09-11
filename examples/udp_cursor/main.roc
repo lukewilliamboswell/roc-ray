@@ -42,11 +42,11 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit, BindFailed])
 init! = App.init_for_args(
 	|_args| App.default.with_title("RocRay UDP Cursor").with_frame_pacing(Capped(60)),
-	|startup| {
-		args = App.args!(startup)
+	|io| {
+		args = io.args!()
 		font = Draw.default_font!()
 		port = flag_port(args, "--udp-port", 0)
-		socket = Udp.bind!({ ip: "127.0.0.1", port }) ? |_err| BindFailed
+		socket = io.udp().bind!({ ip: "127.0.0.1", port }) ? |_err| BindFailed
 		local = Udp.Socket.local_address(socket)
 
 		# With no `--udp-peer`, the peer is this instance itself. The datagrams
@@ -68,8 +68,8 @@ init! = App.init_for_args(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, _io| {
 	# One listener at a time. It answered this cycle, or has never run, so
 	# start the next one; in between, datagrams wait in the kernel's buffer.
 	socket = model.socket

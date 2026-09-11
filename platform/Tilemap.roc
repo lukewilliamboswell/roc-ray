@@ -5,7 +5,7 @@
 ## in the model. Drawing requires `Draw.Frame` and is legal only in `render!`.
 ##
 ## ```roc
-## raw = Tilemap.load_tmx!("assets/level.tmx")?
+## raw = io.tilemaps().load_tmx!("assets/level.tmx")?
 ## tilemap = Tilemap.from_raw(raw)
 ##     .with_origin({ x: 0, y: 0 })
 ##     .with_tileset_texture(1, tiles)
@@ -27,6 +27,7 @@ import Camera
 import Draw
 import Math
 import Host
+import Resource
 
 TilemapRawProperty : Host.TilemapProperty
 
@@ -261,26 +262,6 @@ Tilemap :: {
 		render_layers: [],
 		render_tilesets: [],
 	}
-
-	## Parse a Tiled TMX map.
-	##
-	## The returned data is an allocation-efficient set of flat lists with index
-	## ranges for nested properties, objects, and tile data.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`. A map is more than one
-	## file: an external tileset is read the same way, so a map spread across
-	## several files parks once per file and parses in between.
-	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
-	load_tmx! = |path|
-	# closed error union to open error union
-		match Host.tilemap_load_tmx!(path) {
-			Ok(map) => Ok(map)
-			Err(NotFound) => Err(NotFound)
-			Err(ReadFailed) => Err(ReadFailed)
-			Err(ParseFailed) => Err(ParseFailed)
-			Err(Unsupported) => Err(Unsupported)
-		}
 
 	## Begin configuring a drawable and queryable tilemap from parsed TMX data.
 	from_raw : TilemapRawMap -> TilemapBuilder
@@ -607,6 +588,28 @@ Tilemap :: {
 		without_d = if without_v >= 536_870_912 without_v - 536_870_912 else without_v
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
 	}
+
+	## Opaque tilemaps authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Loader :: Resource.Authority.{
+
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Loader
+		for_host = |authority| Loader.(authority)
+
+		## Parse a Tiled TMX map.
+		##
+		## The returned data is an allocation-efficient set of flat lists with index
+		## ranges for nested properties, objects, and tile data.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`. A map is more than one
+		## file: an external tileset is read the same way, so a map spread across
+		## several files parks once per file and parses in between.
+		load_tmx! : Loader, Str => Try(TilemapRawMap, [PermissionDenied, NotFound, ReadFailed, ParseFailed, Unsupported, ..])
+		load_tmx! = |Loader.(authority), path| perform_load_tmx!(authority, path)
+
+	}
+
 }
 
 layer_role_for_rules : List(TilemapLayerRoleRule), Str -> TilemapLayerRole
@@ -1192,3 +1195,16 @@ expect {
 	camera = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
 	Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
 }
+
+## Private authority-taking implementations.
+perform_load_tmx! : Resource.Authority, Str => Try(TilemapRawMap, [PermissionDenied, NotFound, ReadFailed, ParseFailed, Unsupported, ..])
+perform_load_tmx! = |authority, path|
+# closed error union to open error union
+	match Host.tilemap_load_tmx!(authority, path) {
+		Ok(map) => Ok(map)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
+		Err(ParseFailed) => Err(ParseFailed)
+		Err(Unsupported) => Err(Unsupported)
+	}

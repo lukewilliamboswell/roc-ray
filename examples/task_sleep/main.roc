@@ -38,7 +38,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Task Sleep").with_frame_pacing(Capped(60)),
-	|_host| {
+	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			state: Waiting,
@@ -51,8 +51,8 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, input, io| {
 	cycle = input.time.cycle_count
 	settled = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
 	if cycle == 0 {
@@ -68,7 +68,7 @@ update! = |model, input| {
 			},
 		)
 		# Printed from `update!` too, one line before any of the waiting starts.
-		_ = Stdout.line!(start_line)
+		_ = io.stdout().line!(start_line)
 	}
 
 	match settled {
@@ -76,7 +76,7 @@ update! = |model, input| {
 			# The line is queued here and written by the host's own thread, so
 			# exiting on the next expression does not race it out of the
 			# process: shutdown drains the queue.
-			_ = Stdout.line!(report_line(arrived_on))
+			_ = io.stdout().line!(report_line(arrived_on))
 			Err(Exit(0))
 		}
 		Waiting =>

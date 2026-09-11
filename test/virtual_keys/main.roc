@@ -42,10 +42,10 @@ typed_codepoints = [73, 78, 80, 85, 84, 95, 80, 65, 89, 76, 79, 65, 68, 95, 83, 
 expect Keys.typing(typed) == typed_codepoints
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("virtual keys"), |_startup| Ok({ outcome: Pending }))
+init! = App.init(App.default.with_title("virtual keys"), |_io| Ok({ outcome: Pending }))
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	input = program_input.devices
 	cycle = program_input.time.cycle_count
 

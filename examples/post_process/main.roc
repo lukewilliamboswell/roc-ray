@@ -34,11 +34,11 @@ program = { init!, update!, render! }
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }),
-	|_host| {
+	|io| {
 
 		## This source tree example deliberately opts into CWD-relative assets.
 		## Packaged applications normally use `Assets.beside_executable("assets")`.
-		assets = Assets.Store.open!(Assets.working_directory("examples/post_process/assets"))?
+		assets = io.assets().open!(Assets.working_directory("examples/post_process/assets"))?
 		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
@@ -56,8 +56,8 @@ init! = App.init(
 ## the draws it precedes.
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input|
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io|
 	if program_input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {

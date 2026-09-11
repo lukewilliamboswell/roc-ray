@@ -9,7 +9,7 @@
 ##         .with_args(["-y", "-i", input, "out.mp4"])
 ##         .with_timeout_ms(120_000)
 ##
-##     match Cmd.run!(cmd) {
+##     match io.commands().run!(cmd) {
 ##         Ok(output) if output.exit_code == 0 => Encoded("out.mp4")
 ##         Ok(output) => EncodeRefused(Str.from_utf8_lossy(output.stderr))
 ##         Err(err) => EncodeFailed(err)
@@ -39,6 +39,7 @@
 ## Orderly shutdown terminates children still managed by the host. Detached
 ## descendants and forced process termination are outside this guarantee.
 import Host
+import Resource
 
 Cmd := {
 
@@ -222,81 +223,54 @@ Cmd := {
 	with_stderr_limit : Cmd, U64 -> Cmd
 	with_stderr_limit = |cmd, limit_bytes| { ..cmd, stderr_limit_bytes: limit_bytes }
 
-	## Run the command and wait for the child to finish.
-	##
-	## At most eight children run at once. The slot is taken before anything
-	## is started and released when the child has been reaped, so a `Busy`
-	## means precisely that no process was created. Bounding what is started
-	## is what keeps a task per child from becoming a process per task.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	##
-	## ```roc
-	## update! = |model, input| {
-	##     if input.devices.key_pressed(KeyE) {
-	##         Task.spawn!(
-	##             input,
-	##             || match Cmd.run!(Cmd.new("git").with_args(["rev-parse", "HEAD"])) {
-	##                 Ok(output) => Revision(Str.from_utf8_lossy(output.stdout))
-	##                 Err(err) => RevisionFailed(err)
-	##             },
-	##         )
-	##     }
-	##     Ok(model)
-	## }
-	## ```
-	run! : Cmd => Try(Output, CmdErr)
-	run! = |cmd| {
-		result = Host.cmd_run!({
-			program: cmd.program,
-			args: cmd.args,
-			envs: cmd.envs,
-			clear_envs: cmd.clear_envs,
-			working_dir: match cmd.working_dir {
-				Inherit => ""
-				Set(dir) => dir
-			},
-			timeout_ms: cmd.timeout_ms,
-			stdout_limit_bytes: cmd.stdout_limit_bytes,
-			stderr_limit_bytes: cmd.stderr_limit_bytes,
-		})
+	## Opaque commands authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	Runner :: Resource.Authority.{
 
-		# closed error union to open error union
-		match result {
-			Ok(output) => Ok(output)
-			Err(Timeout(output)) => Err(Timeout(output))
-			Err(Busy) => Err(Busy)
-			Err(CommandNotFound) => Err(CommandNotFound)
-			Err(PermissionDenied) => Err(PermissionDenied)
-			Err(SpawnFailed) => Err(SpawnFailed)
-			Err(StderrLimitExceeded) => Err(StderrLimitExceeded)
-			Err(StdoutLimitExceeded) => Err(StdoutLimitExceeded)
-			Err(Unavailable) => Err(Unavailable)
-		}
+		## Private platform construction; no application can manufacture the argument.
+		for_host : Resource.Authority -> Runner
+		for_host = |authority| Runner.(authority)
+
+		## Run the command and wait for the child to finish.
+		##
+		## At most eight children run at once. The slot is taken before anything
+		## is started and released when the child has been reaped, so a `Busy`
+		## means precisely that no process was created. Bounding what is started
+		## is what keeps a task per child from becoming a process per task.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		##
+		## ```roc
+		## update! = |model, input, io| {
+		##     if input.devices.key_pressed(KeyE) {
+		##         Task.spawn!(
+		##             input,
+		##             || match io.commands().run!(Cmd.new("git").with_args(["rev-parse", "HEAD"])) {
+		##                 Ok(output) => Revision(Str.from_utf8_lossy(output.stdout))
+		##                 Err(err) => RevisionFailed(err)
+		##             },
+		##         )
+		##     }
+		##     Ok(model)
+		## }
+		## ```
+		run! : Runner, Cmd => Try(Output, CmdErr)
+		run! = |Runner.(authority), cmd| perform_run!(authority, cmd)
+
+		## Run the command and read both streams as text.
+		##
+		## The decoding is lossy: bytes that are not valid UTF-8 become the
+		## replacement character rather than failing the run, because a tool that
+		## puts one stray byte in a progress line has still told the app what it
+		## needed to know. Use `run!` when a stream has to survive exactly.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		run_utf8! : Runner, Cmd => Try(Utf8Output, CmdErr)
+		run_utf8! = |Runner.(authority), cmd| perform_run_utf8!(authority, cmd)
+
 	}
 
-	## Run the command and read both streams as text.
-	##
-	## The decoding is lossy: bytes that are not valid UTF-8 become the
-	## replacement character rather than failing the run, because a tool that
-	## puts one stray byte in a progress line has still told the app what it
-	## needed to know. Use `run!` when a stream has to survive exactly.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	run_utf8! : Cmd => Try(Utf8Output, CmdErr)
-	run_utf8! = |cmd|
-		match run!(cmd) {
-			Ok(output) =>
-				Ok({
-					exit_code: output.exit_code,
-					stdout: Str.from_utf8_lossy(output.stdout),
-					stderr: Str.from_utf8_lossy(output.stderr),
-				})
-
-			Err(err) => Err(err)
-		}
 }
 
 expect Cmd.new("ls").program == "ls"
@@ -317,3 +291,51 @@ expect Cmd.new("sleep").with_timeout_ms(0).timeout_ms == 1
 expect Cmd.new("sleep").with_timeout_ms(500).timeout_ms == 500
 expect Cmd.new("ls").with_stdout_limit(64).stdout_limit_bytes == 64
 expect Cmd.new("ls").with_stderr_limit(64).stderr_limit_bytes == 64
+
+## Private authority-taking implementations.
+perform_run! : Resource.Authority, Cmd => Try(Cmd.Output, Cmd.CmdErr)
+perform_run! = |authority, cmd| {
+	result = Host.cmd_run!(
+		authority,
+		{
+			program: cmd.program,
+			args: cmd.args,
+			envs: cmd.envs,
+			clear_envs: cmd.clear_envs,
+			working_dir: match cmd.working_dir {
+				Inherit => ""
+				Set(dir) => dir
+			},
+			timeout_ms: cmd.timeout_ms,
+			stdout_limit_bytes: cmd.stdout_limit_bytes,
+			stderr_limit_bytes: cmd.stderr_limit_bytes,
+		},
+	)
+
+	# closed error union to open error union
+	match result {
+		Ok(output) => Ok(output)
+		Err(Timeout(output)) => Err(Timeout(output))
+		Err(Busy) => Err(Busy)
+		Err(CommandNotFound) => Err(CommandNotFound)
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(SpawnFailed) => Err(SpawnFailed)
+		Err(StderrLimitExceeded) => Err(StderrLimitExceeded)
+		Err(StdoutLimitExceeded) => Err(StdoutLimitExceeded)
+		Err(Unavailable) => Err(Unavailable)
+	}
+}
+
+perform_run_utf8! : Resource.Authority, Cmd => Try(Cmd.Utf8Output, Cmd.CmdErr)
+perform_run_utf8! = |authority, cmd|
+	match perform_run!(authority, cmd) {
+		Ok(output) =>
+			Ok({
+				exit_code: output.exit_code,
+				stdout: Str.from_utf8_lossy(output.stdout),
+				stderr: Str.from_utf8_lossy(output.stderr),
+			})
+
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(err) => Err(err)
+	}

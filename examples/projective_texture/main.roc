@@ -75,7 +75,7 @@ initial_corners = {
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 init! = App.init(
 	App.default.with_title("Projective Texture").with_frame_pacing(Capped(120)),
-	|_startup| {
+	|_io| {
 		texture = Assets.generate_checked_texture!({
 			width: 512,
 			height: 512,
@@ -94,8 +94,8 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	dragged = model.drag_corner(program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })

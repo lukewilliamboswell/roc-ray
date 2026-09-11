@@ -111,7 +111,7 @@ def _run_case(
     """Run one probe invocation; return a failure description or None."""
     command = [
         str(executable),
-        "--host-headless",
+        "--host-headless", "--host-caps-allow-all",
         f"--host-headless-frames={FRAMES}",
         *args,
     ]

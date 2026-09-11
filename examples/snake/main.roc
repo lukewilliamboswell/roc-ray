@@ -32,8 +32,8 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Snake").with_size({ width: 800, height: 600 }).with_frame_pacing(Capped(120)),
-	|startup| {
-		rng = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
+	|io| {
+		rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 		Ok({ assets: Assets.load!()?, world: Game.new_world(rng), elapsed: 0 })
 	},
 )
@@ -68,8 +68,8 @@ play_event! = |assets, event|
 Msg : []
 
 ## Advances pure rules, plays their events, and handles the quit control.
-update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, program_input| {
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! = |model, program_input, _io| {
 	controls = read_controls(program_input.devices)
 	dt = Math.clamp(program_input.time.elapsed_seconds, 0, 0.25)
 	(world, events) = Game.update(model.world, controls, dt)

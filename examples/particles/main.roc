@@ -5,7 +5,7 @@
 ## This example shows a frame-rate-independent particle update and drawing many
 ## copies of one texture in a single batch.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
 	roc: "nightly-2026-09-18-1d982dc",
 }
 

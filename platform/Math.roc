@@ -10,7 +10,7 @@
 Math := [].{
 
 	# TODO(follow up): Restore derived equality once Roc compiles comparisons
-	# through platform aliases without looping (nightly-2026-09-07-14d9829).
+	# through platform aliases without looping (nightly-2026-09-18-1d982dc).
 	## Two-dimensional floating-point vector, also named `Draw.Vector2`.
 	Vec2 := {
 		x : F32,

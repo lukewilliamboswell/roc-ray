@@ -138,6 +138,45 @@ Camera := [].{
 		}
 	}
 
+	## Eye, focus, up direction, and vertical field of view for a perspective camera.
+	PerspectiveSettings : {
+		position : Math.Vec3,
+		target : Math.Vec3,
+		up : Math.Vec3,
+		fovy : F32,
+	}
+
+	## Validated pure perspective camera accepted by `Draw.with_camera_3d!`.
+	## Non-finite vector components become zero. A field of view outside the open
+	## interval 0 to 180 degrees becomes 60 degrees.
+	Camera3D :: {
+		position : Math.Vec3,
+		target : Math.Vec3,
+		up : Math.Vec3,
+		fovy : F32,
+	}.{
+		position : Camera3D -> Math.Vec3
+		position = |camera| camera.position
+
+		target : Camera3D -> Math.Vec3
+		target = |camera| camera.target
+
+		up : Camera3D -> Math.Vec3
+		up = |camera| camera.up
+
+		fovy : Camera3D -> F32
+		fovy = |camera| camera.fovy
+	}
+
+	## Construct a validated perspective camera.
+	perspective : PerspectiveSettings -> Camera3D
+	perspective = |settings| {
+		position: sane_vec3(settings.position),
+		target: sane_vec3(settings.target),
+		up: sane_vec3(settings.up),
+		fovy: sane_fovy(settings.fovy),
+	}
+
 	## The zoom substituted for a zoom that cannot be used, meaning zero (which
 	## has no inverse) or a non-finite one (which has no meaning).
 	##
@@ -282,3 +321,9 @@ expect {
 	F32.abs(round_trip.x - world.x) < 0.001 and F32.abs(round_trip.y - world.y) < 0.001
 }
 expect Camera.default.viewport({ x: 80, y: 40 }) == Math.rect(0, 0, 80, 40)
+
+sane_vec3 : Math.Vec3 -> Math.Vec3
+sane_vec3 = |vec| { x: sane_scalar(vec.x), y: sane_scalar(vec.y), z: sane_scalar(vec.z) }
+
+sane_fovy : F32 -> F32
+sane_fovy = |value| if F32.is_finite(value) and value > 0 and value < 180 value else 60

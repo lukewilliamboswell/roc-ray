@@ -260,6 +260,19 @@ Draw := [].{
 	## Pure 2D camera settings.
 	Camera2D : Camera.Camera2D
 
+	## Pure perspective camera settings.
+	Camera3D : Camera.Camera3D
+
+	## Three-dimensional vector used by 3D drawing records.
+	Vector3 : Math.Vec3
+
+	## One vertex in an immediate textured triangle batch.
+	TexturedVertex3D : { position : Vector3, uv : Vector2, tint : Color.Rgba }
+
+	## A borrowed indexed triangle batch. Every consecutive group of three indices
+	## is one triangle. Indices must be in range and their count a multiple of three.
+	TexturedTriangles3D : { texture : Texture, vertices : List(TexturedVertex3D), indices : List(U32) }
+
 	## Optional shape fill.
 	Fill : [NoFill, Fill(Color.Rgba)]
 
@@ -1050,6 +1063,17 @@ Draw := [].{
 		})
 	}
 
+	## Draw one borrowed indexed batch of perspective-correct textured triangles.
+	## The vertex and index list lengths explicitly bound all work in this call;
+	## the host consumes both synchronously and retains no geometry. The index
+	## count must be a multiple of three and every index must name a vertex.
+	## Violating either condition is a programmer error.
+	##
+	## Legal in `render!` only. Normally called inside `with_camera_3d!`.
+	textured_triangles_3d! : Frame, TexturedTriangles3D => {}
+	textured_triangles_3d! = |_frame, cfg|
+		if List.len(cfg.indices) == 0 {} else Host.draw_draw_textured_triangles_3d!(cfg)
+
 	## Draw many instances of one texture, in list order, with a single hosted
 	## call.
 	##
@@ -1163,6 +1187,23 @@ Draw := [].{
 			}
 			Err(ScopeLimit) => Err(ScopeLimit)
 			Err(ScopeUnavailable) => crash "camera scope host invariant failed"
+		}
+	}
+
+	## Draw the callback in 3D world space using a perspective camera. Depth
+	## testing and depth writes are active until the callback returns.
+	##
+	## Legal in `render!` only.
+	with_camera_3d! : Frame, Camera3D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_camera_3d! = |frame, camera, callback| {
+		match Host.draw_begin_camera_3d!(camera) {
+			Ok(_) => {
+				result = callback(frame)
+				Host.draw_end_camera_3d!()
+				result
+			}
+			Err(ScopeLimit) => Err(ScopeLimit)
+			Err(ScopeUnavailable) => crash "3D camera scope host invariant failed"
 		}
 	}
 

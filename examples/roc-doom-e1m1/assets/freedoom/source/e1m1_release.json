@@ -1,0 +1,8 @@
+{
+  "project": "Freedoom: Phase 1",
+  "version": "0.13.0",
+  "release_url": "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip",
+  "release_zip_sha256": "3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59",
+  "wad_member": "freedoom-0.13.0/freedoom1.wad",
+  "wad_sha256": "7323bcc168c5a45ff10749b339960e98314740a734c30d4b9f3337001f9e703d"
+}

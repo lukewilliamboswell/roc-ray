@@ -733,6 +733,24 @@
               "abi_mapping": "Objective-C class and metaclass linker spellings are derived from this exact documented class name."
             }
           ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSNumber",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/documentation/foundation/nsnumber",
+              "data_url": "https://developer.apple.com/tutorials/data/documentation/foundation/nsnumber.json",
+              "external_id": "doc://com.apple.foundation/documentation/Foundation/NSNumber",
+              "title": "NSNumber",
+              "documented_modules": [
+                "Foundation"
+              ],
+              "evidence_kind": "exact_C_identifier",
+              "retrieved_at": "2026-09-22T07:08:00+00:00",
+              "response_sha256": "450c17533a4f4274ac9c4d0aa4bb1f0e9a455c63a50369dcb4a19712adfe5e9e",
+              "abi_mapping": "Objective-C class linker spelling derived from the documented NSNumber class."
+            }
+          ]
         }
       ],
       "load_requirement": "Reexported by AppKit"
@@ -6712,6 +6730,19 @@
               "revision": "0ef5ecb01f25edd801d06d624fcc35740294c589",
               "source_license": "APSL-2.0; file notices may apply",
               "response_sha256": "c9eb8ce29f6d3356451342d71ea71144eaa2161b21719e27b04eaedb84ff9d18"
+            }
+          ]
+        },
+        {
+          "name": "dyld_stub_binder",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/apple-oss-distributions/dyld/79fdd08288695d6dbbdac41f022a2851d20fa647/include/mach-o/dyld_priv.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "dyld_stub_binder",
+              "revision": "79fdd08288695d6dbbdac41f022a2851d20fa647",
+              "source_license": "APSL-2.0; file notices may apply",
+              "response_sha256": "294d29f6175896e3c173ce7a5a77924f015bb5fb674dcc6f0394211c09c69e0b"
             }
           ]
         }

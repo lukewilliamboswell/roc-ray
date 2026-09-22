@@ -461,7 +461,7 @@ pub fn build(b: *std.Build) void {
         });
         graphical_smoke.root_module.addIncludePath(b.path("vendor/raylib/include"));
         graphical_smoke.root_module.addLibraryPath(b.path(raylib_lib_dir));
-        graphical_smoke.root_module.linkSystemLibrary("raylib", .{});
+        graphical_smoke.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
         switch (native_target.result.os.tag) {
             .linux => graphical_smoke.root_module.linkSystemLibrary("X11", .{}),
             .macos => {

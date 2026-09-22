@@ -21,7 +21,15 @@ IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 def sha256(path: Path) -> str:
     with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
+        return stream_sha256(source)
+
+
+def stream_sha256(source) -> str:
+    """Hash a binary stream on every supported Python version (including 3.10)."""
+    result = hashlib.sha256()
+    while chunk := source.read(1024 * 1024):
+        result.update(chunk)
+    return result.hexdigest()
 
 
 def read_lock(path: Path) -> dict:
@@ -121,7 +129,7 @@ def unpack_verified(archive: Path, entry: dict, destination: Path) -> dict:
                     or not HEX256.fullmatch(record["sha256"])):
                 raise ValueError("invalid dependency file record")
             with packed.extractfile(members[name]) as source:
-                if hashlib.file_digest(source, "sha256").hexdigest() != record["sha256"]:
+                if stream_sha256(source) != record["sha256"]:
                     raise ValueError("dependency file digest mismatch")
         destination.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".dependency-") as temporary:

@@ -236,6 +236,20 @@ jobs:
           bundle_name: ${{ matrix.bundle_name }}
           release_version: ${{ needs.build.outputs.release_version }}
 
+  required:
+    name: Release required
+    if: always()
+    needs:
+      - build
+      - test-bundles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require release validation
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          BUNDLES_RESULT: ${{ needs.test-bundles.result }}
+        run: test "$BUILD_RESULT" = success && test "$BUNDLES_RESULT" = success
+
   publish-release:
     name: Publish GitHub release
     needs:

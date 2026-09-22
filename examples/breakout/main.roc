@@ -11,7 +11,7 @@
 ## - Rendering (`Render.roc`): cabinet, brick wall, HUD, bodies, and prompts
 ## - Gameplay (`Ball.roc`, `Paddle.roc`, `Bricks.roc`): motion and collisions
 ## - Tests (`main.roc`): key mapping, launch, wall bounce, and last life lost
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
 
 import rr.App
 import rr.Capture

@@ -19,7 +19,12 @@ class MacOSInterfaceTests(unittest.TestCase):
         self.assertNotIn("roc gui", serialized)
         self.assertNotIn("roc-gui", serialized)
         self.assertNotIn("gpui", serialized)
+        self.assertNotIn("_objc_msgsend$", serialized)
         self.assertGreater(sum(len(x["symbols"]) for x in catalog["libraries"]), 0)
+
+        appkit = next(x for x in catalog["libraries"] if x["name"] == "AppKit")
+        foundation = next(x for x in catalog["libraries"] if x["name"] == "Foundation")
+        self.assertIn(foundation["install_name"], appkit["reexports"])
 
     def test_generation_is_deterministic_and_binds_all_archives(self):
         with tempfile.TemporaryDirectory() as temporary:

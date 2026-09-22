@@ -60,10 +60,7 @@ def validate_catalog(catalog):
             if set(record) != {'name', 'sources'} or not isinstance(record['sources'], list):
                 raise ValueError('invalid macOS symbol evidence schema')
             symbol = record['name']
-            # arm64 Mach-O archives can reference selector-specialized Objective-C
-            # message stubs such as `_objc_msgSend$setTitle:`. Colons are valid in
-            # those linker symbols and remain safely single-quoted in TBD output.
-            if not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$.:]*', symbol) or symbol in seen_symbols:
+            if not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$.]*', symbol) or symbol in seen_symbols:
                 raise ValueError('invalid or duplicate macOS symbol')
             if not record['sources']:
                 raise ValueError(f'macOS symbol requires source evidence: {symbol}')
@@ -84,6 +81,12 @@ def validate_catalog(catalog):
                     raise ValueError(f'incomplete manual-page evidence: {symbol}')
                 if kind.startswith('public_open_source_') and not source.get('identifier'):
                     raise ValueError(f'incomplete open-source evidence: {symbol}')
+            dependency_context_only = all(
+                ('github.com/raysan5/' in source['url'] or 'docs.rs/' in source['url'])
+                for source in record['sources'])
+            if dependency_context_only:
+                raise ValueError(
+                    f'macOS symbol has requirement context but no authoritative declaration: {symbol}')
             seen_symbols.add(symbol)
     if 'usr/lib/libSystem.tbd' not in seen_paths:
         raise ValueError('macOS interface catalog requires libSystem')

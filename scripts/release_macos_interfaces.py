@@ -73,6 +73,16 @@ def publish(directory: Path, tag: str) -> None:
         "--target", os.environ["GITHUB_SHA"], "--latest=false", "--draft",
         "--title", f"macOS linker interfaces {tag}", "--notes-file", str(notes),
     ], check=True)
+    release = json.loads(subprocess.check_output([
+        "gh", "release", "view", tag, "--repo", REPOSITORY,
+        "--json", "isDraft,targetCommitish,tagName,assets",
+    ], text=True))
+    actual_assets = {asset["name"] for asset in release["assets"]}
+    expected_assets = {path.name for path in assets}
+    if (release["tagName"] != tag or not release["isDraft"]
+            or release["targetCommitish"] != os.environ["GITHUB_SHA"]
+            or actual_assets != expected_assets):
+        raise ValueError("draft release identity or asset set differs from tested candidate")
     subprocess.run(["gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false"], check=True)
 
 

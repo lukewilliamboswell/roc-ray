@@ -38,6 +38,10 @@ Every selected symbol record identifies its owning interface and evidence. Every
 library record identifies its install path and supporting public or open-source
 evidence. Ownership is reviewed symbol by symbol. Prefix matching,
 framework-name guessing, and archive-wide collection do not establish ownership.
+Dependency call sites are requirement context only. A catalog entry must also
+carry an authoritative declaration or ABI source from public Apple documentation,
+Apple OSS, or a pinned public compiler/runtime implementation. Catalog validation
+rejects raylib or community bindings as the sole evidence for an interface.
 
 `scripts/audit_macos_archives.py` inventories unresolved references in the
 project-built host, raylib, GIF, VP8, and SQLite archives. The inventory is intentionally broader than the final
@@ -45,6 +49,11 @@ application: static archives contain members that may be discarded by the final
 link, and dynamically looked-up Objective-C names may not appear as linker
 references. Audit output is evidence for what needs investigation, never an
 automatic input to `interfaces.json`.
+The validation workflow additionally checks that every reference in each
+architecture's conservative archive inventory is classified as a reviewed system
+interface, one of the six explicit Roc application callbacks, or a compiler
+selector stub resolved through the reviewed `_objc_msgSend` interface. Selector
+stub spellings are not copied into the generated system interfaces.
 
 `scripts/build_macos_stubs.py` deterministically writes TAPI v4 YAML from the
 reviewed catalog. Generation is offline. It reads no SDK or installed system

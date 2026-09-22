@@ -11,6 +11,12 @@ Sources are limited to publicly available developer documentation and identified
 public open-source declarations with pinned revisions. Generation uses the
 committed catalog offline.
 
+Project archive symbol tables establish only requirement context. Apple public
+documentation or pinned Apple OSS establishes declarations and ownership; pinned
+public LLVM or runtime source establishes compiler-generated ABI transformations.
+Raylib, GLFW, and community bindings cannot be the sole evidence for a generated
+system interface.
+
 The producer does not read, copy, or modify Apple SDK headers, TBDs, framework
 binaries, dylibs, object files, symbol tables, generated SDK metadata, or other
 installed macOS software. The generated interface package redistributes no Apple

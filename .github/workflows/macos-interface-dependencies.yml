@@ -81,6 +81,22 @@ jobs:
         run: |
           python3 -c 'from pathlib import Path; from scripts.dependency_artifacts import unpack_verified; unpack_verified(next(Path("${{ runner.temp }}/candidate").glob("*.tar")), {"name":"macos-interfaces","target":"macos-sysroot"}, Path("${{ runner.temp }}/unpacked"))'
           printf 'ROC_RAY_MACOS_INTERFACES_DIR=%s\n' "${{ runner.temp }}/unpacked/targets/macos-sysroot" >> "$GITHUB_ENV"
+      - name: Verify native archive symbol closure
+        run: |
+          case "${{ runner.arch }}" in
+            ARM64) archive_dir=platform/targets/arm64mac ;;
+            X64) archive_dir=platform/targets/x64mac ;;
+            *) echo "unsupported runner architecture: ${{ runner.arch }}" >&2; exit 1 ;;
+          esac
+          python3 scripts/audit_macos_archives.py \
+            --llvm-nm "$(xcrun --find llvm-nm)" \
+            --verify-closure \
+            --output "$RUNNER_TEMP/macos-archive-closure.json" \
+            "$archive_dir/libhost.a" \
+            "$archive_dir/libraylib.a" \
+            "$archive_dir/libmsf_gif.a" \
+            "$archive_dir/libvpx.a" \
+            "$archive_dir/libsqlite3.a"
       - name: Build every native host against the candidate
         run: zig build -Doptimize=ReleaseFast -Dmacos-interfaces-path="$ROC_RAY_MACOS_INTERFACES_DIR" -Droc-tests=false
       - name: Final-link and run the RocRay headless suite

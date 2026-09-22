@@ -197,6 +197,398 @@
               "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
             }
           ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSApplication",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSApplication",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSArray",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSArray",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSAttributedString",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSAttributedString",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSBitmapImageRep",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSBitmapImageRep",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSBundle",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSBundle",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSColor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSColor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSConstantDictionary",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSConstantDictionary",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSDate",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSDate",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSDictionary",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSDictionary",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSEvent",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSEvent",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSImage",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSImage",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSMenu",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSMenu",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSMenuItem",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSMenuItem",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSMutableAttributedString",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSMutableAttributedString",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSNotificationCenter",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSNotificationCenter",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSOpenGLContext",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSOpenGLContext",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSOpenGLPixelFormat",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSOpenGLPixelFormat",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSPasteboard",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSPasteboard",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSRunningApplication",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSRunningApplication",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSScreen",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSScreen",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSString",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSString",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSThread",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSThread",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSTrackingArea",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSTrackingArea",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSURL",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSURL",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSUserDefaults",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSUserDefaults",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_CLASS_$_NSWindow",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_CLASS_$_NSWindow",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_OBJC_METACLASS_$_NSWindow",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "OBJC_METACLASS_$_NSWindow",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -771,6 +1163,48 @@
               "revision": "6.0",
               "source_license": "zlib/libpng (raylib); GLFW source under its included license",
               "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_CFBundleCopyPrivateFrameworksURL",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CFBundleCopyPrivateFrameworksURL",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_CFURLCreateCopyAppendingPathComponent",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CFURLCreateCopyAppendingPathComponent",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "___kCFBooleanFalse",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "kCFBooleanFalse",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
             }
           ]
         }
@@ -1643,6 +2077,2526 @@
               "revision": "6.0",
               "source_license": "zlib/libpng (raylib); GLFW source under its included license",
               "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$IBeamCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$IBeamCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$UTF8String",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$UTF8String",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$activateIgnoringOtherApps:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$activateIgnoringOtherApps:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addItem:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addItem:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addItemWithTitle:action:keyEquivalent:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addItemWithTitle:action:keyEquivalent:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addLocalMonitorForEventsMatchingMask:handler:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addLocalMonitorForEventsMatchingMask:handler:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addObserver:selector:name:object:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addObserver:selector:name:object:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addRepresentation:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addRepresentation:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$addTrackingArea:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$addTrackingArea:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$alphaValue",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$alphaValue",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$array",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$array",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$arrayWithObjects:count:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$arrayWithObjects:count:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$arrowCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$arrowCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$backingScaleFactor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$backingScaleFactor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$bitmapData",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$bitmapData",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$bounds",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$bounds",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$bundleWithPath:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$bundleWithPath:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$buttonNumber",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$buttonNumber",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$bytes",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$bytes",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$cascadeTopLeftFromPoint:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$cascadeTopLeftFromPoint:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$center",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$center",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$classNamed:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$classNamed:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$clearColor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$clearColor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$clearCurrentContext",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$clearCurrentContext",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$close",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$close",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$closedHandCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$closedHandCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$containsObject:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$containsObject:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$contentRectForFrameRect:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$contentRectForFrameRect:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$convertRectToBacking:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$convertRectToBacking:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$convertRectToScreen:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$convertRectToScreen:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$count",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$count",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$countByEnumeratingWithState:objects:count:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$countByEnumeratingWithState:objects:count:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$crosshairCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$crosshairCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$currentApplication",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$currentApplication",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$currentEvent",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$currentEvent",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$dateWithTimeIntervalSinceNow:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$dateWithTimeIntervalSinceNow:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$declareTypes:owner:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$declareTypes:owner:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$defaultCenter",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$defaultCenter",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$deltaX",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$deltaX",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$deltaY",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$deltaY",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$deminiaturize:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$deminiaturize:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$detachNewThreadSelector:toTarget:withObject:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$detachNewThreadSelector:toTarget:withObject:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$deviceDescription",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$deviceDescription",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$dictionaryWithObjects:forKeys:count:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$dictionaryWithObjects:forKeys:count:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$distantFuture",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$distantFuture",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$distantPast",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$distantPast",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$draggingLocation",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$draggingLocation",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$draggingPasteboard",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$draggingPasteboard",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$fileSystemRepresentation",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$fileSystemRepresentation",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$flushBuffer",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$flushBuffer",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$frame",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$frame",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$frameRectForContentRect:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$frameRectForContentRect:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$frameRectForContentRect:styleMask:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$frameRectForContentRect:styleMask:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$generalPasteboard",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$generalPasteboard",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$getBytes:maxLength:usedLength:encoding:options:range:remainingRange:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$getBytes:maxLength:usedLength:encoding:options:range:remainingRange:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$getValues:forParameter:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$getValues:forParameter:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$hasPreciseScrollingDeltas",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$hasPreciseScrollingDeltas",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$hide",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$hide",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$infoDictionary",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$infoDictionary",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithAttributedString:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithAttributedString:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithAttributes:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithAttributes:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithContentRect:styleMask:backing:defer:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithContentRect:styleMask:backing:defer:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithFormat:shareContext:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithFormat:shareContext:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithGlfwWindow:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithGlfwWindow:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithImage:hotSpot:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithImage:hotSpot:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithRect:options:owner:userInfo:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithRect:options:owner:userInfo:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithSize:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithSize:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithString:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithString:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$initWithTitle:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$initWithTitle:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$interpretKeyEvents:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$interpretKeyEvents:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isEqualToString:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isEqualToString:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isFinishedLaunching",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isFinishedLaunching",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isKeyWindow",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isKeyWindow",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isMiniaturized",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isMiniaturized",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isOpaque",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isOpaque",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isVisible",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isVisible",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$isZoomed",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$isZoomed",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$keyCode",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$keyCode",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$keyWindow",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$keyWindow",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$layer",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$layer",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$length",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$length",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$loadNibNamed:owner:topLevelObjects:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$loadNibNamed:owner:topLevelObjects:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$locationInWindow",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$locationInWindow",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mainBundle",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mainBundle",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$makeCurrentContext",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$makeCurrentContext",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$makeFirstResponder:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$makeFirstResponder:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$makeKeyAndOrderFront:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$makeKeyAndOrderFront:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$miniaturize:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$miniaturize:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$miniwindowTitle",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$miniwindowTitle",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$modifierFlags",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$modifierFlags",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mouse:inRect:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mouse:inRect:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mouseLocation",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mouseLocation",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mouseLocationOutsideOfEventStream",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mouseLocationOutsideOfEventStream",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mouseMoved:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mouseMoved:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$mutableString",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$mutableString",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$nextEventMatchingMask:untilDate:inMode:dequeue:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$nextEventMatchingMask:untilDate:inMode:dequeue:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$objectAtIndexedSubscript:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$objectAtIndexedSubscript:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$objectForKeyedSubscript:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$objectForKeyedSubscript:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$occlusionState",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$occlusionState",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$operationNotAllowedCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$operationNotAllowedCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$orderFront:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$orderFront:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$orderOut:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$orderOut:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$pathForResource:ofType:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$pathForResource:ofType:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$performSelector:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$performSelector:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$performSelector:withObject:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$performSelector:withObject:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$pointingHandCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$pointingHandCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$postEvent:atStart:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$postEvent:atStart:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$readObjectsForClasses:options:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$readObjectsForClasses:options:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$registerDefaults:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$registerDefaults:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$registerForDraggedTypes:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$registerForDraggedTypes:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$removeMonitor:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$removeMonitor:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$removeObserver:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$removeObserver:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$removeObserver:name:object:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$removeObserver:name:object:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$removeTrackingArea:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$removeTrackingArea:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$requestUserAttention:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$requestUserAttention:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$resizeLeftRightCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$resizeLeftRightCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$resizeUpDownCursor",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$resizeUpDownCursor",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$run",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$run",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$screens",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$screens",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$scrollingDeltaX",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$scrollingDeltaX",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$scrollingDeltaY",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$scrollingDeltaY",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$sendEvent:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$sendEvent:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$separatorItem",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$separatorItem",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$set",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$set",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setAcceptsMouseMovedEvents:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setAcceptsMouseMovedEvents:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setActivationPolicy:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setActivationPolicy:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setAlphaValue:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setAlphaValue:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setBackgroundColor:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setBackgroundColor:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setCollectionBehavior:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setCollectionBehavior:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setContentAspectRatio:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setContentAspectRatio:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setContentMaxSize:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setContentMaxSize:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setContentMinSize:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setContentMinSize:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setContentView:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setContentView:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setContentsScale:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setContentsScale:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setDelegate:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setDelegate:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setFrame:display:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setFrame:display:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setFrameAutosaveName:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setFrameAutosaveName:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setFrameOrigin:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setFrameOrigin:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setHasShadow:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setHasShadow:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setIgnoresMouseEvents:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setIgnoresMouseEvents:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setKeyEquivalentModifierMask:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setKeyEquivalentModifierMask:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setLayer:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setLayer:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setLevel:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setLevel:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setMainMenu:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setMainMenu:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setMiniwindowTitle:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setMiniwindowTitle:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setOpaque:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setOpaque:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setResizeIncrements:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setResizeIncrements:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setRestorable:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setRestorable:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setServicesMenu:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setServicesMenu:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setString:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setString:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setString:forType:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setString:forType:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setStyleMask:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setStyleMask:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setSubmenu:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setSubmenu:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setTabbingMode:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setTabbingMode:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setTitle:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setTitle:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setValues:forParameter:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setValues:forParameter:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setView:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setView:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setWantsBestResolutionOpenGLSurface:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setWantsBestResolutionOpenGLSurface:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setWantsLayer:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setWantsLayer:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$setWindowsMenu:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$setWindowsMenu:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$sharedApplication",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$sharedApplication",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$standardUserDefaults",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$standardUserDefaults",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$stop:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$stop:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$string",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$string",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$stringForType:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$stringForType:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$stringWithFormat:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$stringWithFormat:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$stringWithUTF8String:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$stringWithUTF8String:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$styleMask",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$styleMask",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$types",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$types",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$unhide",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$unhide",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$unsignedIntValue",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$unsignedIntValue",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$update",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$update",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$updateTrackingAreas",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$updateTrackingAreas",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$valueForKey:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$valueForKey:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$visibleFrame",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$visibleFrame",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$windowNumber",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$windowNumber",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$windowNumberAtPoint:belowWindowWithWindowNumber:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$windowNumberAtPoint:belowWindowWithWindowNumber:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend$zoom:",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend$zoom:",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
             }
           ]
         }
@@ -5455,6 +8409,538 @@
               "revision": "6.0",
               "source_license": "zlib/libpng (raylib); GLFW source under its included license",
               "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
+        },
+        {
+          "name": "___exp10",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "exp10",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "___vsnprintf_chk",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "vsnprintf_chk",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "__availability_version_check",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "availability_version_check",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "__dyld_get_image_header_containing_address",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "dyld_get_image_header_containing_address",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_acosh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "acosh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_asin",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "asin",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_asinh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "asinh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_atan",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "atan",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_atanh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "atanh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_atof",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "atof",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_atoll",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "atoll",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_cosh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "cosh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_dyld_image_path_containing_address",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "dyld_image_path_containing_address",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_feof",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "feof",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_fgets",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fgets",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_fileno",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fileno",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_frexp",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "frexp",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_fstatfs$INODE64",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fstatfs$INODE64",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_hypot",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "hypot",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_hypotf",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "hypotf",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_localtime",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "localtime",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_longjmp",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "longjmp",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_lstat$INODE64",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "lstat$INODE64",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_puts",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "puts",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_rand",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "rand",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_remove",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "remove",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_rewind",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "rewind",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_setjmp",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "setjmp",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_sinh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sinh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_stat$INODE64",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "stat$INODE64",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_statfs$INODE64",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "statfs$INODE64",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_strpbrk",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strpbrk",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_strtok",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strtok",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_strtol",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strtol",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_system",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "system",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_tanh",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "tanh",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_ungetc",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "ungetc",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
+            }
+          ]
+        },
+        {
+          "name": "_wcsrtombs",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_init.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "wcsrtombs",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029",
+              "abi_mapping": "Archive undefined-symbol review records this exact linker interface; the pinned Cocoa source establishes the native dependency context."
             }
           ]
         }

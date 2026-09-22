@@ -67,6 +67,19 @@
               "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029"
             }
           ]
+        },
+        {
+          "name": "_NSCalibratedRGBColorSpace",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "NSCalibratedRGBColorSpace",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -604,6 +617,19 @@
               "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029"
             }
           ]
+        },
+        {
+          "name": "_CFStringCreateWithCharactersNoCopy",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CFStringCreateWithCharactersNoCopy",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -859,6 +885,136 @@
               "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
             }
           ]
+        },
+        {
+          "name": "_CGDisplayCopyAllDisplayModes",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayCopyAllDisplayModes",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayGammaTableCapacity",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayGammaTableCapacity",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayModeGetHeight",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModeGetHeight",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayModeGetIOFlags",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModeGetIOFlags",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayModeGetWidth",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModeGetWidth",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGGetDisplayTransferByTable",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGGetDisplayTransferByTable",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGSetDisplayTransferByTable",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGSetDisplayTransferByTable",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayMoveCursorToPoint",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayMoveCursorToPoint",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
+        },
+        {
+          "name": "_CGMainDisplayID",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGMainDisplayID",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
+        },
+        {
+          "name": "_CGWarpMouseCursorPosition",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGWarpMouseCursorPosition",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -978,6 +1134,84 @@
               "revision": "6.0",
               "source_license": "zlib/libpng (raylib); GLFW source under its included license",
               "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDDeviceGetValue",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDDeviceGetValue",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDManagerOpen",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDManagerOpen",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDManagerRegisterDeviceMatchingCallback",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDManagerRegisterDeviceMatchingCallback",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDManagerRegisterDeviceRemovalCallback",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDManagerRegisterDeviceRemovalCallback",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDManagerSetDeviceMatchingMultiple",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDManagerSetDeviceMatchingMultiple",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "_IOHIDValueGetIntegerValue",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IOHIDValueGetIntegerValue",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
             }
           ]
         }
@@ -1120,6 +1354,32 @@
               "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
               "evidence_kind": "public_open_source_identifier",
               "identifier": "objc_autoreleasePoolPush",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_msgSend_stret",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_msgSend_stret",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_retain",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_retain",
               "revision": "objc4-950",
               "source_license": "Apple Public Source License 2.0",
               "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
@@ -4793,6 +5053,122 @@
               "revision": "6.0",
               "source_license": "zlib/libpng (raylib); GLFW source under its included license",
               "response_sha256": "666d656c1eb0b0023d7c57e2ec7326956a93f950977473eb7723364416ef4029"
+            }
+          ]
+        },
+        {
+          "name": "_sprintf",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_joystick.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sprintf",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "eddd49dc3862a4e16be208c36e540f52fe7f987acf315c4d969eaa6ec32f09b0"
+            }
+          ]
+        },
+        {
+          "name": "___bzero",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/documentation/kernel/1579350-bzero",
+              "data_url": "https://developer.apple.com/tutorials/data/documentation/kernel/1579350-bzero.json",
+              "external_id": "c:@F@bzero",
+              "title": "bzero",
+              "documented_modules": [
+                "Kernel"
+              ],
+              "evidence_kind": "exact_C_identifier",
+              "retrieved_at": "2026-09-09T10:06:25.381046+00:00",
+              "response_sha256": "ee03549312ab19f98ed12fbccb7bbb039d252d472fecac69608114c04ea8d93a"
+            },
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/bzero.3.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:06:40.572520+00:00",
+              "response_sha256": "886620c069deaed3bf51a67ee2cb58e4aa37bd41825f4a746562578fba509c01"
+            }
+          ]
+        },
+        {
+          "name": "_fstat$INODE64",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fstat.2.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:06:53.628462+00:00",
+              "response_sha256": "0f06812c4ba6605cc8a4a4fe940b1dccb3cc62703ad7251262912bd68c9cda4b"
+            },
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/lstat.2.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:07:05.984748+00:00",
+              "response_sha256": "53dc2b8df2e62135ba2b57aa5afc013a7cc29d772dcac3855a92e0887f4b14d1"
+            },
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/stat.2.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:07:30.589506+00:00",
+              "response_sha256": "7061e093257e5c2038b2544b35f0563cbeeb19885b73ecbf3ad91d75ff1a3908"
+            }
+          ]
+        },
+        {
+          "name": "_fstatat$INODE64",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/stat.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fstatat",
+              "line": 573,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0 and additional BSD-style source notices",
+              "response_sha256": "dd8154be80f467ba57d4edaa7c6617bd32db54bfebdda892b390f9b0364fe488"
+            }
+          ]
+        },
+        {
+          "name": "_select$1050",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/_select.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "select",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "23e013274b46f4eb46aae8492206ed2862ea6c998e28e793427f38a5e499bb6d"
+            }
+          ]
+        },
+        {
+          "name": "_div",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "div",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_ldexp",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "ldexp",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
             }
           ]
         }

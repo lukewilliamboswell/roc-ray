@@ -124,6 +124,11 @@ const all_native_targets = [_]RocTarget{
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
+    const macos_interfaces_path = b.option(
+        []const u8,
+        "macos-interfaces-path",
+        "Path to a generated macOS interface tree (defaults to platform/targets/macos-sysroot)",
+    ) orelse "platform/targets/macos-sysroot";
     const run_roc_tests = b.option(
         bool,
         "roc-tests",
@@ -172,7 +177,7 @@ pub fn build(b: *std.Build) void {
     // Build for each native Roc target
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const build_result = buildHostLib(b, target, optimize, roc_target);
+        const build_result = buildHostLib(b, target, optimize, roc_target, macos_interfaces_path);
 
         // For Linux targets, ensure X11 stubs are generated first
         if (target.result.os.tag == .linux) {
@@ -296,6 +301,17 @@ pub fn build(b: *std.Build) void {
     });
     release_helper_tests.setCwd(b.path("."));
     test_step.dependOn(&release_helper_tests.step);
+
+    const dependency_input_tests = b.addSystemCommand(&.{
+        "python3",
+        "-m",
+        "unittest",
+        "scripts/test_dependency_artifacts.py",
+        "scripts/test_macos_archive_audit.py",
+        "scripts/test_macos_interfaces.py",
+    });
+    dependency_input_tests.setCwd(b.path("."));
+    test_step.dependOn(&dependency_input_tests.step);
 
     const observatory_analysis_tests = b.addSystemCommand(&.{
         "python3",
@@ -445,7 +461,7 @@ pub fn build(b: *std.Build) void {
         });
         graphical_smoke.root_module.addIncludePath(b.path("vendor/raylib/include"));
         graphical_smoke.root_module.addLibraryPath(b.path(raylib_lib_dir));
-        graphical_smoke.root_module.linkSystemLibrary("raylib", .{});
+        graphical_smoke.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
         switch (native_target.result.os.tag) {
             .linux => graphical_smoke.root_module.linkSystemLibrary("X11", .{}),
             .macos => {
@@ -1070,6 +1086,7 @@ fn buildHostLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     roc_target: RocTarget,
+    macos_interfaces_path: []const u8,
 ) BuildResult {
     const raylib_include_path = b.path("vendor/raylib/include");
     const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
@@ -1139,8 +1156,16 @@ fn buildHostLib(
     });
 
     if (target.result.os.tag == .macos) {
-        const sysroot_frameworks = b.path("platform/targets/macos-sysroot/System/Library/Frameworks");
-        const sysroot_lib = b.path("platform/targets/macos-sysroot/usr/lib");
+        const framework_path = b.pathJoin(&.{ macos_interfaces_path, "System/Library/Frameworks" });
+        const library_path = b.pathJoin(&.{ macos_interfaces_path, "usr/lib" });
+        const sysroot_frameworks: std.Build.LazyPath = if (std.fs.path.isAbsolute(framework_path))
+            .{ .cwd_relative = framework_path }
+        else
+            b.path(framework_path);
+        const sysroot_lib: std.Build.LazyPath = if (std.fs.path.isAbsolute(library_path))
+            .{ .cwd_relative = library_path }
+        else
+            b.path(library_path);
         host_lib.root_module.addSystemFrameworkPath(sysroot_frameworks);
         host_lib.root_module.addLibraryPath(sysroot_lib);
     }

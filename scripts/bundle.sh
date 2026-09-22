@@ -5,6 +5,7 @@ root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 platform_dir="$root_dir/platform"
 output_dir="$root_dir"
 package="default"
+macos_interfaces_dir="${ROC_RAY_MACOS_INTERFACES_DIR:-$platform_dir/targets/macos-sysroot}"
 roc_bundle_args=()
 roc_bin="${ROC:-roc}"
 
@@ -15,6 +16,7 @@ fi
 usage() {
     cat <<'EOF'
 Usage: scripts/bundle.sh [--platform default|wayland] [--output-dir DIR]
+                         [--macos-interfaces-dir DIR]
                          [roc bundle args...]
 
 The default package includes all supported native targets. The Wayland package
@@ -60,6 +62,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --output-dir=*)
             output_dir="${1#--output-dir=}"
+            shift
+            ;;
+        --macos-interfaces-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "error: --macos-interfaces-dir requires a directory" >&2
+                exit 1
+            fi
+            macos_interfaces_dir="$2"
+            shift 2
+            ;;
+        --macos-interfaces-dir=*)
+            macos_interfaces_dir="${1#--macos-interfaces-dir=}"
             shift
             ;;
         -h|--help)
@@ -163,9 +177,11 @@ case "$package" in
         copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a libm.so libX11.so libc.so crtn.o
         copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib sqlite3.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib bcryptprimitives.lib
 
-        if [[ -d "$platform_dir/targets/macos-sysroot" ]]; then
-            cp -R "$platform_dir/targets/macos-sysroot" "$stage_dir/targets/"
+        if [[ ! -d "$macos_interfaces_dir" ]]; then
+            echo "error: missing macOS interface tree: $macos_interfaces_dir" >&2
+            exit 1
         fi
+        cp -R "$macos_interfaces_dir" "$stage_dir/targets/macos-sysroot"
         copy_vendor_notices
         ;;
     wayland)
@@ -212,10 +228,16 @@ for lib in targets/*/*.a targets/*/*.o targets/*/*.lib targets/*/*.so; do
 done
 
 sysroot_files=()
+sysroot_metadata_files=()
 if [[ -d "targets/macos-sysroot" ]]; then
     while IFS= read -r -d '' tbd; do
         sysroot_files+=("$tbd")
     done < <(find targets/macos-sysroot -name "*.tbd" -print0)
+    for metadata in targets/macos-sysroot/interfaces.json targets/macos-sysroot/manifest.json targets/macos-sysroot/PROVENANCE.md; do
+        if [[ -f "$metadata" ]]; then
+            sysroot_metadata_files+=("$metadata")
+        fi
+    done
 fi
 
 echo "Bundling:"
@@ -223,6 +245,7 @@ echo "  - platform package: $package"
 echo "  - ${#roc_files[@]} .roc files"
 echo "  - ${#lib_files[@]} library files"
 echo "  - ${#sysroot_files[@]} sysroot TBD files"
+echo "  - ${#sysroot_metadata_files[@]} sysroot provenance files"
 if [[ -n "${ROC_RAY_KEEP_BUNDLE_STAGE:-}" ]]; then
     echo "  - staged at: $stage_dir"
 fi
@@ -236,6 +259,9 @@ if [[ "${#lib_files[@]}" -gt 0 ]]; then
 fi
 if [[ "${#sysroot_files[@]}" -gt 0 ]]; then
     bundle_args+=("${sysroot_files[@]}")
+fi
+if [[ "${#sysroot_metadata_files[@]}" -gt 0 ]]; then
+    bundle_args+=("${sysroot_metadata_files[@]}")
 fi
 bundle_args+=(--output-dir "$output_dir")
 if [[ "${#roc_bundle_args[@]}" -gt 0 ]]; then

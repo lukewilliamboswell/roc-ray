@@ -32,6 +32,33 @@ Build the native hosts and platform inputs:
 zig build
 ```
 
+### macOS linker interfaces
+
+RocRay owns a reviewed catalog for the minimal macOS linker interfaces it
+needs. `scripts/build_macos_interfaces.py` deterministically generates those
+text interfaces without reading Xcode or an installed SDK:
+
+```bash
+python3 scripts/build_macos_interfaces.py --tree /tmp/roc-ray-macos-sysroot
+zig build -Dmacos-interfaces-path=/tmp/roc-ray-macos-sysroot
+```
+
+Use `scripts/audit_macos_archives.py` only to inventory unresolved references
+in RocRay's five macOS archives. An archive reference does not establish public
+API status or library ownership; additions to
+`dependencies/macos-interfaces/interfaces.json` require the evidence described
+in `dependencies/macos-interfaces/README.md`.
+
+The independent producer workflow generates the archive twice, validates the
+exact candidate on Intel and Apple Silicon, attests it with GitHub build
+provenance, and publishes an immutable dependency release. This initial
+producer change deliberately keeps the existing checked-in stubs as the normal
+build input: the producer must first exist on trusted `main`. A follow-up
+reviews the generated `dependencies.lock.json`, verifies the attestation in the
+platform release workflow, changes the default build and bundler to the locked
+artifact, and removes the old stubs. No placeholder digest or unattested
+bootstrap asset is accepted.
+
 Run an example against the local platform:
 
 ```bash

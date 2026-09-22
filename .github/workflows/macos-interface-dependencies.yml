@@ -1,0 +1,129 @@
+name: macOS interface dependency releases
+
+on:
+  pull_request:
+    paths:
+      - dependencies/macos-interfaces/**
+      - scripts/audit_macos_archives.py
+      - scripts/build_macos_interfaces.py
+      - scripts/build_macos_stubs.py
+      - scripts/dependency_archive.py
+      - scripts/dependency_artifacts.py
+      - scripts/release_macos_interfaces.py
+      - scripts/test_dependency_artifacts.py
+      - scripts/test_macos_archive_audit.py
+      - scripts/test_macos_interfaces.py
+      - .github/workflows/macos-interface-dependencies.yml
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: New tag (deps-macos-interfaces-<version>)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-interface-dependencies-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  produce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.16.0
+      - name: Test catalog, archive, audit, and admission contracts
+        run: python3 -m unittest scripts/test_dependency_artifacts.py scripts/test_macos_archive_audit.py scripts/test_macos_interfaces.py
+      - name: Generate the release candidate twice
+        run: |
+          python3 scripts/build_macos_interfaces.py --output "$RUNNER_TEMP/first"
+          python3 scripts/build_macos_interfaces.py --output "$RUNNER_TEMP/second"
+          cmp "$RUNNER_TEMP/first/macos-interfaces-macos-sysroot.tar" "$RUNNER_TEMP/second/macos-interfaces-macos-sysroot.tar"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-interfaces-macos-sysroot
+          path: ${{ runner.temp }}/first/*.tar
+          retention-days: 30
+
+  validate:
+    needs: produce
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: macos-interfaces-macos-sysroot
+          path: ${{ runner.temp }}/candidate
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.16.0
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+      - name: Extract the exact producer candidate
+        run: |
+          python3 -c 'from pathlib import Path; from scripts.dependency_artifacts import unpack_verified; unpack_verified(next(Path("${{ runner.temp }}/candidate").glob("*.tar")), {"name":"macos-interfaces","target":"macos-sysroot"}, Path("${{ runner.temp }}/unpacked"))'
+          printf 'ROC_RAY_MACOS_INTERFACES_DIR=%s\n' "${{ runner.temp }}/unpacked/targets/macos-sysroot" >> "$GITHUB_ENV"
+      - name: Build every native host against the candidate
+        run: zig build -Doptimize=ReleaseFast -Dmacos-interfaces-path="$ROC_RAY_MACOS_INTERFACES_DIR" -Droc-tests=false
+      - name: Verify native archive symbol closure
+        run: |
+          case "${{ runner.arch }}" in
+            ARM64) archive_dir=platform/targets/arm64mac ;;
+            X64) archive_dir=platform/targets/x64mac ;;
+            *) echo "unsupported runner architecture: ${{ runner.arch }}" >&2; exit 1 ;;
+          esac
+          python3 scripts/audit_macos_archives.py \
+            --llvm-nm "$(xcrun --find llvm-nm)" \
+            --verify-closure \
+            --output "$RUNNER_TEMP/macos-archive-closure.json" \
+            "$archive_dir/libhost.a" \
+            "$archive_dir/libraylib.a" \
+            "$archive_dir/libmsf_gif.a" \
+            "$archive_dir/libvpx.a" \
+            "$archive_dir/libsqlite3.a"
+      - name: Final-link and run the RocRay headless suite
+        run: python3 scripts/all_tests.py --skip-platform-build --skip-windowed
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'lukewilliamboswell/roc-ray'
+    needs: [produce, validate]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: macos-interfaces-macos-sysroot
+          path: ${{ runner.temp }}/release
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: ${{ runner.temp }}/release/*.tar
+      - name: Publish exact tested bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python3 scripts/release_macos_interfaces.py --directory "$RUNNER_TEMP/release" --tag "$RELEASE_TAG"

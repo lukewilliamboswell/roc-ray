@@ -4580,6 +4580,28 @@
           ]
         },
         {
+          "name": "_opendir$INODE64",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/opendir.3.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:07:11.952126+00:00",
+              "response_sha256": "19a8c92d2240d867d252034b58f0bdcd790ab81b860146b96698c89dcc16ab82"
+            },
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/cdefs.h",
+              "evidence_kind": "public_open_source_ABI_suffix",
+              "identifier": "__DARWIN_INODE64",
+              "line": 927,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0 and BSD-style source notices",
+              "response_sha256": "6bab328310e9d4f9ff47f763f1fa8cf0000e25ce6be04a9743bf176ccdf94682",
+              "abi_mapping": "_opendir$INODE64 is the x86_64 Darwin inode64 ABI spelling of _opendir."
+            }
+          ]
+        },
+        {
           "name": "_os_unfair_lock_lock",
           "sources": [
             {
@@ -5234,6 +5256,28 @@
               "evidence_kind": "exact_function_name_in_manpage_synopsis",
               "retrieved_at": "2026-09-09T10:07:22.589583+00:00",
               "response_sha256": "fe265e38b400fe06347ababa68cbe0828e7c135b7c9c5dcf50cc63fbb31dda54"
+            }
+          ]
+        },
+        {
+          "name": "_readdir$INODE64",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/readdir.3.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:07:22.289134+00:00",
+              "response_sha256": "709c2821cc81f2eadd7d69ef355417d40c56c7c758dc9253c54c914528c3b2e2"
+            },
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/cdefs.h",
+              "evidence_kind": "public_open_source_ABI_suffix",
+              "identifier": "__DARWIN_INODE64",
+              "line": 927,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0 and BSD-style source notices",
+              "response_sha256": "6bab328310e9d4f9ff47f763f1fa8cf0000e25ce6be04a9743bf176ccdf94682",
+              "abi_mapping": "_readdir$INODE64 is the x86_64 Darwin inode64 ABI spelling of _readdir."
             }
           ]
         },

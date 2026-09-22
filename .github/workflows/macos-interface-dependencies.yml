@@ -81,6 +81,8 @@ jobs:
         run: |
           python3 -c 'from pathlib import Path; from scripts.dependency_artifacts import unpack_verified; unpack_verified(next(Path("${{ runner.temp }}/candidate").glob("*.tar")), {"name":"macos-interfaces","target":"macos-sysroot"}, Path("${{ runner.temp }}/unpacked"))'
           printf 'ROC_RAY_MACOS_INTERFACES_DIR=%s\n' "${{ runner.temp }}/unpacked/targets/macos-sysroot" >> "$GITHUB_ENV"
+      - name: Build every native host against the candidate
+        run: zig build -Doptimize=ReleaseFast -Dmacos-interfaces-path="$ROC_RAY_MACOS_INTERFACES_DIR" -Droc-tests=false
       - name: Verify native archive symbol closure
         run: |
           case "${{ runner.arch }}" in
@@ -97,8 +99,6 @@ jobs:
             "$archive_dir/libmsf_gif.a" \
             "$archive_dir/libvpx.a" \
             "$archive_dir/libsqlite3.a"
-      - name: Build every native host against the candidate
-        run: zig build -Doptimize=ReleaseFast -Dmacos-interfaces-path="$ROC_RAY_MACOS_INTERFACES_DIR" -Droc-tests=false
       - name: Final-link and run the RocRay headless suite
         run: python3 scripts/all_tests.py --skip-platform-build --skip-windowed
 

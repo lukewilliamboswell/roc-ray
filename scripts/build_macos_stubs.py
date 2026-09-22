@@ -36,7 +36,7 @@ def validate_catalog(catalog):
     seen_paths, seen_symbols = set(), set()
     for library in catalog['libraries']:
         required = {'name', 'path', 'install_name', 'path_sources', 'symbols'}
-        if not required <= set(library) <= required | {'path_evidence', 'load_requirement'}:
+        if not required <= set(library) <= required | {'path_evidence', 'load_requirement', 'reexports'}:
             raise ValueError('invalid macOS library evidence schema')
         name = library['path']
         relative = PurePosixPath(name)
@@ -50,6 +50,12 @@ def validate_catalog(catalog):
                 or any(not isinstance(url, str) or not url.startswith('https://')
                        for url in library['path_sources'])):
             raise ValueError('macOS library requires install-path evidence')
+        reexports = library.get('reexports', [])
+        if (not isinstance(reexports, list) or len(reexports) != len(set(reexports))
+                or any(not isinstance(name, str) or not re.fullmatch(
+                    r'/(?:usr/lib|System/Library/Frameworks)/[A-Za-z0-9_./+-]+', name)
+                    for name in reexports)):
+            raise ValueError('invalid macOS reexport')
         for record in library['symbols']:
             if set(record) != {'name', 'sources'} or not isinstance(record['sources'], list):
                 raise ValueError('invalid macOS symbol evidence schema')
@@ -88,6 +94,10 @@ def render(catalog):
         target_list = ', '.join(TAPI_TARGETS)
         lines = ['--- !tapi-tbd', 'tbd-version: 4', f'targets: [ {target_list} ]',
                  "install-name: '" + library['install_name'] + "'"]
+        if library.get('reexports'):
+            lines += ['reexported-libraries:', f'  - targets: [ {target_list} ]',
+                      '    libraries:']
+            lines += ["      - '" + name + "'" for name in sorted(library['reexports'])]
         symbols = sorted(record['name'] for record in library['symbols'])
         if symbols:
             lines += ['exports:', f'  - targets: [ {target_list} ]', '    symbols:']

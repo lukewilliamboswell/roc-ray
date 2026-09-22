@@ -1,7 +1,8 @@
 # Generated macOS linker interface provenance
 
 RocRay generates these `.tbd` files from scratch as minimal text descriptions
-of selected symbol names, library paths, and target architectures.
+of selected symbol names, library paths, required reexports, and target
+architectures.
 They exist solely to link the independently compiled RocRay host to libraries
 that macOS supplies at runtime.
 

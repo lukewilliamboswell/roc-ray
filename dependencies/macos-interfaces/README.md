@@ -55,8 +55,9 @@ archives are not part of the interface archive's identity.
 
 The TAPI text format is openly implemented by
 [LLVM's TextAPI reader and writer](https://www.llvm.org/docs/doxygen/TextStub_8cpp_source.html).
-The generated files contain only targets, install names, and selected symbol
-names required for linking. macOS supplies all implementations at runtime.
+The generated files contain only targets, install names, required reexports,
+and selected symbol names needed for linking. macOS supplies all
+implementations at runtime.
 
 ## Reviewing a catalog change
 

@@ -35,8 +35,16 @@ zig build
 ### macOS linker interfaces
 
 RocRay owns a reviewed catalog for the minimal macOS linker interfaces it
-needs. `scripts/build_macos_interfaces.py` deterministically generates those
-text interfaces without reading Xcode or an installed SDK:
+needs. A normal build downloads the release pinned in `dependencies.lock.json`,
+checks its size, SHA-256 digest, identity, and complete file inventory, then
+materializes it under the ignored `platform/targets/macos-sysroot/` directory:
+
+```bash
+zig build
+```
+
+The cache is `~/.cache/roc-ray/dependencies`. For producer work, generate an
+unpublished candidate independently and opt into it explicitly:
 
 ```bash
 python3 scripts/build_macos_interfaces.py --tree /tmp/roc-ray-macos-sysroot
@@ -51,13 +59,14 @@ in `dependencies/macos-interfaces/README.md`.
 
 The independent producer workflow generates the archive twice, validates the
 exact candidate on Intel and Apple Silicon, attests it with GitHub build
-provenance, and publishes an immutable dependency release. This initial
-producer change deliberately keeps the existing checked-in stubs as the normal
-build input: the producer must first exist on trusted `main`. A follow-up
-reviews the generated `dependencies.lock.json`, verifies the attestation in the
-platform release workflow, changes the default build and bundler to the locked
-artifact, and removes the old stubs. No placeholder digest or unattested
-bootstrap asset is accepted.
+provenance, and publishes an immutable dependency release. Platform releases
+verify that attestation against the repository, trusted `main` source commit,
+and producing workflow before building. To verify it yourself, run:
+
+```bash
+python3 scripts/verify_release_attestations.py dependencies.lock.json \
+    --cache ~/.cache/roc-ray/dependencies
+```
 
 Run an example against the local platform:
 

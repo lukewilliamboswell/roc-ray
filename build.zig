@@ -124,11 +124,17 @@ const all_native_targets = [_]RocTarget{
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
-    const macos_interfaces_path = b.option(
+    const configured_macos_interfaces_path = b.option(
         []const u8,
         "macos-interfaces-path",
-        "Path to a generated macOS interface tree (defaults to platform/targets/macos-sysroot)",
-    ) orelse "platform/targets/macos-sysroot";
+        "Path to a generated macOS interface tree (defaults to the locked release)",
+    );
+    const macos_interfaces_path = configured_macos_interfaces_path orelse "platform/targets/macos-sysroot";
+    const prepare_macos_interfaces = if (configured_macos_interfaces_path == null) b.addSystemCommand(&.{
+        "python3",
+        "scripts/prepare_dependencies.py",
+    }) else null;
+    if (prepare_macos_interfaces) |prepare| prepare.setCwd(b.path("."));
     const run_roc_tests = b.option(
         bool,
         "roc-tests",
@@ -178,6 +184,10 @@ pub fn build(b: *std.Build) void {
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
         const build_result = buildHostLib(b, target, optimize, roc_target, macos_interfaces_path);
+
+        if (prepare_macos_interfaces) |prepare| {
+            if (target.result.os.tag == .macos) build_result.host_lib.step.dependOn(&prepare.step);
+        }
 
         // For Linux targets, ensure X11 stubs are generated first
         if (target.result.os.tag == .linux) {
@@ -309,6 +319,7 @@ pub fn build(b: *std.Build) void {
         "scripts/test_dependency_artifacts.py",
         "scripts/test_macos_archive_audit.py",
         "scripts/test_macos_interfaces.py",
+        "scripts/test_prepare_dependencies.py",
     });
     dependency_input_tests.setCwd(b.path("."));
     test_step.dependOn(&dependency_input_tests.step);

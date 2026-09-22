@@ -30,6 +30,8 @@ jobs:
   build:
     name: Build release bundles
     runs-on: ubuntu-latest
+    env:
+      ROC_RAY_DEPENDENCY_CACHE: ${{ runner.temp }}/dependencies
     outputs:
       release_version: ${{ steps.validate.outputs.release_version }}
       docs_version: ${{ steps.validate.outputs.docs_version }}
@@ -64,6 +66,11 @@ jobs:
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
+
+      - name: Verify locked linker-input attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/verify_release_attestations.py dependencies.lock.json --cache "$RUNNER_TEMP/dependencies"
 
       - name: Validate release request
         id: validate

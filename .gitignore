@@ -78,6 +78,9 @@ host/libhost.h
 zig-pkg/
 zig-cache/
 zig-out/
+
+# Digest-locked macOS interfaces materialized by scripts/prepare_dependencies.py.
+/platform/targets/macos-sysroot/
 build
 app
 

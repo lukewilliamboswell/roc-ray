@@ -7,5 +7,5 @@
     "platform/main.roc",
     "platform/main-wayland.roc"
   ],
-  "auto_merge": false
+  "auto_merge": true
 }

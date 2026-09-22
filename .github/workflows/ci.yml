@@ -332,3 +332,17 @@ jobs:
           else
             "${SWEEP[@]}"
           fi
+
+  required:
+    name: CI required
+    if: always()
+    needs:
+      - public-quickstart
+      - graphical-smoke
+      - build-and-test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require all CI jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "$RESULTS" = "success success success"

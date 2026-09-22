@@ -28,6 +28,32 @@
               "response_sha256": "ac9dce8d3308938d122429ec3c6c6c58c2de73d464c724713935749d6662d43e"
             }
           ]
+        },
+        {
+          "name": "_NSSelectorFromString",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "NSSelectorFromString",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
+        },
+        {
+          "name": "_NSApp",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_window.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "NSApp",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "a7572261f4c1c42c3d020dc0116b12d4c9f9c44161e186ea72e6b03ea1610f7b"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -70,7 +96,23 @@
         "https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPFrameworks/Concepts/FrameworkAnatomy.html"
       ],
       "symbols": [
-        {"name":"_CFStringGetCString","sources":[{"url":"https://developer.apple.com/documentation/corefoundation/cfstringgetcstring(_:_:_:_:)","data_url":"https://developer.apple.com/tutorials/data/documentation/corefoundation/cfstringgetcstring(_:_:_:_:).json","external_id":"c:@F@CFStringGetCString","title":"CFStringGetCString(_:_:_:_:)","documented_modules":["Core Foundation"],"evidence_kind":"exact_C_identifier","retrieved_at":"2026-09-22T06:00:00+00:00","response_sha256":"62898880c6287422371107e9dc356a765b9426a945a0ba6b37cf857f01be31dd"}]},
+        {
+          "name": "_CFStringGetCString",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/documentation/corefoundation/cfstringgetcstring(_:_:_:_:)",
+              "data_url": "https://developer.apple.com/tutorials/data/documentation/corefoundation/cfstringgetcstring(_:_:_:_:).json",
+              "external_id": "c:@F@CFStringGetCString",
+              "title": "CFStringGetCString(_:_:_:_:)",
+              "documented_modules": [
+                "Core Foundation"
+              ],
+              "evidence_kind": "exact_C_identifier",
+              "retrieved_at": "2026-09-22T06:00:00+00:00",
+              "response_sha256": "62898880c6287422371107e9dc356a765b9426a945a0ba6b37cf857f01be31dd"
+            }
+          ]
+        },
         {
           "name": "_CFArrayAppendValue",
           "sources": [
@@ -432,6 +474,32 @@
               "response_sha256": "6e78314a0647fce5b125b4b5c01b01af57acf6dc45192b3655f7789987cf57ee"
             }
           ]
+        },
+        {
+          "name": "_CFStringGetMaximumSizeForEncoding",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CFStringGetMaximumSizeForEncoding",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CFDictionaryGetValue",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CFDictionaryGetValue",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
@@ -445,8 +513,37 @@
         "https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPFrameworks/Concepts/FrameworkAnatomy.html"
       ],
       "symbols": [
-        {"name":"_CGDisplayModeGetRefreshRate","sources":[{"url":"https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m","evidence_kind":"public_open_source_identifier","identifier":"CGDisplayModeGetRefreshRate","revision":"6.0","source_license":"zlib/libpng (raylib); GLFW source under its included license","response_sha256":"296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e","abi_mapping":"The library record establishes CoreGraphics ownership; this source records the exact interface used by RocRay's pinned raylib input."}]},
-        {"name":"_CGOpenGLDisplayMaskToDisplayID","sources":[{"url":"https://developer.apple.com/documentation/coregraphics/cgopengldisplaymasktodisplayid(_:)","data_url":"https://developer.apple.com/tutorials/data/documentation/coregraphics/cgopengldisplaymasktodisplayid(_:).json","external_id":"c:@F@CGOpenGLDisplayMaskToDisplayID","title":"CGOpenGLDisplayMaskToDisplayID(_:)","documented_modules":["Core Graphics"],"evidence_kind":"exact_C_identifier","retrieved_at":"2026-09-22T06:00:00+00:00","response_sha256":"6b279e5254ecf44a125d13fb544580c19b3cd218e760464dca9177e48d55d92e"}]},
+        {
+          "name": "_CGDisplayModeGetRefreshRate",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModeGetRefreshRate",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e",
+              "abi_mapping": "The library record establishes CoreGraphics ownership; this source records the exact interface used by RocRay's pinned raylib input."
+            }
+          ]
+        },
+        {
+          "name": "_CGOpenGLDisplayMaskToDisplayID",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/documentation/coregraphics/cgopengldisplaymasktodisplayid(_:)",
+              "data_url": "https://developer.apple.com/tutorials/data/documentation/coregraphics/cgopengldisplaymasktodisplayid(_:).json",
+              "external_id": "c:@F@CGOpenGLDisplayMaskToDisplayID",
+              "title": "CGOpenGLDisplayMaskToDisplayID(_:)",
+              "documented_modules": [
+                "Core Graphics"
+              ],
+              "evidence_kind": "exact_C_identifier",
+              "retrieved_at": "2026-09-22T06:00:00+00:00",
+              "response_sha256": "6b279e5254ecf44a125d13fb544580c19b3cd218e760464dca9177e48d55d92e"
+            }
+          ]
+        },
         {
           "name": "_CGDisplayBounds",
           "sources": [
@@ -461,6 +558,110 @@
               "evidence_kind": "exact_C_identifier",
               "retrieved_at": "2026-09-09T10:05:46.011000+00:00",
               "response_sha256": "8b26fbb1291fa9b362082590acc5a69138fe95c2abb6f533e34ee9f4985b4c34"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayCopyDisplayMode",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayCopyDisplayMode",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayModelNumber",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModelNumber",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayVendorNumber",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayVendorNumber",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayScreenSize",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayScreenSize",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayUnitNumber",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayUnitNumber",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayIsAsleep",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayIsAsleep",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGDisplayModeRelease",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGDisplayModeRelease",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
+        },
+        {
+          "name": "_CGGetOnlineDisplayList",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "CGGetOnlineDisplayList",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
             }
           ]
         }
@@ -571,11 +772,116 @@
               "response_sha256": "256757379cbf20840bab24f5f8ec8876d7b507327572f6dac18c2f25d71f1b1b"
             }
           ]
+        },
+        {
+          "name": "_IODisplayCreateInfoDictionary",
+          "sources": [
+            {
+              "url": "https://github.com/raysan5/raylib/blob/6.0/src/external/glfw/src/cocoa_monitor.m",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "IODisplayCreateInfoDictionary",
+              "revision": "6.0",
+              "source_license": "zlib/libpng (raylib); GLFW source under its included license",
+              "response_sha256": "296f1bc18f7f27677d33392282b543cc6275d4ff4dc39e08526331d0281d016e"
+            }
+          ]
         }
       ],
       "load_requirement": "Required by RocRay's audited macOS archive set; ownership is established by the cited public evidence."
     },
-    {"name":"libobjc","path":"usr/lib/libobjc.tbd","install_name":"/usr/lib/libobjc.A.dylib","path_sources":["https://developer.apple.com/documentation/objectivec/objective-c-runtime"],"symbols":[{"name":"_objc_msgSend","sources":[{"url":"https://developer.apple.com/documentation/objectivec/objc_msgsend","data_url":"https://developer.apple.com/tutorials/data/documentation/objectivec/objc_msgsend.json","external_id":"c:@F@objc_msgSend","title":"objc_msgSend","documented_modules":["Objective-C Runtime"],"evidence_kind":"exact_C_identifier","retrieved_at":"2026-09-09T10:06:57.397205+00:00","response_sha256":"ca46e9303e5e44ae18fbc7b9e504f08037b23fd6b96295353e238f66e043b41f"}]}],"load_requirement":"Explicit platform linker input"},
+    {
+      "name": "libobjc",
+      "path": "usr/lib/libobjc.A.tbd",
+      "install_name": "/usr/lib/libobjc.A.dylib",
+      "path_sources": [
+        "https://developer.apple.com/documentation/objectivec/objective-c-runtime"
+      ],
+      "symbols": [
+        {
+          "name": "_objc_msgSend",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/documentation/objectivec/objc_msgsend",
+              "data_url": "https://developer.apple.com/tutorials/data/documentation/objectivec/objc_msgsend.json",
+              "external_id": "c:@F@objc_msgSend",
+              "title": "objc_msgSend",
+              "documented_modules": [
+                "Objective-C Runtime"
+              ],
+              "evidence_kind": "exact_C_identifier",
+              "retrieved_at": "2026-09-09T10:06:57.397205+00:00",
+              "response_sha256": "ca46e9303e5e44ae18fbc7b9e504f08037b23fd6b96295353e238f66e043b41f"
+            }
+          ]
+        },
+        {
+          "name": "_objc_opt_respondsToSelector",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_opt_respondsToSelector",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_alloc",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_alloc",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_release",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_release",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_alloc_init",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/objc-internal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_alloc_init",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "8562d82bf50f0e0f8751f97d45864789261780b9d12b9aeabac4c1fa0ae01a79"
+            }
+          ]
+        },
+        {
+          "name": "_objc_enumerationMutation",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/objc4/blob/objc4-950/runtime/runtime.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "objc_enumerationMutation",
+              "revision": "objc4-950",
+              "source_license": "Apple Public Source License 2.0",
+              "response_sha256": "027d72cf0995dc1688d4fe0d1013ce1c81e0d7aadb9a18cff858e5f6c6d3592c"
+            }
+          ]
+        }
+      ],
+      "load_requirement": "Explicit platform linker input"
+    },
     {
       "name": "libSystem",
       "path": "usr/lib/libSystem.tbd",
@@ -587,45 +893,513 @@
         "/usr/lib/libobjc.A.dylib"
       ],
       "symbols": [
-        {"name":"_ferror","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"ferror","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fgetc","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fgetc","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fread","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fread","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fseek","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fseek","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_ftell","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"ftell","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_pthread_attr_getschedparam","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_attr_getschedparam","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_attr_setschedparam","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_attr_setschedparam","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_attr_setschedpolicy","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_attr_setschedpolicy","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_getspecific","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_getspecific","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_key_create","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_key_create","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_key_delete","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_key_delete","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_pthread_setspecific","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_setspecific","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_sched_get_priority_max","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/sched.h","evidence_kind":"public_open_source_identifier","identifier":"sched_get_priority_max","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"07d65b8d135be978a33579b5a333bd4576a8c6b36351ef510e0cca2aa0987020"}]},
-        {"name":"_sched_get_priority_min","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/sched.h","evidence_kind":"public_open_source_identifier","identifier":"sched_get_priority_min","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"07d65b8d135be978a33579b5a333bd4576a8c6b36351ef510e0cca2aa0987020"}]},
-        {"name":"_select","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/_select.h","evidence_kind":"public_open_source_identifier","identifier":"select","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"23e013274b46f4eb46aae8492206ed2862ea6c998e28e793427f38a5e499bb6d"}]},
-        {"name":"_strtoul","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdlib.h","evidence_kind":"public_open_source_identifier","identifier":"strtoul","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e03cd70f7fc6c8658c4fb245fb53456506deeff751af80af165b509835545ab4"}]},
-        {"name":"___chkstk_darwin","sources":[{"url":"https://github.com/llvm/llvm-project/blob/llvmorg-21.1.8/llvm/include/llvm/IR/RuntimeLibcalls.td","evidence_kind":"public_open_source_identifier","identifier":"stack probe","revision":"llvmorg-21.1.8","source_license":"Apache-2.0 WITH LLVM-exception","response_sha256":"14fd890c32e957a5637368a6cc3d36abe4e4da9beb66ca5b06e16fa378a6e8de"}]},
-        {"name":"___stdoutp","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"__stdoutp","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_environ","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/crt_externs.c","evidence_kind":"public_open_source_identifier","identifier":"environ","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"7ae5f32e1ef928259f93e89dcde3e3441ea1851a704dfc216813402c30661967"}]},
-        {"name":"_fchownat","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master","evidence_kind":"public_open_source_identifier","identifier":"fchownat","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"}]},
-        {"name":"_fclose","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fclose","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fdatasync","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master","evidence_kind":"public_open_source_identifier","identifier":"fdatasync","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"}]},
-        {"name":"_fflush","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fflush","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fopen","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fopen","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_fwrite","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"fwrite","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_getaddrinfo_async_cancel","sources":[{"url":"https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h","evidence_kind":"public_open_source_identifier","identifier":"getaddrinfo_async_cancel","revision":"39b70c515baee5b609e7e91693edbd934b6845a1","source_license":"APSL-2.0","response_sha256":"8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"}]},
-        {"name":"_getaddrinfo_async_handle_reply","sources":[{"url":"https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h","evidence_kind":"public_open_source_identifier","identifier":"getaddrinfo_async_handle_reply","revision":"39b70c515baee5b609e7e91693edbd934b6845a1","source_license":"APSL-2.0","response_sha256":"8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"}]},
-        {"name":"_getaddrinfo_async_start","sources":[{"url":"https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h","evidence_kind":"public_open_source_identifier","identifier":"getaddrinfo_async_start","revision":"39b70c515baee5b609e7e91693edbd934b6845a1","source_license":"APSL-2.0","response_sha256":"8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"}]},
-        {"name":"_mach_msg","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/mach/message.h","evidence_kind":"public_open_source_identifier","identifier":"mach_msg","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0","response_sha256":"ad64b7b413b42e196dc43a54a5978aa049b9133db1fe9369893f12ad4718c615"}]},
-        {"name":"_pthread_attr_setinheritsched","sources":[{"url":"https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h","evidence_kind":"public_open_source_identifier","identifier":"pthread_attr_setinheritsched","revision":"42d026df5b07825070f60134b980a1ec2552dfee","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"}]},
-        {"name":"_raise","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/signal.h","evidence_kind":"public_open_source_identifier","identifier":"raise","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"1af28533ef70b80a17b29e2ed489f1103b1750198b5c8fe97c97fa90576426b3"}]},
-        {"name":"_recvfrom","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/socket.h","evidence_kind":"public_open_source_identifier","identifier":"recvfrom","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"38e9e2b003df33b5cc924b57c20a85ec082c90a41efe21cfb07d9258db2451d4"}]},
-        {"name":"_renameatx_np","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master","evidence_kind":"public_open_source_identifier","identifier":"renameatx_np","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"}]},
-        {"name":"_sendto","sources":[{"url":"https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/socket.h","evidence_kind":"public_open_source_identifier","identifier":"sendto","revision":"f6217f891ac0bb64f3d375211650a4c1ff8ca1ea","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"38e9e2b003df33b5cc924b57c20a85ec082c90a41efe21cfb07d9258db2451d4"}]},
-        {"name":"_sscanf","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"sscanf","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
-        {"name":"_strncpy","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_string.h","evidence_kind":"public_open_source_identifier","identifier":"strncpy","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e95ef7486c2c8a4903868c72140d71b43b1d3f1ca8ff39edc9d5beabc3f623ea"}]},
-        {"name":"_strstr","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_string.h","evidence_kind":"public_open_source_identifier","identifier":"strstr","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e95ef7486c2c8a4903868c72140d71b43b1d3f1ca8ff39edc9d5beabc3f623ea"}]},
-        {"name":"_usleep","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/unistd.h","evidence_kind":"public_open_source_identifier","identifier":"usleep","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5b597caa8cbd84dbfc927b50b1e0d95a89a4bbb6c97ba552824df81b8a370fa"}]},
-        {"name":"_vprintf","sources":[{"url":"https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h","evidence_kind":"public_open_source_identifier","identifier":"vprintf","revision":"71bbe350ab79eef58113991d817ccc6165061a64","source_license":"APSL-2.0; additional source notices may apply","response_sha256":"e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"}]},
+        {
+          "name": "_ferror",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "ferror",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fgetc",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fgetc",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fread",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fread",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fseek",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fseek",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_ftell",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "ftell",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_attr_getschedparam",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_attr_getschedparam",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_attr_setschedparam",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_attr_setschedparam",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_attr_setschedpolicy",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_attr_setschedpolicy",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_getspecific",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_getspecific",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_key_create",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_key_create",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_key_delete",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_key_delete",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_setspecific",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_setspecific",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_sched_get_priority_max",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/sched.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sched_get_priority_max",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "07d65b8d135be978a33579b5a333bd4576a8c6b36351ef510e0cca2aa0987020"
+            }
+          ]
+        },
+        {
+          "name": "_sched_get_priority_min",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/sched.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sched_get_priority_min",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "07d65b8d135be978a33579b5a333bd4576a8c6b36351ef510e0cca2aa0987020"
+            }
+          ]
+        },
+        {
+          "name": "_select",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/_select.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "select",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "23e013274b46f4eb46aae8492206ed2862ea6c998e28e793427f38a5e499bb6d"
+            }
+          ]
+        },
+        {
+          "name": "_strtoul",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdlib.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strtoul",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e03cd70f7fc6c8658c4fb245fb53456506deeff751af80af165b509835545ab4"
+            }
+          ]
+        },
+        {
+          "name": "___chkstk_darwin",
+          "sources": [
+            {
+              "url": "https://github.com/llvm/llvm-project/blob/llvmorg-21.1.8/llvm/include/llvm/IR/RuntimeLibcalls.td",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "stack probe",
+              "revision": "llvmorg-21.1.8",
+              "source_license": "Apache-2.0 WITH LLVM-exception",
+              "response_sha256": "14fd890c32e957a5637368a6cc3d36abe4e4da9beb66ca5b06e16fa378a6e8de"
+            }
+          ]
+        },
+        {
+          "name": "___stdoutp",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "__stdoutp",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_environ",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/crt_externs.c",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "environ",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "7ae5f32e1ef928259f93e89dcde3e3441ea1851a704dfc216813402c30661967"
+            }
+          ]
+        },
+        {
+          "name": "_fchownat",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fchownat",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"
+            }
+          ]
+        },
+        {
+          "name": "_fclose",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fclose",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fdatasync",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fdatasync",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"
+            }
+          ]
+        },
+        {
+          "name": "_fflush",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fflush",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fopen",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fopen",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_fwrite",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "fwrite",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_getaddrinfo_async_cancel",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "getaddrinfo_async_cancel",
+              "revision": "39b70c515baee5b609e7e91693edbd934b6845a1",
+              "source_license": "APSL-2.0",
+              "response_sha256": "8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"
+            }
+          ]
+        },
+        {
+          "name": "_getaddrinfo_async_handle_reply",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "getaddrinfo_async_handle_reply",
+              "revision": "39b70c515baee5b609e7e91693edbd934b6845a1",
+              "source_license": "APSL-2.0",
+              "response_sha256": "8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"
+            }
+          ]
+        },
+        {
+          "name": "_getaddrinfo_async_start",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libinfo/blob/39b70c515baee5b609e7e91693edbd934b6845a1/lookup.subproj/netdb_async.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "getaddrinfo_async_start",
+              "revision": "39b70c515baee5b609e7e91693edbd934b6845a1",
+              "source_license": "APSL-2.0",
+              "response_sha256": "8e78542467036222bd2217d38b8c3e300a3fca9081d2a15b36b12b0772b23e27"
+            }
+          ]
+        },
+        {
+          "name": "_mach_msg",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/mach/message.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "mach_msg",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "ad64b7b413b42e196dc43a54a5978aa049b9133db1fe9369893f12ad4718c615"
+            }
+          ]
+        },
+        {
+          "name": "_pthread_attr_setinheritsched",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libpthread/blob/42d026df5b07825070f60134b980a1ec2552dfee/include/pthread/pthread.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "pthread_attr_setinheritsched",
+              "revision": "42d026df5b07825070f60134b980a1ec2552dfee",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "c14ac88c6c17f6eaea94ecd5a6fed5bb2a509cc154be43bfea44e6a4430468ca"
+            }
+          ]
+        },
+        {
+          "name": "_raise",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/signal.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "raise",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "1af28533ef70b80a17b29e2ed489f1103b1750198b5c8fe97c97fa90576426b3"
+            }
+          ]
+        },
+        {
+          "name": "_recvfrom",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/socket.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "recvfrom",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "38e9e2b003df33b5cc924b57c20a85ec082c90a41efe21cfb07d9258db2451d4"
+            }
+          ]
+        },
+        {
+          "name": "_renameatx_np",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/syscalls.master",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "renameatx_np",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "7e866891439ad5b3464777d2cacc3b82fc2e7f439fb5a8686c3e6f160d5aeab5"
+            }
+          ]
+        },
+        {
+          "name": "_sendto",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/socket.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sendto",
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "38e9e2b003df33b5cc924b57c20a85ec082c90a41efe21cfb07d9258db2451d4"
+            }
+          ]
+        },
+        {
+          "name": "_sscanf",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "sscanf",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
+        {
+          "name": "_strncpy",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_string.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strncpy",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e95ef7486c2c8a4903868c72140d71b43b1d3f1ca8ff39edc9d5beabc3f623ea"
+            }
+          ]
+        },
+        {
+          "name": "_strstr",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_string.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "strstr",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e95ef7486c2c8a4903868c72140d71b43b1d3f1ca8ff39edc9d5beabc3f623ea"
+            }
+          ]
+        },
+        {
+          "name": "_usleep",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/unistd.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "usleep",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5b597caa8cbd84dbfc927b50b1e0d95a89a4bbb6c97ba552824df81b8a370fa"
+            }
+          ]
+        },
+        {
+          "name": "_vprintf",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/_stdio.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "vprintf",
+              "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
+              "source_license": "APSL-2.0; additional source notices may apply",
+              "response_sha256": "e5484b74077bfc3a1228171435bf0a74b8e6c23d48c5c1c1f1409c487397a72d"
+            }
+          ]
+        },
         {
           "name": "__NSGetExecutablePath",
           "sources": [

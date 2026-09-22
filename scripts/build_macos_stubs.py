@@ -88,7 +88,7 @@ def validate_catalog(catalog):
 
 
 def render(catalog):
-    """Emit deterministic TBD v4 YAML without SDK versions, UUIDs, or reexports."""
+    """Emit deterministic TBD v4 YAML without SDK versions or UUIDs."""
     files = {}
     for library in catalog['libraries']:
         target_list = ', '.join(TAPI_TARGETS)

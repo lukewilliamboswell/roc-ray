@@ -11,7 +11,7 @@
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
 ## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
 
 import rr.Draw
 import rr.Color

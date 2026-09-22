@@ -10,7 +10,7 @@
 ## - Rendering (`Render.roc`): board, HUD, snake, food, glow, and game over
 ## - Gameplay (`Snake.roc`, `Board.roc`): legal turns, growth, collisions, and food
 ## - Tests (`main.roc`, `Board.roc`, `Game.roc`): controls, turns, food placement, movement, eating, and crashes
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
 
 import rr.App
 import rr.Devices

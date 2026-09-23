@@ -68,15 +68,7 @@ jobs:
         with:
           name: macos-interfaces-macos-sysroot
           path: ${{ runner.temp }}/candidate
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
-        with:
-          version: 0.16.0
-      - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
-      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+      - uses: ./.github/actions/setup-toolchain
       - name: Extract the exact producer candidate
         run: |
           python3 -c 'from pathlib import Path; from scripts.dependency_artifacts import unpack_verified; unpack_verified(next(Path("${{ runner.temp }}/candidate").glob("*.tar")), {"name":"macos-interfaces","target":"macos-sysroot"}, Path("${{ runner.temp }}/unpacked"))'

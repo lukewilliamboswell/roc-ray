@@ -133,6 +133,12 @@ pub fn build(b: *std.Build) void {
     run_lints.setCwd(b.path(".")); // Run from project root
     lint_step.dependOn(&run_lints.step);
 
+    // Every development compiler pin agrees with platform/main.roc, and the
+    // nightly updater's root list covers every pinned file.
+    const compiler_pins = b.addSystemCommand(&.{ "python3", "scripts/check_compiler_pins.py" });
+    compiler_pins.setCwd(b.path("."));
+    lint_step.dependOn(&compiler_pins.step);
+
     const glue_helper_tests = b.addSystemCommand(&.{
         "python3",
         "scripts/test_roc_platform_abi.py",

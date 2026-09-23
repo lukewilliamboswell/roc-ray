@@ -21,7 +21,7 @@
 ## This app opens a window, draws a circle, and exits on Escape:
 ##
 ## ```roc
-## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-18-1d982dc" }
+## app [Model, program] { rr: platform "../../platform/main.roc" }
 ##
 ## import rr.App
 ## import rr.Color

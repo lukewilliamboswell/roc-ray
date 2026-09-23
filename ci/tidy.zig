@@ -459,6 +459,7 @@ fn tidyAst(
 ) void {
     // Skip build files - they often have longer functions
     if (std.mem.eql(u8, file.path, "build.zig")) return;
+    if (std.mem.eql(u8, file.path, "link_inputs.zig")) return;
     if (std.mem.endsWith(u8, file.path, "/build.zig")) return;
 
     const tags = tree.nodes.items(.tag);
@@ -583,7 +584,9 @@ const DeadFilesDetector = struct {
 
         // Only track src/ files as needing to be imported somewhere
         const is_src_file = std.mem.startsWith(u8, file.path, "src/");
-        if (is_src_file) {
+        // The linker-input recipes are build.zig's own import, not host code.
+        const is_build_import = std.mem.eql(u8, file.path, "link_inputs.zig");
+        if (is_src_file or is_build_import) {
             (try detector.fileState(gpa, file.path)).definition_count += 1;
         }
 

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Assets
@@ -73,7 +73,7 @@ check! = |files, allowed| {
 	}
 }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	if input.time.cycle_count == 0 {
 		files = io.files()
@@ -86,5 +86,5 @@ update! = |model, input, io| {
 	}
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

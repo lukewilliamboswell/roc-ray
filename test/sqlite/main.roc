@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Draw
@@ -202,7 +202,7 @@ error_paths! = |db| {
 	)
 }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	if !model.checked {
 		Task.spawn!(input, || check!(io))
@@ -222,5 +222,5 @@ update! = |model, input, io| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

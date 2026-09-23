@@ -1,7 +1,7 @@
 ## Reads text, bytes, and file details while continuing to animate the window.
 ## Press Escape to quit. This example introduces tasks for work that may take
 ## time, messages that return task results to `update!`, and typed file errors.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Files
@@ -65,7 +65,7 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, io| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
@@ -161,7 +161,7 @@ expect
 	)
 		== { small: Loaded(5), large: Held([1, 2]), meta: Waiting }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	size = draw_backdrop!(frame)
 	model.title.draw!(frame, { pos: { x: 44, y: 40 }, color: ink })

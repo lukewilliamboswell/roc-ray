@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Devices
@@ -44,7 +44,7 @@ expect Keys.typing(typed) == typed_codepoints
 init! : App.Init(Model, [])
 init! = App.init(App.default.with_title("virtual keys"), |_io| Ok({ outcome: Pending }))
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	input = program_input.devices
 	cycle = program_input.time.cycle_count
@@ -157,5 +157,5 @@ expect check(2, Devices.none.with_key_down(KeySpace).with_key_pressed(KeyLeftShi
 
 expect check(3, Devices.none.with_key_released(KeySpace).with_key_released(KeyLeftShift), []) == Ok({})
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

@@ -10,7 +10,7 @@
 ## - Rendering (`Render.roc`): board, HUD, snake, food, glow, and game over
 ## - Gameplay (`Snake.roc`, `Board.roc`): legal turns, growth, collisions, and food
 ## - Tests (`main.roc`, `Board.roc`, `Game.roc`): controls, turns, food placement, movement, eating, and crashes
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Devices
@@ -68,7 +68,7 @@ play_event! = |assets, event|
 Msg : []
 
 ## Advances pure rules, plays their events, and handles the quit control.
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	controls = read_controls(program_input.devices)
 	dt = Math.clamp(program_input.time.elapsed_seconds, 0, 0.25)
@@ -80,7 +80,7 @@ update! = |model, program_input, _io| {
 }
 
 ## Delegates presentation of the retained world to the rendering module.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| Render.draw!(frame, model.assets, model.world, model.elapsed)
 
 expect read_controls(Devices.none.with_key_pressed(KeyUp)).requested_direction == Turn(Up)

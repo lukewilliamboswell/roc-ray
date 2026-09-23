@@ -2,7 +2,7 @@
 ## to save, E to try a refused `..` path, or Escape to quit. Without input it
 ## saves on the third frame and exits for automated runs. This example shows
 ## screenshot tasks, result messages, and output-directory confinement.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Capture
@@ -74,7 +74,7 @@ init! = App.init(
 ## Screenshot saving may wait, so it runs in a Task instead of pausing
 ## `update!`. A Task is work that can wait and later returns one Message through
 ## `App.Input`. The captured pixels still come from the frame that requested it.
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, io| {
 	input = program_input.devices
 	outcome = apply_messages(model.outcome, program_input.messages)
@@ -135,7 +135,7 @@ expect apply_messages(NoCapture, []) == NoCapture
 ## Both tasks can finish on one cycle; they are folded in the order they did.
 expect apply_messages(NoCapture, [SavedScreenshotFinished(Ok({})), EscapingScreenshotFinished(Err(PathEscapesOutputDir))]) == Refused
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })

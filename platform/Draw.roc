@@ -442,7 +442,7 @@ Draw := [].{
 		## Validate four boundary-ordered corners and solve their projective weights.
 		## A single homography cannot represent a concave, self-intersecting, or
 		## horizon-crossing destination, so those states are rejected here.
-		from_corners : ProjectiveQuadCorners -> Try(ProjectiveQuad, [NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon, ..])
+		from_corners : ProjectiveQuadCorners -> Try(ProjectiveQuad, [NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 		from_corners = |corners| {
 			finite = vec_is_finite(corners.top_left)
 				and vec_is_finite(corners.bottom_left)
@@ -539,7 +539,7 @@ Draw := [].{
 		## Allocate an offscreen framebuffer.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
+		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit])
 		load! = |size|
 			match Host.texture_load_render_target!(size) {
 				# closed error union to open error union
@@ -588,7 +588,7 @@ Draw := [].{
 		## Compile shader stages from source strings.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
+		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit])
 		from_source! = |cfg|
 		# closed error union to open error union
 			match Host.shader_load_source!(cfg) {
@@ -604,7 +604,7 @@ Draw := [].{
 		## read off the frame thread and compiled when the bytes are back. To
 		## compile from `update!`, use `from_source!` with strings the app
 		## already holds.
-		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
+		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit])
 		from_store! = |store, cfg|
 		# closed error union to open error union
 			match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
@@ -622,46 +622,46 @@ Draw := [].{
 		## uniform is a lookup against the compiled program, so it belongs beside the
 		## load. Setting one is the opposite: `set!` on the resolved handle is legal
 		## in `render!` only.
-		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound, ..])
+		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound])
 		uniform_f32! = |Shader.(shader), name| Ok(F32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a scalar integer uniform once. Same phases as `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound, ..])
+		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound])
 		uniform_i32! = |Shader.(shader), name| Ok(I32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a two-component vector uniform once. Same phases as
 		## `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound, ..])
+		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound])
 		uniform_vec2! = |Shader.(shader), name| Ok(Vec2Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a three-component vector uniform once. Same phases as
 		## `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound, ..])
+		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound])
 		uniform_vec3! = |Shader.(shader), name| Ok(Vec3Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a four-component vector uniform once. Same phases as
 		## `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound, ..])
+		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound])
 		uniform_vec4! = |Shader.(shader), name| Ok(Vec4Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a color-valued vec4 uniform once. Same phases as `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound, ..])
+		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound])
 		uniform_color! = |Shader.(shader), name| Ok(ColorUniform.(uniform_host!(shader, name)?))
 
 		## Resolve a sampled-texture uniform once. Same phases as `uniform_f32!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
+		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound])
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 
 		## Resource-free shader value for pure tests.
@@ -1002,7 +1002,7 @@ Draw := [].{
 	## the task; refused in `update!` and `render!`. The file is read off the
 	## frame thread and rasterized when the bytes are back. To load a font from
 	## `update!`, use `font_from_bytes!` with bytes the app already holds.
-	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
+	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit])
 	load_store_font! = |store, cfg|
 		match Host.text_load_store_font!({ store: store.for_host(), path: cfg.path, size: cfg.size }) {
 			Ok(font) => Ok(font)
@@ -1018,7 +1018,7 @@ Draw := [].{
 	## The bytes are borrowed while raylib copies and decodes them, so no extra
 	## Roc payload-sized buffer is created. Legal in `init!`, `update!`, and
 	## tasks; refused in `render!`.
-	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
+	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit])
 	font_from_bytes! = |cfg|
 		match Host.text_load_font!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size }) {
 			Ok(font) => Ok(font)
@@ -1262,7 +1262,7 @@ font_format_code = |format|
 		Otf => 1
 	}
 
-uniform_host! : Resource.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound, ..])
+uniform_host! : Resource.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound])
 uniform_host! = |shader, name| {
 	# closed error union to open error union
 	match Host.shader_location!({ shader, name }) {

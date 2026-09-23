@@ -127,7 +127,7 @@ Http := [].{
 	## This uses Roc's builtin JSON encoder, so the value's type determines the
 	## encoder through static dispatch. A `Content-Type: application/json`
 	## header is added.
-	with_json_body : Request, _ -> Try(Request, [JsonErr(_), ..])
+	with_json_body : Request, _ -> Try(Request, [JsonErr(_)])
 	with_json_body = |request, value| {
 		body = Json.to_str_try(value) ? JsonErr
 
@@ -142,7 +142,7 @@ Http := [].{
 	##
 	## This uses Roc's builtin JSON parser, so the expected result type
 	## determines the parser through static dispatch.
-	decode_json_response : Response -> Try(_, [BadBody(Str), JsonErr(_), ..])
+	decode_json_response : Response -> Try(_, [BadBody(Str), JsonErr(_)])
 	decode_json_response = |response| {
 		body = Str.from_utf8(Response.body(response)) ? |_| BadBody("decode_json_response: response body was not valid UTF-8")
 		decoded = Json.parse(body) ? JsonErr
@@ -178,7 +178,7 @@ Http := [].{
 		## request = Request.from_method(GET).with_uri("https://www.roc-lang.org")
 		## response = io.http().send!(request)?
 		## ```
-		send! : Client, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send! : Client, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		send! = |Client.(authority), request| perform_send!(authority, request)
 
 		## Validate and send an HTTP request under explicit limits.
@@ -193,14 +193,14 @@ Http := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
-		send_with! : Client, Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send_with! : Client, Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		send_with! = |Client.(authority), config, request| perform_send_with!(authority, config, request)
 
 		## Encode a value as JSON, attach it to the request body, and send it.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
-		send_json! : Client, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		send_json! : Client, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		send_json! = |Client.(authority), request, value| perform_send_json!(authority, request, value)
 
 		## Perform an HTTP GET and decode the response body as a UTF-8 `Str`.
@@ -221,7 +221,7 @@ Http := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
-		get_utf8! : Client, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
+		get_utf8! : Client, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		get_utf8! = |Client.(authority), url| perform_get_utf8!(authority, url)
 
 		## Perform an HTTP GET and decode the response body as JSON.
@@ -237,7 +237,7 @@ Http := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
-		get! : Client, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_), ..])
+		get! : Client, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_)])
 		get! = |Client.(authority), url| perform_get!(authority, url)
 
 	}
@@ -357,10 +357,10 @@ expect to_host_timeout(NoTimeout, 30_000) == 30_000
 expect to_host_timeout(TimeoutMilliseconds(250), 30_000) == 250
 
 ## Private authority-taking implementations.
-perform_send! : Resource.Authority, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send! : Resource.Authority, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
 perform_send! = |authority, request| perform_send_with!(authority, Http.default_config, request)
 
-perform_send_with! : Resource.Authority, Http.Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send_with! : Resource.Authority, Http.Config, Request => Try(Response, [PermissionDenied, InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
 perform_send_with! = |authority, config, request| {
 	check_method(Request.method(request)) ? HttpErr
 	url = Url.parse(Request.uri(request)) ? InvalidUrl
@@ -376,14 +376,14 @@ perform_send_with! = |authority, config, request| {
 	}
 }
 
-perform_send_json! : Resource.Authority, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_send_json! : Resource.Authority, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
 perform_send_json! = |authority, request, value| {
 	json_request = Http.with_json_body(request, value)?
 
 	perform_send!(authority, json_request)
 }
 
-perform_get_utf8! : Resource.Authority, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), ..])
+perform_get_utf8! : Resource.Authority, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
 perform_get_utf8! = |authority, url| {
 	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
 	body = Str.from_utf8(Response.body(response)) ? |_| BadBody("perform_get_utf8!: response body was not valid UTF-8")
@@ -391,7 +391,7 @@ perform_get_utf8! = |authority, url| {
 	Ok(body)
 }
 
-perform_get! : Resource.Authority, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), JsonErr(_), ..])
+perform_get! : Resource.Authority, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), JsonErr(_)])
 perform_get! = |authority, url| {
 	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
 

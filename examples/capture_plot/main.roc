@@ -2,7 +2,7 @@
 ## window stays hidden, but a display is still required; use `xvfb-run` on a
 ## machine without one. This example shows how to configure recording, advance
 ## animation by the same amount for every recorded frame, and track progress.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Capture
@@ -73,7 +73,7 @@ init! = App.init(
 ## the devices and the clock, not asked for with an effect.
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. Match on that rather than on `Idle`:
@@ -88,7 +88,7 @@ update! = |model, program_input, _io| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })

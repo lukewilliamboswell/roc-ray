@@ -4,7 +4,7 @@
 ## the mouse cursor after calculating what the pointer is over.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -94,14 +94,14 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	dragged = model.drag_corner(program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	pulse = 0.5 + 0.5 * F32.sin(model.elapsed * 3)
 	edge = Color.with_alpha(Color.white, 170)

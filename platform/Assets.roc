@@ -193,7 +193,7 @@ Assets := [].{
 	## `NotFound` is no such file under the store, `ReadFailed` is a file that
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
 	## would not decode as an image.
-	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit, ..])
+	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit])
 	load_texture! = |Store.(store), path|
 	# closed error union to open error union
 		match Host.texture_load_store!({ store, path }) {
@@ -208,7 +208,7 @@ Assets := [].{
 	## Decode an authored image embedded with a compile-time file import.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
+	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit])
 	texture_from_bytes! = |cfg|
 	# closed error union to open error union
 		match Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes }) {
@@ -221,7 +221,7 @@ Assets := [].{
 	## inside the host; only the host-owned texture crosses back.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
+	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit])
 	generate_color_texture! = |cfg|
 	# closed error union to open error union
 		match Host.texture_generate_color!(cfg) {
@@ -233,7 +233,7 @@ Assets := [].{
 	## Generate a checkerboard GPU texture without retaining a CPU image.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
+	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit])
 	generate_checked_texture! = |cfg|
 	# closed error union to open error union
 		match Host.texture_generate_checked!(cfg) {
@@ -246,7 +246,7 @@ Assets := [].{
 	## dimensions and is borrowed only for this host call.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
+	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch])
 	update_texture! = |texture, pixels|
 	# closed error union to open error union. The public API does not yet
 	# distinguish a handle that is not an app-owned texture from a pixel
@@ -260,7 +260,7 @@ Assets := [].{
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
+	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds])
 	update_texture_region! = |texture, region|
 	# closed error union to open error union, as `update_texture!` does.
 		match Host.texture_update_region!({
@@ -328,7 +328,7 @@ Assets := [].{
 		## A `Sha256` expectation compares against the manifest's declaration
 		## only. Nothing walks or hashes the loose files, so opening a store
 		## stays constant-time in the number of assets.
-		open! : Loader, StoreConfig => Try(Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
+		open! : Loader, StoreConfig => Try(Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
 		open! = |Loader.(authority), cfg| perform_open!(authority, cfg)
 
 	}
@@ -396,7 +396,7 @@ wrap_code = |wrap|
 	}
 
 ## Private authority-taking implementations.
-perform_open! : Resource.Authority, Assets.StoreConfig => Try(Assets.Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
+perform_open! : Resource.Authority, Assets.StoreConfig => Try(Assets.Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
 perform_open! = |authority, cfg|
 	match Host.store_open!(authority, store_open_config(cfg)) {
 		Ok(store) => Ok(Assets.Store.(store))

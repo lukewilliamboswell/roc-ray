@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Task
@@ -43,7 +43,7 @@ build_ids = |acc, n| if n > wanted acc else build_ids(List.append(acc, n), n + 1
 expect List.len(ids) == wanted
 expect List.fold(ids, 0, |acc, n| acc + n) == expected_sum
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	if input.time.cycle_count == 0 {
 		for id in ids {
@@ -81,5 +81,5 @@ update! = |model, input, _io| {
 	}
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

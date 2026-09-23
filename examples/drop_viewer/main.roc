@@ -1,7 +1,7 @@
 ## Displays an image dropped onto the window; press Escape to quit. This
 ## example shows one-time dropped-file input, tasks that read without pausing
 ## drawing, messages that return the bytes to `update!`, and texture creation.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Assets
@@ -65,7 +65,7 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	# One dropped path starts one read. If several files are dropped, the app
 	# displays the result whose message arrives last.
@@ -233,7 +233,7 @@ status_color = |status|
 expect status_color(WaitingForDrop) == theme.faint
 expect status_color(Refused("x")) == theme.warn
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	frame.clear!(theme.bg)
 	model.title.draw!(frame, { pos: { x: 40, y: 34 }, color: theme.ink })

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Trace
@@ -14,11 +14,11 @@ program = { init!, update!, render! }
 init! : App.Init(Model, Msg)
 init! = App.init(App.default.with_title("Observatory abrupt probe"), |_io| Ok(0))
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, _input, _io| {
 	Trace.sample_i64!("abrupt cycles", 1, Count)
 	Ok(model + 1)
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

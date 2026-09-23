@@ -4,7 +4,7 @@
 ##
 ## This example shows how to draw a large composition into a render texture,
 ## display a scaled preview, and use a Task for an export that may take time.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Capture
@@ -112,7 +112,7 @@ init! = App.init_for_args(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, io| {
 	input = program_input.devices
 	chrome = Box.unbox(model.chrome)
@@ -180,7 +180,7 @@ Palette := { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, se
 		}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
 render! = |model, frame| {
 	colors = Palette.for_theme(model.theme)
 	card = Box.unbox(model.card)

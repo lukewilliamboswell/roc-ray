@@ -8,7 +8,7 @@
 ## points efficiently.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -1671,7 +1671,7 @@ init! = App.init_for_args(
 sprite_of : Model -> Draw.Texture
 sprite_of = |model| model.glow.texture()
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, io| {
 	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
@@ -2005,7 +2005,7 @@ accent = Color.from_hex_rgb(0xe0a458)
 # Rendering
 # ---------------------------------------------------------------------------
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
 render! = |model, frame| {
 	render_zone = Trace.begin!("draw live plot")
 	# The sprite first, because everything else samples it. It is one scope and
@@ -2034,7 +2034,7 @@ render! = |model, frame| {
 ## of each other tell you nothing more. A halo composited additively adds up, so
 ## where lines of a given length are common the lane glows, and a single
 ## outlying line stays a single visible spark.
-paint_glow! : Draw.Frame, Model => Try({}, [ScopeLimit, ScopeUnavailable, ..])
+paint_glow! : Draw.Frame, Model => Try({}, [ScopeLimit, ScopeUnavailable])
 paint_glow! = |frame, model|
 	frame.with_render_texture!(
 		model.glow,
@@ -2071,7 +2071,7 @@ draw_page! = |frame, model| {
 	})
 }
 
-draw_plot! : Draw.Frame, Model => Try({}, [ScopeLimit, ..])
+draw_plot! : Draw.Frame, Model => Try({}, [ScopeLimit])
 draw_plot! = |frame, model| {
 	area = plot_area(model.screen)
 	window = visible_lanes(model.camera, area, model.lanes)
@@ -2236,7 +2236,7 @@ draw_density! = |frame, lane, index| {
 ## comet head fading back into the finished trace behind it. It costs a view of
 ## the tail of the list rather than a copy of it, and it is the difference
 ## between watching data arrive and watching a picture appear.
-draw_points! : Draw.Frame, Model => Try({}, [ScopeLimit, ..])
+draw_points! : Draw.Frame, Model => Try({}, [ScopeLimit])
 draw_points! = |frame, model|
 	frame.with_blend_mode!(
 		Draw.additive_blend,
@@ -2527,7 +2527,7 @@ mode_label = |mode|
 ## One row per visible file. Only the visible ones: with hundreds of lanes, a
 ## per-lane loop would cost hundreds of camera queries a frame to discover that
 ## fifteen of them are on screen.
-draw_gutter! : Draw.Frame, Model => Try({}, [ScopeLimit, ..])
+draw_gutter! : Draw.Frame, Model => Try({}, [ScopeLimit])
 draw_gutter! = |frame, model| {
 	area = plot_area(model.screen)
 	window = visible_lanes(model.camera, area, model.lanes)

@@ -1,7 +1,7 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -92,7 +92,7 @@ flag_number = |args, flag, fallback| {
 	}
 }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	if model.cycle == 0 {
 		url = model.url
@@ -167,7 +167,7 @@ describe = |err|
 		HttpErr(Other(bytes)) => Str.from_utf8(bytes) ?? "the host reported an unprintable failure"
 	}
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})
 
 expect judge(Pending, Fetched(200, "hello token", 3), Body("token")) == Passed

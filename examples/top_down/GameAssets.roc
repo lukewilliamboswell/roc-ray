@@ -50,7 +50,7 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 music_volume = 0.13.F32
 
 ## Generates a compact fallback effect when an audio file cannot be loaded.
-make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [ResourceLimit, SoundGenerationFailed, ..])
+make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [ResourceLimit, SoundGenerationFailed])
 make_sound! = |waveform, from, to, ms, volume|
 	Audio.gen_sound!({ waveform, freq_start: from, freq_end: to, ms, attack_ms: 2, decay_ms: 24, sustain: 0.45, release_ms: 45, volume })
 

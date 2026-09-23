@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 # `update!` is effectful: host state changes are direct calls and deferred
 # work goes through `Task.spawn!`. The pure-update `Transition` builder is
@@ -16,11 +16,11 @@ init! = App.init(App.default, |io| Ok({}))
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, _input, io| {
 	_ = App.next(model)
 	Ok(model)
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

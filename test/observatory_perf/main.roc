@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Color
@@ -23,7 +23,7 @@ init! = App.init(
 		Ok({ cycle: 0, values: List.repeat(0, 64) }),
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, _input, _io| {
 	zone = Trace.begin!("benchmark update")
 	index = model.cycle % List.len(model.values)
@@ -37,7 +37,7 @@ update! = |model, _input, _io| {
 	Ok({ cycle: model.cycle + 1, values })
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |_model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x080c14))
 	frame.rectangle!({

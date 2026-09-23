@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Files
@@ -25,7 +25,7 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	zone = Trace.begin!("probe update")
 	Trace.sample_i64!("probe items", 7, Count)
@@ -67,7 +67,7 @@ update! = |model, input, _io| {
 	}
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| {
 	Trace.mark!("probe render")
 	Ok({})

@@ -12,7 +12,7 @@ import Paddle
 Render := [].{
 
 	## Draws one complete Breakout presentation frame from the resulting world.
-	draw! : Draw.Frame, Assets, Game.World, F32, Bool => Try({}, [ScopeLimit, ..])
+	draw! : Draw.Frame, Assets, Game.World, F32, Bool => Try({}, [ScopeLimit])
 	draw! = |frame, assets, world, elapsed, demo| {
 		frame.clear!(field_bottom)
 		draw_background!(frame)
@@ -31,7 +31,7 @@ draw_background! = |frame|
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: field_top, color_bottom: field_bottom })
 
 ## Draws additive neon halos behind the paddle and ball.
-draw_glow! : Draw.Frame, Game.World => Try({}, [ScopeLimit, ..])
+draw_glow! : Draw.Frame, Game.World => Try({}, [ScopeLimit])
 draw_glow! = |frame, world|
 	frame.with_blend_mode!(
 		Draw.additive_blend,

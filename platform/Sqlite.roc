@@ -228,7 +228,7 @@ Sqlite := [].{
 		values = |Row.(row)| row.values
 
 		## The value in a named column, still tagged.
-		value : Row, Str -> Try(Value, [NoSuchField(Str), ..])
+		value : Row, Str -> Try(Value, [NoSuchField(Str)])
 		value = |Row.(row), name|
 			match List.find_first_index(row.names, |candidate| candidate == name) {
 				Ok(index) =>
@@ -559,7 +559,7 @@ expect kind_of(Null) == Null
 expect kind_of(Integer(1)) == Integer
 expect kind_of(Bytes([1, 2])) == Bytes
 
-in_bounds : Try(a, b) -> Try(a, [IntOutOfBounds, ..])
+in_bounds : Try(a, b) -> Try(a, [IntOutOfBounds])
 in_bounds = |result|
 	match result {
 		Ok(value) => Ok(value)
@@ -576,7 +576,7 @@ expect in_bounds(I64.to_u8_try(-1)) == Err(IntOutOfBounds)
 ## `Constraint` and the detail stays in the message. Without this an app
 ## matching on `Constraint` would miss every constraint SQLite bothered to be
 ## specific about.
-sqlite_err : Host.SqliteFailure -> [SqliteErr(Sqlite.ErrCode, Str), ..]
+sqlite_err : Host.SqliteFailure -> [SqliteErr(Sqlite.ErrCode, Str)]
 sqlite_err = |{ code, message }| SqliteErr(errcode_from_i64(code % 256), message)
 
 errcode_from_i64 : I64 -> Sqlite.ErrCode

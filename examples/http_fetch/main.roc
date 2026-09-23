@@ -7,7 +7,7 @@
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -106,7 +106,7 @@ chosen_url = |args, from_env| {
 	}
 }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	elapsed = model.elapsed + input.time.elapsed_seconds
 
@@ -178,7 +178,7 @@ apply = |state, message, current, waited|
 		_ => state
 	}
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })

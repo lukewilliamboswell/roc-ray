@@ -129,13 +129,32 @@ jobs:
         with:
           name: link-input-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Build the host
-        run: zig build -Doptimize=ReleaseFast
+      # `zig build hosts`, not `zig build`: a candidate exists because the
+      # lock is missing or stale, so validating it cannot consume the lock.
+      - name: Build the hosts
+        run: zig build hosts -Doptimize=ReleaseFast
       - name: Install the exact candidate
-        run: python3 scripts/link_inputs.py install --candidate "$RUNNER_TEMP/candidate" --destination platform --targets-only
+        run: |
+          python3 scripts/link_inputs.py install --candidate "$RUNNER_TEMP/candidate" --destination platform --targets-only
+          printf 'ROC_RAY_LINK_INPUT_CANDIDATE=%s\n' "$RUNNER_TEMP/candidate" >> "$GITHUB_ENV"
       - name: Build and run the examples headlessly
         timeout-minutes: 30
         run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
+      - name: Build against the Wayland candidate
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          import scripts.all_tests as tests
+
+          root = Path(".").resolve()
+          failures = tests.run_wayland_bundle_test(root, root / "examples/hello_world/main.roc", False)
+          if failures:
+              for failure in failures:
+                  print(f"FAILED: {failure}")
+              raise SystemExit(1)
+          PY
 
   release-candidate:
     name: Attest and expose the candidate

@@ -73,14 +73,22 @@ pub fn build(b: *std.Build) void {
     const link_inputs_step = b.step("link-inputs-install", "Install the locked linker inputs into platform/targets");
     link_inputs_step.dependOn(&install_link_inputs.step);
 
-    // Default step: build the host library for all native targets from this
-    // checkout, next to the locked inputs. Cleanup has to finish before the
-    // new archives are copied into the source tree.
+    // Build the host library for all native targets from this checkout.
+    // Cleanup has to finish before the new archives are copied into the
+    // source tree.
     const copy_all = b.addUpdateSourceFiles();
     copy_all.step.dependOn(cleanup_step);
-    copy_all.step.dependOn(&install_link_inputs.step);
+
+    // Hosts alone, without the lock. The linker-input producer validates an
+    // unpublished candidate this way: a candidate exists precisely because the
+    // lock is missing or stale, so its validation cannot depend on it.
+    const hosts_step = b.step("hosts", "Build only the host libraries, without installing locked linker inputs");
+    hosts_step.dependOn(&copy_all.step);
+
+    // Default step: the hosts next to the locked inputs.
     const all_step = b.getInstallStep();
     all_step.dependOn(&copy_all.step);
+    all_step.dependOn(&install_link_inputs.step);
 
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
@@ -192,7 +200,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/observatory-benchmark.md",
     });
     observatory_benchmark.setCwd(b.path("."));
-    observatory_benchmark.step.dependOn(&copy_all.step);
+    observatory_benchmark.step.dependOn(all_step);
     const observatory_benchmark_step = b.step(
         "observatory-bench",
         "Report disabled/summary/standard/full Observatory overhead",
@@ -380,7 +388,7 @@ pub fn build(b: *std.Build) void {
             "--skip-platform-build",
         });
         roc_tests.setCwd(b.path(".")); // Run from project root
-        roc_tests.step.dependOn(&copy_all.step);
+        roc_tests.step.dependOn(all_step);
         test_step.dependOn(&roc_tests.step);
     }
 }

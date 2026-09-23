@@ -157,6 +157,10 @@ install_link_inputs() {
     for profile in "$@"; do
         args+=(--profile "$profile")
     done
+    # Producer validation only: an unpublished candidate, checked the same way.
+    if [[ -n "${ROC_RAY_LINK_INPUT_CANDIDATE:-}" ]]; then
+        args+=(--candidate "$ROC_RAY_LINK_INPUT_CANDIDATE")
+    fi
     python3 "$root_dir/scripts/link_inputs.py" install "${args[@]}" --destination "$stage_dir"
 }
 

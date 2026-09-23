@@ -1,0 +1,169 @@
+name: Linker-input release candidate
+
+# The read-only producer for link-inputs.lock.json. It builds every profile
+# twice from clean state, requires identical bytes, final-links and runs the
+# examples against the exact candidate on every supported OS, and uploads the
+# candidate. It has no permission to publish anything: the trusted publisher
+# (publish-link-inputs.yml, dispatched from main) runs this workflow on a PR
+# branch, verifies its attestations, and releases these exact bytes.
+#
+# Ordinary CI never runs this. See dependencies/link-inputs/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_candidate:
+        description: Build and attest bytes for the trusted publisher
+        type: boolean
+        default: false
+        required: true
+      expected_sha:
+        description: Exact branch commit requested by the trusted publisher
+        type: string
+        required: false
+  pull_request:
+    paths:
+      - link_inputs.zig
+      - vendor/raylib/**
+      - vendor/msf_gif/**
+      - vendor/libvpx/**
+      - vendor/sqlite/**
+      - platform/targets/x64glibc/**
+      - platform/targets/windows-def/**
+      - platform/main.roc
+      - platform/main-wayland.roc
+      - scripts/link_input_release.py
+      - scripts/link_inputs.py
+      - scripts/test_link_inputs.py
+      - .github/workflows/link-inputs.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: link-inputs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  produce:
+    name: Build every profile twice
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+          use-cache: false
+      - name: Test the producer and consumer contracts
+        run: python3 -m unittest scripts/test_link_inputs.py
+      - name: Build and compose the candidate twice from clean state
+        run: |
+          zig build link-inputs
+          python3 scripts/link_input_release.py --output "$RUNNER_TEMP/candidate"
+          rm -rf .zig-cache zig-out
+          zig build link-inputs
+          python3 scripts/link_input_release.py --output "$RUNNER_TEMP/rebuild"
+          diff -r "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/rebuild"
+          ls -l "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: link-input-candidate
+          path: ${{ runner.temp }}/candidate/*
+          if-no-files-found: error
+          retention-days: 30
+
+  # Runs on the target, so it is the only check that a NEON or SSE2 kernel
+  # computes what its C counterpart does. macos-15 is arm64, where NEON
+  # replaces ~200 kernels.
+  libvpx-parity:
+    name: libvpx SIMD parity (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - run: zig build libvpx-parity
+
+  # Final-links every example against the exact candidate bytes and runs it
+  # headlessly: a static archive never complains about an unresolved
+  # reference, so only an application link proves an input set is complete.
+  validate:
+    name: Link and run against the candidate (${{ matrix.os }})
+    needs: produce
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, ubuntu-22.04, ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ROC_BUILD_OPT: dev
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: link-input-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Build the host
+        run: zig build -Doptimize=ReleaseFast
+      - name: Install the exact candidate
+        run: python3 scripts/link_inputs.py install --candidate "$RUNNER_TEMP/candidate" --destination platform --targets-only
+      - name: Build and run the examples headlessly
+        timeout-minutes: 30
+        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
+
+  release-candidate:
+    name: Attest and expose the candidate
+    needs: [produce, libvpx-parity, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Admit only the publisher's exact requested commit
+        if: inputs.release_candidate
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test -n "$EXPECTED_SHA" && test "$EXPECTED_SHA" = "$GITHUB_SHA"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: link-input-candidate
+          path: ${{ runner.temp }}/release
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        if: inputs.release_candidate
+        with:
+          subject-path: ${{ runner.temp }}/release/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.release_candidate
+        with:
+          name: link-input-release
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 30

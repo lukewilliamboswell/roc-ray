@@ -30,6 +30,8 @@ jobs:
   build:
     name: Build release bundles
     runs-on: ubuntu-latest
+    env:
+      ROC_RAY_DEPENDENCY_CACHE: ${{ github.workspace }}/../roc-ray-dependencies
     outputs:
       release_version: ${{ steps.validate.outputs.release_version }}
       docs_version: ${{ steps.validate.outputs.docs_version }}
@@ -53,6 +55,11 @@ jobs:
 
       - name: Install the pinned toolchain
         uses: ./.github/actions/setup-toolchain
+
+      - name: Verify locked macOS interface attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/verify_release_attestations.py dependencies.lock.json --cache "$ROC_RAY_DEPENDENCY_CACHE"
 
       - name: Validate release request
         id: validate

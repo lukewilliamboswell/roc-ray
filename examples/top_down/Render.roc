@@ -15,7 +15,7 @@ import Spark
 Render := [].{
 
 	## Draws one complete Spark Run presentation frame from the resulting world.
-	draw! : Draw.Frame, GameAssets, Level, Game.World => Try({}, [ScopeLimit, ..])
+	draw! : Draw.Frame, GameAssets, Level, Game.World => Try({}, [ScopeLimit])
 	draw! = |frame, assets, level, world| {
 		camera = Camera.follow(shaken_target(world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
 		viewport = camera.viewport({ x: screen_w, y: screen_h })

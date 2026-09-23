@@ -11,7 +11,7 @@
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
 ## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.Draw
 import rr.Color
@@ -245,7 +245,7 @@ play_event! = |assets, event|
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	controls = read_controls(program_input.devices)
 
@@ -271,7 +271,7 @@ update! = |model, program_input, _io| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| {
 	assets = model.assets
 	world = model.world

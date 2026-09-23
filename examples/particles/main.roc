@@ -6,7 +6,7 @@
 ## copies of one texture in a single batch.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -173,7 +173,7 @@ init! = App.init_for_args(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
@@ -218,7 +218,7 @@ update! = |model, program_input, _io| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
 	frame.texture_instances!(model.sprite, model.instances)

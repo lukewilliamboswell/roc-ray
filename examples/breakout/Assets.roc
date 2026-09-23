@@ -22,7 +22,7 @@ Assets := {
 	}
 
 	## Prepares all Breakout sounds, fonts, and text before the first frame.
-	load! : () => Try(Assets, [ResourceLimit, SoundGenerationFailed, ..])
+	load! : () => Try(Assets, [ResourceLimit, SoundGenerationFailed])
 	load! = || {
 		font = Draw.default_font!()
 		Ok({

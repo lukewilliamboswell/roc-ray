@@ -6,7 +6,7 @@
 ## `update!` can change the clipboard, cursor, and window or read a pixel from
 ## the previous drawing. Every cycle with events prints them to stdout in
 ## delivery order, which is what the windowed sweep asserts on.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.Draw
 import rr.Text
@@ -151,7 +151,7 @@ ascii_typed = |codepoints|
 ## answers immediately -- the windowing backend hands over a pointer on the
 ## window's own thread -- so its result feeds the frame that asked for it and
 ## nothing has to be carried across a cycle boundary.
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, io| {
 	input = program_input.devices
 
@@ -371,7 +371,7 @@ line! : Draw.Frame, Text.Font, { x : F32, y : F32, text : Str, color : Color.Rgb
 line! = |frame, font, cfg|
 	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font })
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	input = model.input
 	font = model.font

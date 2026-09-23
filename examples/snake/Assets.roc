@@ -18,7 +18,7 @@ Assets := {
 	}
 
 	## Prepares all Snake sounds, fonts, and text before the first frame.
-	load! : () => Try(Assets, [ResourceLimit, SoundGenerationFailed, ..])
+	load! : () => Try(Assets, [ResourceLimit, SoundGenerationFailed])
 	load! = || {
 		font = Draw.default_font!()
 		Ok({

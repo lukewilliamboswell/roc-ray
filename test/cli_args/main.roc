@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 
@@ -25,7 +25,7 @@ init! = App.init_for_args(config_for_args, |io| Ok({ args: io.args!() }))
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	passed =
 		List.len(model.args) == 3
@@ -36,5 +36,5 @@ update! = |model, program_input, _io| {
 	Err(Exit(if passed 0 else 1))
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

@@ -116,7 +116,7 @@ Text := [].{
 		## host.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		prepare! : Builder => Try(Prepared, [ResourceLimit, ..])
+		prepare! : Builder => Try(Prepared, [ResourceLimit])
 		prepare! = |builder| Text.prepare_builder!(builder)
 	}
 
@@ -194,7 +194,7 @@ Text := [].{
 	## Prepare a builder's text, as `Builder.prepare!` does.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
+	prepare_builder! : Builder => Try(Prepared, [ResourceLimit])
 	prepare_builder! = |builder| {
 		result = Host.text_prepare!({
 			text: builder.content,

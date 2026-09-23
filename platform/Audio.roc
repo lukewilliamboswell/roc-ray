@@ -243,13 +243,13 @@ Audio := [].{
 	## error.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
+	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit])
 	gen_sound! = |cfg| generated_sound_from_resource(Host.audio_gen_sound!(raw_config(cfg)))
 
 	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
+	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit])
 	gen_tone! = |cfg|
 		Audio.gen_sound!({
 			waveform: Sine,
@@ -287,7 +287,7 @@ Audio := [].{
 		## `SoundLoadFailed` covers both a path with nothing behind it and bytes
 		## raylib would not decode; the format is taken from the extension, and
 		## `.wav`, `.ogg`, `.mp3`, `.qoa` and `.flac` are the ones it reads.
-		load_sound! : Loader, Str => Try(Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit, ..])
+		load_sound! : Loader, Str => Try(Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
 		load_sound! = |Loader.(authority), path| perform_load_sound!(authority, path)
 
 		## Load a streamed music file. Keep the returned value in the app model.
@@ -300,14 +300,14 @@ Audio := [].{
 		## raylib would not decode; the format is taken from the extension, and
 		## `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm` and `.mod` are the ones it
 		## reads.
-		load_music! : Loader, Str => Try(Music, [PermissionDenied, MusicLoadFailed, ResourceLimit, ..])
+		load_music! : Loader, Str => Try(Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
 		load_music! = |Loader.(authority), path| perform_load_music!(authority, path)
 
 	}
 
 }
 
-loaded_sound_from_resource : Try(Resource.Sound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource : Try(Resource.Sound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
 loaded_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union
@@ -317,7 +317,7 @@ loaded_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit])
 generated_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union
@@ -326,7 +326,7 @@ generated_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-music_from_resource : Try(Resource.Music, Host.AudioLoadMusicError) -> Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit, ..])
+music_from_resource : Try(Resource.Music, Host.AudioLoadMusicError) -> Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
 music_from_resource = |result|
 	match result {
 		# closed error union to open error union
@@ -360,8 +360,8 @@ raw_config = |cfg| {
 }
 
 ## Private authority-taking implementations.
-perform_load_sound! : Resource.Authority, Str => Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit, ..])
+perform_load_sound! : Resource.Authority, Str => Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
 perform_load_sound! = |authority, path| loaded_sound_from_resource(Host.audio_load_sound!(authority, path))
 
-perform_load_music! : Resource.Authority, Str => Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit, ..])
+perform_load_music! : Resource.Authority, Str => Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
 perform_load_music! = |authority, path| music_from_resource(Host.audio_load_music!(authority, path))

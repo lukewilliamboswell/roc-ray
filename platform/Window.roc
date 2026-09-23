@@ -160,7 +160,7 @@ Window := [].{
 		## Read it back with `Window.Clipboard.read_text!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		set_text! : Clipboard, Str => Try({}, [PermissionDenied, ..])
+		set_text! : Clipboard, Str => Try({}, [PermissionDenied])
 		set_text! = |Clipboard.(authority), text| perform_set_clipboard_text!(authority, text)
 
 	}
@@ -194,7 +194,7 @@ perform_read_clipboard! = |authority|
 		Err(Unavailable) => Err(Unavailable)
 	}
 
-perform_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied, ..])
+perform_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied])
 perform_set_clipboard_text! = |authority, text| match Host.window_set_clipboard_text!(authority, text) {
 	Ok({}) => Ok({})
 	Err(PermissionDenied) => Err(PermissionDenied)

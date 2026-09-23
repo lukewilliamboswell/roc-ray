@@ -547,7 +547,7 @@ Capture := [].{
 		## A rejected start appears as `Failed` in `input.capture` on the next cycle;
 		## the call itself reports nothing, so the recording's outcome is observed
 		## the same way whichever phase started it.
-		start! : Writer, Recording => Try({}, [PermissionDenied, ..])
+		start! : Writer, Recording => Try({}, [PermissionDenied])
 		start! = |Writer.(authority), recording| perform_start!(authority, recording)
 
 		## Finish the current recording and write its file.
@@ -557,7 +557,7 @@ Capture := [].{
 		##
 		## Stopping while idle does nothing. The next input reports the frame count
 		## and file size as `Finished`.
-		stop! : Writer => Try({}, [PermissionDenied, ..])
+		stop! : Writer => Try({}, [PermissionDenied])
 		stop! = |Writer.(authority)| perform_stop!(authority)
 
 	}
@@ -697,7 +697,7 @@ perform_screenshot_texture! = |authority, target, path| {
 	}
 }
 
-perform_start! : Resource.Authority, Capture.Recording => Try({}, [PermissionDenied, ..])
+perform_start! : Resource.Authority, Capture.Recording => Try({}, [PermissionDenied])
 perform_start! = |authority, recording| {
 	ratio = capture_scale_ratio(recording.scale())
 	# The host latches the refusal for the next `Input` to report, so there
@@ -723,7 +723,7 @@ perform_start! = |authority, recording| {
 	}
 }
 
-perform_stop! : Resource.Authority => Try({}, [PermissionDenied, ..])
+perform_stop! : Resource.Authority => Try({}, [PermissionDenied])
 perform_stop! = |authority| {
 	result = Host.capture_stop_recording!(authority)
 	match result {

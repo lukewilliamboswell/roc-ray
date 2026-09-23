@@ -2,7 +2,7 @@
 ## `captures/ui_demo.gif`, then exits. This example shows how simulated mouse,
 ## key, and text input can exercise normal UI code, and how to include a cursor
 ## in a recording.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Capture
@@ -131,7 +131,7 @@ init! = App.init(
 )
 
 ## Prepare one label per reachable click count, so `render!` never lays out text.
-prepare_counter_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_counter_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit])
 prepare_counter_labels! = |font, index, acc|
 	if index > max_clicks {
 		Ok(acc)
@@ -144,7 +144,7 @@ prepare_counter_labels! = |font, index, acc|
 ##
 ## The script types that string in order and backspace only ever removes from
 ## its end, so every state the field can reach is one of these prefixes.
-prepare_field_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_field_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit])
 prepare_field_labels! = |font, index, acc|
 	if index > List.len(field_text) {
 		Ok(acc)
@@ -164,7 +164,7 @@ expect field_prefix(List.len(field_text)) == "roc-ray!"
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	input = program_input.devices
 	# Drive the pointer for the *next* frame from the script.
@@ -283,7 +283,7 @@ expect typed_char(first_type_frame + 7 * type_every) == "!"
 expect typed_char(first_type_frame + 8 * type_every) == ""
 expect typed_char(0) == ""
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	over_increment = inside(model.mouse, increment_button)
 	over_toggle = inside(model.mouse, toggle_button)

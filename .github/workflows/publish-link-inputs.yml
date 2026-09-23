@@ -1,0 +1,46 @@
+name: Publish PR linker inputs
+
+# The trusted publisher for link-inputs.lock.json. Dispatched by a maintainer
+# from main with a same-repository PR number, the pinned roc-automation
+# controller runs that PR's link-inputs.yml at its exact head, verifies the
+# run, candidate inventory, digests, and attestations, publishes the exact
+# bytes as an immutable content-addressed release, and adds a signed,
+# lock-only commit to the PR. It never checks out or executes PR code.
+#
+# See dependencies/link-inputs/README.md for when and how to run it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Open same-repository PR containing the linker-input change
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: publish-link-inputs
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'lukewilliamboswell/roc-ray'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: write
+      attestations: read
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Publish exact PR-produced bytes and adopt their lock
+        uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@d2bf9d412dcff12aae3249afde170eab8119253f
+        with:
+          pull-request: ${{ inputs.pull-request }}
+          producer-workflow: link-inputs.yml
+          candidate-artifact: link-input-release
+          lock-path: link-inputs.lock.json
+          release-prefix: link-inputs
+        env:
+          GH_TOKEN: ${{ github.token }}

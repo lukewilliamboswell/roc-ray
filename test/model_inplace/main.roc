@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Color
@@ -101,7 +101,7 @@ parse_pattern = |name|
 ##
 ## Every branch uses the ordinary record-update spread an app would write,
 ## except `SetWithoutSpread`, which exists to price the spread itself.
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, _input, _io|
 	match model.pattern {
 		SetInPlace =>
@@ -207,7 +207,7 @@ marker : U64 -> F32
 marker = |cursor| U64.to_f32(cursor % 1024) * 0.5
 
 ## Trivial on purpose: the frame's cost should be the model's, not the drawing's.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |_model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101820))
 	frame.rectangle!({ x: 10, y: 10, width: 20, height: 20, style: Draw.filled(Color.white) })

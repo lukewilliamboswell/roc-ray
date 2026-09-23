@@ -2,7 +2,7 @@
 ## the task finishes, or press Escape to quit. This example introduces Tasks as
 ## work that may wait without pausing drawing, and Messages as the values
 ## completed tasks deliver to a later Input.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Task
@@ -51,7 +51,7 @@ init! = App.init(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	cycle = input.time.cycle_count
 	settled = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
@@ -118,7 +118,7 @@ expect match apply_message(Waiting, Woke, 18) {
 ## message could not move it.
 expect apply_message(Woke({ arrived_on: 18 }), Woke, 25) == Woke({ arrived_on: 18 })
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	# How much of the sleep has gone by, clamped so a slow frame cannot
 	# overshoot the ring. Purely a view value, so it is derived here.

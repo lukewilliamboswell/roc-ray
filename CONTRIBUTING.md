@@ -26,11 +26,20 @@ come first on it. A local debug build of the compiler is not a substitute: it
 trips SpecConstr invariants on this platform's code and fails in ways that look
 like platform bugs.
 
-Build the native hosts and platform inputs:
+Build the native hosts:
 
 ```bash
 zig build
 ```
+
+`zig build` compiles `libhost.a`/`host.lib` for every target from this checkout.
+It takes every other linker input (raylib, msf_gif, libvpx, SQLite, and the CRT,
+stub, and import libraries) from the immutable release that
+`link-inputs.lock.json` selects. The first build downloads those archives into
+`~/.cache/roc-ray/link-inputs`. Every build rehashes them against the lock and
+never compiles them. When you change a linker input, follow the producer
+procedure in [`dependencies/link-inputs/README.md`](dependencies/link-inputs/README.md).
+That page also explains why production and consumption are separate.
 
 ### macOS linker interfaces
 
@@ -576,19 +585,15 @@ Build the Linux x64 native Wayland bundle:
 scripts/bundle.sh --platform wayland
 ```
 
-The Wayland bundle requires
-`vendor/raylib/linux-x64-wayland/libraylib.a`. Rebuild it from a raylib 6.0
-source checkout with:
-
-```bash
-scripts/build-raylib-wayland.sh /path/to/raylib-6.0
-```
-
-Both bundles need every target's archives under `platform/targets/`, which a
-plain `zig build` produces -- it cross-compiles all four of x64mac, arm64mac,
-x64glibc and x64win. So a local checkout can build a complete bundle, which is
-what `scripts/all_tests.py` relies on. `bundle.sh` names the exact file it is
-missing if some target was never built.
+Both bundles take the host archives that `zig build` writes under
+`platform/targets/`, and install their other linker inputs from the locked
+release into a fresh staging directory. The default package takes the
+`x64mac`, `arm64mac`, `x64glibc-x11`, and `x64win` profiles, and the Wayland
+package takes `x64glibc-wayland`. So a local checkout can build a complete
+bundle, which is what `scripts/all_tests.py` relies on. The Wayland raylib
+archive itself (`vendor/raylib/linux-x64-wayland/libraylib.a`, rebuilt with
+`scripts/build-raylib-wayland.sh`) is a producer input like the other vendored
+libraries.
 
 `bundle.sh` includes all platform modules, including the private `Resource`
 module, with their relative paths preserved. Local tests and release
@@ -597,9 +602,10 @@ builds use the same bundling path.
 ## Vendored C libraries
 
 Screenshots go through raylib's own PNG writer, but GIF and video need encoders
-the vendored raylib does not have. Both are vendored as *source* and compiled by
-`zig build` for every target, so there is no configure step, no prebuilt archive
-to re-vendor per platform, and no per-OS CI runner in the loop:
+the vendored raylib does not have. Both are vendored as *source* and compiled for
+every target by the linker-input producer (`zig build link-inputs`, recipes in
+`link_inputs.zig`), so there is no configure step and no per-OS build runner in
+the loop:
 
 - `vendor/msf_gif/` -- a single-header GIF encoder (MIT or public domain). Built
   freestanding like the host; the handful of libc declarations it needs come
@@ -630,11 +636,12 @@ stub and are unaffected.
 
 Both expose only primitives and opaque pointers to Zig through a small C shim,
 so the freestanding host module never needs C headers. Each produces its own
-static archive, copied into `platform/targets/<target>/` and named in the
-`targets:` block of `platform/main.roc`, exactly as `libraylib.a` is.
+static archive, released as a linker input and named in the `targets:` block of
+`platform/main.roc`, exactly as `libraylib.a` is. `zig build libvpx-parity`
+checks the SIMD kernels; the producer workflow runs it on arm64 and x64.
 
 libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
-added to the glibc link stubs in `platform/targets/*/libc_stub.s`. SQLite's unix
+added to the glibc link stubs in `platform/targets/x64glibc/libc_stub.s`. SQLite's unix
 VFS and its serialized threading mode added ten more there and in
 `libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
 library: the stub files are hand-written assembly, and a missing symbol shows up

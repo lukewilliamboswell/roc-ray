@@ -2,7 +2,7 @@
 ## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
 ## This example shows startup database setup, prepared statements, and Tasks:
 ## work that may wait runs separately and returns rows as a later Message.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Color
@@ -281,7 +281,7 @@ next_run = |state| {
 	}
 }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	folded = List.fold(input.messages, { ..model, elapsed: model.elapsed + input.time.elapsed_seconds }, apply_message)
 
@@ -310,7 +310,7 @@ update! = |model, input, _io| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })

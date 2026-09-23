@@ -19,7 +19,6 @@ fn addBuildMetadata(b: *std.Build, module: *std.Build.Module) void {
 const link_inputs = @import("link_inputs.zig");
 const RocTarget = link_inputs.RocTarget;
 const buildLibvpx = link_inputs.buildLibvpx;
-const buildSqlite3 = link_inputs.buildSqlite3;
 const libvpx_flags = link_inputs.libvpx_flags;
 const windows_import_libs = link_inputs.windows_import_libs;
 
@@ -45,104 +44,50 @@ pub fn build(b: *std.Build) void {
         "Run Roc example tests as part of `zig build test`",
     ) orelse true;
 
-    // Cleanup step: remove all generated build artifacts
-    const cleanup_step = b.step("clean", "Remove all built library files");
+    // Cleanup step: remove the host archives this build writes.
+    const cleanup_step = b.step("clean", "Remove the built host libraries");
     for (all_native_targets) |roc_target| {
         cleanup_step.dependOn(&CleanupStep.create(b, b.path(
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         )).step);
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.msfGifFilename() }),
-        )).step);
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
-        )).step);
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.sqlite3Filename() }),
-        )).step);
     }
-    // Clean legacy locations
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 
+    // Producer-only: ordinary builds never run the linker-input recipes.
     _ = link_inputs.addProducerStep(b);
 
-    // Create copy step for all targets
+    // Every other linker input comes from the release selected by
+    // link-inputs.lock.json. The installer rehashes cached archives against
+    // the lock on every run, downloads only on a cache miss, and fails -- it
+    // never rebuilds -- when an input is missing, stale, or not the locked
+    // bytes. See dependencies/link-inputs/README.md.
+    const install_link_inputs = b.addSystemCommand(&.{
+        "python3",
+        "scripts/link_inputs.py",
+        "install",
+        "--destination",
+        "platform",
+        "--targets-only",
+    });
+    install_link_inputs.setCwd(b.path("."));
+    install_link_inputs.has_side_effects = true;
+    const link_inputs_step = b.step("link-inputs-install", "Install the locked linker inputs into platform/targets");
+    link_inputs_step.dependOn(&install_link_inputs.step);
+
+    // Default step: build the host library for all native targets from this
+    // checkout, next to the locked inputs. Cleanup has to finish before the
+    // new archives are copied into the source tree.
     const copy_all = b.addUpdateSourceFiles();
     copy_all.step.dependOn(cleanup_step);
-
-    // Default step: build the host library for all native targets. Ensure the
-    // cleanup completes before generated libraries are copied into the source
-    // tree; sibling dependencies would be free to run in either order.
+    copy_all.step.dependOn(&install_link_inputs.step);
     const all_step = b.getInstallStep();
     all_step.dependOn(&copy_all.step);
 
-    // Generate Windows import libraries (needed for Windows cross-compilation)
-    for (windows_import_libs) |lib_name| {
-        copy_all.addCopyFileToSource(
-            link_inputs.windowsImportLib(b, lib_name),
-            b.pathJoin(&.{ "platform", "targets", "x64win", b.fmt("{s}.lib", .{lib_name}) }),
-        );
-    }
-
-    // Build for each native Roc target
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const build_result = buildHostLib(b, target, optimize, roc_target, macos_interfaces_path);
-
-        // Copy libhost.a to platform/targets/{target}/
         copy_all.addCopyFileToSource(
-            build_result.host_lib.getEmittedBin(),
+            buildHostLib(b, target, optimize, macos_interfaces_path).getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
-
-        // Copy vendored raylib library to platform/targets/{target}/
-        copy_all.addCopyFileToSource(
-            build_result.raylib_archive,
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.raylibFilename() }),
-        );
-
-        // Copy the GIF encoder archive to platform/targets/{target}/
-        copy_all.addCopyFileToSource(
-            build_result.msf_gif_archive,
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.msfGifFilename() }),
-        );
-
-        // Copy the VP8 encoder archive to platform/targets/{target}/
-        copy_all.addCopyFileToSource(
-            build_result.libvpx_archive,
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
-        );
-
-        // Copy the SQLite archive to platform/targets/{target}/
-        copy_all.addCopyFileToSource(
-            build_result.sqlite3_archive,
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.sqlite3Filename() }),
-        );
-
-        // Copy libc.so stub for Linux targets
-        if (build_result.libc_stub) |libc_stub| {
-            copy_all.addCopyFileToSource(
-                libc_stub,
-                b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libc.so" }),
-            );
-        }
-
-        // Copy libm.so stub for Linux targets
-        if (build_result.libm_stub) |libm_stub| {
-            copy_all.addCopyFileToSource(
-                libm_stub,
-                b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libm.so" }),
-            );
-        }
-
-        // Copy libX11.so stub for Linux targets
-        if (build_result.x11_stub) |x11_stub| {
-            copy_all.addCopyFileToSource(
-                x11_stub,
-                b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libX11.so" }),
-            );
-        }
     }
 
     const test_step = b.step("test", "Run all tests");
@@ -215,6 +160,7 @@ pub fn build(b: *std.Build) void {
         "scripts/test_dependency_artifacts.py",
         "scripts/test_macos_archive_audit.py",
         "scripts/test_macos_interfaces.py",
+        "scripts/test_link_inputs.py",
     });
     dependency_input_tests.setCwd(b.path("."));
     test_step.dependOn(&dependency_input_tests.step);
@@ -285,7 +231,10 @@ pub fn build(b: *std.Build) void {
         // in-memory database rather than a stand-in: a heap test built on
         // zeroed memory makes every incref and decref a no-op and so cannot
         // fail when a refcount is wrong.
-        native_tests.root_module.linkLibrary(buildSqlite3(b, native_target, optimize, roc_target));
+        // Linked against the exact locked archive the platform ships.
+        const locked_sqlite3 = b.path(b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.sqlite3Filename() }));
+        native_tests.root_module.addObjectFile(locked_sqlite3);
+        native_tests.step.dependOn(&install_link_inputs.step);
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
 
@@ -299,7 +248,8 @@ pub fn build(b: *std.Build) void {
                 .link_libc = true,
             }),
         });
-        observatory_tests.root_module.linkLibrary(buildSqlite3(b, native_target, optimize, roc_target));
+        observatory_tests.root_module.addObjectFile(locked_sqlite3);
+        observatory_tests.step.dependOn(&install_link_inputs.step);
         const run_observatory_tests = b.addRunArtifact(observatory_tests);
         test_step.dependOn(&run_observatory_tests.step);
 
@@ -343,8 +293,9 @@ pub fn build(b: *std.Build) void {
             "libvpx-parity",
             "Check the vendored libvpx SIMD kernels against their C references",
         );
+        // A producer check: it builds libvpx from source, so it runs in the
+        // linker-input producer workflow rather than as part of `zig build test`.
         parity_step.dependOn(&run_parity.step);
-        test_step.dependOn(&run_parity.step);
 
         // Pixel-level rendering checks need a real graphics context, so keep
         // them opt-in for local/CI runs with a display (for example xvfb-run).
@@ -499,27 +450,13 @@ const CleanupStep = struct {
     }
 };
 
-const BuildResult = struct {
-    host_lib: *std.Build.Step.Compile,
-    raylib_archive: std.Build.LazyPath,
-    msf_gif_archive: std.Build.LazyPath,
-    libvpx_archive: std.Build.LazyPath,
-    sqlite3_archive: std.Build.LazyPath,
-    libc_stub: ?std.Build.LazyPath,
-    libm_stub: ?std.Build.LazyPath,
-    x11_stub: ?std.Build.LazyPath,
-};
-
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    roc_target: RocTarget,
     macos_interfaces_path: []const u8,
-) BuildResult {
+) *std.Build.Step.Compile {
     const raylib_include_path = b.path("vendor/raylib/include");
-    const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
-    const raylib_lib_path = b.path(raylib_lib_dir);
 
     const host_lib = b.addLibrary(.{
         .name = "host",
@@ -541,16 +478,11 @@ fn buildHostLib(
 
     host_lib.root_module.addIncludePath(raylib_include_path);
     addBuildMetadata(b, host_lib.root_module);
-    host_lib.root_module.addLibraryPath(raylib_lib_path);
 
     // Coroutine runtime for app tasks. Configured to a single executor on the
     // frame thread at runtime; task migration is compiled out so the
     // scheduler cannot move a Roc call onto another thread.
     host_lib.root_module.addImport("zio", zioModule(b, target, optimize));
-
-    const msf_gif = link_inputs.buildMsfGif(b, target, optimize);
-    const libvpx = buildLibvpx(b, target, optimize, roc_target);
-    const sqlite3 = buildSqlite3(b, target, optimize, roc_target);
 
     if (target.result.os.tag == .macos) {
         const framework_path = b.pathJoin(&.{ macos_interfaces_path, "System/Library/Frameworks" });
@@ -575,31 +507,5 @@ fn buildHostLib(
     // helpers such as __divti3 in the archive for every target.
     host_lib.bundle_compiler_rt = true;
 
-    const raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, roc_target.raylibFilename() }));
-
-    const libc_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
-        const stub = link_inputs.generateLibcStub(b, target);
-        break :blk stub.getEmittedBin();
-    } else null;
-
-    const libm_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
-        const stub = link_inputs.generateLibmStub(b, target);
-        break :blk stub.getEmittedBin();
-    } else null;
-
-    const x11_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
-        const stub = link_inputs.generateX11SoStub(b, target);
-        break :blk stub.getEmittedBin();
-    } else null;
-
-    return .{
-        .host_lib = host_lib,
-        .raylib_archive = raylib_archive,
-        .msf_gif_archive = msf_gif.getEmittedBin(),
-        .libvpx_archive = libvpx.getEmittedBin(),
-        .sqlite3_archive = sqlite3.getEmittedBin(),
-        .libc_stub = libc_stub,
-        .libm_stub = libm_stub,
-        .x11_stub = x11_stub,
-    };
+    return host_lib;
 }

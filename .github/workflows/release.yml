@@ -81,6 +81,22 @@ jobs:
             exit 1
           fi
 
+      # Linker inputs come from the release locked by link-inputs.lock.json.
+      # The cache only saves a download: every use rehashes the archives
+      # against the lock, and nothing here can rebuild them.
+      - name: Restore locked linker inputs
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: ~/.cache/roc-ray/link-inputs
+          key: link-inputs-${{ hashFiles('link-inputs.lock.json') }}
+
+      # Publication bundles only inputs whose GitHub build provenance names
+      # the locked producer workflow, source commit, and ref.
+      - name: Verify linker-input attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/link_inputs.py verify-attestations
+
       - name: Build platform
         run: zig build -Doptimize=ReleaseFast
 

@@ -39,7 +39,7 @@ During `zig build`, these DEF files are processed by `zig dlltool` to generate i
 - `opengl32.lib` - OpenGL
 - `shell32.lib` - Windows Shell
 
-These import libraries are required by raylib on Windows and are placed in `platform/targets/x64win/`.
+These import libraries are required by raylib on Windows. `zig build link-inputs` generates them into the `x64win` linker-input profile; see `dependencies/link-inputs/README.md`.
 
 ## Updating
 

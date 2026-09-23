@@ -4616,6 +4616,20 @@
           ]
         },
         {
+          "name": "_os_unfair_lock_trylock",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/libplatform/blob/2512ffd8bb5c6caff3c8ea83331ab8a0adc820c3/include/os/lock.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "os_unfair_lock_trylock",
+              "line": 134,
+              "revision": "2512ffd8bb5c6caff3c8ea83331ab8a0adc820c3",
+              "source_license": "APSL-2.0",
+              "response_sha256": "6eca61843ad39ff9220e8c554849ece4c59010689688b07a7f69fffc5d78d778"
+            }
+          ]
+        },
+        {
           "name": "_os_unfair_lock_unlock",
           "sources": [
             {

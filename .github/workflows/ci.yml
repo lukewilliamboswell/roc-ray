@@ -235,6 +235,13 @@ jobs:
         timeout-minutes: 20
         run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
 
+      # The broad suite uses Roc's dev backend to fit hosted runners. This
+      # small app also covers the default LLVM link path used by run-example.py.
+      - name: Link and run a default-mode macOS example
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        run: scripts/run-example.py --skip-platform-build examples/hello_world -- --host-headless-frames=3
+
       # The headless run above never calls raylib, so window, GL, texture,
       # font, audio and capture code would otherwise never execute on any
       # runner. The windowed sweep runs the same examples against the real

@@ -5,14 +5,14 @@
       "name": "macos-interfaces",
       "target": "macos-sysroot",
       "repository": "lukewilliamboswell/roc-ray",
-      "release": "deps-macos-interfaces-1-20260922.1",
+      "release": "deps-macos-interfaces-1-20260923.1",
       "asset": "macos-interfaces-macos-sysroot.tar",
-      "sha256": "4ea8659c65025718fcb36f0a004747c107eadc0f1a3b863113ba67beb430946b",
+      "sha256": "a452f0163590ff0af80a8261de9cf025be6149c3e75236a877b0942fc2674dbf",
       "size": 358400,
-      "source_sha": "fafa57cd9acf755e794a67767430bdb67bec763e",
+      "source_sha": "fa045ae44c9c028bda2a47834b0399454997f8e9",
       "source_ref": "refs/heads/main",
       "signer_workflow": "lukewilliamboswell/roc-ray/.github/workflows/macos-interface-dependencies.yml",
-      "input_fingerprint": "887653a2720c63abfcb614d59f56f1533ad847a7c8ff0a958ef5a49c5072cf3a"
+      "input_fingerprint": "0cba50989f3eb8f98931771f2c51c8b15d619df872f161b36d03906b249b97ac"
     }
   }
 }

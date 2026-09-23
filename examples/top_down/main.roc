@@ -12,7 +12,7 @@
 ## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -172,7 +172,7 @@ play_event! = |assets, level, previous_world, world, event| {
 Msg : []
 
 ## Advances pure gameplay, performs its events, and handles capture or quit.
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	controls = if model.demo demo_controls(model.demo_frame) else read_controls(program_input.devices)
 	dt = program_input.time.elapsed_seconds
@@ -194,7 +194,7 @@ update! = |model, program_input, _io| {
 }
 
 ## Delegates the complete presentation frame to the rendering module.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| Render.draw!(frame, model.assets, model.level, model.world)
 
 no_controls : Controls

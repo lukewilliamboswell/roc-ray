@@ -147,7 +147,11 @@ def fetch(lock: dict, asset: str, digest: str, size: int | None, cache: Path,
     with tempfile.NamedTemporaryFile(dir=cache, prefix=".download-", delete=False) as pending:
         temporary = Path(pending.name)
     try:
-        download(asset_url(lock, asset), temporary, size, limit)
+        url = asset_url(lock, asset)
+        try:
+            download(url, temporary, size, limit)
+        except OSError as error:
+            raise LinkInputError(f"could not download {asset} from {url}: {error}") from error
         verify_file(temporary, size, digest)
         os.replace(temporary, cached)
     finally:
@@ -307,7 +311,10 @@ def main() -> None:
                     cache=args.cache, targets_only=args.targets_only)
         else:
             verify_attestations(args.lock, args.cache)
-    except (LinkInputError, OSError, tarfile.TarError, json.JSONDecodeError) as error:
+    # ValueError covers LinkInputError and the producer-input fingerprint's own
+    # refusals (such as an uncommitted edit to a recipe), which are ordinary
+    # outcomes to explain in one line, not crashes to show as tracebacks.
+    except (ValueError, OSError, tarfile.TarError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1)
 

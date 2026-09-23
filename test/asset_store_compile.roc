@@ -1,6 +1,6 @@
 app [Model, program] {
 	rr: platform "../platform/main.roc",
-	roc: "nightly-2026-09-18-1d982dc",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -36,8 +36,8 @@ init! = App.init(
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, _input, _io| Ok(model)
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

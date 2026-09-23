@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Task
@@ -80,7 +80,7 @@ expect score(Child(Ticked(4242))) == 128
 expect score(Child(Ticked(0))) == 0
 expect 1 + 32 + 2 + 4 + 8 + 16 + 64 + 128 == expected_total
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	if input.time.cycle_count == 0 {
 		Task.spawn!(input, || Num(77))
@@ -128,5 +128,5 @@ update! = |model, input, _io| {
 	}
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

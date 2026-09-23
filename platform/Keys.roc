@@ -158,7 +158,7 @@ Keys := [].{
 	## A code with a named key decodes to that key, so a value that came from
 	## the host -- a `Devices.Event` -- pattern-matches on `KeyA` exactly as
 	## one written in the app does. A code in range with no name is `Raw`.
-	from_code : U64 -> Try(Key, [InvalidKeyCode, ..])
+	from_code : U64 -> Try(Key, [InvalidKeyCode])
 	from_code = |code|
 		match code {
 			4 => Ok(KeyAndroidBack)

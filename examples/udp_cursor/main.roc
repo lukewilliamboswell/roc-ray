@@ -4,7 +4,7 @@
 ##
 ## This example shows immediate UDP sends, a Task for receiving data that may
 ## wait, and Messages that carry received batches back to `update!`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Color
@@ -68,7 +68,7 @@ init! = App.init_for_args(
 	},
 )
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	# One listener at a time. It answered this cycle, or has never run, so
 	# start the next one; in between, datagrams wait in the kernel's buffer.
@@ -193,7 +193,7 @@ expect flag_port(["--udp-port", "x"], "--udp-port", 5) == 5
 expect flag_port(["--udp-port"], "--udp-port", 5) == 5
 expect flag_port([], "--udp-port", 5) == 5
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	size = frame.size!()
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })

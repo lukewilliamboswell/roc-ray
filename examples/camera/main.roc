@@ -2,7 +2,7 @@
 ## Move with WASD or the arrow keys, zoom with the mouse wheel, rotate with
 ## Q/E, reset with R, and quit with Escape. This example demonstrates camera
 ## drawing and converting positions between world and screen coordinates.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Camera
@@ -78,7 +78,7 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
@@ -97,7 +97,7 @@ update! = |model, program_input, _io| {
 
 ## Builds the camera and coordinate conversions from the latest Model. This
 ## avoids storing calculated values that could become inconsistent.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| {
 	camera = Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom }).with_rotation(model.rotation)
 	mouse_world = camera.screen_to_world(model.mouse)

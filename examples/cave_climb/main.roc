@@ -5,7 +5,7 @@
 ## and calculations for the two tools.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-19-d025939",
+	roc: "nightly-2026-09-22-e494788",
 }
 
 import rr.App
@@ -756,7 +756,7 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io| {
 	input = program_input.devices
 
@@ -786,7 +786,7 @@ update! = |model, program_input, _io| {
 
 ## The camera follows the player, so it is a pure function of the model and is
 ## derived here rather than stored.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| {
 	camera = camera_for(model.level, model.world.player.pos)
 	viewport = camera.viewport({ x: screen_w, y: screen_h })

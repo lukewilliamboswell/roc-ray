@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-18-1d982dc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Task
@@ -115,7 +115,7 @@ init! = App.init_for_args(
 loopback : U16 -> Udp.Address
 loopback = |port| { ip: "127.0.0.1", port }
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	cycle = input.time.cycle_count
 	started = if model.state == Idle {
@@ -311,5 +311,5 @@ reply! = |model, input, local, datagrams, cycle, started| {
 		}
 }
 
-render! : Model, _ => Try({}, [Exit(I64), ..])
+render! : Model, _ => Try({}, [Exit(I64)])
 render! = |_model, _frame| Ok({})

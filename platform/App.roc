@@ -522,7 +522,7 @@ App := [].{
 		## Call as `io.suggest_window_size!(size)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		## A running app resizes itself with `Window.suggest_size!`, which reaches
 		## the same host call, and only this spelling can report a refusal.
-		suggest_window_size! : Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+		suggest_window_size! : Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported])
 		suggest_window_size! = |io, size| app_suggest_window_size!(io, size)
 
 		## Suggest the smallest window size the user can drag the window down to.
@@ -569,7 +569,7 @@ App := [].{
 		## working directory. The host loads it once; repeat calls return retained
 		## aliases of the same resource. Legal only in `init!`.
 		## A configured file requires external authority; otherwise PermissionDenied.
-		default_font! : Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+		default_font! : Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 		default_font! = |io| app_default_font!(io)
 	}
 
@@ -577,7 +577,7 @@ App := [].{
 	Environment :: Resource.Authority.{
 
 		## Read a variable; denied access is `PermissionDenied`. Legal only in `init!`.
-		read! : Environment, Str => Try(Str, [NotFound, PermissionDenied, ..])
+		read! : Environment, Str => Try(Str, [NotFound, PermissionDenied])
 		read! = |Environment.(authority), key| match Host.app_read_env!(authority, key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
@@ -799,7 +799,7 @@ app_entropy! = |_startup| Host.random_entropy!()
 app_random_i32! : App.Io, I32, I32 => I32
 app_random_i32! = |_startup, min, max| Host.random_i32!(min, max)
 
-app_suggest_window_size! : App.Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+app_suggest_window_size! : App.Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported])
 app_suggest_window_size! = |_startup, size|
 	if size.width <= 0 or size.height <= 0 {
 		Err(InvalidSize)
@@ -829,7 +829,7 @@ app_set_cursor_mode! = |_startup, mode| Host.mouse_set_cursor_mode!(Mouse.cursor
 app_set_cursor! : App.Io, Mouse.Cursor => {}
 app_set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cursor))
 
-app_default_font! : App.Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+app_default_font! : App.Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 app_default_font! = |App.Io.(authority)|
 # closed error union to open error union
 	match Host.text_startup_default_font!(authority) {

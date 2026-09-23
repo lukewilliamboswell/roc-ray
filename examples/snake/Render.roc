@@ -11,7 +11,7 @@ import Snake
 Render := [].{
 
 	## Draws one complete Snake presentation frame from the resulting world.
-	draw! : Draw.Frame, Assets, Game.World, F32 => Try({}, [ScopeLimit, ..])
+	draw! : Draw.Frame, Assets, Game.World, F32 => Try({}, [ScopeLimit])
 	draw! = |frame, assets, world, elapsed| {
 		frame.clear!(field_bottom)
 		draw_background!(frame)
@@ -81,7 +81,7 @@ pulse : F32 -> F32
 pulse = |elapsed| 0.5 + 0.5 * F32.sin(elapsed * 3.4)
 
 ## Draws additive halos behind the food and snake's head.
-draw_glow! : Draw.Frame, Game.World, F32 => Try({}, [ScopeLimit, ..])
+draw_glow! : Draw.Frame, Game.World, F32 => Try({}, [ScopeLimit])
 draw_glow! = |frame, world, elapsed|
 	frame.with_blend_mode!(
 		Draw.additive_blend,

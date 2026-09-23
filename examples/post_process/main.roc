@@ -3,7 +3,7 @@
 ##
 ## Press Escape to quit. This example shows drawing in stages, combining light
 ## additively, and changing a shader setting before using it.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-19-d025939" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
 
 import rr.App
 import rr.Assets
@@ -56,7 +56,7 @@ init! = App.init(
 ## the draws it precedes.
 Msg : []
 
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, program_input, _io|
 	if program_input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
@@ -64,7 +64,7 @@ update! = |model, program_input, _io|
 		Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
 	}
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
 render! = |model, frame| {
 	frame.with_render_texture!(
 		model.target,

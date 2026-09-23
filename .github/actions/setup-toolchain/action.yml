@@ -1,0 +1,55 @@
+name: Install the pinned RocRay toolchain
+description: >-
+  Install Zig 0.16.0 and the exact Roc nightly pinned by platform/main.roc, and
+  fail unless the compiler on PATH is that nightly.
+
+inputs:
+  zig:
+    description: Also install Zig (jobs that only run a bundled platform do not need it)
+    required: false
+    default: "true"
+
+outputs:
+  roc-version:
+    description: The pinned Roc nightly tag
+    value: ${{ steps.pin.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.zig == 'true'
+      uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      with:
+        version: 0.16.0
+
+    - name: Read pinned Roc version
+      id: pin
+      shell: bash
+      run: |
+        pin="$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')"
+        echo "version=$pin" >> "$GITHUB_OUTPUT"
+        echo "ROC_NIGHTLY_TAG=$pin" >> "$GITHUB_ENV"
+
+    # Installs into the runner tool cache and checks the archive against the
+    # SHA-256 digest in the nightly's release metadata.
+    - name: Install Roc
+      id: roc
+      uses: lukewilliamboswell/setup-roc@89a8a2945bd107f27b160096b3af7f52d2d78369
+      with:
+        version: nightly-new-compiler
+        nightly-tag: ${{ steps.pin.outputs.version }}
+
+    # A different compiler on PATH produces failures that look like platform
+    # bugs, so refuse one here rather than warn about it later.
+    - name: Require the pinned compiler
+      shell: bash
+      env:
+        PIN: ${{ steps.pin.outputs.version }}
+      run: |
+        actual="$(roc version)"
+        commit="${PIN##*-}"
+        if [[ "$actual" != *"$PIN"* && "$actual" != *"$commit"* ]]; then
+          echo "::error::roc on PATH is '$actual', not the pinned $PIN"
+          exit 1
+        fi
+        echo "Using $actual ($(command -v roc))"

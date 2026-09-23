@@ -58,6 +58,8 @@ unpublished candidate independently and opt into it explicitly:
 ```bash
 python3 scripts/build_macos_interfaces.py --tree /tmp/roc-ray-macos-sysroot
 zig build -Dmacos-interfaces-path=/tmp/roc-ray-macos-sysroot
+ROC_RAY_MACOS_INTERFACES_DIR=/tmp/roc-ray-macos-sysroot \
+    scripts/run-example.py examples/pong
 ```
 
 Use `scripts/audit_macos_archives.py` only to inventory unresolved references

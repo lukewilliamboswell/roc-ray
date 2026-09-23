@@ -381,7 +381,23 @@ def stage_platform_source(root: Path, dest: Path) -> Path:
 
     targets_src = root / "platform" / "targets"
     targets_dest = dest / "targets"
-    if not targets_dest.exists():
+    macos_interfaces = os.environ.get("ROC_RAY_MACOS_INTERFACES_DIR")
+    if macos_interfaces:
+        candidate = Path(macos_interfaces).resolve()
+        if not (candidate / "usr/lib/libSystem.tbd").is_file():
+            raise LocalBundleError(f"invalid macOS interface tree: {candidate}")
+        targets_dest.mkdir()
+        for entry in targets_src.iterdir():
+            source = candidate if entry.name == "macos-sysroot" else entry
+            destination = targets_dest / entry.name
+            try:
+                destination.symlink_to(source, target_is_directory=source.is_dir())
+            except (OSError, NotImplementedError):
+                if source.is_dir():
+                    shutil.copytree(source, destination)
+                else:
+                    shutil.copyfile(source, destination)
+    elif not targets_dest.exists():
         try:
             targets_dest.symlink_to(targets_src, target_is_directory=True)
         except (OSError, NotImplementedError):

@@ -71,7 +71,10 @@ def main() -> int:
         print(warning, file=sys.stderr)
 
     if not args.skip_platform_build:
-        build = subprocess.run(["zig", "build"], cwd=root)
+        build_command = ["zig", "build"]
+        if macos_interfaces := os.environ.get("ROC_RAY_MACOS_INTERFACES_DIR"):
+            build_command.append(f"-Dmacos-interfaces-path={macos_interfaces}")
+        build = subprocess.run(build_command, cwd=root)
         if build.returncode != 0:
             return build.returncode
 

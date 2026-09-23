@@ -20,9 +20,10 @@ Usage: scripts/bundle.sh [--platform default|wayland] [--output-dir DIR]
                          [roc bundle args...]
 
 The default package includes all supported native targets. The Wayland package
-is Linux x64 only and requires vendor/raylib/linux-x64-wayland/libraylib.a.
+is Linux x64 only.
 
-All RocRay API modules and native host inputs ship in this platform bundle.
+Host archives come from `zig build`; every other linker input is installed from
+the release locked by link-inputs.lock.json and verified before use.
 EOF
 }
 
@@ -143,16 +144,24 @@ copy_shared_roc_files() {
     done < <(find "$platform_dir" -name '*.roc' -print0)
 }
 
-copy_target_files() {
-    local target="$1"
-    shift
+copy_host() {
+    local target="$1" file="$2"
+    copy_required "$platform_dir/targets/$target/$file" "$stage_dir/targets/$target/$file"
+}
 
-    local file
-    for file in "$@"; do
-        copy_required \
-            "$platform_dir/targets/$target/$file" \
-            "$stage_dir/targets/$target/$file"
+# Installs the locked profiles (targets/ and their licences/) into the stage,
+# after checking every archive against the lock. It never builds an input.
+install_link_inputs() {
+    local args=()
+    local profile
+    for profile in "$@"; do
+        args+=(--profile "$profile")
     done
+    # Producer validation only: an unpublished candidate, checked the same way.
+    if [[ -n "${ROC_RAY_LINK_INPUT_CANDIDATE:-}" ]]; then
+        args+=(--candidate "$ROC_RAY_LINK_INPUT_CANDIDATE")
+    fi
+    python3 "$root_dir/scripts/link_inputs.py" install "${args[@]}" --destination "$stage_dir"
 }
 
 stage_dir="$(mktemp -d "$root_dir/.bundle-stage-${package}.XXXXXX")"
@@ -160,47 +169,27 @@ trap cleanup_stage EXIT
 mkdir -p "$stage_dir/targets"
 copy_shared_roc_files
 
-# Redistribute the vendored libraries' licence texts alongside their binaries.
-copy_vendor_notices() {
-    mkdir -p "$stage_dir/licenses"
-    copy_required "$root_dir/vendor/libvpx/LICENSE" "$stage_dir/licenses/LICENSE.libvpx"
-    copy_required "$root_dir/vendor/libvpx/PATENTS" "$stage_dir/licenses/PATENTS.libvpx"
-    copy_required "$root_dir/vendor/libvpx/AUTHORS" "$stage_dir/licenses/AUTHORS.libvpx"
-}
-
 case "$package" in
     default)
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
 
-        copy_target_files x64mac libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a
-        copy_target_files arm64mac libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a libm.so libX11.so libc.so crtn.o
-        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib sqlite3.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib bcryptprimitives.lib
+        install_link_inputs x64mac arm64mac x64glibc-x11 x64win
+        copy_host x64mac libhost.a
+        copy_host arm64mac libhost.a
+        copy_host x64glibc libhost.a
+        copy_host x64win host.lib
 
         if [[ ! -d "$macos_interfaces_dir" ]]; then
             echo "error: missing macOS interface tree: $macos_interfaces_dir" >&2
             exit 1
         fi
         cp -R "$macos_interfaces_dir" "$stage_dir/targets/macos-sysroot"
-        copy_vendor_notices
         ;;
     wayland)
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
 
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libmsf_gif.a libvpx.a libsqlite3.a libm.so libc.so crtn.o
-
-        wayland_raylib="$root_dir/vendor/raylib/linux-x64-wayland/libraylib.a"
-        if [[ ! -f "$wayland_raylib" ]]; then
-            cat >&2 <<'EOF'
-error: missing Wayland raylib archive: vendor/raylib/linux-x64-wayland/libraylib.a
-
-Build it on Linux from a raylib 6.0 source checkout:
-  scripts/build-raylib-wayland.sh /path/to/raylib-6.0
-EOF
-            exit 1
-        fi
-        copy_required "$wayland_raylib" "$stage_dir/targets/x64glibc/libraylib.a"
-        copy_vendor_notices
+        install_link_inputs x64glibc-wayland
+        copy_host x64glibc libhost.a
         ;;
 esac
 

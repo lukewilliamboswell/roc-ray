@@ -317,12 +317,7 @@ pub fn generateLibcStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         }),
     });
 
-    const stub_path = switch (target.result.cpu.arch) {
-        .x86_64 => "platform/targets/x64glibc/libc_stub.s",
-        .aarch64 => "platform/targets/arm64glibc/libc_stub.s",
-        else => @panic("Unsupported architecture for libc stub"),
-    };
-    stub_lib.root_module.addAssemblyFile(b.path(stub_path));
+    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64glibc/libc_stub.s"));
     return stub_lib;
 }
 
@@ -338,12 +333,7 @@ pub fn generateLibmStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         }),
     });
 
-    const stub_path = switch (target.result.cpu.arch) {
-        .x86_64 => "platform/targets/x64glibc/libm_stub.s",
-        .aarch64 => "platform/targets/arm64glibc/libm_stub.s",
-        else => @panic("Unsupported architecture for libm stub"),
-    };
-    stub_lib.root_module.addAssemblyFile(b.path(stub_path));
+    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64glibc/libm_stub.s"));
     return stub_lib;
 }
 

@@ -5,9 +5,12 @@ Generated interfaces and archives are not committed. Independent producer CI
 publishes deterministic release assets with GitHub build-provenance
 attestations; consumers select exact bytes through `dependencies.lock.json`.
 
-The first migrated input is the project-authored macOS interface set. The
-remaining checked-in raylib, CRT, Linux, and Windows inputs are deliberately
-outside this migration and will move through the same boundary separately.
+This directory covers the project-authored macOS interface set, selected by
+`dependencies.lock.json`. The platform's other linker inputs (raylib, msf_gif,
+libvpx, SQLite, and the CRT, Linux stub, and Windows import libraries) are
+released separately and selected by `link-inputs.lock.json`. See
+[`link-inputs/README.md`](link-inputs/README.md). The two locks stay separate
+because they are separate trust boundaries.
 
 Each lock entry identifies the producer repository, immutable release and
 asset, target, SHA-256, byte length, source commit and trusted branch, signer

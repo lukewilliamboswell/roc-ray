@@ -186,6 +186,15 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
+      # Linker inputs come from the release locked by link-inputs.lock.json.
+      # The cache only saves a download: every use rehashes the archives
+      # against the lock, and nothing here can rebuild them.
+      - name: Restore locked linker inputs
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: ~/.cache/roc-ray/link-inputs
+          key: link-inputs-${{ hashFiles('link-inputs.lock.json') }}
+
       - name: Build platform
         run: zig build
 
@@ -193,15 +202,6 @@ jobs:
         # Native tests require MSVC libraries on Windows which aren't available in CI
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
-
-      # Checks each vendored libvpx SIMD kernel against its C reference. It has
-      # to run on the target -- macos-15 is arm64, and NEON is where an arm64
-      # build replaces ~200 kernels that nothing else here would exercise.
-      # `zig build test` already depends on this; naming it separately makes a
-      # kernel mismatch obvious in the job list rather than buried in the tests.
-      - name: Check libvpx SIMD parity
-        if: runner.os != 'Windows'
-        run: zig build libvpx-parity
 
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'

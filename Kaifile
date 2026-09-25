@@ -1,0 +1,36 @@
+environment ray {
+  packages: [
+    "rocpkgs.nightly-2026-08-23-fb208ba",
+    "zig_0_16",
+    "python3",
+    "zstd",
+    "sqlite",
+    "llvmPackages.bintools"
+  ]
+  overlays: ["github:roc-lang/roc-overlay"]
+}
+
+task test {
+  environment: "roc-ray"
+  run: ["zig", "build", "test"]
+}
+
+task docs {
+  environment: "roc-ray"
+  run: ["scripts/build_docs.py", "--check"]
+}
+
+task smoke {
+  environment: "roc-ray"
+  run: [
+    "scripts/run-example.py",
+    "examples/hello_world",
+    "--",
+    "--host-headless",
+    "--host-headless-frames=2"
+  ]
+}
+
+workflow verify {
+  steps: ["run test", "run docs"]
+}

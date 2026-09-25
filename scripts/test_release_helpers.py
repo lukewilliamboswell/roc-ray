@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import argparse
 import json
 import subprocess
 import sys
@@ -234,6 +235,46 @@ class ResolveDefaultBundleUrlTests(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(RuntimeError):
                 helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    def make_notes(self, root: Path, version: str) -> str:
+        bundles = root / "bundles.json"
+        bundles.write_text(json.dumps([
+            {"name": "default", "artifact_file": f"roc-ray-{version}.tar.zst"},
+            {"name": "wayland", "artifact_file": f"roc-ray-wayland-{version}.tar.zst"},
+        ]), encoding="utf-8")
+        output = root / "release.md"
+        args = argparse.Namespace(
+            release_version=version, release_bundles=str(bundles), output_file=str(output),
+            docs_url="https://example.com/docs/", notes_dir=str(root / "notes"),
+        )
+        with unittest.mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}):
+            helpers.cmd_make_release_notes(args)
+        return output.read_text(encoding="utf-8")
+
+    def test_uses_versioned_notes_and_keeps_generated_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.md").write_text("# Highlights\n\nNew API.\n", encoding="utf-8")
+            body = self.make_notes(root, "0.10.0")
+            self.assertTrue(body.startswith("# Highlights\n\nNew API.\n"))
+            self.assertIn('platform "https://github.com/owner/repo/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"', body)
+            self.assertIn("https://example.com/docs/", body)
+
+    def test_missing_versioned_notes_uses_generated_intro(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            body = self.make_notes(Path(temporary), "0.11.0")
+            self.assertTrue(body.startswith("Release 0.11.0.\n"))
+
+    def test_empty_versioned_notes_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.md").write_text("  \n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "release notes are empty"):
+                self.make_notes(root, "0.10.0")
 
 
 if __name__ == "__main__":

@@ -48,6 +48,7 @@ def main() -> int:
     notes.add_argument("--release-bundles", required=True)
     notes.add_argument("--output-file", required=True)
     notes.add_argument("--docs-url", default="")
+    notes.add_argument("--notes-dir", default="docs/releases")
     notes.set_defaults(func=cmd_make_release_notes)
 
     examples = subcommands.add_parser("update-example-urls")
@@ -137,8 +138,18 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     default_url = release_asset_url(repo, release_version, default_file)
     wayland_url = release_asset_url(repo, release_version, wayland_file)
 
+    notes_path = Path(args.notes_dir) / f"{release_version}.md"
+    if notes_path.exists():
+        if not notes_path.is_file():
+            raise RuntimeError(f"release notes path is not a file: {notes_path}")
+        editorial_notes = notes_path.read_text(encoding="utf-8").strip()
+        if not editorial_notes:
+            raise RuntimeError(f"release notes are empty: {notes_path}")
+    else:
+        editorial_notes = f"Release {release_version}."
+
     lines = [
-        f"Release {release_version}.",
+        editorial_notes,
         "",
         f"Supported compiler: `{read_pin().nightly}`. Install this compiler before running the examples.",
         "",

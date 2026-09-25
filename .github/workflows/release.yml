@@ -291,7 +291,7 @@ jobs:
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
-          release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL"
+          release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL" --notes-dir docs/releases
           github_token: ${{ github.token }}
 
       # The examples are packaged with their headers pointing at the default

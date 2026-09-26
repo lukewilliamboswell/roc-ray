@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-22-e494788" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-26-d6267b4" }
 
 # A connection's identity is private to the host. An application can hold and
 # copy a `Db` it was given, but cannot manufacture one from a raw integer and

@@ -2,7 +2,7 @@
 ## the task finishes, or press Escape to quit. This example introduces Tasks as
 ## work that may wait without pausing drawing, and Messages as the values
 ## completed tasks deliver to a later Input.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-22-e494788" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-26-d6267b4" }
 
 import rr.App
 import rr.Task

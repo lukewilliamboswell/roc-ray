@@ -12,7 +12,7 @@
 ## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-22-e494788",
+	roc: "nightly-2026-09-26-d6267b4",
 }
 
 import rr.App

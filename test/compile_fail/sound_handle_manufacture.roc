@@ -1,6 +1,6 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	roc: "nightly-2026-09-22-e494788",
+	roc: "nightly-2026-09-26-d6267b4",
 }
 
 # A sound remains opaque even though its representation is now a direct handle.

@@ -1,0 +1,401 @@
+# RocRay PDF theme.
+#
+# Shares the palette and typefaces of docs/theme/roc-ray.css so the manual and
+# the website read as one publication: warm sage neutrals, Space Grotesk for
+# headings, Plus Jakarta Sans for running text, and the gem's bundled M+ 1mn
+# for code.
+#
+# The fonts live in docs/theme/fonts and reach asciidoctor-pdf through the
+# pdf-fontsdir attribute set by scripts/build_manual.py, which lists that
+# directory ahead of GEM_FONTS_DIR so the bundled mono and fallback faces stay
+# available.
+extends: default
+
+# ---------------------------------------------------------------- palette
+#
+# Named here once; every rule below refers to these rather than repeating
+# hex values.
+brand:
+  ink: #1A1A1A            # darkest: headings
+  body: #3A3A3A           # running text
+  accent: #2B5EA7         # links and the one accent
+  muted: #6B6B6B          # captions, running heads, secondary labels
+  border: #C8C8C4         # borders that should be seen
+  border-light: #D4D4D0   # hairlines inside blocks
+  fill-light: #F0F0EC     # table heads, inline code
+  fill-warm: #F4F4F2      # code blocks, admonition and sidebar grounds
+  paper: #FFFFFF          # page
+
+font:
+  catalog:
+    merge: true
+    Space Grotesk:
+      normal: SpaceGrotesk-Regular.ttf
+      italic: SpaceGrotesk-Regular.ttf
+      bold: SpaceGrotesk-Bold.ttf
+      bold_italic: SpaceGrotesk-Bold.ttf
+    Plus Jakarta Sans:
+      normal: PlusJakartaSans-Regular.ttf
+      italic: PlusJakartaSans-Italic.ttf
+      bold: PlusJakartaSans-Bold.ttf
+      bold_italic: PlusJakartaSans-BoldItalic.ttf
+
+# ------------------------------------------------------------------- page
+page:
+  size: A4
+  margin: [0.78in, 0.95in, 0.72in, 0.95in]
+  background-color: $brand-paper
+  numbering:
+    start-at: body
+
+base:
+  font-family: Plus Jakarta Sans
+  font-size: 10
+  font-color: $brand-body
+  text-align: left
+  line-height-length: 15.4
+  line-height: $base-line-height-length / $base-font-size
+  border-color: $brand-border-light
+  border-radius: 2
+  border-width: 0.5
+
+role:
+  line-through:
+    text-decoration: line-through
+  subtle:
+    font-color: $brand-muted
+  lead:
+    font-size: 12
+    font-color: $brand-body
+    line-height: 1.55
+  term:
+    font-family: Space Grotesk
+    font-color: $brand-ink
+
+link:
+  font-color: $brand-accent
+
+prose:
+  margin-bottom: 9
+
+block:
+  margin-bottom: 12
+
+# --------------------------------------------------------------- headings
+#
+# Space Grotesk throughout. Chapter titles (h1) open a page well below the
+# head margin and carry a rule the width of the text block, so a chapter
+# start never reads as just another section.
+heading:
+  font-family: Space Grotesk
+  font-color: $brand-ink
+  font-style: bold
+  line-height: 1.18
+  margin-top: 20
+  margin-bottom: 7
+  min-height-after: 48
+  h1:
+    font-size: 26
+  h2:
+    font-size: 21
+    margin-page-top: 78
+    margin-bottom: 18
+    padding: [0, 0, 12, 0]
+    border-width: [0, 0, 1, 0]
+    border-color: $brand-accent
+  h3:
+    font-size: 14
+    margin-top: 24
+    margin-bottom: 8
+  h4:
+    font-size: 11.5
+    font-color: $brand-body
+    margin-top: 18
+  h5:
+    font-size: 10.5
+    font-color: $brand-body
+  h6:
+    font-size: 9.5
+    font-color: $brand-muted
+    text-transform: uppercase
+
+# ------------------------------------------------------------- title page
+title-page:
+  background-color: $brand-fill-light
+  text-align: left
+  logo:
+    display: none
+  title:
+    top: 38%
+    font-family: Space Grotesk
+    font-size: 40
+    font-color: $brand-ink
+    line-height: 1.05
+    margin-top: 0
+    margin-bottom: 16
+  subtitle:
+    font-family: Plus Jakarta Sans
+    font-size: 13.5
+    font-style: normal
+    font-color: $brand-accent
+    line-height: 1.45
+    margin-bottom: 30
+  authors:
+    font-family: Space Grotesk
+    font-size: 10
+    font-color: $brand-muted
+    text-transform: uppercase
+    margin-bottom: 4
+  revision:
+    font-family: Plus Jakarta Sans
+    font-size: 9.5
+    font-color: $brand-muted
+
+abstract:
+  font-color: $brand-accent
+  font-size: 11.5
+  line-height: 1.5
+  padding: [0, 0, 0, 14]
+  title:
+    font-family: Space Grotesk
+    font-color: $brand-ink
+
+# --------------------------------------------------------------- captions
+caption:
+  font-family: Space Grotesk
+  font-size: 8.5
+  font-color: $brand-muted
+  font-style: normal
+  text-align: left
+  margin-inside: 4
+  margin-outside: 0
+
+image:
+  align: center
+  caption:
+    text-align: center
+
+# ------------------------------------------------------------------- code
+code:
+  font-family: M+ 1mn
+  font-color: $brand-ink
+  background-color: $brand-fill-warm
+  border-color: $brand-accent
+  border-width: [0, 0, 0, 2.5]
+  border-radius: 0
+  padding: [9, 12, 9, 13]
+  font-size: 8.5
+  line-height: 1.4
+  linenum:
+    font-color: $brand-muted
+
+codespan:
+  font-family: M+ 1mn
+  font-size: 0.92em
+  font-color: $brand-ink
+  background-color: $brand-fill-warm
+  border-color: $brand-fill-warm
+  border-width: 0.5
+  border-offset: 1.2
+
+kbd:
+  background-color: $brand-fill-light
+  border-color: $brand-border
+  border-offset: 1.5
+  font-family: M+ 1mn
+  font-size: 0.9em
+
+button:
+  font-family: M+ 1mn
+  font-color: $brand-ink
+
+mark:
+  background-color: $brand-fill-light
+  border-offset: 1
+
+# ------------------------------------------------------------------ quote
+quote:
+  border-color: $brand-accent
+  border-width: 0
+  border-left-width: 2
+  padding: [2, 12, 2, 14]
+  font-color: $brand-accent
+  cite:
+    font-family: Space Grotesk
+    font-size: 8.5
+    font-color: $brand-muted
+
+verse:
+  border-color: $brand-accent
+  border-left-width: 2
+  font-color: $brand-accent
+
+sidebar:
+  background-color: $brand-fill-warm
+  border-color: $brand-border-light
+  border-width: 0.5
+  border-radius: 0
+  padding: [12, 14, 12, 14]
+  title:
+    font-family: Space Grotesk
+    font-color: $brand-ink
+    text-align: left
+
+example:
+  background-color: transparent
+  border-color: $brand-border-light
+  border-width: 0.5
+  border-radius: 0
+  padding: [12, 14, 2, 14]
+
+# ------------------------------------------------------------ admonitions
+admonition:
+  background-color: $brand-fill-warm
+  border-color: $brand-border-light
+  border-width: 0.5
+  border-radius: 0
+  column-rule-color: $brand-border
+  column-rule-width: 0.5
+  padding: [9, 12, 9, 12]
+  label:
+    font-family: Space Grotesk
+    font-size: 8
+    font-style: bold
+    font-color: $brand-accent
+    text-transform: uppercase
+    padding: [9, 10, 9, 12]
+    vertical-align: top
+  icon:
+    note:
+      stroke-color: $brand-accent
+      size: 18
+    tip:
+      stroke-color: $brand-accent
+      size: 18
+    warning:
+      stroke-color: $brand-ink
+      size: 18
+    important:
+      stroke-color: $brand-ink
+      size: 18
+    caution:
+      stroke-color: $brand-ink
+      size: 18
+
+# ----------------------------------------------------------------- tables
+#
+# The outer border width must stay non-zero: with a scalar 0 asciidoctor-pdf
+# strokes the head band and grid lines past the right edge of the text block.
+# Top and bottom rules only, which keeps the table open without the overhang.
+table:
+  border-color: $brand-border
+  border-width: [0.9, 0, 0.9, 0]
+  grid-color: $brand-border-light
+  grid-width: 0.5
+  cell-padding: [6, 8, 6, 8]
+  font-size: 9.5
+  head:
+    font-family: Space Grotesk
+    font-color: $brand-ink
+    font-style: bold
+    font-size: 9
+    background-color: transparent
+    border-bottom-width: 0.9
+    border-bottom-color: $brand-border
+  body:
+    stripe-background-color: $brand-fill-warm
+  foot:
+    background-color: $brand-fill-light
+  caption:
+    text-align: left
+
+# ------------------------------------------------------------------ lists
+list:
+  indent: 16
+  marker-font-color: $brand-accent
+
+ulist:
+  marker:
+    font-color: $brand-accent
+    disc:
+      content: "–"
+
+olist:
+  marker:
+    font-color: $brand-muted
+
+description-list:
+  term-font-style: bold
+  term-spacing: 3
+  description-indent: 18
+
+thematic-break:
+  border-color: $brand-border-light
+  border-width: 0.5
+  margin-top: 14
+  margin-bottom: 18
+
+# ------------------------------------------------------- table of contents
+#
+# Leaders only on the deeper levels: chapter entries are set in Space Grotesk
+# and carry their own weight, so dotting them adds texture without adding
+# information.
+toc:
+  font-color: $brand-body
+  indent: 14
+  line-height: 1.45
+  h2:
+    font-family: Space Grotesk
+    font-color: $brand-ink
+    font-size: 10.5
+    font-style: bold
+  h3:
+    font-color: $brand-body
+  dot-leader:
+    content: " ."
+    font-color: $brand-border-light
+    levels: 2 3
+  title:
+    font-family: Space Grotesk
+    font-size: 15
+    font-color: $brand-ink
+    text-align: left
+    margin-bottom: 14
+
+# -------------------------------------------------------- running content
+running-content:
+  start-at: body
+
+header:
+  height: 0.6in
+  font-family: Space Grotesk
+  font-size: 7.5
+  font-color: $brand-muted
+  text-transform: uppercase
+  border-color: transparent
+  border-width: 0
+  recto:
+    right:
+      content: '{chapter-title}'
+  verso:
+    left:
+      content: '{document-title}'
+
+footer:
+  height: 0.62in
+  font-family: Space Grotesk
+  font-size: 8
+  font-color: $brand-muted
+  border-color: $brand-border-light
+  border-width: 0.5
+  padding: [8, 0, 0, 0]
+  recto:
+    right:
+      content: '{page-number}'
+    left:
+      content: '{document-title}'
+  verso:
+    left:
+      content: '{page-number}'
+    right:
+      content: '{document-title}'

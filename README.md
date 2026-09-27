@@ -9,17 +9,6 @@ state and rules; RocRay provides drawing, audio, keyboard and mouse input,
 windows, recording, files, and networking. It runs on macOS (Intel and Apple
 Silicon), Linux x64, and Windows x64.
 
-The platform includes the complete RocRay API: value types, pure helpers, and
-host effects are documented and released together. Import them through your
-platform dependency, such as `rr.App`, `rr.Math`, and `rr.Assets`.
-
-## See what it can do
-
-These nine apps span small games, designed levels, creative tools, responsive
-interfaces, and scenes with thousands of moving objects. Each tile links to its
-complete Roc source; the [example guide](examples/README.md) covers the rest and
-suggests a learning path.
-
 <table>
   <tr>
     <td align="center"><a href="examples/cave_climb/main.roc"><img src="examples/gallery/cave_climb.webp" alt="Cave Climb gameplay" width="260"><br><strong>Cave Climb</strong></a><br>Designed level, jumping, camera, sound</td>
@@ -38,13 +27,6 @@ suggests a learning path.
   </tr>
 </table>
 
-The capture examples also produce deterministic media directly, including this
-[WebM plot recording](examples/gallery/capture_plot.webm).
-
-For performance investigation, [RocRay Observatory](docs/observatory.md)
-records host-cycle summaries and opt-in application annotations to a bounded,
-queryable SQLite `.rrstats` capture.
-
 ## Try it
 
 Download the [0.10.0-rc3 example starter](https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/examples-0.10.0-rc3.zip)
@@ -57,92 +39,68 @@ roc version
 roc examples/hello_world/main.roc
 ```
 
-Each starter includes immutable platform URLs and the matching compiler in its
-application headers. The header records the requirement; it does not install
-or select the compiler. Run from the extracted directory so asset paths resolve.
-Use `roc build` when producing an executable for distribution.
-
-Choose a starting point from the [example guide](examples/README.md). The
-[platform release](https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0-rc3)
-contains the tested downloads; the platform's development compiler can be newer.
-
-`main` contains development source, including examples of unreleased APIs.
-To run those against the checkout, follow [Contributing](CONTRIBUTING.md) and use
-`scripts/run-example.py examples/hello_world`. Development checks rebind temporary
-copies to the platform source and its compiler, while published starters keep
-their own pins.
-
-## The programming model
-
-A RocRay app provides three functions:
-
-- `init!` runs once. It sets the window options, loads what the app needs, and
-  creates the starting state.
-- `update!` handles input such as keys and mouse movement, then returns the next
-  state.
-- `render!` draws that state on the screen.
-
-`init!` receives `App.Io`; the update signature is
-`update!(model, input, io)`. Select a service and call its receivers:
+## A whole app
 
 ```roc
-files = io.files()
-Task.spawn!(input, || Loaded(files.read_text!("data.json")))
-# In a task or init!:
-response = io.http().send!(request)?
+app [Model, program] { rr: platform "<platform bundle URL from the release>" }
+
+import rr.App
+import rr.Color
+import rr.Draw
+
+Model : { frames : U64 }
+
+Msg : []
+
+program = { init!, update!, render! }
+
+init! : App.Init(Model, [])
+init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |model, input, _io| {
+    if input.devices.key_pressed(KeyEscape) {
+        Err(Exit(0))
+    } else {
+        Ok({ frames: model.frames + 1 })
+    }
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |_model, frame| {
+    frame.clear!(Color.black)
+    frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+    Ok({})
+}
 ```
 
-Every app can draw, read input, play audio, print to stdout and stderr, write
-captures under its output directory, and read the directory beside its
-executable. Reaching further -- a network origin, a directory, a program, an
-environment variable, the clipboard -- is declared in the startup config, and
-the declaration is the grant:
+`init!` creates the starting state, `update!` folds each frame's input into the
+next state, and `render!` draws it. Work that waits, such as reading a file or
+fetching a URL, runs as a task and reports back to a later `update!`. What an
+app reaches beyond its own window -- the network, a directory, another program
+-- is declared in its startup config.
 
-```roc
-config =
-    App.default
-    .with_permission(HttpOrigin("https://api.example.com"))
-    .with_permission(Directory("saves", ReadWrite))
-```
+## Documentation
 
-There are no launch flags for this: what an app can reach is written in its
-source. A target outside every declared scope returns `PermissionDenied`, and
-using a facility the app never declared stops it with a message naming the
-declaration to add. This is platform policy that holds because Roc code can
-only act through the platform; it is not an operating-system sandbox.
+The [RocRay manual](https://lukewilliamboswell.github.io/roc-ray/manual/) is
+published as a website and a PDF. Its chapters are the AsciiDoc files in
+[`docs/`](docs/), which you can also read here:
 
-Reading a file or waiting for a network reply can take time. Start that work as
-a task so the app can keep updating and drawing; when it finishes, `update!`
-receives the result.
-
-Read [`hello_world/main.roc`](examples/hello_world/main.roc) for the smallest
-complete app, then choose a project from the
-[example guide](examples/README.md). The
-[API reference](https://lukewilliamboswell.github.io/roc-ray/) documents the
-available features and functions.
-
-Configure a shared startup font when one font serves most of the app. Loading
-a font file reads the working directory, so it needs that declared; the
-built-in font does not:
-
-```roc
-config =
-    App.default
-    .with_default_font({ path: "assets/body.ttf", size: 32 })
-    .with_permission(Directory("assets", ReadOnly))
-font = io.default_font!()?
-```
-
-`Text.Font` carries both its opaque host handle and an immutable metric
-snapshot, so `font.measure(...)` is pure.
-
-## Project links
-
-- [Examples and learning path](examples/README.md)
+- [Getting started](docs/getting-started.adoc): install, run an example, and
+  write the smallest app
+- [Example gallery](docs/examples.adoc): what each example shows, and a
+  learning path
+- Guides: [the app model](docs/app-model.adoc), [input](docs/input.adoc),
+  [drawing](docs/drawing.adoc), [tasks](docs/tasks.adoc),
+  [declaring what an app reaches](docs/permissions.adoc),
+  [files and assets](docs/files-and-assets.adoc), [audio](docs/audio.adoc),
+  [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
+  [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)
 - [API reference](https://lukewilliamboswell.github.io/roc-ray/)
-- [Latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
-- [Architecture](design.md)
-- [Contributing](CONTRIBUTING.md)
+- [Architecture](docs/architecture.adoc)
+- [Contributing](docs/contributing.adoc)
+- [Release notes](docs/releases/) and the
+  [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
 
 RocRay follows Roc's new compiler closely, and its APIs may still change as the
 language evolves. Bug reports, documentation improvements, approachable APIs,

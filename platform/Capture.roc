@@ -5,11 +5,11 @@
 ## image at another size.
 ##
 ## Every path here is relative to the output directory set with
-## `App.default.with_output_dir`, and one that would escape it -- absolute, or
-## containing `..` -- is refused rather than rewritten. Capture is the only
-## path-sandboxed writer the platform grants: `Files.Access.write_text!` and
-## `Files.Access.write_bytes!` write wherever the process may write, while everything
-## here is confined to the output directory.
+## `App.default.with_output_dir`, and one that would escape it -- absolute,
+## containing `..`, or passing through a symbolic link -- is refused rather
+## than rewritten. Captures are the app's own output, so they need no declared
+## permission; being confined to the output directory is what makes that
+## safe.
 ##
 ## `start!` and `stop!` control recording. `screenshot!` writes a presented
 ## frame, and `screenshot_texture!` writes an offscreen render texture.

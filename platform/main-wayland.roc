@@ -143,6 +143,7 @@ platform ""
 		"roc_draw_text_raw": Host.draw_text!,
 		"roc_draw_triangle_lines_raw": Host.draw_triangle_lines!,
 		"roc_draw_triangle_raw": Host.draw_triangle!,
+		"roc_app_report_error": Host.app_report_error!,
 		"roc_files_open_root": Host.files_open_root!,
 		"roc_files_designate": Host.files_designate!,
 		"roc_files_read_text": Host.files_read_text!,
@@ -356,7 +357,7 @@ init_for_host! = |authority|
 	match (program.init!.run!)(App.Io.for_host(authority)) {
 		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("init!", Str.inspect(other))
 	}
 
 ## Advance the model by one cycle.
@@ -381,7 +382,7 @@ update_for_host! = |boxed_model, { devices, window, time, task_results, capture,
 	match (program.update!)(model, input, App.Io.for_host(authority)) {
 		Ok(next) => Ok(Box.box(next))
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("update!", Str.inspect(other))
 	}
 }
 
@@ -430,8 +431,18 @@ render_for_host! = |boxed_model| {
 	match (program.render!)(model, frame) {
 		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("render!", Str.inspect(other))
 	}
+}
+
+## Stop the app over an error a callback returned, other than `Exit`, saying
+## which callback and what the error was. Without this an app whose `init!`
+## fails -- a store that would not open, a missing file -- closed with no word
+## about why.
+stopped! : Str, Str => Try(a, I64)
+stopped! = |callback, error| {
+	Host.app_report_error!(callback, error)
+	Err(-1)
 }
 
 ## Drop the final boxed model at host shutdown.

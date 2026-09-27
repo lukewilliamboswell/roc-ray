@@ -88,6 +88,7 @@ init! = App.init_for_args(
 			"undeclared-clipboard-read" => undeclared!(denied(io.clipboard().read_text!()))
 			"undeclared-clipboard-write" => undeclared!(denied(io.clipboard().set_text!("must never reach the clipboard")))
 			"undeclared-files" => undeclared!(denied(io.files().working_directory_read!()))
+			"init-error" => Err(Failed("init failed on purpose"))
 			"undeclared-app-id" => undeclared!(denied(io.files().app_data!()))
 			other => Err(Failed("unknown probe mode: ${other}"))
 		}

@@ -586,6 +586,11 @@ def run_capability_probe(root: Path, packages: local_bundles.ServedPackages, ver
         if result.returncode != 1 or "startup config is invalid" not in result.stderr:
             failures.append(f"capability probe {name}: startup was not refused: {result.returncode} {result.stderr[-400:]}")
 
+    # An error init! returns stops the app and says which callback and what.
+    init_error, _ = probe("init-error", "--probe=init-error")
+    if init_error.returncode == 0 or "init! returned an error" not in init_error.stderr or "init failed on purpose" not in init_error.stderr:
+        failures.append(f"capability probe init-error: the error was not reported: {init_error.returncode} {init_error.stderr[-400:]}")
+
     crashed, _ = probe("crash", "--probe-crash")
     if crashed.returncode != 1 or "CRASH_PAYLOAD_VISIBLE" not in crashed.stdout + crashed.stderr:
         failures.append("capability probe crash: the failure or its payload was lost")

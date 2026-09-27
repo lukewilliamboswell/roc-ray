@@ -796,6 +796,12 @@ Host := [].{
 	## Legal only in `init!`.
 	app_read_env! : Resource.Authority, Str => Try(Str, [PermissionDenied, NotFound])
 
+	## Report the error a callback returned, other than `Exit`, before the host
+	## stops: the callback's name and the error as `Str.inspect` renders it.
+	## Platform plumbing for the adapters in `main.roc`, not an app effect, so
+	## legal in every phase.
+	app_report_error! : Str, Str => {}
+
 	## Random interface
 	## Draw from operating-system entropy.
 	##

@@ -13278,6 +13278,14 @@ comptime {
     }
 }
 
+/// Arguments for Host.app_report_error!
+/// Roc signature: Str, Str => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostApp_report_errorArgs = extern struct {
+    arg0: RocStr,
+    arg1: RocStr,
+};
+
 /// Arguments for Host.files_open_root!
 /// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PermissionDenied, Unavailable])
 /// Refcounted fields are owned by the hosted function.
@@ -17854,6 +17862,14 @@ pub extern fn roc_draw_triangle_lines_raw(arg0: HostDraw_triangle_linesArgs) cal
 /// Hosted symbol for Host.draw_triangle!
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba } => {}
 pub extern fn roc_draw_triangle_raw(arg0: HostDraw_triangleArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.app_report_error!
+/// Roc signature: Str, Str => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+///     arg1.decref(roc_host);
+pub extern fn roc_app_report_error(arg0: RocStr, arg1: RocStr) callconv(.c) void;
 
 /// Hosted symbol for Host.files_open_root!
 /// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PermissionDenied, Unavailable])

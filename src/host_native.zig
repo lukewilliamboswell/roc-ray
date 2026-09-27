@@ -1363,6 +1363,18 @@ fn exportedFilesWriteBytes(root_arg: abi.RocStr, path_arg: abi.RocStr, bytes_arg
     return hostedFilesWriteBytes(activeHost(), root_arg, path_arg, bytes_arg);
 }
 
+/// `Host.app_report_error!`: the platform adapter reporting that a callback
+/// returned an error other than `Exit`, just before the app stops.
+///
+/// Printed straight to standard error rather than through the queued writer:
+/// the app is about to end, and this is the one line that says why.
+fn hostedAppReportError(callback: abi.RocStr, message: abi.RocStr) callconv(.c) void {
+    const roc_host = activeHost();
+    defer callback.decref(roc_host);
+    defer message.decref(roc_host);
+    std.debug.print("roc-ray: {s} returned an error: {s}\n", .{ callback.asSlice(), message.asSlice() });
+}
+
 /// Where a directory handle may start, as `Files` asks for it.
 const FilesRoot = @FieldType(abi.HostFiles_open_rootArgs, "arg1");
 
@@ -9989,6 +10001,7 @@ comptime {
         @export(&hostedEntropy, .{ .name = "roc_random_entropy" });
         @export(&hostedExit, .{ .name = "roc_app_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
+        @export(&hostedAppReportError, .{ .name = "roc_app_report_error" });
         @export(&capsExportedFilesOpenRoot, .{ .name = "roc_files_open_root" });
         @export(&capsExportedFilesDesignate, .{ .name = "roc_files_designate" });
         @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });

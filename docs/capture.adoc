@@ -1,0 +1,140 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#capture]
+= Screenshots and recordings
+
+An app can save its own rendered output as PNG screenshots, PNG sequences,
+animated GIFs, or WebM video, and read pixels back. Combined with a hidden
+window and scripted input, that makes an app its own batch renderer or demo
+recorder. This chapter assumes <<app-model>> and <<tasks>>.
+
+== The output directory
+
+Every capture path is relative to the app's output directory, which is the
+working directory unless the config says otherwise:
+
+[source,roc]
+----
+config = App.default.with_output_dir("captures")
+----
+
+Captures are the app's own output, so writing them needs no declaration. In
+exchange the directory is confined: it must be relative to the working
+directory, with no `..`, and the app refuses to start with one that is not.
+Every capture path resolves beneath it, and a path that would escape it is
+refused rather than rewritten. The directory is created on first use.
+
+== Screenshots
+
+`io.capture().screenshot!(path)` writes one PNG of the next presented frame.
+It waits for that frame to be drawn, read back, and written, so it is legal
+only in a task -- not even in `init!`, which runs before any frame exists. To
+capture the first frame, spawn it on the first cycle:
+
+[source,roc]
+----
+if input.time.cycle_count == 0 {
+    Task.spawn!(input, || Shot(io.capture().screenshot!("frame0.png")))
+}
+----
+
+Only one screenshot can be in flight at a time. A headless run has no
+framebuffer, so a screenshot there answers `Ok({})` without writing anything.
+
+`io.capture().screenshot_texture!(target, path)` exports an offscreen
+`Draw.RenderTexture` instead, at the texture's own size -- useful for an image
+larger than the window. {src}/examples/postcard_studio/main.roc[Postcard
+Studio] exports at twice the window size.
+
+== Recordings
+
+A recording is a description built from `Capture.default`, a 25 frames per
+second, half-scale GIF of at most 300 frames:
+
+[source,roc]
+----
+recording = Capture.default
+    .with_path("demo.webm")
+    .with_format(WebM)
+    .with_fps(30)
+    .with_timing(FixedStep)
+----
+
+[cols="1,3",options="header"]
+|===
+|Setting |Choices
+|`with_format` |`Png` (numbered stills), `Gif`, or `WebM` (VP8). GIF and WebM are encoded incrementally, so memory stays bounded by one frame.
+|`with_scale` |`Full`, `Half`, `Quarter`, or `Ratio(...)`, applied after rendering; it shrinks the file without changing the window
+|`with_timing` |`RealTime`, or `FixedStep`, which reports exactly `1/fps` as each frame's elapsed time for smooth, reproducible output
+|`with_max_frames`, `with_every_nth` |How long to record, and how many frames to skip
+|`with_cursor` |`NoCursor` or `DrawCursor`; the operating system's pointer is not part of the framebuffer
+|`with_quality` |GIF palette effort: `Best`, `Balanced`, or `Fast`
+|===
+
+Start and stop it with the capture service, from `init!`, `update!`, or a
+task:
+
+[source,roc]
+----
+_ = io.capture().start!(recording)
+# ...later
+_ = io.capture().stop!()
+----
+
+`App.default.with_recording(recording)` stores a recording in the config, but
+only as a description: starting it is always an explicit `start!`.
+
+The outcome arrives in `input.capture` on the following cycles: `Active` with
+the frames recorded so far, then `Finished` with the frame count and file size,
+or `Failed` with a reason. A recording also finishes when it reaches its frame
+limit or the app exits.
+
+With `FixedStep` timing, the same app and the same input produce the same
+frames on every run.
+
+== Hidden windows
+
+`App.default.with_visible(Bool.False)` opens the window hidden. It still
+renders on the GPU, so capture works exactly as with a visible window, and an
+app can render a chart or a clip to a file without a window appearing. A
+hidden window still needs a display server; on a machine without one, wrap the
+run in `xvfb-run`. {src}/examples/capture_plot/main.roc[Capture Plot] is a
+hidden-window WebM batch render.
+
+== Scripted input
+
+`Keys.set_source!`, `Keys.set_text!`, and `Mouse.set_source!` let an app drive
+its own keyboard, typed text, and pointer. Scripted input travels the same path
+as real input, so a recorded demo exercises the app's ordinary code:
+
+[source,roc]
+----
+Keys.set_source!(Keys.holding([KeyRight]))
+Keys.set_text!(Keys.typing("hello"))
+----
+
+While a script drives a device, real input from that device is ignored.
+{src}/examples/capture_ui_demo/main.roc[Capture UI Demo] records a
+reproducible interface walkthrough this way. The host's `--host-keys` and
+`--host-text` switches script input from the command line instead; see
+<<testing>>.
+
+== Reading pixels
+
+`pixel_at!` and `read_region!` return pixels from the last presented frame or
+from a render texture, without writing a file. Neither is legal in `render!`.
+{src}/examples/input_inspector/main.roc[Input Inspector] uses one as an
+eyedropper.
+
+== Further reading
+
+* The `Capture`, `Keys`, and `Mouse` pages of the {api}[API reference].
+* {src}/examples/capture_screenshot/main.roc[Capture Screenshot] and
+  {src}/examples/breakout/main.roc[Breakout], which can record its own demo.

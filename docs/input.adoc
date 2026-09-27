@@ -1,0 +1,189 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#input]
+= Input, time, and the window
+
+Each cycle, `update!` receives an `App.Input` describing what the platform
+observed since the previous cycle. This chapter covers the keyboard, mouse,
+gamepads, typed text, time, the window, and dropped files. It assumes
+<<app-model>>.
+
+== Two kinds of information
+
+Input carries two different kinds of fact, and the difference matters when
+you read it:
+
+* A _state sample_ is the latest value at the moment the cycle began: whether
+  a key is held, where the pointer is, how far a gamepad stick is pushed.
+* An _interval event_ is something that happened since the previous input: a
+  key press, a release, a click, a wheel notch, a typed character.
+
+A key tapped quickly between two cycles is never held at a cycle boundary, but
+the press and the release still arrive as events. RocRay records keyboard,
+mouse-button, wheel, and text events as the window system delivers them, so an
+event that reaches the app is in the next input, never silently lost.
+
+== The keyboard
+
+Read keys through the devices snapshot:
+
+[source,roc]
+----
+devices = input.devices
+jump = devices.key_pressed(KeySpace)     # went down this cycle
+running = devices.key_down(KeyLeftShift) # held right now
+released = devices.key_released(KeyW)    # came up this cycle
+----
+
+`key_pressed` and `key_released` mean "at least once since the previous
+input". Several presses of the same key in one interval collapse into one
+answer. When the count or the order matters -- a double tap, text editing where
+a keystroke lands between two characters -- read `devices.events` instead
+(see <<input-events>>).
+
+By default, Escape closes the window. Change that with
+`App.default.with_exit_key(...)`; `NoExitKey` leaves closing to the window's
+close button and your own `update!`.
+
+=== Typed text
+
+`devices.text_input` holds the Unicode codepoints typed since the previous
+input, in the order typed and according to the user's keyboard layout. It is
+distinct from which physical keys are down. Up to 32 codepoints are delivered
+per input; if more were typed, the rest are discarded and
+`devices.text_input_overflow` is set.
+
+== The mouse
+
+[source,roc]
+----
+mouse = input.devices.mouse
+pointer = mouse.position()           # { x, y } in window coordinates
+held = mouse.button_down(Left)
+clicked = mouse.button_pressed(Left)
+scroll = mouse.wheel_delta()         # every notch this interval, summed
+----
+
+Positions use the same logical coordinates as drawing: x grows to the right
+and y grows downward. `mouse.delta()` is the movement since the previous input.
+
+Change the cursor's shape with `Mouse.set_cursor!` and its mode (for example,
+hidden) with `Mouse.set_cursor_mode!`. Both are legal in `init!`, `update!`,
+and tasks.
+
+== Gamepads
+
+The platform samples up to four gamepads once per cycle. Resolve one from the
+snapshot and query it straight away:
+
+[source,roc]
+----
+match input.devices.gamepad(pad_id) {
+    Connected(pad) => pad.left_stick()
+    Disconnected => { x: 0, y: 0 }
+}
+----
+
+Gamepad buttons have no event callback, so their pressed and released answers
+come from comparing two consecutive samples: a button pressed and released
+between two cycles is not seen. Hold a button for at least one cycle to be
+sure it registers. Gamepads never appear in `devices.events`.
+
+[#input-events]
+== The ordered event record
+
+`devices.events` lists every key edge, click, wheel notch, and typed character
+since the previous input, in the order they arrived, across all of those
+sources:
+
+[source,roc]
+----
+Event : [
+    KeyPressed(Keys.Key),
+    KeyReleased(Keys.Key),
+    ButtonPressed(Mouse.Button, { x : F32, y : F32 }),
+    ButtonReleased(Mouse.Button, { x : F32, y : F32 }),
+    Wheel({ x : F32, y : F32 }),
+    Text(U32),
+]
+----
+
+Each click carries the pointer position where it landed. The list holds up to
+256 events per input; if more arrive, the rest are discarded and
+`devices.events_overflow` is set. The coalesced answers (`key_pressed`, the
+wheel sum, `text_input`) keep recording even when the list is full.
+
+== Time
+
+`input.time` describes this cycle:
+
+* `elapsed_seconds` is the simulation duration of this cycle. Multiply speeds
+  by it for movement that does not depend on the frame rate.
+* `cycle_count` counts cycles from zero.
+
+[source,roc]
+----
+next = model.position.add(model.velocity.scale(input.time.elapsed_seconds))
+----
+
+`Time.now!` reads the wall clock as a UTC `Time.Timestamp`. It does not wait,
+and it is legal in `init!`, `update!`, and tasks. Use `input.time`, not the
+wall clock, for animation and physics, so a recorded run can replay them
+exactly.
+
+=== Randomness
+
+Keep a `Random.State` in the model and draw from it with pure generators, so a
+run can be reproduced from its seed. Seed it once in `init!`, from
+`io.entropy!()` for a run that should vary, or from a constant for one that
+must reproduce:
+
+[source,roc]
+----
+generation = Random.step(model.rng, Random.bounded_i32(0, 799))
+Ok({ ..model, rng: generation.state, x: generation.value })
+----
+
+== The window
+
+`input.window` reports the window's size, whether it is focused, and whether
+it is minimized. The size is in logical units that match mouse coordinates and
+drawing; on a high-DPI display the framebuffer has more pixels than that, and
+`Window.scale!()` returns the factor between the two.
+
+Window effects are legal in `init!`, `update!`, and tasks:
+
+* `Window.suggest_size!`, `Window.suggest_min_size!`,
+  `Window.suggest_position!`, and `Window.suggest_monitor!` ask the window
+  manager for new geometry. They are named `suggest` because the window
+  manager may alter or ignore the request; the next input's `window` field is
+  authoritative.
+* `Window.set_target_fps!` changes frame pacing.
+* `Window.monitors!()` lists the connected monitors.
+
+== Dropped files
+
+When the user drops files on the window, `input.dropped` lists them for that
+cycle, each with its path and the pointer position where it landed, and
+`input.dropped_overflow` is set if more arrived than the platform keeps.
+
+A dropped path is an observation, not access. To read the file, turn the path
+into a handle in the same `update!` that received it; see
+<<files-designated>>.
+
+== Further reading
+
+* {src}/examples/input_inspector/main.roc[Input Inspector] shows every device
+  snapshot live.
+* {src}/examples/responsive_ui/main.roc[Responsive Settings] handles resizing,
+  display scaling, and monitor placement.
+* The `Devices`, `Keys`, `Mouse`, `Gamepad`, `Window`, and `Time` pages of the
+  {api}[API reference].
+* The input guarantees are stated precisely in <<architecture>>.

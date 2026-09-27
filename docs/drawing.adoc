@@ -1,0 +1,196 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#drawing]
+= Drawing
+
+`render!` draws the model through a `Draw.Frame`. This chapter covers shapes,
+colours, text, textures, and the scoped drawing modes -- cameras, clipping,
+blending, shaders, and offscreen targets. It assumes <<app-model>>.
+
+== The frame
+
+Drawing is immediate: each frame, `render!` draws the whole scene from the
+model, in order, and nothing is retained between frames. Every drawing effect
+takes the frame, and is legal only in `render!`:
+
+[source,roc]
+----
+render! = |model, frame| {
+    frame.clear!(Color.from_hex_rgb(0x0d1425))
+    frame.rectangle!({ x: 40, y: 40, width: 200, height: 90, style: Draw.filled(Color.white) })
+    frame.circle!({ center: model.pointer, radius: 18, style: Draw.outlined(Color.red, 3) })
+    Ok({})
+}
+----
+
+Pass the frame to your own drawing helpers as an argument. Do not keep it in
+the model: it is only valid while `render!` runs.
+
+Most shapes have both a receiver form and a free-function form, such as
+`frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`. The available shapes
+include `rectangle!`, `rounded_rectangle!`, `circle!`, `line!`, `triangle!`,
+`convex_polygon!`, and gradient fills.
+
+Coordinates are logical window units: x grows to the right, y grows downward,
+and they match mouse positions. `frame.size!()` answers the size of the
+surface being drawn to.
+
+== Colours
+
+A colour is a plain `Color.Rgba` value with 8-bit channels. Use the named
+constants, read a hex value, or make one translucent:
+
+[source,roc]
+----
+accent = Color.from_hex_rgb(0x2f80ed)
+glow = Color.with_alpha(accent, 100)
+----
+
+== Text
+
+For a quick label, `frame.text_at!` draws with the built-in font. For text you
+draw every frame, prepare it once and keep the result in the model; a
+prepared text is laid out once and drawn without allocating:
+
+[source,roc]
+----
+# In init!: prepare and keep it.
+title = Text.from("Hello", font).size(38).prepare!()?
+
+# In render!: draw it, aligned on a point.
+model.title.draw!(frame, { pos: { x: 400, y: 60 }, color: Color.white, align: (Top, Center) })
+----
+
+Preparing text is legal in `init!`, `update!`, and tasks, not in `render!`.
+`Text.from(str, font).size(n).draw!(frame, ...)` draws unprepared text with
+alignment when it changes every frame.
+
+=== Fonts
+
+`Draw.default_font!()` returns the backend's built-in font.
+`App.default.with_default_font({ path, size })` loads one font for the whole
+app at startup, returned by `io.default_font!()` in `init!`.
+`Draw.font_from_bytes!` builds a font from bytes the app already holds, and
+`Draw.load_store_font!` loads one from an asset store (see <<files-and-assets>>).
+
+A `Text.Font` carries its metrics with it, so measuring text is a pure
+function that layout code can call anywhere, including in tests:
+
+[source,roc]
+----
+size = font.measure({ text: "Score", size: 24, spacing: Text.default_spacing })
+----
+
+== Textures and sprites
+
+A texture is an image on the GPU. Load textures in `init!` (see
+<<files-and-assets>>) or generate them from pixels, keep them in the model, and
+draw them:
+
+[source,roc]
+----
+frame.texture!(Draw.texture_at(model.logo, { x: 32, y: 32 }))
+----
+
+`Draw.texture_draw` gives a configuration with an explicit source rectangle,
+destination, origin, rotation, and tint. The `Sprite` module adds pure helpers
+for spritesheet frames and simple animation, so animation state can advance in
+`update!` and be drawn in `render!`.
+
+Textures are released automatically when the last reference to them goes
+away; there is no `unload` to call. Creating or changing a texture from
+pixels the app holds -- `Assets.texture_from_bytes!`,
+`Assets.generate_color_texture!`, `Assets.update_texture!` -- is legal in
+`init!`, `update!`, and tasks.
+
+=== Drawing many sprites at once
+
+Each `texture!` call crosses from Roc to the host, and that crossing, not the
+drawing itself, is what limits how many sprites a frame can afford.
+`frame.texture_instances!(texture, instances)` draws a whole list of instances
+of one texture in a single call:
+
+[source,roc]
+----
+frame.texture_instances!(model.spark, model.particles)
+----
+
+See {src}/examples/particles/main.roc[Particles] for thousands of sprites a
+frame.
+
+== Scoped drawing
+
+Some drawing modes apply to a group of drawing calls. Each is a function that
+takes a callback, runs it with the mode active, and restores the previous
+state however the callback ends -- including when it returns an error:
+
+[cols="1,3",options="header"]
+|===
+|Scope |Effect on the callback's drawing
+|`frame.with_camera!(camera, callback)` |Draws in world space through a 2D camera
+|`frame.with_scissor!(rect, callback)` |Clips drawing to a screen rectangle
+|`frame.with_blend_mode!(mode, callback)` |Uses one of raylib's built-in blend equations
+|`frame.with_shader!(shader, callback)` |Applies a shader
+|`frame.with_render_texture!(target, callback)` |Draws into an offscreen texture instead of the window
+|===
+
+Scopes nest. They return `Try`, with `ScopeLimit` when nesting goes deeper than
+the host allows:
+
+[source,roc]
+----
+camera = Camera.centered(model.player, Math.vec2(800, 600))
+frame.with_camera!(camera, |world| {
+    world.circle!({ center: model.player, radius: 12, style: Draw.filled(Color.white) })
+    Ok({})
+})?
+----
+
+Cameras are pure values; `Camera` converts between world and screen
+coordinates, so `update!` can use the same camera for hit testing.
+
+=== Offscreen targets and shaders
+
+`Draw.RenderTexture.load!` creates an offscreen target, and
+`Draw.Shader.from_source!` compiles a shader from source text; both are legal
+in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a shader from
+an asset store and waits, so it belongs in `init!` or a task. Shader uniforms
+are typed handles resolved once and kept, so a setter of the wrong type does
+not compile.
+
+See {src}/examples/post_process/main.roc[Post Process] for render textures,
+blend scopes, shaders, and cached uniform locations, and
+{src}/examples/postcard_studio/main.roc[Postcard Studio] for exporting an
+offscreen target larger than the window.
+
+== Tilemaps
+
+The `Tilemap` module draws maps made in the https://www.mapeditor.org/[Tiled]
+editor. Load the `.tmx` file (see <<files-and-assets>>), bind each tileset to a
+loaded texture, and keep the built map in the model:
+
+[source,roc]
+----
+tilemap = Tilemap.from_raw(raw)
+    .with_origin({ x: 0, y: 0 })
+    .with_tileset_texture(1, tiles)
+    .build()?
+----
+
+`tilemap.draw_all!(frame)` draws it. Grid queries and coordinate conversions
+are pure, so `update!` can use them for collision and picking. See
+{src}/examples/top_down/main.roc[Top Down] and
+{src}/examples/cave_climb/main.roc[Cave Climb].
+
+== Further reading
+
+* The `Draw`, `Text`, `Color`, `Camera`, `Sprite`, `Texture`, `Tilemap`, and
+  `Math` pages of the {api}[API reference].
+* <<capture>> to save what you draw as images and video.

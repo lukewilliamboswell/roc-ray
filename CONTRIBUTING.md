@@ -672,21 +672,37 @@ Before opening a PR:
   files, generated output, platform-reference churn, binaries, or unrelated
   local edits.
 
-## External service permissions
+## Declared permissions
 
-The development host denies external services unless launched with
-`--host-caps-allow-all`. Pass it explicitly when running an example that reads
-assets, accesses files or the network, uses the clipboard, or writes capture
-output. `scripts/run-example.py` forwards it after `--`; it never grants it
-implicitly. Existing integration probes request it explicitly where they test
-external services. Permission probes also run without it to test refusal.
+An app's reach beyond its own resources is declared in its startup `Config`
+with `Permission`; there is no launch flag. The host validates the
+declarations into `src/permissions.zig` after the config callback and before
+`init!`, and every `caps*` wrapper in `src/host_native.zig` asks that policy
+before any native work:
+
+- `allow` runs the effect;
+- `out_of_scope` releases the transferred arguments and returns typed
+  `PermissionDenied` through `refuseEffect`;
+- `undeclared` is a programmer error, raised by `admitDeclared` with the
+  declaration that would permit the effect.
+
+Adding a gated effect means choosing its tier. An effect on the app's own
+resources (standard streams, captures, the bundle) checks only that the
+authority is live. One that reaches further names a `permissions.Facility`
+and scopes its target with an `admit*` check; extend the policy, its unit
+tests, `Permission.roc`, and the capability probe in `test/capabilities`
+together. An effect whose target changes during the work, as an HTTP redirect
+does, checks every step.
+
+Test apps declare what they use, as examples do. `test/capabilities` chooses
+its declarations from argv and covers scoped refusal, undeclared use, and
+invalid startup configuration.
 
 `App.Io` is supplied to `init!` and as the third `update!` argument. Delegate
 narrow receivers (`Files.Access`, `Http.Client`, and so on) to helpers and tasks.
-Permission checks precede native work and consume transferred arguments on
-refusal. Selecting a receiver is pure and allocates no host resource. The
-private scalar identity belongs to one application lifetime, is not a native
-pointer, and is checked against the host's fixed launch policy.
+Selecting a receiver is pure and allocates no host resource. The private scalar
+identity belongs to one application lifetime and is not a native pointer; a
+test stub or an identity from an earlier lifetime is refused.
 
 A recording in `App.Config` is a description. Start it explicitly with
 `io.capture().start!(recording)`; configuration does not authorize output.

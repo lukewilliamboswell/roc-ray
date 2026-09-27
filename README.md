@@ -92,18 +92,24 @@ Task.spawn!(input, || Loaded(files.read_text!("data.json")))
 response = io.http().send!(request)?
 ```
 
-Development builds deny external services by default. Launch a trusted app with
-`--host-caps-allow-all` to grant the previous broad behavior:
+Every app can draw, read input, play audio, print to stdout and stderr, write
+captures under its output directory, and read the directory beside its
+executable. Reaching further -- a network origin, a directory, a program, an
+environment variable, the clipboard -- is declared in the startup config, and
+the declaration is the grant:
 
-```sh
-scripts/run-example.py examples/http_fetch -- --host-caps-allow-all
+```roc
+config =
+    App.default
+    .with_permission(HttpOrigin("https://api.example.com"))
+    .with_permission(Directory("saves", ReadWrite))
 ```
 
-Files (including cwd and asset files), networking, processes, SQLite,
-environment, clipboard, stdout/stderr, and capture output otherwise return
-`PermissionDenied`. Drawing, input, generated resources, audio playback, clocks,
-and timers remain available. This is a host API policy, not an OS sandbox;
-allow-all does not confine files, network destinations, or child processes.
+There are no launch flags for this: what an app can reach is written in its
+source. A target outside every declared scope returns `PermissionDenied`, and
+using a facility the app never declared stops it with a message naming the
+declaration to add. This is platform policy that holds because Roc code can
+only act through the platform; it is not an operating-system sandbox.
 
 Reading a file or waiting for a network reply can take time. Start that work as
 a task so the app can keep updating and drawing; when it finishes, `update!`
@@ -116,10 +122,14 @@ complete app, then choose a project from the
 available features and functions.
 
 Configure a shared startup font when one font serves most of the app. Loading
-a font file requires `--host-caps-allow-all`; the built-in font does not:
+a font file reads the working directory, so it needs that declared; the
+built-in font does not:
 
 ```roc
-config = App.default.with_default_font({ path: "assets/body.ttf", size: 32 })
+config =
+    App.default
+    .with_default_font({ path: "assets/body.ttf", size: 32 })
+    .with_permission(Directory("assets", ReadOnly))
 font = io.default_font!()?
 ```
 

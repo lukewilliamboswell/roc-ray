@@ -23,6 +23,7 @@ assert SPEC and SPEC.loader
 helpers = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = helpers
 SPEC.loader.exec_module(helpers)
+markdown = sys.modules["release_notes_markdown"]
 
 BUNDLE_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/roc-ray-0.9.0.tar.zst"
 NEXT_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"
@@ -275,6 +276,109 @@ class ReleaseNotesTests(unittest.TestCase):
             (root / "notes" / "0.10.0.md").write_text("  \n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "release notes are empty"):
                 self.make_notes(root, "0.10.0")
+
+    def test_asciidoc_notes_are_converted_to_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text(
+                "[#release-0.10.0]\n= Highlights\n\n*New* API, see https://example.com[the docs].\n",
+                encoding="utf-8",
+            )
+            body = self.make_notes(root, "0.10.0")
+            self.assertTrue(body.startswith("# Highlights\n\n**New** API, see [the docs](https://example.com).\n"))
+
+    def test_notes_in_both_formats_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text("= A\n", encoding="utf-8")
+            (root / "notes" / "0.10.0.md").write_text("# A\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "keep one"):
+                self.make_notes(root, "0.10.0")
+
+    def test_unsupported_asciidoc_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text("= A\n\nimage::shot.png[]\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsupported"):
+                self.make_notes(root, "0.10.0")
+
+
+class AsciiDocToMarkdownTests(unittest.TestCase):
+    def convert(self, source: str) -> str:
+        return markdown.convert(source)
+
+    def test_titles_lists_and_continuations(self) -> None:
+        source = "\n".join([
+            "= Title",
+            "",
+            "== Section",
+            "",
+            "* *Bold `code` inside.* Plain text.",
+            "+",
+            "[source,roc]",
+            "----",
+            "expect 1 == 1",
+            "----",
+            "",
+            ". First",
+            ". Second",
+        ])
+        self.assertEqual(self.convert(source), "\n".join([
+            "# Title",
+            "",
+            "## Section",
+            "",
+            "- **Bold `code` inside.** Plain text.",
+            "",
+            "  ```roc",
+            "  expect 1 == 1",
+            "  ```",
+            "",
+            "1. First",
+            "1. Second",
+            "",
+        ]))
+
+    def test_tables_keep_escaped_pipes(self) -> None:
+        source = "\n".join([
+            '[cols="1,1",options="header"]',
+            "|===",
+            "|Old |New",
+            "|`f(x)` |`App.init(config, \\|io\\| ...)`",
+            "|===",
+        ])
+        self.assertEqual(self.convert(source), "\n".join([
+            "| Old | New |",
+            "| --- | --- |",
+            "| `f(x)` | `App.init(config, \\|io\\| ...)` |",
+            "",
+        ]))
+
+    def test_links_cross_references_and_breaks(self) -> None:
+        source = "See <<upgrading,the guide>> and https://example.com/a[`a`].\n\n'''\n"
+        self.assertEqual(
+            self.convert(source),
+            "See [the guide](#upgrading) and [`a`](https://example.com/a).\n\n---\n",
+        )
+
+    def test_code_spans_are_left_alone(self) -> None:
+        self.assertEqual(self.convert("Use `+*_from_bytes!*+` and `gen_*`.\n"), "Use `*_from_bytes!*` and `gen_*`.\n")
+
+    def test_unsupported_constructs_fail(self) -> None:
+        for source in ("include::other.adoc[]\n", ":toc: left\n", "....\nx\n....\n", "See <<only-id>>.\n"):
+            with self.subTest(source=source):
+                with self.assertRaises(markdown.ConversionError):
+                    self.convert(source)
+
+    def test_published_notes_convert(self) -> None:
+        notes = sorted(Path(__file__).resolve().parents[1].joinpath("docs", "releases").glob("*.*.*.adoc"))
+        self.assertTrue(notes, "no release notes found")
+        for path in notes:
+            with self.subTest(path=path.name):
+                self.assertTrue(markdown.convert_file(path).startswith("# "))
 
 
 if __name__ == "__main__":

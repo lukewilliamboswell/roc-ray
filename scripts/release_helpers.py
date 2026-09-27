@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from local_bundles import rewrite_compiler_pin
+from release_notes_markdown import ConversionError, convert_file
 from roc_platform_abi import read_pin
 
 
@@ -50,6 +51,13 @@ def main() -> int:
     notes.add_argument("--docs-url", default="")
     notes.add_argument("--notes-dir", default="docs/releases")
     notes.set_defaults(func=cmd_make_release_notes)
+
+    preview = subcommands.add_parser(
+        "preview-release-notes",
+        help="print the Markdown a release-notes .adoc file becomes on the GitHub release page",
+    )
+    preview.add_argument("notes")
+    preview.set_defaults(func=cmd_preview_release_notes)
 
     examples = subcommands.add_parser("update-example-urls")
     examples.add_argument("--release-version", default="")
@@ -138,15 +146,7 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     default_url = release_asset_url(repo, release_version, default_file)
     wayland_url = release_asset_url(repo, release_version, wayland_file)
 
-    notes_path = Path(args.notes_dir) / f"{release_version}.md"
-    if notes_path.exists():
-        if not notes_path.is_file():
-            raise RuntimeError(f"release notes path is not a file: {notes_path}")
-        editorial_notes = notes_path.read_text(encoding="utf-8").strip()
-        if not editorial_notes:
-            raise RuntimeError(f"release notes are empty: {notes_path}")
-    else:
-        editorial_notes = f"Release {release_version}."
+    editorial_notes = read_editorial_notes(Path(args.notes_dir), release_version)
 
     lines = [
         editorial_notes,
@@ -186,6 +186,40 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return 0
+
+
+def read_editorial_notes(notes_dir: Path, release_version: str) -> str:
+    """The hand-written notes for a release, as Markdown.
+
+    Notes are written in AsciiDoc (`<version>.adoc`), the manual's format, and
+    converted here. A Markdown file (`<version>.md`) is used as it is. With
+    neither, the release gets a one-line generated introduction.
+    """
+    adoc = notes_dir / f"{release_version}.adoc"
+    markdown = notes_dir / f"{release_version}.md"
+    if adoc.exists() and markdown.exists():
+        raise RuntimeError(f"release notes exist as both {adoc} and {markdown}; keep one")
+    notes_path = adoc if adoc.exists() else markdown
+    if not notes_path.exists():
+        return f"Release {release_version}."
+    if not notes_path.is_file():
+        raise RuntimeError(f"release notes path is not a file: {notes_path}")
+    if not notes_path.read_text(encoding="utf-8").strip():
+        raise RuntimeError(f"release notes are empty: {notes_path}")
+    if notes_path.suffix == ".adoc":
+        try:
+            return convert_file(notes_path).strip()
+        except ConversionError as err:
+            raise RuntimeError(str(err)) from None
+    return notes_path.read_text(encoding="utf-8").strip()
+
+
+def cmd_preview_release_notes(args: argparse.Namespace) -> int:
+    try:
+        sys.stdout.write(convert_file(Path(args.notes)))
+    except ConversionError as err:
+        raise RuntimeError(str(err)) from None
     return 0
 
 

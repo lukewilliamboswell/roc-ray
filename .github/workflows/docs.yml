@@ -1,0 +1,44 @@
+name: docs
+
+# Builds the RocRay manual (docs/*.adoc) as a website and a PDF and uploads
+# both for review. The Pages site itself is published by the release workflow,
+# which places the manual for the released version beside the versioned API
+# reference in www/; publishing from main here would replace that site with
+# documentation for unreleased APIs.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manual:
+    name: Build the manual
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # This build tracks the branch, not a release, and says so on its title
+      # page rather than claiming the last published version.
+      - name: Build and check HTML and PDF
+        env:
+          DOCS_VERSION: ${{ github.event_name == 'pull_request' && format('pull request {0}', github.event.number) || github.ref_name }}
+        run: python3 scripts/build_manual.py --pdf --docs-version "$DOCS_VERSION"
+
+      - name: Upload the manual
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: roc-ray-manual
+          path: .docs-out/site
+          retention-days: 14

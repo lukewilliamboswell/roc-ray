@@ -1,0 +1,310 @@
+[#host-development]
+= Working on the host
+
+This chapter is for contributors changing the native host, the Roc/host
+boundary, or a hosted effect. It assumes <<contributing>> and <<architecture>>:
+every rule here exists to keep one of the architecture's invariants true.
+
+== ABI and host changes
+
+`platform/main.roc` and `platform/main-wayland.roc` are the same platform built
+for two link configurations. Every change outside their `targets:` blocks --
+adding a hosted effect, an exposed module, a package dependency -- must be made
+to both. `zig build lint` enforces this and points at the first line that
+drifted; without it a missing entry only surfaces when someone links against the
+Wayland bundle.
+
+A value that crosses the host boundary is flat: scalars, `List` of scalars, or
+`List` of a record of scalars. Unions and boxed lists do not cross. The input
+event record is the worked example -- the host fills
+`List({ kind : U8, code : U32, x : F32, y : F32 })` and
+`AppTransport.events_from_raw` in the platform decodes it into the typed
+`Devices.Event`; the `kind` numbering is stated on both sides
+(`InputEventKind` in `src/backend_raylib.zig`, `event_from_raw` in
+`platform/AppTransport.roc`) so neither can drift alone. A new field on
+`Devices.Snapshot` touches `InputFromHost` and `input_from_raw` in both
+platform headers, `Devices.none` and `Devices.empty`, and the ABI regeneration
+below.
+
+Every hosted effect carries a phase set in `src/host_native.zig` --
+`enforcePhase(name, during_update)` and friends -- that says which app
+callbacks may reach it: `during_load` and `during_update` for anything that
+changes host state (`init!`, `update!`, tasks), `during_render` for drawing,
+`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`,
+`constant_time_anywhere` for a query with nothing to allocate and no I/O to do.
+A call from the wrong phase stops the app with a message naming the effect, the
+phase, and the fix, so choose the set deliberately and keep the public wrapper's
+doc comment in step with it.
+
+`during_load` is for allocating or generating a resource from bytes the app
+already holds -- `Assets.texture_from_bytes!`, `Draw.Shader.from_source!`,
+`Audio.gen_sound!`. A loader that opens a directory or reads a file is
+`during_wait`, however small the file: reaching the filesystem from `update!`
+is exactly what invariant 4 in <<architecture>> forbids. Where the resource can be built without
+touching the filesystem, give the effect a `*_from_bytes!` sibling in
+`during_load` so an app can still finish in `update!` a load a task started.
+
+An effect in `during_wait` does its I/O through `waitingIo()` rather than
+`mainThreadIo()`, and wraps the call in a `WaitScope` so the phase is restored
+when it resumes. On a task that parks the coroutine and the frame loop keeps
+running; in `init!` it parks the frame loop's own task and pumps the event loop
+until the answer is in, which is the blocking behaviour startup wants.
+
+Work the event loop cannot take runs on zio's blocking pool instead, through
+`rt.spawnBlocking` with a `std.Io.Threaded` inside the worker: a file write,
+because creating directories through the runtime's file backend fails on
+Windows, and anything reached through a descriptor the frame thread opened and
+closes, such as an asset store's directory handle. The pool parks the caller
+the same way the event loop would, and the worker must see host-owned bytes
+only -- never a Roc value.
+
+`during_frame_wait` is `during_wait` without `init!`, for a waiting effect
+whose answer is a frame that has to be drawn first. `Capture.screenshot!` is
+the one that needs it: it parks until the framebuffer has been read back at the
+end of a frame, and `init!` runs before the frame loop has drawn one, so a
+screenshot asked for there would wait for a frame that cannot arrive while it
+holds the frame thread. Reach for this set only when an effect genuinely waits
+on the frame loop's own progress; anything else that waits belongs in
+`during_wait`.
+
+An effect that reports a failure by code, rather than by tag union, shares the
+numbering with the effects it fails alongside. `Files` is the worked example:
+`NotFound`, `Unavailable` and the generic failure have the same code for a read
+and for a write, so one code never means two things across the boundary, and
+the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
+`PermissionDenied`, `NoSpace` -- are numbered past that shared table. Keep the
+Roc-side decoder and `src/host_native.zig` in step; each constant says where
+its counterpart lives.
+
+Every standalone native hosted function is declared in the private
+`platform/Host.roc` module with a domain-prefixed name. Add its structural
+wire aliases there, call it from the public module that owns validation and
+typed decoding, and register the unchanged native symbol in both platform
+headers. Do not add a domain-specific `*Host.roc` or `*ABI.roc` module.
+
+`test/compile_fail/host_module.roc` and its registered case in
+`scripts/test_app_transport_privacy.py` prove the consolidated module remains
+outside `exposes`. Keep that single fixture rather than adding one per domain.
+
+`roc test` cannot reach a new effect through `update!`: an `expect` cannot call
+an effectful function, and the phase guard would refuse the effects inside one
+anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
+half, a headless example run for the whole path -- and shape the public wrapper
+so an app can keep its decisions in pure functions (`apply_message : Model, Msg -> Model` and friends) that `update!` only performs. Those pure functions are
+what an app's own `expect`s exercise, using `App.Input.for_tests` and the
+resource `stub`s.
+
+=== Pin `msg` with a witness
+
+*Any platform function whose signature mentions `msg` and reaches a hosted
+effect must pin `msg` with an `App.Input(msg)` parameter* (or something else
+equally concrete that the app already holds). That is why `Task.spawn!` takes
+an input it never reads:
+
+[source,roc]
+----
+spawn! : App.Input(msg), (() => msg) => {}
+spawn! = |_input, task!| Host.task_spawn!(Box.box(task!))
+----
+
+Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else
+`msg` is an ordinary type variable, so without a witness it generalizes: the
+call site's closure is compiled at whatever type its own body implies --
+`|| Woke` becomes `[Woke]`, a single-tag union with no discriminant -- while
+`run_task_for_host!` decodes the bytes as the app's real `Msg`. The result is a
+wrong tag, a payload read through the wrong variant's layout, or an abort in
+`roc_dealloc` when the misread variant holds a `Str` or a `List`. The witness
+unifies the two and the whole class of failure goes away.
+
+`Task.spawn_with!` takes the same witness and adds a wrapper, so a component
+can answer in its own message type while the parent lifts it:
+`Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))`. The input still
+pins `msg` -- through the wrapper's result rather than the closure's -- so the
+rule is unchanged. The wrapper is a lambda because a bare tag name is not a
+function in Roc.
+
+This is an API rule, not a workaround for a compiler defect. `test/task_delivery`
+guards it: it spawns one task per `Msg` variant and exits non-zero unless every
+message comes back with the right tag and payload. `scripts/all_tests.py` runs
+it.
+
+The Zig ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`.
+After changing hosted functions in `platform/main.roc`, regenerate them with a
+local checkout of the Roc repository:
+
+[source,bash]
+----
+scripts/roc_platform_abi.py \
+    --roc-repo /path/to/roc \
+    --roc /path/to/pinned/roc \
+    --update
+----
+
+Verify the checked-in file without modifying it:
+
+[source,bash]
+----
+scripts/roc_platform_abi.py \
+    --roc-repo /path/to/roc \
+    --roc /path/to/pinned/roc \
+    --check
+----
+
+The helper requires the compiler and Roc source revision to agree with
+the compiler pin in `platform/main.roc`. Its focused tests run under `zig build test` or directly with:
+
+[source,bash]
+----
+python3 scripts/test_roc_platform_abi.py
+----
+
+Host-backed resources use typed, generation-checked slots. Successful hosted
+effects must release transferred references exactly once, including failure and
+scope-unwind paths. The headless backend should continue to exercise lifecycle
+behavior without requiring GPU objects. A new typed resource adds a member to
+`host_resource.Kind` and nowhere else -- heaps name a kind rather than a number,
+and the host fails to build if a kind has no heap or has two.
+
+A new `src/*.zig` module whose only caller is a hosted export needs a
+`test { _ = the_module; }` in `src/host_native.zig`. The exports are compiled
+out under `zig test`, so nothing references the module, Zig never analyses it,
+and its tests are silently absent from the run -- the suite reports the same
+number of passes it did before, with a broken assertion sitting in the file.
+`src/http_effect.zig` is the worked example.
+
+A Debug host archive carries the whole of `std.crypto` for the HTTP client's
+TLS and bundles past roc's default 100 MB transitive-dependency budget, so
+bundling one by hand needs `--max-transitive-mb=512`, which the scripts already
+pass.
+
+== Declared permissions in the host
+
+An app's reach beyond its own resources is declared in its startup `Config`
+with `Permission`; there is no launch flag. The host validates the
+declarations into `src/permissions.zig` after the config callback and before
+`init!`, and every `caps*` wrapper in `src/host_native.zig` asks that policy
+before any native work:
+
+* `allow` runs the effect;
+* `out_of_scope` releases the transferred arguments and returns typed
+`PermissionDenied` through `refuseEffect`;
+* `undeclared` is a programmer error, raised by `admitDeclared` with the
+declaration that would permit the effect.
+
+Adding a gated effect means choosing its tier. An effect on the app's own
+resources (standard streams, captures, the bundle) checks only that the
+authority is live. One that reaches further names a `permissions.Facility`
+and scopes its target with an `admit*` check; extend the policy, its unit
+tests, `Permission.roc`, and the capability probe in `test/capabilities`
+together. An effect whose target changes during the work, as an HTTP redirect
+does, checks every step.
+
+Test apps declare what they use, as examples do. `test/capabilities` chooses
+its declarations from argv and covers scoped refusal, undeclared use, and
+invalid startup configuration.
+
+`App.Io` is supplied to `init!` and as the third `update!` argument. Delegate
+narrow receivers (`Files.Access`, `Http.Client`, and so on) to helpers and tasks.
+Selecting a receiver is pure and allocates no host resource. The private scalar
+identity belongs to one application lifetime and is not a native pointer; a
+test stub or an identity from an earlier lifetime is refused.
+
+A recording in `App.Config` is a description. Start it explicitly with
+`io.capture().start!(recording)`; configuration does not authorize output.
+
+== Performance work
+
+Profile a Roc compiler build on Linux:
+
+[source,bash]
+----
+scripts/profile-roc-build.sh examples/cave_climb.roc 20
+----
+
+Set `ROC=/path/to/roc` to compare compiler builds.
+
+Measure steady-state Roc allocation traffic and hosted calls in examples:
+
+[source,bash]
+----
+scripts/profile-example-allocations.py --build
+scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
+----
+
+The allocation profiler subtracts one-frame startup behavior from a longer run.
+It sees Roc allocation ABI calls, not internal allocations made by raylib or
+Zig. Use the native lifecycle and allocation tests when optimizing inside a
+hosted effect.
+
+Any built app can report its own per-frame allocation instead, without GDB:
+
+[source,bash]
+----
+ROC_RAY_ALLOC_STATS=1 examples/pong/main --host-headless --host-headless-frames=120
+----
+
+Each frame prints one line to stderr with the bytes and calls that frame
+allocated and freed, and how much of it belonged to `update`. Unset, the host
+does not install the meter at all.
+
+That is how the cost of holding a collection in the model was measured:
+
+[source,bash]
+----
+scripts/test_model_allocation.py --report
+----
+
+Changing one element of a list in the model is an in-place write: the box the
+model arrived in is consumed, so the list is uniquely referenced at the write
+and a frame costs only the model box. `test/model_inplace` is the probe and
+`scripts/test_model_allocation.py` runs in `all_tests.py`, holding steady-state
+per-frame allocation under a 16 KiB budget.
+
+[#observatory-methodology]
+== Testing and benchmarking the Observatory recorder
+
+
+Recorder hot-path obligations are tested with deterministic operation counts,
+not machine-dependent elapsed-time thresholds. The disabled and summary
+hosted-effect path uses an injected counting clock and allocation-meter
+snapshots to require zero clock reads and zero recorded allocations. Detail
+policy is exhaustively checked across summary, standard, and full for every
+event family. Backpressure is modeled by retaining every producer chunk as a
+blocked writer would; a fixed number of reserve attempts must immediately
+refuse, leave capacity unchanged, and increment the refusal counter exactly
+once per attempt. This establishes bounded memory and non-waiting producer
+admission without a flaky scheduler or wall-clock benchmark.
+
+`scripts/test_effect_scope_audit.py` also scans every production `hosted*`
+boundary function: a phase guard must have an `EffectScope`, except for the
+explicitly listed Trace annotations that are recorder input themselves. New
+hosted effects therefore fail CI until their timing/accounting obligation is
+made deliberate.
+
+For machine-dependent overhead measurements, run an opt-in ReleaseFast report:
+
+[source,sh]
+----
+zig build -Doptimize=ReleaseFast observatory-bench
+----
+
+The command builds `test/observatory_perf/main.roc` once, performs two warmups,
+then runs disabled, summary, standard, full, and full with an intentionally
+delayed writer nine times each. The delayed-writer case uses the private
+benchmark seam plus a 1 MiB recorder pool and requires explicit loss, so it
+exercises non-blocking saturation rather than relying on storage luck. The
+order is shuffled within each repetition with a recorded seed. It writes the
+raw samples, machine description, methodology, medians, and ratios to
+`zig-out/observatory-benchmark.json` and a compact table to
+`zig-out/observatory-benchmark.md`.
+
+These timings are report-only: operating-system scheduling, storage, CPU power
+state, and virtualization make a universal percentage threshold misleading.
+The command fails only for semantic problems such as a failed application,
+wrong cycle count or detail level, or an unclean capture. Headless measurements
+are the primary recorder-overhead comparison. Real-window measurements must
+keep render callback and host submission separate from raylib's indivisible
+`end_drawing_including_presentation_and_pacing` interval; that interval is not
+recorder CPU time. The windowed integration sweep separately records a short
+real raylib capture and queries all four backend intervals; on Linux it runs
+under the same X11 or Wayland display as the graphical example tests.

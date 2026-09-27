@@ -166,6 +166,9 @@ Files := [].{
 		## Read a bounded UTF-8 file into a `Str`: at most 64 kibibytes, and a
 		## file past that is `TooLarge` rather than truncated. One that is not
 		## valid UTF-8 is `NotUtf8` rather than an invalid `Str`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_text! : ReadDir, Str => Try(Str, ReadTextError)
 		read_text! = |ReadDir.(handle), path| perform_read_text!(handle, path)
 
@@ -177,6 +180,9 @@ Files := [].{
 		## held answers `Busy` without touching the disk. Retaining a sublist
 		## retains the whole allocation, which `List.release_excess_capacity`
 		## releases by copying out the part worth keeping.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_bytes! : ReadDir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |ReadDir.(handle), path| perform_read_bytes!(handle, path)
 
@@ -184,6 +190,9 @@ Files := [].{
 		## handle's own directory. Entry order is the filesystem's, unsorted.
 		## A listing is bounded at 8192 entries and one mebibyte of encoded
 		## names, and a directory past either is `TooLarge`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		list! : ReadDir, Str => Try(List(Entry), ListError)
 		list! = |ReadDir.(handle), path| perform_list!(handle, path)
 
@@ -193,6 +202,9 @@ Files := [].{
 		##
 		## Polling `modified` from a task, sleeping between stats, is how an app
 		## hot-reloads a shader, a level, or a dataset it did not write.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		metadata! : ReadDir, Str => Try(Metadata, MetadataError)
 		metadata! = |ReadDir.(handle), path| perform_metadata!(handle, path)
 
@@ -222,18 +234,30 @@ Files := [].{
 		subdir = |Dir.(handle), path| Ok(Dir.(beneath(handle, path)?))
 
 		## As `ReadDir.read_text!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_text! : Dir, Str => Try(Str, ReadTextError)
 		read_text! = |Dir.(handle), path| perform_read_text!(handle, path)
 
 		## As `ReadDir.read_bytes!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_bytes! : Dir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |Dir.(handle), path| perform_read_bytes!(handle, path)
 
 		## As `ReadDir.list!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		list! : Dir, Str => Try(List(Entry), ListError)
 		list! = |Dir.(handle), path| perform_list!(handle, path)
 
 		## As `ReadDir.metadata!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		metadata! : Dir, Str => Try(Metadata, MetadataError)
 		metadata! = |Dir.(handle), path| perform_metadata!(handle, path)
 
@@ -241,11 +265,17 @@ Files := [].{
 		## directories on the way. The write replaces the whole file: there is
 		## no append, and no partial write is reported as success. An existing
 		## symbolic link at the path is refused rather than written through.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		write_text! : Dir, Str, Str => Try({}, WriteError)
 		write_text! = |Dir.(handle), path, contents| perform_write_text!(handle, path, contents)
 
 		## Replace a file's contents with ordinary Roc bytes, exactly as
 		## `write_text!` does with a string.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		write_bytes! : Dir, Str, List(U8) => Try({}, WriteError)
 		write_bytes! = |Dir.(handle), path, bytes| perform_write_bytes!(handle, path, bytes)
 
@@ -274,14 +304,23 @@ Files := [].{
 		path = |Designated.(item)| item.path
 
 		## Read the designated file into a `Str`, as `ReadDir.read_text!` does.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_text! : Designated => Try(Str, ReadTextError)
 		read_text! = |Designated.(item)| perform_read_text!(parent_handle(item), item.name)
 
 		## Read the designated file as bytes, as `ReadDir.read_bytes!` does.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_bytes! : Designated => Try(List(U8), ReadBytesError)
 		read_bytes! = |Designated.(item)| perform_read_bytes!(parent_handle(item), item.name)
 
 		## What the designated item is, how big it is, and when it last changed.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		metadata! : Designated => Try(Metadata, MetadataError)
 		metadata! = |Designated.(item)| perform_metadata!(parent_handle(item), item.name)
 
@@ -302,28 +341,46 @@ Files := [].{
 		## The app's private data directory, created on first use: saves,
 		## databases, anything the app keeps for itself. Needs
 		## `App.Config.with_app_id`; without one the app stops, naming it.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		app_data! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_data! = |Access.(authority)| open_root!(authority, AppData, Bool.True) |> map_dir
 
 		## The app's private configuration directory, created on first use.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		app_config! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_config! = |Access.(authority)| open_root!(authority, AppConfig, Bool.True) |> map_dir
 
 		## The app's private cache directory, created on first use: files it
 		## can recreate if the user clears it.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		app_cache! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_cache! = |Access.(authority)| open_root!(authority, AppCache, Bool.True) |> map_dir
 
 		## The directory the executable is in, read-only: the app's own bundle.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		beside_executable! : Access => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		beside_executable! = |Access.(authority)| open_root!(authority, BesideExecutable, Bool.False) |> map_read_dir
 
 		## The launch directory, writable. Needs `WorkingDirectory(ReadWrite)`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		working_directory! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		working_directory! = |Access.(authority)| open_root!(authority, WorkingDirectory, Bool.True) |> map_dir
 
 		## The launch directory, read-only. Needs `WorkingDirectory` in either
 		## mode.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		working_directory_read! : Access => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		working_directory_read! = |Access.(authority)| open_root!(authority, WorkingDirectory, Bool.False) |> map_read_dir
 
@@ -331,6 +388,9 @@ Files := [].{
 		## is absolute, or relative to the working directory, and must be
 		## covered by a `ReadWrite` `Directory` or `FilesAny` declaration, or
 		## by `WorkingDirectory(ReadWrite)` for a relative path.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		open_dir! : Access, Str => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		open_dir! = |Access.(authority), path| open_root!(authority, Declared(path), Bool.True) |> map_dir
 
@@ -351,8 +411,9 @@ Files := [].{
 		##
 		## Only a path the host delivered this cycle is accepted; a string made
 		## up, or kept from an earlier cycle, is `PermissionDenied`. Nothing is
-		## opened, so this is legal in `update!` as well as in `init!` and tasks;
-		## refused in `render!`.
+		## opened, so it is legal wherever a drop can be seen.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		accept_drop! : Access, Str => Try(Designated, [PermissionDenied])
 		accept_drop! = |Access.(authority), path| designate!(authority, Drop(path))
 
@@ -368,6 +429,9 @@ Files := [].{
 
 		## A declared directory, read-only, covered by a declaration in either
 		## mode.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		open_dir_read! : Access, Str => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		open_dir_read! = |Access.(authority), path| open_root!(authority, Declared(path), Bool.False) |> map_read_dir
 	}

@@ -1,0 +1,248 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#files-and-assets]
+= Files, assets, and databases
+
+This chapter covers reading and writing files, loading textures, sounds,
+fonts, and maps from disk, accepting a file the user hands the app, and
+keeping data in SQLite. It assumes <<tasks>>, because everything here that
+touches the disk waits, and <<permissions>>, because most directories must be
+declared.
+
+== Directory handles, not paths
+
+An app never names a file by a bare path such as `"saves/slot1.json"` on its
+own. It first asks `io.files()` for a _directory handle_, then names files
+relative to that handle:
+
+[source,roc]
+----
+init! = App.init(
+    App.default.with_app_id("dev.example.notes"),
+    |io| {
+        saves = io.files().app_data!()?
+        Ok({ saves })
+    },
+)
+
+update! = |model, input, _io| {
+    if input.devices.key_pressed(KeyS) {
+        saves = model.saves
+        Task.spawn!(input, || Saved(saves.write_text!("slot1.json", encode(model))))
+    }
+    Ok(model)
+}
+----
+
+Here `encode` stands for the app's own serializer, and `Saved` is a `Msg`
+variant carrying the write's result.
+
+A handle is an ordinary value. Keep it in the model, pass it to a helper, or
+capture it in a task. Whoever holds it can reach what lies beneath it and
+nothing else.
+
+There are two kinds: a `Files.Dir` can read and write, and a `Files.ReadDir`
+can only read. A write through a `ReadDir` does not compile.
+
+== Where a handle comes from
+
+[cols="2,1,3",options="header"]
+|===
+|`io.files()` receiver |Returns |Needs
+|`app_data!()`, `app_config!()`, `app_cache!()` |`Dir` |No permission, but the app must name itself with `App.default.with_app_id(...)`. These are the app's private directories under the user's home, created on first use.
+|`beside_executable!()` |`ReadDir` |Nothing. This is the directory the executable is in: the app's own bundle.
+|`working_directory!()` |`Dir` |`WorkingDirectory(ReadWrite)`
+|`working_directory_read!()` |`ReadDir` |`WorkingDirectory(ReadOnly)` or `WorkingDirectory(ReadWrite)`
+|`open_dir!(path)` |`Dir` |A `Directory(path, ReadWrite)` or `FilesAny(ReadWrite)` declaration covering `path`
+|`open_dir_read!(path)` |`ReadDir` |A `Directory` or `FilesAny` declaration covering `path`
+|===
+
+An app id is a reverse-DNS style name the app will keep, such as
+`"dev.example.pong"`: 1 to 128 ASCII letters, digits, `.`, `-`, or `_`. It
+becomes a directory name, so changing it later moves the app's saved data out
+of reach.
+
+Two pure receivers narrow a handle without touching the disk:
+`dir.subdir("levels")` returns a handle to a directory beneath it, and
+`dir.read_only()` turns a `Dir` into a `ReadDir`. Pass the narrowest handle a
+helper needs.
+
+== Reading and writing
+
+Every handle has:
+
+* `read_text!(path)`: a UTF-8 file as a `Str`, up to 64 KiB;
+* `read_bytes!(path)`: a file as a `List(U8)`, up to 16 MiB;
+* `list!(path)`: the entries of a directory, each a name and a kind (`File`,
+  `Dir`, or `Other`);
+* `metadata!(path)`: a path's kind, size in bytes, and modification time.
+
+A `Dir` adds `write_text!(path, text)` and `write_bytes!(path, bytes)`.
+
+All of these wait. Call them in `init!`, where they hold startup, or in a
+task:
+
+[source,roc]
+----
+repo = model.repo
+Task.spawn!(input, || SmallReadFinished(repo.read_text!("README.md")))
+----
+
+Each returns a typed error the app can `match` on. For a read, `NotFound` is
+no file at that path; `TooLarge` is a file past the size ceiling; `NotUtf8` is
+a file that is not valid text; `Busy` means the host's file-delivery slots are
+all held by byte lists the app has kept, so nothing was read and the same call
+can succeed later; and `Unavailable` means the app was shutting down. The
+{api}[API reference] lists every error for every effect.
+
+=== Paths beneath a handle
+
+A path given to a handle is plainly relative: no leading `/`, no drive letter,
+no backslash, and no empty, `.`, or `..` component. Symbolic links beneath a
+handle are not followed. A path that breaks either rule returns
+`PermissionDenied`, the same answer as any target outside what the app
+declared. When the operating system itself refuses, for example a file the
+user may not write, the error is `AccessRefused`.
+
+[#files-designated]
+== Files the user hands the app
+
+A file dropped on the window, or a path passed on the command line, needs no
+declaration: the user choosing it is the consent. The app turns it into a
+`Files.Designated` handle scoped to exactly that file or directory.
+
+A dropped path arrives in `input.dropped`. Accept it in the same `update!`
+that received it, then read through the handle on a task:
+
+[source,roc]
+----
+# For each `drop` in `input.dropped`, inside update!:
+match io.files().accept_drop!(drop.path) {
+    Ok(item) => Task.spawn!(input, || Opened(item.read_bytes!()))
+    Err(PermissionDenied) => {}
+}
+----
+
+A dropped path kept past that `update!` is only a string; it can no longer be
+accepted.
+
+A command-line argument is accepted with `io.files().from_arg!(arg)`. It is
+accepted only if it is exactly one of the arguments the app was launched with.
+
+There is no file-picker dialog.
+
+== Asset stores
+
+Textures, sounds, music, fonts, shaders, and maps are loaded from an _asset
+store_: a directory opened from a `ReadDir`. The store reaches exactly what
+that handle reaches, so a bundle beside the executable needs no permission,
+and any other directory needs one:
+
+[source,roc]
+----
+init! = App.init(
+    App.default,
+    |io| {
+        bundle = io.files().beside_executable!()?
+        store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
+        Ok({ logo: Assets.load_texture!(store, "logo.png")?, store })
+    },
+)
+----
+
+When running an example from a repository checkout, the assets sit in the
+source tree rather than beside the executable, so the examples declare their
+asset directory and open it by path:
+
+[source,roc]
+----
+App.default.with_permission(Directory("examples/top_down/assets", ReadOnly))
+
+# In init!:
+store = Assets.open!(io.files().open_dir_read!("examples/top_down/assets")?, IgnoreManifest)?
+----
+
+Load from a store with:
+
+[cols="2,3",options="header"]
+|===
+|Loader |Returns
+|`Assets.load_texture!(store, path)` |A texture
+|`Audio.load_sound!(store, path)` |A sound effect, decoded into memory
+|`Audio.load_music!(store, path)` |A music track, streamed
+|`Tilemap.load_tmx!(store, path)` |A parsed Tiled map, ready to bind to textures
+|`Draw.load_store_font!(store, font)` |A font
+|`Draw.Shader.from_store!(store, shader)` |A shader
+|===
+
+Opening a store and loading from it wait, so they belong in `init!` or a
+task. Load long-lived resources once in `init!` and keep them in the model. To
+load something after startup, load it in a task and keep the resource its
+message carries.
+
+A path that would escape the store, or that meets a symbolic link, is refused
+rather than rewritten. `ResourceLimit` means the host's fixed table for that
+kind of resource is full; release resources the app no longer needs.
+
+=== Asset manifests
+
+`Assets.open!` takes a manifest policy. `IgnoreManifest` opens a directory of
+loose files. `RequireManifest(expectation)` fails the open unless a
+`roc-assets.manifest` file beside the assets declares the expected asset set,
+schema version, content version, and, optionally, a SHA-256 content hash. The
+comparison is against the manifest's declaration only; nothing hashes the
+files, so opening a store stays fast however many assets it holds. The
+repository's `scripts/asset_manifest.py` generates and verifies a
+deterministic manifest for a directory of loose assets, which gives packaging
+and CI a stable content revision.
+
+== SQLite databases
+
+RocRay bundles SQLite. A database file lives beneath a directory handle,
+usually the app's own data directory:
+
+[source,roc]
+----
+data = io.files().app_data!()?
+db = io.sqlite().open!(data, "scores.db")?
+Sqlite.exec_script!(db, schema)?
+rows = Sqlite.query!({ db, query: top_ten, bindings: [] })?
+----
+
+* `io.sqlite().open!(dir, name)` opens or creates a database beneath a `Dir`.
+* `io.sqlite().open_read!(read_dir, name)` opens one read-only beneath a
+  `ReadDir`.
+* `io.sqlite().open_memory!()` creates a private in-memory database, which
+  needs no handle.
+
+Every database effect waits, so it runs in `init!` or a task. Use the free
+`Sqlite.query!` and `Sqlite.execute!` for one-off SQL, and keep a prepared
+statement from `Sqlite.prepare!` when running the same SQL repeatedly.
+Transactions use explicit `BEGIN`, `COMMIT`, and `ROLLBACK`. Rows are decoded
+with pure, typed accessors such as `row.str("name")`.
+
+`ATTACH` is disabled on every connection, so a database cannot reach a second
+file outside its handle. At most eight connections and sixty-four statements
+may be open. A query whose result exceeds one million cells, or the configured
+byte limit (sixteen megabytes by default), is refused rather than truncated.
+Databases and statements close automatically when their last reference goes
+away; `Db.close!` closes one early.
+
+{src}/examples/sqlite_scores/main.roc[SQLite Scores] keeps a high-score table
+that survives a restart.
+
+== Further reading
+
+* The `Files`, `Assets`, `Audio`, `Tilemap`, and `Sqlite` pages of the
+  {api}[API reference].
+* {src}/examples/async_read/main.roc[Async Read],
+  {src}/examples/drop_viewer/main.roc[Drop Viewer], and
+  {src}/examples/live_plot/main.roc[Live Plot] for file access in complete
+  apps.

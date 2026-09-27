@@ -1,0 +1,114 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#host-services]
+= Printing, programs, environment, and clipboard
+
+This chapter covers the smaller services an app reaches through `App.Io`:
+printing to the terminal, reading environment variables, running other
+programs, and the system clipboard. It assumes <<app-model>> and
+<<permissions>>.
+
+== Printing
+
+`io.stdout()` and `io.stderr()` write to standard output and standard error.
+They need no declaration, and they are legal in `init!`, `update!`, and tasks:
+
+[source,roc]
+----
+_ = io.stdout().line!("level ${U64.to_str(model.level)} complete")
+----
+
+Each writer has `line!`, `write!`, and `write_bytes!`. A write copies the
+whole payload into a 256 KiB queue the host owns and returns at once; a host
+thread writes it out, so printing never stalls a frame. The result says
+whether the payload was accepted: `TooLarge` for a payload bigger than the
+queue, `BufferFull` when there is not enough free space right now. Nothing is
+partially queued. Accepted writes keep their order and are flushed when the
+app exits normally.
+
+The order of these writes relative to `dbg`, `expect`, and crash output is not
+defined.
+
+== Environment variables
+
+[source,roc]
+----
+config = App.default.with_permission(EnvVar("API_TOKEN"))
+
+# In init!:
+token = io.env().read!("API_TOKEN")?
+----
+
+`read!` returns `NotFound` for an unset variable and `PermissionDenied` for a
+name the app did not declare. It is legal only in `init!`: the environment is
+a startup fact. `EnvAny` permits reading any variable.
+
+== Running programs
+
+Build a command, then run it from a task:
+
+[source,roc]
+----
+config = App.default.with_permission(Command("ffmpeg"))
+
+encode! = |commands, input_path| {
+    cmd = Cmd.new("ffmpeg")
+        .with_args(["-y", "-i", input_path, "out.mp4"])
+        .with_timeout_ms(120_000)
+
+    match commands.run!(cmd) {
+        Ok(output) if output.exit_code == 0 => Encoded("out.mp4")
+        Ok(output) => EncodeRefused(Str.from_utf8_lossy(output.stderr))
+        Err(err) => EncodeFailed(err)
+    }
+}
+
+# In update!:
+commands = io.commands()
+Task.spawn!(input, || encode!(commands, "in.mov"))
+----
+
+`run!` waits while the child runs, so it belongs in a task (or `init!`).
+
+* A non-zero exit code is a completed run and arrives as `Ok(output)`. `Err`
+  means there was no exit status: the program could not start, timed out, or
+  exceeded an output limit.
+* No shell is involved. The program is named directly and the arguments are
+  passed as written; spaces, globs, pipes, and redirects mean nothing special.
+* Every command has a timeout and limits on how much standard output and
+  standard error are captured. Standard input is closed.
+* The child inherits the app's user, working directory, and, unless
+  `with_clear_envs` is used, its environment.
+* When the app exits normally, children the host still manages are terminated.
+
+The program must be declared with `Command`, named exactly as the app names it
+to `Cmd.new`. A child process has all of the user's authority, and no
+declaration can narrow what it does.
+
+== The clipboard
+
+[source,roc]
+----
+config = App.default.with_permissions([ClipboardRead, ClipboardWrite])
+
+# In update!:
+pasted = io.clipboard().read_text!()
+_ = io.clipboard().set_text!("copied")
+----
+
+Both are legal in `init!`, `update!`, and tasks; neither waits. Reading needs
+`ClipboardRead` and writing needs `ClipboardWrite`. Content that is not text,
+or is too large to copy, is refused rather than truncated.
+{src}/examples/input_inspector/main.roc[Input Inspector] uses both.
+
+== Further reading
+
+* The `Stdout`, `Stderr`, `Cmd`, `App`, and `Window` pages of the
+  {api}[API reference].

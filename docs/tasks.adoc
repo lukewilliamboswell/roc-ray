@@ -1,0 +1,162 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#tasks]
+= Work that waits: tasks
+
+Reading a file, fetching a URL, or querying a database can take longer than a
+frame. If `update!` waited for the answer, the window would freeze. This
+chapter shows how to run that work as a _task_, so the app keeps updating and
+drawing while it waits, and how its result comes back. It assumes
+<<app-model>>.
+
+== Start a task, receive a message
+
+A task is a function with no arguments, handed to `Task.spawn!`. The platform
+runs it; when it returns, its return value arrives as a _message_ on
+`input.messages` in a later cycle:
+
+[source,roc]
+----
+Msg : [Woke]
+
+update! = |model, input, _io| {
+    if input.devices.key_pressed(KeyEnter) {
+        Task.spawn!(
+            input,
+            || {
+                Task.sleep!(300)
+                Woke
+            },
+        )
+    }
+    Ok(List.fold(input.messages, model, apply_message))
+}
+----
+
+Inside the task, `Task.sleep!(300)` waits for 300 milliseconds. Only the task
+pauses; the frame loop keeps running, and `update!` and `render!` keep being
+called. When the task returns `Woke`, that value appears in `input.messages`
+on a later cycle, and `apply_message` folds it into the model.
+
+`Task.spawn!` takes the current `input` as its first argument. It is not read:
+it lets the compiler check that the task returns your app's `Msg` type.
+
+{src}/examples/task_sleep/main.roc[Task Sleep] is this pattern as a complete
+app.
+
+== Waiting effects
+
+An effect that may wait on the outside world is a _waiting effect_: file
+reads and writes, HTTP requests, UDP receives, database queries, running a
+program, loading a resource from disk, and `Task.sleep!`. Each one is legal in
+two places:
+
+* in `init!`, where it holds startup until it answers, before the first frame;
+* in a task, where it pauses only that task.
+
+Calling one from `update!` or `render!` stops the app with a message naming
+the effect and where it belongs.
+
+Inside a task, a waiting effect simply returns its answer, so a job with
+several steps is ordinary top-to-bottom code with `?`:
+
+[source,roc]
+----
+load_level! = |saves| {
+    text = saves.read_text!("level.json")?
+    parse_level(text)
+}
+
+# In update!:
+Task.spawn!(input, || LevelLoaded(load_level!(saves)))
+----
+
+Here `saves` is a directory handle (see <<files-and-assets>>) and
+`parse_level` is the app's own pure parser. The job does not need to be split
+across several messages.
+
+== Give each kind of work its own message
+
+Put a variant in `Msg` for each kind of work, carrying its result, errors
+included:
+
+[source,roc]
+----
+Msg : [
+    SmallReadFinished(Try(Str, Files.ReadTextError)),
+    BytesReadFinished(Try(List(U8), Files.ReadBytesError)),
+]
+----
+
+Several tasks can be in flight at once, and their messages arrive in the order
+the tasks _finished_, which need not be the order they were started. When the
+same kind of work can be in flight more than once -- the user presses "reload"
+twice -- a reply can arrive after a newer one. Put an id or generation counter
+in the message and ignore replies that do not match the latest;
+{src}/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
+
+A task cannot read or change the model. Everything it needs, it captures when
+it is created -- a file handle, an HTTP client, a copy of some model value --
+and everything it has to say, it says in its message.
+
+== What the platform guarantees
+
+* **Each task delivers exactly one message.** A finished task's message is
+  never dropped while the app is running.
+* **Spawning never fails.** Up to 32 tasks run at once. Extra spawns wait in a
+  queue and start in order as slots free up.
+* **Tasks run one at a time, on the same thread as your callbacks.** Your code
+  never needs a lock and never sees a half-updated model.
+* **When the app exits,** running tasks are cancelled, queued ones are dropped,
+  and undelivered messages are released.
+
+The cost of that simplicity: a task that computes for a long time without
+waiting holds up the frame, exactly as the same work in `update!` would. Tasks
+let slow I/O overlap with frames; they do not add parallel computation.
+
+`Task.spawn!` is legal in `update!` and in other tasks. It is refused in
+`init!`, which never sees the input a message would arrive on, and in
+`render!`.
+
+== Components with their own messages
+
+A reusable module may not know the app's `Msg` type. `Task.spawn_with!` lets
+its task answer in the module's own message type and lifts the answer into the
+app's:
+
+[source,roc]
+----
+# Counter.roc knows nothing about the app's Msg.
+Msg : [Loaded(U64), LoadFailed]
+load! : () => Msg
+
+# The app: Msg : [CounterMsg(Counter.Msg), ...]
+Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
+----
+
+A bare tag name is not a function in Roc, so the wrapper is written as a
+lambda.
+
+== Not everything needs a task
+
+Effects that do not wait are called straight from `update!`. Playing a sound,
+resizing the window, starting a recording, and uploading pixels to a texture
+all happen immediately. So do _queued_ effects, such as printing a line or
+sending a UDP datagram: they hand the bytes to a bounded host queue and return
+at once, reporting a full queue as a result rather than waiting.
+
+== Further reading
+
+* {src}/examples/async_read/main.roc[Async Read] runs three file operations
+  at once, each with its own message.
+* {src}/examples/sqlite_scores/main.roc[SQLite Scores] writes and reads back in
+  one task.
+* <<architecture>> explains why tasks run on the frame thread and why each
+  delivers exactly one message.

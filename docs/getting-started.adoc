@@ -1,0 +1,149 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#getting-started]
+= Getting started
+
+This chapter runs a finished example, then walks through the smallest complete
+app. You need a terminal and an internet connection; you do not need a
+checkout of the RocRay repository.
+
+== Install the compiler and download the examples
+
+Every RocRay release is built and tested with one exact Roc nightly compiler,
+and it attaches a zip of the examples whose headers already point at that
+release.
+
+. Open the {repo}/releases/latest[latest RocRay release]. Its notes name the
+  supported compiler, such as `nightly-2026-08-23-fb208ba`.
+. Install that compiler from the
+  https://github.com/roc-lang/nightlies/releases[Roc nightlies] and put `roc`
+  on your `PATH`.
+. Download `examples-<version>.zip` from the same release and unzip it.
+
+The repository's {repo}#readme[README] also links the current starter and its
+compiler directly.
+
+Check that the compiler on your `PATH` is the one the release names:
+
+[source,sh]
+----
+roc version
+----
+
+== Run an example
+
+Open a terminal in the extracted directory -- the one that contains
+`examples/` -- and run:
+
+[source,sh]
+----
+roc examples/hello_world/main.roc
+----
+
+A window opens with a panel and a circle that follows the pointer. Hold the
+left mouse button to change its colour, and press Escape to quit.
+
+Run examples from the extracted directory, as shown, so the paths they use for
+their assets resolve.
+
+Each example's header records the platform release and the compiler it needs.
+The header states the requirement; it does not install or select a compiler.
+
+== Build an executable
+
+`roc` on its own compiles and runs the app. To produce an executable you can
+run again or hand to someone else, use `roc build`:
+
+[source,sh]
+----
+roc build examples/hello_world/main.roc --output hello_world
+./hello_world
+----
+
+== The smallest app
+
+Create a file named `main.roc`. The platform URL is the bundle URL from the
+release notes; copy it from the header of any example in the zip.
+
+[source,roc]
+----
+app [Model, program] { rr: platform "<platform bundle URL from the release>" }
+
+import rr.App
+import rr.Color
+import rr.Draw
+
+Model : { frames : U64 }
+
+Msg : []
+
+program = { init!, update!, render! }
+
+init! : App.Init(Model, [])
+init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |model, input, _io| {
+    if input.devices.key_pressed(KeyEscape) {
+        Err(Exit(0))
+    } else {
+        Ok({ frames: model.frames + 1 })
+    }
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |_model, frame| {
+    frame.clear!(Color.black)
+    frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+    Ok({})
+}
+----
+
+Run it with `roc main.roc`. It opens an 800 by 600 window titled "Hello",
+draws a red circle on black, and exits when you press Escape.
+
+Reading from the top:
+
+* `Model` is the app's state. This one only counts frames.
+* `Msg` lists the results of work the app starts in the background. This app
+  starts none, so it is empty.
+* `init!` pairs a window configuration with a function that builds the first
+  model.
+* `update!` runs once per frame. It reads the keyboard from `input.devices` and
+  returns the next model, or `Err(Exit(0))` to quit.
+* `render!` draws the model. Everything it draws goes through `frame`.
+
+<<app-model>> explains each of these in detail.
+
+== Where to go next
+
+* Read {src}/examples/hello_world/main.roc[`examples/hello_world/main.roc`],
+  the complete example you just ran, for prepared text, pointer input, and
+  animation.
+* Choose a project from <<examples>>, which suggests a learning path.
+* Read <<app-model>> before your app grows beyond one file.
+* The {api}[API reference] documents every module, type, and function.
+
+[#development-checkout]
+== Use the development version instead
+
+The `main` branch of the repository contains development source, including
+examples of APIs that have not been released yet. Its examples are not pinned
+to a release. To run them against a checkout, set up the development tools in
+<<contributing>> and run, from the repository root:
+
+[source,sh]
+----
+scripts/run-example.py examples/hello_world
+----
+
+The script builds the platform from the checkout and runs a temporary copy of
+the example pointed at it, so the checked-in files are never rewritten.
+Published starters keep their own pins.

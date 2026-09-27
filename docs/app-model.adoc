@@ -1,0 +1,262 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#app-model]
+= The app model: init!, update!, and render!
+
+Every RocRay app has the same shape: three functions that the platform calls
+at the right moments. This chapter explains what each one receives, what it
+may do, and what it returns. Every later guide builds on it.
+
+It assumes you have run the smallest app in <<getting-started>>.
+
+== The three callbacks
+
+An app exposes a record of its three callbacks, and the types of its model and
+its messages:
+
+[source,roc]
+----
+app [Model, program] { rr: platform "..." }
+
+program = { init!, update!, render! }
+----
+
+The platform drives them in a loop:
+
+.The order in which the platform calls an app
+[mermaid]
+....
+flowchart LR
+    Init["init!<br/>builds the first model"] --> Update
+    Update["update!<br/>folds one input into the next model"] --> Render
+    Render["render!<br/>draws that model"] --> Update
+    Update -- "Err(Exit(code))" --> Stop([app exits])
+....
+
+`init!` runs once. After that, each time around the loop is one _host cycle_:
+the platform gathers what happened since the last cycle into one input, calls
+`update!` exactly once with it, and then normally calls `render!` with the
+model `update!` returned. A headless or minimized run may skip drawing, but it
+never calls `update!` twice with the same input.
+
+== The model
+
+The _model_ is your app's state: everything it needs to remember from one
+cycle to the next. You choose its type and name it `Model`:
+
+[source,roc]
+----
+Model : {
+    pointer : { x : F32, y : F32 },
+    score : U64,
+    logo : Draw.Texture,
+}
+----
+
+Only `update!` produces a new model, and nothing else in the platform reads or
+changes it. Keep long-lived resources you loaded in `init!` -- textures,
+fonts, sounds, prepared text, file handles -- in the model rather than loading
+them again every frame.
+
+== init!: configuration and the first model
+
+`init!` pairs a startup configuration with a function that builds the first
+model:
+
+[source,roc]
+----
+init! : App.Init(Model, [ResourceLimit])
+init! = App.init(
+    App.default
+        .with_title("Hello RocRay")
+        .with_size({ width: 800, height: 600 })
+        .with_frame_pacing(Capped(120)),
+    |_io| {
+        font = Draw.default_font!()
+        Ok({ title: Text.from("Hello", font).size(38).prepare!()?, score: 0 })
+        # `?` returns early with the error if preparing the text fails.
+    },
+)
+----
+
+The second type argument of `App.Init` lists the errors the function may
+return; here, `ResourceLimit` from preparing text. Returning `Err(Exit(code))`
+quits before the first frame.
+
+=== The startup configuration
+
+`App.default` is an 800 by 600 window titled "RocRay", capped at 240 frames per
+second, that closes when Escape is pressed. Change it with its `with_*`
+receivers:
+
+[cols="2,3",options="header"]
+|===
+|Receiver |Sets
+|`with_title(str)` |The window title
+|`with_size({ width, height })` |The initial logical window size
+|`with_min_size({ width, height })` |A minimum size for a resizable window
+|`with_resizable(bool)`, `with_fullscreen(bool)` |Window behaviour
+|`with_visible(bool)` |Whether the window is shown; a hidden window still renders, which is useful for recording to a file
+|`with_frame_pacing(pacing)` |`VSync`, `Capped(fps)`, or `Uncapped`
+|`with_exit_key(key)` |The key that closes the window, `ExitKey(key)` or `NoExitKey`
+|`with_cursor_mode(mode)` |The initial cursor mode
+|`with_default_font({ path, size })` |A font loaded once at startup for the whole app
+|`with_output_dir(path)` |Where captures are written; see <<capture>>
+|`with_recording(recording)` |A recording to describe at startup; see <<capture>>
+|`with_app_id(id)` |The app's name for its private storage; see <<files-and-assets>>
+|`with_permission(p)`, `with_permissions(list)` |What the app reaches beyond its own resources; see <<permissions>>
+|===
+
+A configuration that depends on the command line uses `App.init_for_args`
+instead of `App.init`. Its first argument is a pure function from the complete
+argument list to a `Config`, chosen before the window exists:
+
+[source,roc]
+----
+init! = App.init_for_args(
+    |args| if List.contains(args, "--record") { App.default.with_visible(Bool.False) } else { App.default },
+    |_io| Ok(initial_model),
+)
+----
+
+Here `initial_model` stands for whatever first model your app builds.
+
+=== What init! can do
+
+The function `init!` runs receives `App.Io`, the app's access to host services
+(files, the network, printing, and so on). `init!` is the one place an app may
+wait for the outside world _without_ a task: loading a texture or reading a
+file there simply holds startup until the answer arrives, before the first
+frame is drawn.
+
+A few effects are legal only in `init!`, because they are startup facts:
+`io.args!()` returns the command line (with the host's own `--host-*` switches
+removed), `io.entropy!()` draws a number from the operating system to seed a
+random generator, and `io.default_font!()` returns the font configured with
+`with_default_font`.
+
+== update!: one input in, one model out
+
+[source,roc]
+----
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |model, input, io| {
+    if input.devices.key_pressed(KeyEscape) {
+        Err(Exit(0))
+    } else {
+        Ok({ ..model, pointer: input.devices.mouse.position() })
+    }
+}
+----
+
+`update!` receives the current model, one `App.Input`, and the same `App.Io`
+that `init!` had. It returns the next model, or `Err(Exit(code))` to stop the
+app with that exit code.
+
+`App.Input` is everything the platform observed for this cycle:
+
+[cols="1,3",options="header"]
+|===
+|Field |Contains
+|`devices` |The keyboard, mouse, text, and gamepad snapshot; see <<input>>
+|`window` |The window's size, focus, and whether it is minimized
+|`time` |This cycle's timing, including `elapsed_seconds` for animation
+|`messages` |The results of tasks that finished since the last cycle; see <<tasks>>
+|`capture` |The status of any recording in progress
+|`dropped`, `dropped_overflow` |Files dropped on the window this cycle
+|===
+
+`update!` may call host effects directly: play a sound, resize the window,
+print a line, start a recording. Those happen immediately, in the order they
+are written. What `update!` must _not_ do is wait. An effect that can wait on
+the outside world -- reading a file, sending a request, sleeping -- is refused
+in `update!`. Start that work as a task instead, and its result arrives in a
+later input. <<tasks>> shows how.
+
+== render!: draw the model
+
+[source,roc]
+----
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |model, frame| {
+    frame.clear!(Color.black)
+    frame.circle!({ center: model.pointer, radius: 18, style: Draw.filled(Color.red) })
+    Ok({})
+}
+----
+
+`render!` receives the model `update!` just returned and a `Draw.Frame`.
+Everything it draws goes through that frame. It returns `{}`, not a model: it
+cannot change the app's state, and effects that change host state are refused
+while it runs, so a frame always shows exactly the model `update!` produced.
+<<drawing>> covers what a frame can draw.
+
+Because `render!` gets no input, anything that moves on screen must be read
+from the model. An animation keeps its clock in the model, advanced in
+`update!` from `input.time.elapsed_seconds`.
+
+[#phases]
+== Phases: which effects are legal where
+
+The platform always knows which callback it is inside -- `init!`, `update!`,
+`render!`, or a task -- and calls this the _phase_. Every effect states the
+phases it is legal in, in its API documentation, using one of a few rules:
+
+[cols="2,3",options="header"]
+|===
+|Kind of effect |Legal in
+|Changes host state (plays a sound, resizes the window, uploads a texture) or queues output (printing) |`init!`, `update!`, and tasks; refused in `render!`
+|Draws |`render!` only
+|Waits on the outside world (files, network, databases, programs, sleeping) |`init!`, where it holds startup, and tasks, where it pauses only that task; refused in `update!` and `render!`
+|Starts a task |`update!` and tasks
+|Reads something the host already has, cheaply |Any callback, `render!` included
+|Startup facts (`args!`, `entropy!`, `default_font!`) |`init!` only
+|Diagnostic annotations for <<observatory>> |Every callback and tasks
+|===
+
+Calling an effect from a phase it does not permit is a programming mistake,
+not a runtime condition: the app stops at once with a message naming the
+effect, the phase it was called from, and where it belongs. The compiler
+cannot catch this, so run your app and read the message if it happens.
+
+== Messages
+
+`Msg` is the type of the values your tasks return. An app that starts no tasks
+writes `Msg : []`. One that loads a level might write:
+
+[source,roc]
+----
+Msg : [LevelLoaded(Try(Str, Files.ReadTextError))]
+----
+
+Finished tasks' messages arrive in `input.messages`, and `update!` folds them
+into the model, usually with a pure helper:
+
+[source,roc]
+----
+Ok(List.fold(input.messages, model, apply_message))
+----
+
+<<tasks>> explains where messages come from.
+
+== Keep the decisions pure
+
+`update!` is effectful, so `roc test` cannot call it. Keep the decisions it
+makes -- which message changes what, whether to quit, what work to start -- in
+pure functions that take the model and input, and let `update!` perform what
+they decide. Those functions are ordinary Roc and can be tested with `expect`.
+<<testing>> shows how to build inputs and resources for such tests.
+
+== Further reading
+
+* <<architecture>> states these rules precisely and explains why RocRay chose
+  them.
+* The `App` page of the {api}[API reference] documents every configuration
+  receiver and `App.Input` field.

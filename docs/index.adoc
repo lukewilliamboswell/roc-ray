@@ -1,0 +1,104 @@
+= RocRay: A manual for building native games and interactive apps in Roc
+:doctype: book
+:author: The RocRay contributors
+// The build stamps the platform version it documents. A checkout that has not
+// been released yet says so rather than claiming a version it is not.
+:revnumber: {docs-version}
+:revremark: macOS (Intel and Apple silicon), Linux x86-64, Windows x86-64
+:toc: left
+:toclevels: 3
+:sectnums:
+:sectanchors:
+:icons: font
+:source-highlighter: rouge
+:imagesdir: images
+// Links into the repository. The manual is published away from the source
+// tree, so a relative link to an example or script would not resolve.
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+
+[.lead]
+RocRay is a Roc platform for games, visual tools, and other interactive
+programs that draw a frame at a time. Your app keeps its own state and rules;
+RocRay supplies drawing, audio, keyboard and mouse input, windows, recording,
+files, and networking. This manual takes an app from its first window, through
+the features it will reach for as it grows, to the design that holds them
+together.
+
+ifdef::backend-html5[]
+{api}[Browse the API reference] ·
+link:roc-ray.pdf[Download this manual as a PDF].
+endif::[]
+
+[discrete]
+== Choose a path
+
+New to RocRay:: Read <<overview>>, then follow <<getting-started>> to run an
+example and write the smallest app. <<examples>> suggests what to read next.
+Building an app:: Read <<app-model>> first. It introduces `init!`, `update!`
+and `render!`, which every later guide builds on. Then read the guides for the
+features you need, in any order: <<input>>, <<drawing>>, <<tasks>>, and so on.
+Before your app touches a file, the network, or another program, read
+<<permissions>>.
+Testing and investigating performance:: <<testing>> covers the pure tests and
+unattended runs an app can use. <<observatory>> records what the host did,
+cycle by cycle, into a database you can query.
+Curious about the design:: <<architecture>> explains the rules the guides
+introduce one at a time, and why RocRay chose them.
+Contributing to RocRay:: Start with <<contributing>>. <<host-development>>
+covers changes to the native host, and <<maintaining>> covers dependencies,
+bundles, and releases.
+
+= Getting started
+
+include::overview.adoc[leveloffset=+1]
+
+include::getting-started.adoc[leveloffset=+1]
+
+include::examples.adoc[leveloffset=+1]
+
+= Guides
+
+include::app-model.adoc[leveloffset=+1]
+
+include::input.adoc[leveloffset=+1]
+
+include::drawing.adoc[leveloffset=+1]
+
+include::tasks.adoc[leveloffset=+1]
+
+include::permissions.adoc[leveloffset=+1]
+
+include::files-and-assets.adoc[leveloffset=+1]
+
+include::audio.adoc[leveloffset=+1]
+
+include::networking.adoc[leveloffset=+1]
+
+include::host-services.adoc[leveloffset=+1]
+
+include::capture.adoc[leveloffset=+1]
+
+include::testing.adoc[leveloffset=+1]
+
+include::observatory.adoc[leveloffset=+1]
+
+= Reference
+
+include::reference.adoc[leveloffset=+1]
+
+include::architecture.adoc[leveloffset=+1]
+
+= Contributing
+
+include::contributing.adoc[leveloffset=+1]
+
+include::host-development.adoc[leveloffset=+1]
+
+include::maintaining.adoc[leveloffset=+1]
+
+= Release notes
+
+include::releases/index.adoc[leveloffset=+1]

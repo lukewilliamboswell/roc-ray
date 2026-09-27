@@ -382,6 +382,16 @@ jobs:
           pr_title: Update release references for ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
 
+      # After the follow-up PR, so the built manual is published beside the API
+      # reference without being committed to www/.
+      - name: Build the manual
+        run: |
+          python3 scripts/build_manual.py --pdf \
+            --docs-version "${{ needs.build.outputs.release_version }}" \
+            --output .docs-out
+          rm -rf www/manual
+          cp -R .docs-out/site www/manual
+
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 

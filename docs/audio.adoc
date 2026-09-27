@@ -1,0 +1,90 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#audio]
+= Audio
+
+RocRay plays short sound effects, streams music, and can generate tones in
+code. This chapter assumes <<app-model>>; loading sounds from disk also uses
+the asset stores described in <<files-and-assets>>.
+
+== Sounds and music
+
+There are two kinds of audio resource, and they are distinct types so they
+cannot be mixed up:
+
+* A `Sound` is decoded into memory. Use it for short effects.
+* A `Music` track streams its encoded bytes. Use it for long tracks; the
+  platform advances it automatically every frame.
+
+Like every host resource, both are released automatically when the last
+reference goes away. Load or generate them in `init!` and keep them in the
+model.
+
+== Sounds made in code
+
+`Audio.gen_tone!` and `Audio.gen_sound!` build a `Sound` with no file behind
+it, so they need no asset store and are legal in `init!`, `update!`, and
+tasks:
+
+[source,roc]
+----
+init! = App.init(
+    App.default,
+    |_io| Ok({ blip: Audio.gen_tone!({ freq: 440, ms: 120 })? }),
+)
+----
+
+`gen_sound!` takes a waveform, a start and end frequency, a duration, an
+envelope, and a volume. {src}/examples/pong/main.roc[Pong] and
+{src}/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
+this way.
+
+== Loading from disk
+
+[source,roc]
+----
+jump = Audio.load_sound!(store, "jump.wav")?
+theme = Audio.load_music!(store, "theme.ogg")?
+----
+
+Both read the disk, so they wait: they are legal in `init!` and in tasks. To
+start a new track after startup, load it in a task and keep the `Music` that
+the task's message carries.
+
+== Playing
+
+Playing, stopping, and adjusting audio change what the mixer is doing. They are
+legal in `init!`, `update!`, and tasks, and refused in `render!`:
+
+[source,roc]
+----
+if input.devices.key_pressed(KeySpace) {
+    model.blip.playback().with_volume(0.4).play!()
+}
+----
+
+A sound has no volume, pitch, or pan that outlives one play. `sound.play!()`
+plays it with the defaults; `sound.playback()` starts a description that sets
+volume, pitch, and pan for this play only, finished with `.play!()`.
+`Sound` also has `stop!`, `pause!`, and `resume!`.
+
+Music keeps its settings: `play!`, `stop!`, `pause!`, `resume!`, `seek!`,
+`set_volume!`, `set_pitch!`, `set_pan!`, and `set_looping!`.
+`Audio.set_master_volume!` scales everything.
+
+Four queries only read what the audio device already knows, so they are legal
+in any callback, `render!` included: `Sound.is_playing!`, `Music.is_playing!`,
+`Music.length!`, and `Music.time_played!`.
+
+== Further reading
+
+* The `Audio` page of the {api}[API reference].
+* {src}/examples/top_down/main.roc[Top Down] loads music and sound effects and
+  switches tracks with the game state.

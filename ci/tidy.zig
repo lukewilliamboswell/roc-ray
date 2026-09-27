@@ -21,9 +21,9 @@ const MiB = 1024 * 1024;
 /// Binary file extensions that should be skipped entirely (not read into the buffer).
 /// These are compiled artifacts, images, and other non-text files.
 const binary_extensions: []const []const u8 = &.{
-    ".ico",  ".png",   ".webp", ".jpg",  ".jpeg", ".gif", ".bin",
-    ".o",    ".a",     ".lib",  ".dll",  ".so",   ".dylib",
-    ".wasm",
+    ".ico", ".png", ".webp", ".jpg", ".jpeg", ".gif",   ".bin",
+    ".o",   ".a",   ".lib",  ".dll", ".so",   ".dylib", ".wasm",
+    ".ttf", ".otf", ".pdf",
 };
 
 const TermColor = struct {
@@ -156,6 +156,13 @@ const Errors = struct {
         );
     }
 
+    pub fn addInvalidAsciidocTitle(errors: *Errors, file: SourceFile) void {
+        errors.emit(
+            "{s}: error: chapter should have exactly one top-level '= Title'\n",
+            .{file.path},
+        );
+    }
+
     pub fn addFileUntracked(errors: *Errors, file: []const u8) void {
         errors.emit(
             "{s}: error: imported file untracked by git\n",
@@ -242,6 +249,9 @@ fn tidyFile(
     if (file.hasExtension(".md")) {
         tidyMarkdownTitle(file, errors);
     }
+    if (file.hasExtension(".adoc")) {
+        tidyAsciidocTitle(file, errors);
+    }
 }
 
 fn tidyControlCharacters(file: SourceFile, errors: *Errors) void {
@@ -300,7 +310,6 @@ fn tidyBanned(file: SourceFile, errors: *Errors) void {
         }
     }
 }
-
 
 const IdentifierCounter = struct {
     const file_identifier_count_max = 100_000;
@@ -524,7 +533,7 @@ fn isBinOpArithmetic(tag: Ast.Node.Tag) bool {
 fn tidyMarkdownTitle(file: SourceFile, errors: *Errors) void {
     // Skip directories with different conventions
     const skip_paths: []const []const u8 = &.{
-        "vendor/",   // External vendored code
+        "vendor/", // External vendored code
         "platform/", // Platform-specific files
         "examples/", // Example projects
     };
@@ -548,6 +557,36 @@ fn tidyMarkdownTitle(file: SourceFile, errors: *Errors) void {
         1 => {},
         else => errors.addInvalidMarkdownTitle(file),
     }
+}
+
+/// Checks that each AsciiDoc chapter has exactly one document title.
+///
+/// The manual is one book: `docs/index.adoc` includes every chapter with
+/// `leveloffset=+1`, so a chapter's `= Title` becomes its chapter heading. A
+/// second `= ` line in a chapter would become a chapter of its own, and a
+/// missing one would merge the chapter into the one before it. The book itself
+/// and the release-notes index, which hold parts and includes rather than a
+/// title of their own, are exempt.
+fn tidyAsciidocTitle(file: SourceFile, errors: *Errors) void {
+    if (std.mem.endsWith(u8, file.path, "index.adoc")) return;
+
+    var delimited_block: ?[]const u8 = null; // Listing, literal, and comment blocks.
+    var title_count: u32 = 0;
+    var it = std.mem.splitScalar(u8, file.text, '\n');
+    while (it.next()) |line| {
+        const delimiters: []const []const u8 = &.{ "----", "....", "////" };
+        for (delimiters) |delimiter| {
+            if (mem.eql(u8, line, delimiter)) {
+                if (delimited_block) |open| {
+                    if (mem.eql(u8, open, delimiter)) delimited_block = null;
+                } else {
+                    delimited_block = delimiter;
+                }
+            }
+        }
+        if (delimited_block == null and mem.startsWith(u8, line, "= ")) title_count += 1;
+    }
+    if (title_count != 1) errors.addInvalidAsciidocTitle(file);
 }
 
 // Zig's lazy compilation model makes it too easy to forget to include a file into the build --- if

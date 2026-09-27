@@ -1,0 +1,147 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#permissions]
+= Declaring what an app reaches
+
+Every app can draw, read input, play audio, and print to its terminal without
+asking. Reaching beyond its own things -- a network service, a directory,
+another program, an environment variable, the clipboard -- is declared in the
+app's startup configuration. This chapter explains what needs a declaration,
+how to write one, and what happens when an app reaches outside it. It assumes
+<<app-model>>.
+
+== Declare it in the startup config
+
+Add a `Permission` to the config for each thing the app reaches:
+
+[source,roc]
+----
+config =
+    App.default
+    .with_title("Weather")
+    .with_permission(HttpOrigin("https://api.example.com"))
+    .with_permission(EnvVar("WEATHER_TOKEN"))
+----
+
+or several at once, in order:
+
+[source,roc]
+----
+App.default.with_permissions([HttpOrigin("https://api.example.com"), EnvVar("API_TOKEN")])
+----
+
+The declaration is the grant. There are no launch flags, prompts, or
+install-time approvals: what an app can reach is read from its source, and
+changed only by changing its source. A declaration may depend on the command
+line, through `App.init_for_args`, but every alternative is still written in
+the source.
+
+Declarations accumulate, and a duplicate is harmless.
+
+== What needs no declaration
+
+These belong to the running app and are always available:
+
+* the window, input, drawing, audio playback, clocks, timers, and entropy;
+* resources built from bytes the app already holds;
+* standard output and standard error;
+* captures written beneath the configured output directory (see <<capture>>);
+* the read-only directory beside the executable -- the app's own bundle;
+* the app's private data, configuration, and cache directories, once it names
+  itself with `with_app_id` (see <<files-and-assets>>);
+* in-memory SQLite databases.
+
+A file the user drops on the window, or a path the user passes on the command
+line, needs no declaration either: the user designating it is the consent.
+<<files-designated>> shows how to accept one.
+
+== Permissions
+
+Declare each facility as narrowly as it allows.
+
+[cols="2,3",options="header"]
+|===
+|Declaration |Permits
+
+2+h|HTTP
+|`HttpOrigin(url)` |Requests to the URL's origin: its scheme, host, and port. `HttpOrigin("https://api.example.com")` permits `https://api.example.com/v1/forecast` but not `http://api.example.com`, `https://api.example.com:8443`, or `https://cdn.example.com`. A redirect to another origin is refused unless that origin is declared too.
+|`HttpAny` |Requests anywhere. Prefer `HttpOrigin` unless the destinations truly are open-ended, such as a URL the user types.
+
+2+h|UDP
+|`UdpBind(port)` |Binding a socket to one local port
+|`UdpPeer(address, port)` |Sending datagrams to one IPv4 peer, written as a dotted quad such as `"192.168.1.20"`; also permits binding an ephemeral port (port `0`) to talk to it
+|`UdpLoopback` |Binding and sending on any port of any address in `127.0.0.0/8`: networking between processes on this machine and nothing beyond
+|`UdpAny` |Binding any port and sending to any peer
+
+2+h|Programs
+|`Command(program)` |Running one program, named exactly as the app names it to `Cmd`. `Command("git")` permits running `"git"`, looked up on `PATH`, and not `"/usr/bin/git"`.
+|`CommandAny` |Running any program. A child process has all of the user's authority, so this is the widest declaration there is.
+
+2+h|Environment
+|`EnvVar(name)` |Reading one environment variable by exact name
+|`EnvAny` |Reading any environment variable
+
+2+h|Clipboard
+|`ClipboardRead` |Reading the system clipboard, which often holds text copied from somewhere else entirely, such as a password
+|`ClipboardWrite` |Replacing the system clipboard's contents
+
+2+h|Files
+|`WorkingDirectory(mode)` |The directory the app was launched from and everything beneath it: what running an example from a repository checkout wants
+|`Directory(path, mode)` |One directory and everything beneath it. An absolute path names it directly; a relative one is resolved against the working directory. It may not contain `..` or be the filesystem root.
+|`FilesAny(mode)` |Any path on the filesystem
+|===
+
+A `mode` is `ReadOnly` or `ReadWrite`.
+
+Each facility's unscoped form -- `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`,
+`FilesAny` -- is spelled to stand out in review.
+
+== What happens at the edges
+
+There are three different outcomes, and they are deliberately different:
+
+Outside a declared scope::
+  The effect returns `PermissionDenied` without doing anything. A URL on
+  another origin, a path outside the declared directories, or an undeclared
+  variable name can all be runtime data, so the app must be able to handle
+  this as an ordinary result. A followed HTTP redirect is checked the same way.
+
+A facility the app never declared at all::
+  Using `Http` with no HTTP declaration, or `Cmd` with no `Command`, is a
+  programming mistake fixed by the source. The app stops at once with a
+  message naming the declaration to add.
+
+A malformed declaration::
+  A directory containing `..`, a UDP peer that is not an IPv4 address, or an
+  origin that does not parse stops the app before `init!` runs, naming the
+  entry.
+
+`PermissionDenied` means only "not declared". When the operating system itself
+refuses -- a file the user cannot write, a port below 1024 without privileges
+-- the effect reports `AccessRefused`.
+
+== What this protects against
+
+A RocRay app has no way to reach anything except through the platform, so its
+declarations bound what the app's code can do. That addresses a careless or
+compromised dependency inside a trusted app, which can reach only what the app
+hands it; runtime data -- a save name, a dropped path, a network reply --
+steering an effect somewhere the app never meant; and unaudited source, which
+can reach no further than what it visibly declares.
+
+It is not an operating-system sandbox. It does not contain a malicious native
+executable, whose author controls the host as well as the app, and it does not
+make decoding hostile data safe.
+
+== Further reading
+
+* The `Permission` page of the {api}[API reference].
+* <<files-and-assets>> for how file declarations become directory handles.
+* The authority tiers are stated precisely in <<architecture>>.

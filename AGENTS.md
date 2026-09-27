@@ -2,21 +2,21 @@
 
 ## Architectural authority
 
-- Read `design.md` completely before proposing or making changes to public
-  APIs, platform behavior, host integration, ownership, scheduling, resource
-  limits, targets, or application lifecycle.
-- Treat `design.md` as the authoritative description of RocRay's intended
-  end-state architecture. The current implementation may lag behind it. Move
-  the implementation toward the design; do not use existing conflicting code
-  as evidence that the conflict is intentional.
+- Read `docs/architecture.adoc` completely before proposing or making changes
+  to public APIs, platform behavior, host integration, ownership, scheduling,
+  resource limits, targets, or application lifecycle.
+- Treat `docs/architecture.adoc` as the authoritative description of RocRay's
+  intended end-state architecture. The current implementation may lag behind
+  it. Move the implementation toward the design; do not use existing
+  conflicting code as evidence that the conflict is intentional.
 - Evaluate code, tests, examples, and documentation against the design's scope,
   boundaries, vocabulary, invariants, and non-goals. A locally convenient
   implementation is not acceptable if it weakens the application contract.
 - If requested work conflicts with the design, identify the conflict
   explicitly. Do not hide it behind compatibility glue, a special case, or an
   undocumented new boundary protocol.
-- Change `design.md` only when requirements deliberately change, experience
-  invalidates an architectural assumption, or the system boundary is
+- Change `docs/architecture.adoc` only when requirements deliberately change,
+  experience invalidates an architectural assumption, or the system boundary is
   intentionally moved. Do not edit it merely to legitimize current behavior or
   an implementation shortcut.
 
@@ -26,9 +26,9 @@
   opaque model between callbacks, but must not inspect it, mutate it, or infer
   application decisions from it.
 - Classify every application/host interaction as one of the four protocols in
-  `design.md`: startup authority, `App.Input`, a direct host effect called from
-  `update!` or a task, or `Draw.Frame`. Adding another interaction shape is an
-  architecture change, not an ordinary feature.
+  `docs/architecture.adoc`: startup authority, `App.Input`, a direct host
+  effect called from `update!` or a task, or `Draw.Frame`. Adding another
+  interaction shape is an architecture change, not an ordinary feature.
 - Keep application callbacks and task bodies serial and on the frame thread.
   Host workers must not execute Roc application code or hold a Roc value; give
   them bytes the host owns.
@@ -65,9 +65,9 @@
 
 ## Use the architecture vocabulary consistently
 
-- Use the terms defined in `design.md` according to their direction, timing,
-  ownership, and cardinality. In particular, distinguish host cycles,
-  simulation steps, and presentation frames.
+- Use the terms defined in `docs/architecture.adoc` according to their
+  direction, timing, ownership, and cardinality. In particular, distinguish
+  host cycles, simulation steps, and presentation frames.
 - For the public model, use `Input`, `Task`, `Message`, and `Frame`; use
   `update!` for the effectful step that folds an input into the next model,
   *effect* for a direct host call it makes, *waiting effect* for one that parks
@@ -85,9 +85,9 @@
 
 ## Complete work across affected layers
 
-- Follow `CONTRIBUTING.md` for the current repository layout, development
-  workflow, and verification commands rather than duplicating volatile details
-  here.
+- Follow `docs/contributing.adoc` for the current repository layout,
+  development workflow, and verification commands rather than duplicating
+  volatile details here.
 - Trace a boundary change through every affected public Roc type, adapter,
   hosted declaration, ABI representation, native host path, backend, target
   profile, test, example, and user-facing document. Keep transport
@@ -108,10 +108,12 @@
   workarounds, investigation logs, benchmark results, command transcripts,
   current compiler defects, one-off file instructions, TODO lists, or lessons
   relevant only to a completed task.
-- Put stable architectural requirements and rationale in `design.md`; current
-  development workflow in `CONTRIBUTING.md`; public API behavior in module
-  documentation; implementation invariants beside the code they constrain; and
-  plans, status, and temporary findings in issues or pull requests.
+- Put stable architectural requirements and rationale in
+  `docs/architecture.adoc`; current development workflow in
+  `docs/contributing.adoc`; user guidance in the other chapters of the manual
+  under `docs/`; public API behavior in module documentation; implementation
+  invariants beside the code they constrain; and plans, status, and temporary
+  findings in issues or pull requests.
 - Add or change an instruction here only when it should govern unrelated future
   work across the repository. If an instruction is likely to expire when one
   feature or bug is finished, it does not belong here.

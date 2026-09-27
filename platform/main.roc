@@ -38,7 +38,7 @@
 ## init! : App.Init(Model, [])
 ## init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
 ##
-## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
+## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 ## update! = |model, input, _io|
 ##     if input.devices.key_pressed(KeyEscape) {
 ##         Err(Exit(0))
@@ -46,7 +46,7 @@
 ##         Ok({ frames: model.frames + 1 })
 ##     }
 ##
-## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+## render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 ## render! = |_model, frame| {
 ##     frame.clear!(Color.black)
 ##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })

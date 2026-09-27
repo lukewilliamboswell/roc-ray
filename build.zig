@@ -528,6 +528,12 @@ fn buildHostLib(
         host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
+    // The glibc 2.38 C23 aliases the prebuilt Linux raylib references, resolved
+    // inside the app so it runs on older glibc; see src/isoc23_shims.s.
+    if (target.result.os.tag == .linux and target.result.abi.isGnu() and target.result.cpu.arch == .x86_64) {
+        host_lib.root_module.addAssemblyFile(b.path("src/isoc23_shims.s"));
+    }
+
     // Roc links the static host library directly, so include Zig compiler-rt
     // helpers such as __divti3 in the archive for every target.
     host_lib.bundle_compiler_rt = true;

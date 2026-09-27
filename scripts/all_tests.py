@@ -13,6 +13,7 @@ This script runs:
 - roc fmt --check - Verify formatting of the checked-in examples
 - roc test        - Run inline tests
 - roc build       - Build executables against the served platform bundle
+- glibc baseline  - On Linux, no built example needs a glibc 2.38-only symbol
 - headless runs   - Run each built example for a few frames
 - windowed sweep  - Run the cases in `scripts/test_spec.json` against the real
                     raylib backend, with a real (hidden) window, so the window,
@@ -184,6 +185,37 @@ def executable_for(entry: Path) -> Path:
     """Return the executable `roc build` produces beside an app's `main.roc`."""
     suffix = ".exe" if IS_WINDOWS else ""
     return entry.with_name(f"{entry.stem}{suffix}")
+
+
+def check_glibc_baseline(built: list[tuple[Path, Path]]) -> list[str]:
+    """Fail if a built Linux example leaves a glibc 2.38-only symbol for the
+    dynamic linker.
+
+    The prebuilt raylib references C23 aliases (`__isoc23_strtoul` and so on)
+    that only glibc 2.38 and later export. The host defines them, so they must
+    resolve inside the executable; an undefined one aborts every app on older
+    glibc the moment raylib initialises, and headless runs never reach it.
+    """
+    if not IS_LINUX or not built or shutil.which("readelf") is None:
+        return []
+    print("\nChecking the glibc baseline of built examples...", end=" ", flush=True)
+    failures = []
+    for example, staged in built:
+        result = subprocess.run(
+            ["readelf", "--dyn-syms", "-W", str(executable_for(staged))],
+            capture_output=True, text=True,
+        )
+        undefined = [
+            line.split()[-1]
+            for line in result.stdout.splitlines()
+            if " UND " in line and line.split()[-1].startswith("__isoc23_")
+        ]
+        if undefined:
+            failures.append(f"{example_name(example)} needs glibc 2.38 for {', '.join(sorted(set(undefined)))}")
+    print("ok" if not failures else "FAILED")
+    for failure in failures:
+        print(f"  {failure}")
+    return [f"glibc baseline: {failure}" for failure in failures]
 
 
 def run_headless_examples(
@@ -1948,6 +1980,7 @@ def _run_example_stages(
     elif args.skip_roc_build:
         print("\nSkipping headless runtime (--skip-roc-build)")
     else:
+        failed.extend(check_glibc_baseline(built))
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
 
     # The windowed sweep is its own stage rather than part of the headless

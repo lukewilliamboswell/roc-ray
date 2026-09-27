@@ -644,6 +644,13 @@ kbd {
   color: var(--ink);
 }
 
+/*
+ * Rouge's theme also paints a light background behind some tokens, among
+ * them every whitespace run (`.w`). Tokens take the block's ground, in either
+ * scheme; only a highlighted line (`.hll`) has its own.
+ */
+#content pre.rouge span { background: transparent; }
+
 #content pre.rouge .c,
 #content pre.rouge .c1,
 #content pre.rouge .cm,

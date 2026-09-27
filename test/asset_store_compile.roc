@@ -16,9 +16,10 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default,
 	|io| {
-		store = io.assets().open!(
-			Assets.with_manifest(
-				Assets.beside_executable("assets"),
+		bundle = io.files().beside_executable!()?
+		store = Assets.open!(
+			bundle.subdir("assets")?,
+			RequireManifest(
 				{
 					asset_set: "test-assets",
 					schema: 1,

@@ -91,7 +91,7 @@ const TilemapRawTileset = abi.HostTilemap_load_tmxOkTilesets;
 /// application can say whether its installation or one optional asset failed.
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_ASSET_MANIFEST_BYTES: usize = 1024 * 1024;
-/// The largest file `Audio.Loader.load_sound!` and `Audio.Loader.load_music!` will read. It
+/// The largest file `Audio.load_sound!` and `Audio.load_music!` will read. It
 /// bounds host memory per resource, not per frame: a sound is decoded whole
 /// onto the device, and a music stream holds its encoded bytes for as long as
 /// it exists. A larger file fails to load rather than being read.
@@ -169,8 +169,8 @@ const DIR_ENTRY_OTHER: u8 = 3;
 /// The most the host will copy into a Roc string in one operation.
 ///
 /// Converting the bytes into a `Str` allocates and copies, which is why only
-/// the reads that produce a string carry this limit: `Files.Access.read_text!`
-/// reports `TooLarge` above it, while `Files.Access.read_bytes!` transfers its
+/// the reads that produce a string carry this limit: `Files.ReadDir.read_text!`
+/// reports `TooLarge` above it, while `Files.ReadDir.read_bytes!` transfers its
 /// allocation as an owning Roc byte list without copying and is bounded by the
 /// much larger `MAX_FILE_READ_BYTES` instead.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
@@ -2277,7 +2277,7 @@ fn exportedCapturePixelAt(args: abi.HostCapture_pixel_atArgs) callconv(.c) abi.H
 /// The order of the checks is the point. A region no source could satisfy is
 /// refused before anything is read, and a delivery slot is reserved before the
 /// readback, so the expensive part never runs for a read that has nowhere to
-/// put its answer -- the same admission `Files.Access.read_bytes!` does before it
+/// put its answer -- the same admission `Files.ReadDir.read_bytes!` does before it
 /// opens a path, and for the same reason.
 fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_regionArgs) abi.HostCapture_read_regionResult {
     enforcePhase("Capture.read_region!", during_update);
@@ -4381,7 +4381,7 @@ fn seamlessByteList(resource: *u64, bytes: []u8) abi.RocListWith(u8, false) {
 }
 
 /// Slots promised to reads that have started but have not yet handed their
-/// bytes over. `Files.Access.read_bytes!` has to reserve one before it opens the
+/// bytes over. `Files.ReadDir.read_bytes!` has to reserve one before it opens the
 /// path: otherwise a full heap could let `MAX_LIVE_FILE_BYTE_LISTS` large
 /// files be read only to discard each one when there is no slot to install it
 /// in, so the app would pay for the I/O and still get `Busy`.
@@ -12203,7 +12203,7 @@ test "completing a large read transfers the read's allocation without copying" {
     const small = installReadBytes(std.testing.allocator, small_bytes);
     try std.testing.expectEqual(large_cost, counter.allocated_bytes);
 
-    // The control. `Files.Access.read_text!` copies its whole payload through the Roc
+    // The control. `Files.ReadDir.read_text!` copies its whole payload through the Roc
     // allocator, so the number above is a result and not a broken meter.
     const inline_bytes = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES);
     defer std.testing.allocator.free(inline_bytes);

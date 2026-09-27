@@ -5,7 +5,7 @@
 ## in the model. Drawing requires `Draw.Frame` and is legal only in `render!`.
 ##
 ## ```roc
-## raw = io.tilemaps().load_tmx!("assets/level.tmx")?
+## raw = Tilemap.load_tmx!(store, "level.tmx")?
 ## tilemap = Tilemap.from_raw(raw)
 ##     .with_origin({ x: 0, y: 0 })
 ##     .with_tileset_texture(1, tiles)

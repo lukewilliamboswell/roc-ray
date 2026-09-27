@@ -17,8 +17,8 @@
 ## }
 ## ```
 ##
-## `load_sound!` and `load_music!` resolve paths against the process working
-## directory; they do not use or enforce an `Assets.Store` root.
+## `load_sound!` and `load_music!` read from an `Assets.Store`, exactly as
+## `Assets.load_texture!` does.
 ##
 ## `Sound` is decoded into memory for short effects. `Music` streams encoded
 ## bytes for long tracks and is advanced automatically each frame.
@@ -38,6 +38,7 @@
 ## in any callback, `render!` included.
 import Resource
 import Host
+import Assets
 
 Audio := [].{
 
@@ -272,48 +273,41 @@ Audio := [].{
 	expect waveform_code(Sine) == 0
 	expect waveform_code(Noise) == 4
 
-	## Opaque audio-loading authority supplied by App.Io. A sound or music path
-	## must be covered by a declared `Permission`, as a `Files` path is.
-	Loader :: Resource.Authority.{
+	## Load a short sound effect from an asset store.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread and decoded onto the audio device when the bytes are back.
+	## `PathInvalid`, `NotFound` and `ReadFailed` mean what they mean for
+	## `Assets.load_texture!`; `SoundLoadFailed` is bytes raylib would not
+	## decode. The format is taken from the extension, and `.wav`, `.ogg`,
+	## `.mp3`, `.qoa` and `.flac` are the ones it reads.
+	load_sound! : Assets.Store, Str => Try(Sound, [PathInvalid, NotFound, ReadFailed, SoundLoadFailed, ResourceLimit])
+	load_sound! = |store, path| perform_load_sound!(store, path)
 
-		## Private platform construction; no application can manufacture the argument.
-		for_host : Resource.Authority -> Loader
-		for_host = |authority| Loader.(authority)
-
-		## Load a short sound effect from disk.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-		## the task; refused in `update!` and `render!`. The file is read off the
-		## frame thread and decoded onto the audio device when the bytes are back.
-		## `SoundLoadFailed` covers both a path with nothing behind it and bytes
-		## raylib would not decode; the format is taken from the extension, and
-		## `.wav`, `.ogg`, `.mp3`, `.qoa` and `.flac` are the ones it reads.
-		load_sound! : Loader, Str => Try(Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
-		load_sound! = |Loader.(authority), path| perform_load_sound!(authority, path)
-
-		## Load a streamed music file. Keep the returned value in the app model.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-		## the task; refused in `update!` and `render!`. The file is read off the
-		## frame thread and the host keeps those bytes for as long as the stream
-		## exists, releasing them with the final reference to the `Music`.
-		## `MusicLoadFailed` covers both a path with nothing behind it and bytes
-		## raylib would not decode; the format is taken from the extension, and
-		## `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm` and `.mod` are the ones it
-		## reads.
-		load_music! : Loader, Str => Try(Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
-		load_music! = |Loader.(authority), path| perform_load_music!(authority, path)
-
-	}
+	## Load a streamed music file from an asset store. Keep the returned value
+	## in the app model.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread and the host keeps those bytes for as long as the stream
+	## exists, releasing them with the final reference to the `Music`.
+	## `MusicLoadFailed` is bytes raylib would not decode; the format is taken
+	## from the extension, and `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm`
+	## and `.mod` are the ones it reads.
+	load_music! : Assets.Store, Str => Try(Music, [PathInvalid, NotFound, ReadFailed, MusicLoadFailed, ResourceLimit])
+	load_music! = |store, path| perform_load_music!(store, path)
 
 }
 
-loaded_sound_from_resource : Try(Resource.Sound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
+loaded_sound_from_resource : Try(Resource.Sound, Host.AudioLoadSoundError) -> Try(Audio.Sound, [PathInvalid, NotFound, ReadFailed, SoundLoadFailed, ResourceLimit])
 loaded_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union
 		Ok(resource) => Ok(Audio.Sound.(resource))
-		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
 		Err(SoundLoadFailed) => Err(SoundLoadFailed)
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
@@ -327,12 +321,14 @@ generated_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-music_from_resource : Try(Resource.Music, Host.AudioLoadMusicError) -> Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
+music_from_resource : Try(Resource.Music, Host.AudioLoadMusicError) -> Try(Audio.Music, [PathInvalid, NotFound, ReadFailed, MusicLoadFailed, ResourceLimit])
 music_from_resource = |result|
 	match result {
 		# closed error union to open error union
 		Ok(resource) => Ok(Audio.Music.(resource))
-		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
 		Err(MusicLoadFailed) => Err(MusicLoadFailed)
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
@@ -361,8 +357,8 @@ raw_config = |cfg| {
 }
 
 ## Private authority-taking implementations.
-perform_load_sound! : Resource.Authority, Str => Try(Audio.Sound, [PermissionDenied, SoundLoadFailed, ResourceLimit])
-perform_load_sound! = |authority, path| loaded_sound_from_resource(Host.audio_load_sound!(authority, path))
+perform_load_sound! : Assets.Store, Str => Try(Audio.Sound, [PathInvalid, NotFound, ReadFailed, SoundLoadFailed, ResourceLimit])
+perform_load_sound! = |store, path| loaded_sound_from_resource(Host.audio_load_sound!({ store: store.for_host(), path }))
 
-perform_load_music! : Resource.Authority, Str => Try(Audio.Music, [PermissionDenied, MusicLoadFailed, ResourceLimit])
-perform_load_music! = |authority, path| music_from_resource(Host.audio_load_music!(authority, path))
+perform_load_music! : Assets.Store, Str => Try(Audio.Music, [PathInvalid, NotFound, ReadFailed, MusicLoadFailed, ResourceLimit])
+perform_load_music! = |store, path| music_from_resource(Host.audio_load_music!({ store: store.for_host(), path }))

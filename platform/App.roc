@@ -38,8 +38,6 @@
 ## models; stubs cannot test loading or resource lifetime.
 import Host
 import Resource
-import Tilemap
-import Assets
 import Sqlite
 import Udp
 import Stderr
@@ -73,7 +71,6 @@ AppRecording := [NoRecording, Record(Capture.Recording)].{
 import Devices
 import Window
 import Time
-import Audio
 import Capture
 import Files
 import AppTransport
@@ -85,12 +82,8 @@ App := [].{
 	## landed.
 	##
 	## The path is the one the window system reported, absolute on every
-	## platform. Reading the file is a separate, waiting effect, so a drop is
-	## handled by starting a task:
-	##
-	## ```roc
-	## Task.spawn!(input, || Opened(io.files().read_bytes!(drop.path)))
-	## ```
+	## platform. It is an observation, not access: reading the file needs a
+	## `Files` handle on a directory that holds it.
 	##
 	## `position` is the pointer position the host sampled for the cycle the
 	## drop arrived on, in the same logical coordinates as
@@ -481,18 +474,6 @@ App := [].{
 		## Select sqlite authority without performing an effect.
 		sqlite : Io -> Sqlite.Service
 		sqlite = |Io.(authority)| Sqlite.Service.for_host(authority)
-
-		## Select assets authority without performing an effect.
-		assets : Io -> Assets.Loader
-		assets = |Io.(authority)| Assets.Loader.for_host(authority)
-
-		## Select audio authority without performing an effect.
-		audio : Io -> Audio.Loader
-		audio = |Io.(authority)| Audio.Loader.for_host(authority)
-
-		## Select tilemaps authority without performing an effect.
-		tilemaps : Io -> Tilemap.Loader
-		tilemaps = |Io.(authority)| Tilemap.Loader.for_host(authority)
 
 		## Select clipboard authority without performing an effect.
 		clipboard : Io -> Window.Clipboard

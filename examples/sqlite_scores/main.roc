@@ -1,7 +1,13 @@
 ## Press Space to add a random score to a SQLite-backed high-score board;
-## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
-## This example shows startup database setup, prepared statements, and Tasks:
-## work that may wait runs separately and returns rows as a later Message.
+## Escape quits. Scores remain in `scores.db` in the app's private data
+## directory between runs. This example shows startup database setup,
+## prepared statements, and Tasks: work that may wait runs separately and
+## returns rows as a later Message.
+##
+## It also shows private storage. The config names the app with
+## `with_app_id`, and `io.files().app_data!()` opens the directory the system
+## keeps for it -- `~/.local/share/dev.roc-ray.sqlite-scores` on Linux -- with
+## no permission to declare, because it is the app's own.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
@@ -13,7 +19,6 @@ import rr.Sqlite
 import rr.Task
 import rr.Text
 import rr.Time
-import rr.Permission
 
 ## State retained between updates: the open database and reusable insert
 ## statement, the displayed rows and request status, random score generation,
@@ -48,11 +53,9 @@ Status : [Ready, Working, Failed(Str)]
 Msg : [Refreshed(List(Entry)), Failed(Str)]
 
 ## `Files` creates the directory on its way; opening a database does not.
-db_dir : Str
-db_dir = "sqlite_scores_out"
-
-db_path : Str
-db_path = "sqlite_scores_out/scores.db"
+## The database's name beneath the app's private data directory.
+db_name : Str
+db_name = "scores.db"
 
 ## `played_at` is a REAL holding fractional seconds since the Unix epoch, and
 ## `name` is UNIQUE, so the board exercises three column types and gives a
@@ -82,13 +85,8 @@ init! = App.init(
 		.with_title("RocRay SQLite Scores")
 		.with_size({ width: 880, height: 560 })
 		.with_frame_pacing(Capped(60))
-	# The database, and the directory it lives in, is all this app writes.
-		.with_permission(Directory(db_dir, ReadWrite)),
+		.with_app_id("dev.roc-ray.sqlite-scores"),
 	|io| {
-		# A write builds the tree on its way, which is how the directory the
-		# database lives in comes to exist.
-		_ = io.files().write_bytes!("${db_dir}/.keep", [])
-
 		rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 		font = Draw.default_font!()
 		title = Text.from("High scores that outlive the process", font).size(26).prepare!()?
@@ -134,7 +132,8 @@ init! = App.init(
 ## Open the store and read the first board. Waits, which `init!` permits.
 open_board! : App.Io => Try({ db : Sqlite.Db, insert : Sqlite.Stmt, rows : List(Entry) }, Str)
 open_board! = |io| {
-	db = io.sqlite().open!(db_path) ? |err| describe(err)
+	data = io.files().app_data!() ? |_| "the app's data directory could not be opened"
+	db = io.sqlite().open!(data, db_name) ? |err| describe(err)
 	Sqlite.exec_script!(db, schema) ? |err| describe(err)
 	insert = Sqlite.prepare!(db, insert_run) ? |err| describe(err)
 	rows = read_board!(db)?

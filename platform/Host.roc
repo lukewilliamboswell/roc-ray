@@ -308,11 +308,13 @@ Host := [].{
 	]
 
 	## Store resource interface
+	## One file named beneath an asset store.
+	StoreAsset : { store : Resource.Store, path : Str }
 
 	## Parameters for opening a confined asset store.
 	StoreOpen : {
-		location_kind : U8,
 		root : Str,
+		path : Str,
 		manifest_required : Bool,
 		asset_set : Str,
 		schema : U32,
@@ -322,7 +324,7 @@ Host := [].{
 	}
 
 	## Failures while opening and validating an asset store.
-	StoreOpenError : [PermissionDenied, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
+	StoreOpenError : [PermissionDenied, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -402,10 +404,10 @@ Host := [].{
 	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
 
 	## Failures while loading a sound.
-	AudioLoadSoundError : [PermissionDenied, ResourceLimit, SoundLoadFailed]
+	AudioLoadSoundError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed]
 
 	## Failures while loading a music stream.
-	AudioLoadMusicError : [PermissionDenied, MusicLoadFailed, ResourceLimit]
+	AudioLoadMusicError : [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit]
 
 	## Parameters for a generated sound envelope.
 	AudioGenSound : {
@@ -428,13 +430,13 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_gen_sound! : AudioGenSound => Try(Resource.Sound, AudioGenerateSoundError)
 
-	## Load a sound from a file.
+	## Load a sound from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Resource.Authority, Str => Try(Resource.Sound, AudioLoadSoundError)
+	audio_load_sound! : StoreAsset => Try(Resource.Sound, AudioLoadSoundError)
 
-	## Load a music stream from a file.
+	## Load a music stream from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Resource.Authority, Str => Try(Resource.Music, AudioLoadMusicError)
+	audio_load_music! : StoreAsset => Try(Resource.Music, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -521,6 +523,19 @@ Host := [].{
 	audio_set_master_volume! : F32 => {}
 
 	## Files interface
+	## A root a directory handle may start from. `Declared` names a directory
+	## the app's permissions must cover; the rest are the app's own.
+	FilesRoot : [BesideExecutable, WorkingDirectory, Declared(Str), AppData, AppConfig, AppCache]
+
+	## Failures while resolving a root. `PermissionDenied` is a root no
+	## declaration covers.
+	FilesOpenError : [AccessRefused, NotADirectory, NotFound, OpenFailed, PermissionDenied, Unavailable]
+
+	## Resolve a root to the canonical absolute path a handle carries, creating
+	## it when it is writable and the app's own, or declared writable.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
+	files_open_root! : Resource.Authority, FilesRoot, Bool => Try(Str, FilesOpenError)
+
 	## Failures while reading a file as validated UTF-8.
 	FilesReadTextError : [PermissionDenied, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
@@ -543,19 +558,19 @@ Host := [].{
 
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_text! : Resource.Authority, Str => Try(Str, FilesReadTextError)
+	files_read_text! : Resource.Authority, Str, Str => Try(Str, FilesReadTextError)
 
-	## Stat one path, following symbolic links.
+	## Stat one path beneath a root, without following a link.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_metadata! : Resource.Authority, Str => Try(FilesMetadata, FilesMetadataError)
+	files_metadata! : Resource.Authority, Str, Str => Try(FilesMetadata, FilesMetadataError)
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Resource.Authority, Str => Try(List(U8), FilesReadBytesError)
+	files_read_bytes! : Resource.Authority, Str, Str => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_list! : Resource.Authority, Str => Try(List(U8), FilesListError)
+	files_list! : Resource.Authority, Str, Str => Try(List(U8), FilesListError)
 
 	## Failures while replacing a whole file.
 	##
@@ -565,11 +580,11 @@ Host := [].{
 
 	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_text! : Resource.Authority, Str, Str => Try({}, FilesWriteError)
+	files_write_text! : Resource.Authority, Str, Str, Str => Try({}, FilesWriteError)
 
 	## Replace a file with bytes; the same failures as a text write.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_bytes! : Resource.Authority, Str, List(U8) => Try({}, FilesWriteError)
+	files_write_bytes! : Resource.Authority, Str, Str, List(U8) => Try({}, FilesWriteError)
 
 	## Http interface
 	## One ordered HTTP header.
@@ -944,8 +959,9 @@ Host := [].{
 		max_row : U64,
 	}
 
+	## Load a TMX map, and the tilesets it references, from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	tilemap_load_tmx! : Resource.Authority, Str => Try(TilemapMap, [PermissionDenied, NotFound, ParseFailed, ReadFailed, Unsupported])
+	tilemap_load_tmx! : StoreAsset => Try(TilemapMap, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
 
 	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}
@@ -1011,7 +1027,7 @@ Host := [].{
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_open! : Resource.Authority, Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
+	sqlite_open! : Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
 
 	## Close early; final handle release remains the fallback.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.

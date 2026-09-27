@@ -37,9 +37,10 @@ init! = App.init(
 	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }).with_permission(Directory("examples/post_process/assets", ReadOnly)),
 	|io| {
 
-		## This source tree example deliberately opts into CWD-relative assets.
-		## Packaged applications normally use `Assets.beside_executable("assets")`.
-		assets = io.assets().open!(Assets.working_directory("examples/post_process/assets"))?
+		## This source-tree example opens the asset directory it declared,
+		## relative to the repository root it runs from. A packaged app opens
+		## `io.files().beside_executable!()`, which needs no declaration.
+		assets = Assets.open!(io.files().open_dir_read!("examples/post_process/assets")?, IgnoreManifest)?
 		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?

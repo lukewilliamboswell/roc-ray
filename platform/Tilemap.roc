@@ -589,27 +589,18 @@ Tilemap :: {
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
 	}
 
-	## Opaque tilemap-loading authority supplied by App.Io. A map path must be
-	## covered by a declared `Permission`, as a `Files` path is.
-	Loader :: Resource.Authority.{
-
-		## Private platform construction; no application can manufacture the argument.
-		for_host : Resource.Authority -> Loader
-		for_host = |authority| Loader.(authority)
-
-		## Parse a Tiled TMX map.
-		##
-		## The returned data is an allocation-efficient set of flat lists with index
-		## ranges for nested properties, objects, and tile data.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-		## the task; refused in `update!` and `render!`. A map is more than one
-		## file: an external tileset is read the same way, so a map spread across
-		## several files parks once per file and parses in between.
-		load_tmx! : Loader, Str => Try(TilemapRawMap, [PermissionDenied, NotFound, ReadFailed, ParseFailed, Unsupported])
-		load_tmx! = |Loader.(authority), path| perform_load_tmx!(authority, path)
-
-	}
+	## Parse a Tiled TMX map from an asset store.
+	##
+	## The returned data is an allocation-efficient set of flat lists with index
+	## ranges for nested properties, objects, and tile data.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. A map is more than one
+	## file: an external tileset is read from the same store, so a map spread
+	## across several files parks once per file and parses in between. A
+	## reference that would leave the store is `PathInvalid`.
+	load_tmx! : Assets.Store, Str => Try(TilemapRawMap, [PathInvalid, NotFound, ReadFailed, ParseFailed, Unsupported])
+	load_tmx! = |store, path| perform_load_tmx!(store, path)
 
 }
 
@@ -1198,12 +1189,12 @@ expect {
 }
 
 ## Private authority-taking implementations.
-perform_load_tmx! : Resource.Authority, Str => Try(TilemapRawMap, [PermissionDenied, NotFound, ReadFailed, ParseFailed, Unsupported])
-perform_load_tmx! = |authority, path|
+perform_load_tmx! : Assets.Store, Str => Try(TilemapRawMap, [PathInvalid, NotFound, ReadFailed, ParseFailed, Unsupported])
+perform_load_tmx! = |store, path|
 # closed error union to open error union
-	match Host.tilemap_load_tmx!(authority, path) {
+	match Host.tilemap_load_tmx!({ store: store.for_host(), path }) {
 		Ok(map) => Ok(map)
-		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(NotFound) => Err(NotFound)
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(ParseFailed) => Err(ParseFailed)

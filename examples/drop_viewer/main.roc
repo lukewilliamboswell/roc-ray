@@ -68,13 +68,26 @@ init! = App.init(
 	},
 )
 
+## Read a dropped file through a handle on the directory it is in.
+read_dropped! : Files.Access, Str => Try(List(U8), Files.ReadBytesError)
+read_dropped! = |files, path|
+	match Str.split_last(path, "/") {
+		Ok({ before, after }) =>
+			match files.open_dir_read!(if before == "" "/" else before) {
+				Ok(dir) => dir.read_bytes!(after)
+				Err(_) => Err(NotFound)
+			}
+		Err(_) => Err(NotFound)
+	}
+
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	# One dropped path starts one read. If several files are dropped, the app
 	# displays the result whose message arrives last.
+	files = io.files()
 	List.for_each!(
 		input.dropped,
-		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, io.files().read_bytes!(drop.path))),
+		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, read_dropped!(files, drop.path))),
 	)
 
 	requested = match List.last(input.dropped) {

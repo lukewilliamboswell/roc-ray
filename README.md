@@ -86,11 +86,18 @@ A RocRay app provides three functions:
 `update!(model, input, io)`. Select a service and call its receivers:
 
 ```roc
-files = io.files()
-Task.spawn!(input, || Loaded(files.read_text!("data.json")))
-# In a task or init!:
+# In init! or a task: a directory handle, kept in the model.
+saves = io.files().app_data!()?
 response = io.http().send!(request)?
+
+# In update!: hand the handle to a task.
+Task.spawn!(input, || Loaded(saves.read_text!("slot1.json")))
 ```
+
+Files are always reached through a directory handle like `saves`, never an
+ambient path: `io.files()` opens the app's private storage (named by
+`App.default.with_app_id`), the directory beside the executable, or a
+directory the app declared.
 
 Every app can draw, read input, play audio, print to stdout and stderr, write
 captures under its output directory, and read the directory beside its

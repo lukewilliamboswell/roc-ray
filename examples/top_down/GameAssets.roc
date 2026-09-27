@@ -10,6 +10,10 @@ GameAssets := {
 	tiles : Draw.Texture,
 	font : Text.Font,
 	sounds : Sounds,
+
+	## The asset store everything else came from, kept so the level can load
+	## its map from the same place.
+	store : Assets.Store,
 }.{
 	Sounds : {
 		collect : Audio.Sound,
@@ -24,28 +28,28 @@ GameAssets := {
 
 	## Loads every texture, font, sound, and music stream before the first frame.
 	load! = |io| {
-		store = io.assets().open!(Assets.working_directory("examples/top_down/assets"))?
+		store = Assets.open!(io.files().open_dir_read!("examples/top_down/assets")?, IgnoreManifest)?
 		characters = Assets.load_texture!(store, "kenney-topdown/characters.png")?
 		tiles = Assets.load_texture!(store, "kenney-topdown/tiles.png")?
 		font = Draw.default_font!()
-		sounds = load_sounds!(io)?
-		Ok({ characters, tiles, font, sounds })
+		sounds = load_sounds!(store)?
+		Ok({ characters, tiles, font, sounds, store })
 	}
 }
 
-collect_path = "examples/top_down/assets/kenney-audio/sfx/collect.ogg"
+collect_path = "kenney-audio/sfx/collect.ogg"
 
-hurt_path = "examples/top_down/assets/kenney-audio/sfx/hurt.ogg"
+hurt_path = "kenney-audio/sfx/hurt.ogg"
 
-win_path = "examples/top_down/assets/kenney-audio/sfx/win.ogg"
+win_path = "kenney-audio/sfx/win.ogg"
 
-lose_path = "examples/top_down/assets/kenney-audio/sfx/lose.ogg"
+lose_path = "kenney-audio/sfx/lose.ogg"
 
-gate_path = "examples/top_down/assets/kenney-audio/sfx/gate.ogg"
+gate_path = "kenney-audio/sfx/gate.ogg"
 
-dash_path = "examples/top_down/assets/kenney-audio/sfx/dash.ogg"
+dash_path = "kenney-audio/sfx/dash.ogg"
 
-music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
+music_path = "kenney-audio/music/spark_loop.wav"
 
 music_volume = 0.13.F32
 
@@ -55,23 +59,23 @@ make_sound! = |waveform, from, to, ms, volume|
 	Audio.gen_sound!({ waveform, freq_start: from, freq_end: to, ms, attack_ms: 2, decay_ms: 24, sustain: 0.45, release_ms: 45, volume })
 
 ## Loads a sound file or retains its generated fallback.
-load_sound_or! : App.Io, Str, Audio.Sound => Audio.Sound
-load_sound_or! = |io, path, fallback|
-	match io.audio().load_sound!(path) {
+load_sound_or! : Assets.Store, Str, Audio.Sound => Audio.Sound
+load_sound_or! = |store, path, fallback|
+	match Audio.load_sound!(store, path) {
 		Ok(sound) => sound
 		Err(_) => fallback
 	}
 
 ## Loads the complete sound set and configures looping background music.
-load_sounds! = |io| {
-	collect = load_sound_or!(io, collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
-	hurt = load_sound_or!(io, hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
-	win = load_sound_or!(io, win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
-	lose = load_sound_or!(io, lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
-	gate = load_sound_or!(io, gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
-	dash = load_sound_or!(io, dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
+load_sounds! = |store| {
+	collect = load_sound_or!(store, collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
+	hurt = load_sound_or!(store, hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
+	win = load_sound_or!(store, win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
+	lose = load_sound_or!(store, lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
+	gate = load_sound_or!(store, gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
+	dash = load_sound_or!(store, dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
 	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)?
-	music = io.audio().load_music!(music_path)?
+	music = Audio.load_music!(store, music_path)?
 	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })

@@ -143,6 +143,7 @@ platform ""
 		"roc_draw_text_raw": Host.draw_text!,
 		"roc_draw_triangle_lines_raw": Host.draw_triangle_lines!,
 		"roc_draw_triangle_raw": Host.draw_triangle!,
+		"roc_files_open_root": Host.files_open_root!,
 		"roc_files_read_text": Host.files_read_text!,
 		"roc_files_read_bytes": Host.files_read_bytes!,
 		"roc_files_list": Host.files_list!,

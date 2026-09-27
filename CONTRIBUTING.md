@@ -694,12 +694,19 @@ tests, `Permission.roc`, and the capability probe in `test/capabilities`
 together. An effect whose target changes during the work, as an HTTP redirect
 does, checks every step.
 
+Filesystem authority is a handle, not a path. `files_open_root!` is where a
+directory declaration or the app id is checked; every other `Files`, asset,
+audio, map and SQLite effect takes a root the host minted and a path beneath
+it, and `src/confined_path.zig` walks that path without following a link.
+Anything that reads or writes a file on the app's behalf goes through it.
+
 Test apps declare what they use, as examples do. `test/capabilities` chooses
 its declarations from argv and covers scoped refusal, undeclared use, and
 invalid startup configuration.
 
 `App.Io` is supplied to `init!` and as the third `update!` argument. Delegate
-narrow receivers (`Files.Access`, `Http.Client`, and so on) to helpers and tasks.
+narrow receivers and handles (`Files.Dir`, `Http.Client`, and so on) to helpers
+and tasks.
 Selecting a receiver is pure and allocates no host resource. The private scalar
 identity belongs to one application lifetime and is not a native pointer; a
 test stub or an identity from an earlier lifetime is refused.

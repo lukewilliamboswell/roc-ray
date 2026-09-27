@@ -5,8 +5,9 @@
 ## ```roc
 ## init! = App.init(
 ##     App.default,
-##     |_io| {
-##         store = io.assets().open!(Assets.working_directory("assets"))?
+##     |io| {
+##         bundle = io.files().beside_executable!()?
+##         store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
 ##         Ok({ logo: Assets.load_texture!(store, "logo.png")?, store })
 ##     },
 ## )
@@ -17,15 +18,18 @@
 ## }
 ## ```
 ##
-## A store anchors relative asset paths to an explicit directory. Paths that
-## escape the store are refused rather than rewritten.
+## A store is opened from a `Files.ReadDir`, so it reaches exactly what that
+## handle reaches: the bundle beside the executable needs no permission, and
+## any other directory needs one. Asset paths are relative to the store; a path
+## that would escape it, or that meets a symbolic link, is refused rather than
+## rewritten.
 ##
 ## Textures are platform-owned values, also named `Assets.Texture` and
 ## `Draw.Texture`. Releasing the final reference
 ## to one unloads the native texture automatically, so there is no `unload` to
 ## remember.
 ##
-## The two effects that read the disk -- `Store.open!` and `load_texture!` --
+## The two effects that read the disk -- `open!` and `load_texture!` --
 ## wait: each is legal in `init!`, where it blocks startup, and in tasks, where
 ## it parks the task; both are refused in `update!` and `render!`. Everything
 ## else here builds a texture from bytes the app already holds --
@@ -37,6 +41,7 @@
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
 ## Release textures the app no longer needs before loading more.
 import Resource
+import Files
 import Color
 import Host
 import Texture as PlatformTexture
@@ -75,11 +80,6 @@ Assets := [].{
 		for_host = |Store.(store)| store
 	}
 
-	## How a disk store root is resolved. These choices are explicit so moving an
-	## executable, changing CWD, and selecting a mod directory cannot silently
-	## change one another's meaning. The host never calls `chdir`.
-	StoreLocation := [BesideExecutable(Str), WorkingDirectory(Str), AbsoluteDirectory(Str)]
-
 	## Whether opening a store checks the asset-set manifest named
 	## `roc-assets.manifest` beside it. `IgnoreManifest` does not look;
 	## `RequireManifest` fails the open unless the manifest is there and matches
@@ -97,34 +97,45 @@ Assets := [].{
 	## version it is, and which content it declares.
 	ManifestExpectation : { asset_set : Str, schema : U32, content_version : U32, content : ContentExpectation }
 
-	## Where a store's root is and whether its manifest is checked. A plain
-	## record; build it with `beside_executable`, `working_directory` or
-	## `absolute_directory`, and add an expectation with `with_manifest`.
-	StoreConfig : { root : StoreLocation, manifest : ManifestPolicy }
+	## Why a store could not be opened.
+	##
+	## `PermissionDenied` is a directory the handle does not reach -- one that
+	## meets a symbolic link, or a stub handle. The next three are about the
+	## directory itself: `RootNotFound` is nothing there, `RootNotDirectory` is
+	## something there that is not a directory, and `RootUnreadable` is a
+	## directory the process may not open.
+	##
+	## The rest are about the `roc-assets.manifest` a `RequireManifest` policy
+	## asked for. `ManifestMissing` is no manifest beside the assets,
+	## `ManifestUnreadable` is one that could not be read, and
+	## `ManifestMalformed` is one that is not a manifest. Of the four
+	## comparisons, `AssetSetMismatch` is a manifest describing a different
+	## asset set than the one expected, `SchemaMismatch` a manifest written to a
+	## different schema version, `ContentVersionMismatch` a different content
+	## version, and `ContentHashMismatch` a declared content hash that is not
+	## the expected one. `InvalidExpectedContentHash` is the expectation itself
+	## being unusable -- a `Sha256` string that is not 64 hexadecimal
+	## characters. `ResourceLimit` is the host's store table being full.
+	OpenError : [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit]
 
-	## Start from an application/executable-relative asset directory. This is the
-	## normal packaged-app choice: the assets travel with the executable, so the
-	## store resolves the same way however the app was launched.
-	beside_executable : Str -> StoreConfig
-	beside_executable = |root| { root: BesideExecutable(root), manifest: IgnoreManifest }
-
-	## Start from a directory relative to the process working directory. This is
-	## what running an example from the repository root wants, and what a tool
-	## invoked from a project directory wants; it moves with the shell rather
-	## than with the executable.
-	working_directory : Str -> StoreConfig
-	working_directory = |root| { root: WorkingDirectory(root), manifest: IgnoreManifest }
-
-	## Start from an absolute path, for a store the app was told about at
-	## runtime -- a mod directory, or a content pack chosen from argv.
-	absolute_directory : Str -> StoreConfig
-	absolute_directory = |root| { root: AbsoluteDirectory(root), manifest: IgnoreManifest }
-
-	## Require this store's `roc-assets.manifest` to match an expectation, so a
-	## mismatched or half-updated asset set fails at startup rather than as a
-	## missing texture later.
-	with_manifest : StoreConfig, ManifestExpectation -> StoreConfig
-	with_manifest = |cfg, expected| { ..cfg, manifest: RequireManifest(expected) }
+	## Open the directory a handle names as an asset store, checking its
+	## manifest if the policy requires one.
+	##
+	## ```roc
+	## bundle = io.files().beside_executable!()?
+	## store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
+	## ```
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. Opening the directory and
+	## reading the manifest are filesystem work, so the host does both off the
+	## frame thread and answers when they are done.
+	##
+	## A `Sha256` expectation compares against the manifest's declaration
+	## only. Nothing walks or hashes the loose files, so opening a store stays
+	## constant-time in the number of assets.
+	open! : Files.ReadDir, ManifestPolicy => Try(Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
+	open! = |dir, manifest| perform_open!(dir, manifest)
 
 	## Image bytes accepted by raylib's in-memory image loader.
 	ImageFormat := [Png, Jpeg, Bmp, Tga, Gif, Qoi]
@@ -292,59 +303,12 @@ Assets := [].{
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3
 
-	## Opaque asset-store authority supplied by App.Io. A store beside the
-	## executable needs no declaration; any other root must be covered by a
-	## declared `Permission`, as a `Files` path is.
-	Loader :: Resource.Authority.{
-
-		## Private platform construction; no application can manufacture the argument.
-		for_host : Resource.Authority -> Loader
-		for_host = |authority| Loader.(authority)
-
-		## Open the store described by a `StoreConfig`, checking its manifest if
-		## one was required.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it
-		## parks the task; refused in `update!` and `render!`. Opening the
-		## directory and reading the manifest are filesystem work, so the host
-		## does both off the frame thread and answers when they are done.
-		##
-		## The first four failures are about the root directory: `RootNotFound`
-		## is nothing at that path, `RootNotDirectory` is something there that
-		## is not a directory, `RootUnreadable` is a directory the process may
-		## not open, and `InvalidRootPath` is a path this host will not accept
-		## at all -- one holding a NUL, or a relative form that escapes.
-		##
-		## The rest are about the `roc-assets.manifest` a `RequireManifest`
-		## config asked for. `ManifestMissing` is no manifest beside the assets,
-		## `ManifestUnreadable` is one that could not be read, and
-		## `ManifestMalformed` is one that is not a manifest. Of the four
-		## comparisons, `AssetSetMismatch` is a manifest describing a different
-		## asset set than the one expected, `SchemaMismatch` a manifest written
-		## to a different schema version, `ContentVersionMismatch` a different
-		## content version, and `ContentHashMismatch` a declared content hash
-		## that is not the expected one. `InvalidExpectedContentHash` is the
-		## expectation itself being unusable -- a `Sha256` string that is not 64
-		## hexadecimal characters.
-		##
-		## A `Sha256` expectation compares against the manifest's declaration
-		## only. Nothing walks or hashes the loose files, so opening a store
-		## stays constant-time in the number of assets.
-		open! : Loader, StoreConfig => Try(Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
-		open! = |Loader.(authority), cfg| perform_open!(authority, cfg)
-
-	}
-
 }
 
-store_open_config : Assets.StoreConfig -> Host.StoreOpen
-store_open_config = |cfg| {
-	location = match cfg.root {
-		BesideExecutable(path) => { kind: 0, path }
-		WorkingDirectory(path) => { kind: 1, path }
-		AbsoluteDirectory(path) => { kind: 2, path }
-	}
-	manifest = match cfg.manifest {
+store_open_args : Files.ReadDir, Assets.ManifestPolicy -> Host.StoreOpen
+store_open_args = |dir, policy| {
+	handle = dir.for_host()
+	manifest = match policy {
 		IgnoreManifest => { required: Bool.False, asset_set: "", schema: 0, content_version: 0, content_hash_mode: 0, content_hash: "" }
 		RequireManifest(expected) => {
 			content = match expected.content {
@@ -355,8 +319,8 @@ store_open_config = |cfg| {
 		}
 	}
 	{
-		location_kind: location.kind,
-		root: location.path,
+		root: handle.root,
+		path: handle.path,
 		manifest_required: manifest.required,
 		asset_set: manifest.asset_set,
 		schema: manifest.schema,
@@ -397,16 +361,15 @@ wrap_code = |wrap|
 		MirrorClamp => 3
 	}
 
-## Private authority-taking implementations.
-perform_open! : Resource.Authority, Assets.StoreConfig => Try(Assets.Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
-perform_open! = |authority, cfg|
-	match Host.store_open!(authority, store_open_config(cfg)) {
+## Private implementation: the handle's authority opens the store.
+perform_open! : Files.ReadDir, Assets.ManifestPolicy => Try(Assets.Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
+perform_open! = |dir, manifest|
+	match Host.store_open!(dir.for_host().authority, store_open_args(dir, manifest)) {
 		Ok(store) => Ok(Assets.Store.(store))
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(RootNotFound) => Err(RootNotFound)
 		Err(RootNotDirectory) => Err(RootNotDirectory)
 		Err(RootUnreadable) => Err(RootUnreadable)
-		Err(InvalidRootPath) => Err(InvalidRootPath)
 		Err(InvalidExpectedContentHash) => Err(InvalidExpectedContentHash)
 		Err(ManifestMissing) => Err(ManifestMissing)
 		Err(ManifestUnreadable) => Err(ManifestUnreadable)

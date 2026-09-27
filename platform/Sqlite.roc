@@ -9,15 +9,20 @@
 ## explicit `BEGIN`, `COMMIT`, and `ROLLBACK` SQL.
 ##
 ## `Db` and `Stmt` are reference-counted host resources. Final release closes
-## them automatically; `Db.close!` provides deliberate early closure. Paths
-## are resolved from the process working directory and are not sandboxed.
-## `":memory:"` creates a private in-memory database.
+## them automatically; `Db.close!` provides deliberate early closure.
+##
+## A database file is named beneath a `Files` directory handle, so it lives
+## where the app may write -- usually `io.files().app_data!()` -- and nowhere
+## else. `open_memory!` creates a private in-memory database, which needs no
+## handle. `ATTACH` is disabled on every connection: a database cannot reach a
+## second file.
 ##
 ## At most eight connections and sixty-four statements may be open. Queries
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
 import Resource
 import Host
+import Files
 
 Sqlite := [].{
 
@@ -484,36 +489,50 @@ Sqlite := [].{
 			Unknown(other) => "Unknown: result code ${I64.to_str(other)}"
 		}
 
-	## Opaque SQLite authority supplied by App.Io. `":memory:"` needs no
-	## declaration; a database file must be covered by a declared `Permission`,
-	## writable unless it is opened read-only.
+	## Opaque SQLite authority supplied by App.Io. Opening a file also takes the
+	## directory handle it is in.
 	Service :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
 		for_host : Resource.Authority -> Service
 		for_host = |authority| Service.(authority)
 
-		## Open or create a database under `default_config`.
+		## Open or create a database beneath a writable directory, under
+		## `default_config`. Missing directories on the way are created.
 		##
-		## The parent directory must already exist. Unlike `Files.Access.write_text!`,
-		## which builds the tree on its way, opening a database does not create
-		## one: a database file is normally placed beside an application rather
-		## than into a directory the application is inventing, and a mistyped
-		## path should be `SqliteErr(CanNotOpen, _)` rather than a new empty
-		## tree. Create it with a write if the app owns that decision.
+		## ```roc
+		## data = io.files().app_data!()?
+		## db = io.sqlite().open!(data, "scores.db")?
+		## ```
+		##
+		## A path the handle does not reach is `PermissionDenied`, as for a
+		## `Files` read. Legal in `init!`, where it blocks startup, and in
+		## tasks, where it parks the task; refused in `update!` and `render!`.
+		open! : Service, Files.Dir, Str => Try(Db, OpenErr)
+		open! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, Sqlite.default_config)
+
+		## Open a database beneath a writable directory with explicit limits and
+		## access mode.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
-		open! : Service, Str => Try(Db, OpenErr)
-		open! = |Service.(authority), path| perform_open!(authority, path)
+		open_with! : Service, Files.Dir, Str, Config => Try(Db, OpenErr)
+		open_with! = |Service.(authority), dir, path, config| perform_open!(authority, dir.for_host(), path, config)
 
-		## Open a database with explicit limits and access mode.
+		## Open an existing database read-only beneath any directory handle.
+		## The connection is locked down so it cannot be turned into a writer.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
-		open_with! : Service, Str, Config => Try(Db, OpenErr)
-		open_with! = |Service.(authority), path, config| perform_open_with!(authority, path, config)
+		open_read! : Service, Files.ReadDir, Str => Try(Db, OpenErr)
+		open_read! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, { ..Sqlite.default_config, mode: ReadOnly })
 
+		## Open a private in-memory database, gone when its last reference is.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_memory! : Service => Try(Db, OpenErr)
+		open_memory! = |Service.(authority)| perform_open!(authority, { authority, root: "", path: "" }, memory_path, Sqlite.default_config)
 	}
 
 }
@@ -835,15 +854,17 @@ expect Sqlite.Row.names(Sqlite.Row.for_tests(["a", "b"], [Integer(1), Integer(2)
 
 expect Sqlite.Row.values(Sqlite.Row.for_tests(["a"], [Integer(1)])) == [Integer(1)]
 
-## Private authority-taking implementations.
-perform_open! : Resource.Authority, Str => Try(Sqlite.Db, Sqlite.OpenErr)
-perform_open! = |authority, path| perform_open_with!(authority, path, Sqlite.default_config)
+## SQLite's name for a private in-memory database. Only `open_memory!` sends
+## it, with no root; the host refuses it from anywhere else.
+memory_path = ":memory:"
 
-perform_open_with! : Resource.Authority, Str, Sqlite.Config => Try(Sqlite.Db, Sqlite.OpenErr)
-perform_open_with! = |authority, path, config| {
+## Private authority-taking implementation.
+perform_open! : Resource.Authority, { authority : Resource.Authority, root : Str, path : Str }, Str, Sqlite.Config => Try(Sqlite.Db, Sqlite.OpenErr)
+perform_open! = |authority, handle, path, config| {
 	result = Host.sqlite_open!(
 		authority,
-		path,
+		handle.root,
+		joined_path(handle.path, path),
 		mode_code(config.mode),
 		config.busy_timeout_ms,
 		config.max_result_bytes,
@@ -856,3 +877,6 @@ perform_open_with! = |authority, path, config| {
 		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}
 }
+
+joined_path : Str, Str -> Str
+joined_path = |prefix, path| if prefix == "" path else "${prefix}/${path}"

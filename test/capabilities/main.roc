@@ -23,7 +23,7 @@ import rr.Task
 ## - `--probe=invalid-directory`, `--probe=escaping-output`: a malformed
 ##   config, which must stop startup before `init!` runs.
 ## - `--probe-crash`: a crash, whose payload is ordinary standard error.
-Model : {}
+Model : { work : Files.Dir }
 
 Msg : [Checked(Bool)]
 
@@ -76,8 +76,8 @@ init! = App.init_for_args(
 		if args.contains("--probe-crash") {
 			crash "CRASH_PAYLOAD_VISIBLE"
 		}
-		if !denied(App.Io.stub.files().write_text!("stub.txt", "must never be written")) {
-			return Err(Failed("a stub authority wrote a file"))
+		if !denied(Files.Dir.stub.write_text!("stub.txt", "must never be written")) {
+			return Err(Failed("a stub handle wrote a file"))
 		}
 		match mode(args) {
 			"scoped" => scoped!(io)
@@ -87,7 +87,8 @@ init! = App.init_for_args(
 			"undeclared-env" => undeclared!(denied(io.env().read!("PATH")))
 			"undeclared-clipboard-read" => undeclared!(denied(io.clipboard().read_text!()))
 			"undeclared-clipboard-write" => undeclared!(denied(io.clipboard().set_text!("must never reach the clipboard")))
-			"undeclared-files" => undeclared!(denied(io.files().read_text!("missing.txt")))
+			"undeclared-files" => undeclared!(denied(io.files().working_directory_read!()))
+			"undeclared-app-id" => undeclared!(denied(io.files().app_data!()))
 			other => Err(Failed("unknown probe mode: ${other}"))
 		}
 	},
@@ -101,23 +102,27 @@ undeclared! = |_| Err(Failed("an undeclared effect returned instead of stopping 
 scoped! : App.Io => Try(Model, [Failed(Str)])
 scoped! = |io| {
 	# The app's own resources: no declaration, never refused.
+	bundle = io.files().beside_executable!() ? |_| Failed("the bundle beside the executable did not open")
 	own =
 		io.stdout().line!("OWN_STDOUT_WRITTEN") == Ok({})
-			and !denied(io.sqlite().open!(":memory:"))
-				and !denied(io.assets().open!(Assets.beside_executable(".")))
+			and !denied(io.sqlite().open_memory!())
+				and !denied(Assets.open!(bundle, IgnoreManifest))
 					and !denied(io.capture().start!(Capture.default))
 						and !denied(io.capture().stop!())
 	if !own {
 		return Err(Failed("an app-scoped effect was refused"))
 	}
+	work = io.files().working_directory!() ? |_| Failed("the declared working directory did not open")
 	# Declared facilities, targets outside their scopes: refused, nothing done.
+	# A path a handle does not reach is refused the same way.
 	outside =
 		denied(io.http().get_utf8!("http://127.0.0.1:1/"))
 			and denied(io.udp().bind!({ ip: "127.0.0.1", port: 40001 }))
 				and denied(io.commands().run!(Cmd.new("roc-ray-caps-command-must-not-run")))
 					and denied(io.env().read!("PATH"))
-						and denied(io.files().read_text!("../outside.txt"))
-							and denied(io.files().write_text!("/tmp/roc-ray-caps-must-not-exist.txt", "must never be written"))
+						and denied(work.read_text!("../outside.txt"))
+							and denied(work.write_text!("/tmp/roc-ray-caps-must-not-exist.txt", "must never be written"))
+								and denied(io.files().open_dir_read!("/etc"))
 	if !outside {
 		return Err(Failed("an out-of-scope effect was admitted"))
 	}
@@ -128,19 +133,19 @@ scoped! = |io| {
 	if !inside {
 		return Err(Failed("an in-scope effect was refused"))
 	}
-	Ok({})
+	Ok({ work: work })
 }
 
-check! : Files.Access => Msg
+check! : Files.Dir => Msg
 check! = |files| {
 	result = files.write_text!("task.txt", "task authority")
 	Checked(result == Ok({}) and files.read_text!("task.txt") == Ok("task authority"))
 }
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, input, io| {
+update! = |model, input, _io| {
 	if input.time.cycle_count == 0 {
-		files = io.files()
+		files = model.work
 		Task.spawn!(input, || check!(files))
 	}
 	match List.first(input.messages) {

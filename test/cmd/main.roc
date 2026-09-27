@@ -80,8 +80,8 @@ check! = |io| {
 	# none of the Windows ones, so one stat decides it without the platform
 	# having to name the operating system.
 	posix =
-		match io.files().metadata!("/bin/sh") {
-			Ok(_) => Bool.True
+		match io.files().open_dir_read!("/bin") {
+			Ok(bin) => bin.metadata!("sh").is_ok()
 			Err(_) => Bool.False
 		}
 

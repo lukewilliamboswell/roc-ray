@@ -27,7 +27,7 @@ init! = App.init(App.default.with_title("file write").with_permission(Directory(
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which half of the probe went wrong.
 expected_score : U64
-expected_score = 127
+expected_score = 255
 
 ## The text written, read back, and compared. Multi-line and non-ASCII on
 ## purpose: a write that went through a C string would truncate at the NUL a
@@ -46,32 +46,41 @@ score = |held, bit| if held bit else 0
 
 expect score(Bool.True, 4) == 4
 expect score(Bool.False, 4) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 == expected_score
 
 ## Write, read back, compare. Runs on a task, where every call parks.
 check! : App.Io => Msg
 check! = |io| {
-	wrote_text = io.files().write_text!("probe_out/text.txt", probe_text) == Ok({})
-	read_text_back = io.files().read_text!("probe_out/text.txt") == Ok(probe_text)
+	out =
+		match io.files().open_dir!("probe_out") {
+			Ok(dir) => dir
+			Err(_) => return Checked(0)
+		}
+	wrote_text = out.write_text!("text.txt", probe_text) == Ok({})
+	read_text_back = out.read_text!("text.txt") == Ok(probe_text)
 
-	wrote_bytes = io.files().write_bytes!("probe_out/blob.bin", probe_bytes) == Ok({})
-	read_bytes_back = io.files().read_bytes!("probe_out/blob.bin") == Ok(probe_bytes)
+	wrote_bytes = out.write_bytes!("blob.bin", probe_bytes) == Ok({})
+	read_bytes_back = out.read_bytes!("blob.bin") == Ok(probe_bytes)
 
 	# A second write replaces the file rather than appending to it or leaving
 	# the tail of the longer contents in place.
 	replaced =
-		io.files().write_bytes!("probe_out/blob.bin", [1, 2, 3]) == Ok({})
-			and io.files().read_bytes!("probe_out/blob.bin") == Ok([1, 2, 3])
+		out.write_bytes!("blob.bin", [1, 2, 3]) == Ok({})
+			and out.read_bytes!("blob.bin") == Ok([1, 2, 3])
 
 	# Missing parent directories are created, so a first save does not need a
 	# separate step to make its directory.
 	made_parents =
-		io.files().write_text!("probe_out/nested/deep/save.json", "{}") == Ok({})
-			and io.files().read_text!("probe_out/nested/deep/save.json") == Ok("{}")
+		out.write_text!("nested/deep/save.json", "{}") == Ok({})
+			and out.read_text!("nested/deep/save.json") == Ok("{}")
 
 	# A path whose parent is a file cannot be created, and says so with the
 	# named error rather than by pretending to succeed.
-	refused = io.files().write_text!("probe_out/text.txt/nope.txt", "x") == Err(NotFound)
+	refused = out.write_text!("text.txt/nope.txt", "x") == Err(NotFound)
+
+	# A path that would leave the handle is refused before anything is
+	# written, the same answer as any undeclared target.
+	escaped = out.write_text!("../escaped.txt", "x") == Err(PermissionDenied)
 
 	Checked(
 		score(wrote_text, 1)
@@ -80,7 +89,8 @@ check! = |io| {
 			+ score(read_bytes_back, 8)
 			+ score(replaced, 16)
 			+ score(made_parents, 32)
-			+ score(refused, 64),
+			+ score(refused, 64)
+			+ score(escaped, 128),
 	)
 }
 

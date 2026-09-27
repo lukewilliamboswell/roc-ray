@@ -95,7 +95,7 @@ init! = App.init_for_args(
 		}
 
 		assets = GameAssets.load!(io)?
-		level = Level.load!(io, assets.tiles)?
+		level = Level.load!(assets.store, assets.tiles)?
 		assets.sounds.music.play!()
 		Ok({ assets, level, world: Game.new(level), demo: List.contains(io.args!(), record_demo_flag), demo_frame: 0 })
 	},

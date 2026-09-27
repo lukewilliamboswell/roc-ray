@@ -78,6 +78,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import tarfile
 import time
 from pathlib import Path
@@ -524,14 +525,16 @@ def run_graphical_observatory_probe(
     return failures
 
 
+# Each undeclared use must stop the app, and the message must name the fix.
 UNDECLARED_PROBES = {
-    "http": "HttpOrigin",
-    "udp": "UdpBind",
-    "command": "Command",
-    "env": "EnvVar",
-    "clipboard-read": "ClipboardRead",
-    "clipboard-write": "ClipboardWrite",
-    "files": "WorkingDirectory",
+    "http": ["declares no permission", "HttpOrigin"],
+    "udp": ["declares no permission", "UdpBind"],
+    "command": ["declares no permission", "Command"],
+    "env": ["declares no permission", "EnvVar"],
+    "clipboard-read": ["declares no permission", "ClipboardRead"],
+    "clipboard-write": ["declares no permission", "ClipboardWrite"],
+    "files": ["declares no permission", "WorkingDirectory"],
+    "app-id": ["no app id", "with_app_id"],
 }
 
 
@@ -566,12 +569,12 @@ def run_capability_probe(root: Path, packages: local_bundles.ServedPackages, ver
     if Path("/tmp/roc-ray-caps-must-not-exist.txt").exists():
         failures.append("capability probe scoped: an out-of-scope write reached the disk")
 
-    for facility, declaration in UNDECLARED_PROBES.items():
+    for facility, expected in UNDECLARED_PROBES.items():
         result, _ = probe(f"undeclared-{facility}", f"--probe=undeclared-{facility}")
         stderr = result.stderr
-        if result.returncode == 0 or "declares no permission" not in stderr or declaration not in stderr:
+        if result.returncode == 0 or any(text not in stderr for text in expected):
             failures.append(
-                f"capability probe undeclared {facility}: expected a failure naming {declaration}, "
+                f"capability probe undeclared {facility}: expected a failure naming {expected}, "
                 f"got exit {result.returncode}: {stderr[-400:]}"
             )
 
@@ -1690,8 +1693,15 @@ def main() -> int:
     # SIGTERM/SIGINT become SystemExit so the server and scratch directory are
     # released promptly. Repository safety does not depend on this: no tracked
     # file is ever rewritten, so even SIGKILL leaves the tree clean.
-    with local_bundles.terminating_signals():
-        return _run_tests(args, root, examples)
+    # Apps keep private storage under the user's data, config and cache
+    # directories. Point those at scratch space for the run, so a test never
+    # writes into the real home directory; every app launched below inherits
+    # it.
+    with tempfile.TemporaryDirectory(prefix="rr-app-storage-") as storage:
+        for variable in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+            os.environ[variable] = str(Path(storage) / variable.lower())
+        with local_bundles.terminating_signals():
+            return _run_tests(args, root, examples)
 
 
 def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> int:

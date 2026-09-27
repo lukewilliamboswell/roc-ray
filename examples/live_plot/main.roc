@@ -109,6 +109,10 @@ import rr.Permission
 Model : {
 	demo : Bool,
 
+	## The directory being walked: the working directory, read-only, as the
+	## config declares. Every listing and read names a path beneath it.
+	tree : Files.ReadDir,
+
 	## The one sprite behind every point, and the offscreen buffer it is
 	## painted into. A batch draws a single texture, so hundreds of differently
 	## coloured lanes come from hundreds of tints of this, not from hundreds of
@@ -677,18 +681,19 @@ is_separator = |bytes, at| List.get(bytes, at) == Ok(47)
 ## Join a directory to one of its entries.
 join_path : Str, Str -> Str
 join_path = |dir, name|
-	if dir == "." {
+	if dir == "" {
 		name
 	} else {
 		Str.concat(dir, Str.concat("/", name))
 	}
 
-## The root the walk starts from. Everything else is discovered.
+## The root the walk starts from, relative to the directory handle: the
+## handle's own directory. Everything else is discovered.
 walk_root : Str
-walk_root = "."
+walk_root = ""
 
 ## Run one unit of work as a task. The only effectful line in the walk.
-start_work! : Files.Access, App.Input(Msg), Work => {}
+start_work! : Files.ReadDir, App.Input(Msg), Work => {}
 start_work! = |files, input, work|
 	match work {
 		ListDir(path) => Task.spawn!(input, || Listed(path, files.list!(path)))
@@ -1634,8 +1639,10 @@ init! = App.init_for_args(
 				.spacing(1.6)
 				.prepare!()?
 
+		tree = io.files().working_directory_read!() ? |_| WorkingDirectoryUnavailable
 		Ok({
 			demo: List.contains(io.args!(), record_demo_flag),
+			tree,
 			glow: glow,
 			queue: WorkQueue.new(),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
@@ -1675,7 +1682,7 @@ sprite_of : Model -> Draw.Texture
 sprite_of = |model| model.glow.texture()
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, io| {
+update! = |model, program_input, _io| {
 	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
@@ -1741,7 +1748,7 @@ update! = |model, program_input, io| {
 		}
 
 	for work in ready.starting {
-		start_work!(io.files(), program_input, work)
+		start_work!(model.tree, program_input, work)
 	}
 
 	exit =
@@ -2928,7 +2935,7 @@ expect extension_of("etc/.gitignore") == ""
 expect extension_of("www/0.9.0/index") == ""
 expect extension_of("www/0.9.0/index.html") == "html"
 
-expect join_path(".", "src") == "src"
+expect join_path("", "src") == "src"
 expect join_path("src", "host_native.zig") == "src/host_native.zig"
 expect join_path("a/b", "c") == "a/b/c"
 

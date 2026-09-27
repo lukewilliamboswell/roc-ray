@@ -21,6 +21,7 @@ const udp_effect = @import("udp_effect.zig");
 const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
 const cmd_effect = @import("cmd_effect.zig");
+const confined_path = @import("confined_path.zig");
 const permissions = @import("permissions.zig");
 const observatory = @import("observatory.zig");
 const build_metadata = @import("build_metadata");
@@ -39,6 +40,7 @@ test {
     _ = sqlite_effect;
     _ = cmd_effect;
     _ = permissions;
+    _ = confined_path;
 }
 
 // Import backend
@@ -228,12 +230,6 @@ fn writeErrorCode(err: anyerror) u8 {
 /// moves into Roc without being copied. The private App transport adapter decodes it.
 ///
 /// Returns the error code, or zero and the buffer through `out`.
-fn encodeListing(io: std.Io, allocator: std.mem.Allocator, path: []const u8, out: *?[]u8) u8 {
-    return encodeListingIn(std.Io.Dir.cwd(), io, allocator, path, out);
-}
-
-/// `encodeListing` against an explicit base directory, so a test can point it
-/// at a temporary tree without depending on the process working directory.
 fn encodeListingIn(base: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator, path: []const u8, out: *?[]u8) u8 {
     var dir = base.openDir(io, path, .{ .iterate = true }) catch |err| return listErrorCode(err);
     defer dir.close(io);
@@ -979,31 +975,115 @@ fn hostedTaskSleep(millis: u64) callconv(.c) void {
     AppTasks.observeResume(park, "sleep");
 }
 
-/// Read a whole file on the waiting path, parked rather than blocking.
+/// Run filesystem work beneath a handle's root on zio's blocking pool.
+///
+/// Every `Files` effect takes this path rather than the runtime's own file
+/// backend: the confined walk opens a directory per path component, and
+/// creating directories and files through that backend fails on Windows. The
+/// pool parks the calling task the same way the event loop would, and the
+/// worker sees only host-owned strings and bytes -- never a Roc value. Without
+/// a runtime (unit tests) the work runs on the calling thread.
+fn runBeneath(comptime label: []const u8, comptime work: anytype, args: anytype) @typeInfo(@TypeOf(work)).@"fn".return_type.? {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    const park = AppTasks.observePark(label, 0);
+    defer AppTasks.observeResume(park, label);
+    const rt = AppTasks.currentRuntime() orelse return @call(.auto, work, args);
+    var blocking = rt.spawnBlocking(work, args) catch return @call(.auto, work, args);
+    return blocking.join();
+}
+
+/// A path a handle does not reach -- not plainly relative, meeting a link,
+/// or beneath a stub's empty root. Mirrored in `Files.roc` as
+/// `PermissionDenied`, and numbered past the write table.
+const READ_ERR_NOT_PERMITTED: u8 = 10;
+
+/// Name a confined-resolution failure, deferring to `base` for the
+/// filesystem's own errors.
+fn beneathErrorCode(err: anyerror, comptime base: fn (anyerror) u8) u8 {
+    return switch (err) {
+        error.Escapes => READ_ERR_NOT_PERMITTED,
+        else => base(err),
+    };
+}
+
+/// A finished read beneath a root: the bytes, or the code saying why not.
+const BeneathRead = union(enum) { bytes: []u8, failed: u8 };
+
+fn readBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, limit: usize) BeneathRead {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var dir = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = beneathErrorCode(err, readErrorCode) };
+    defer dir.close(io);
+    const bytes = confined_path.readFileAlloc(io, dir, path, allocator, .limited(limit)) catch |err|
+        return .{ .failed = beneathErrorCode(err, readErrorCode) };
+    return .{ .bytes = bytes };
+}
+
+/// Read a whole file beneath a root, parked rather than blocking.
 ///
 /// `limit` is the operation's own ceiling: a text read stops one byte past the
 /// largest string the host will build, a byte read one past the per-file
 /// ceiling, so a file of exactly the limit succeeds and one byte more is
 /// `TooLarge` without the whole file having been read first.
-fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize, out_err: *u8) ?[]u8 {
-    const scope = WaitScope.enter();
-    defer scope.leave();
-    const park = AppTasks.observePark("read", 0);
-    defer AppTasks.observeResume(park, "read");
-    return std.Io.Dir.cwd().readFileAlloc(waitingIo(), path, allocator, .limited(limit)) catch |err| {
-        out_err.* = readErrorCode(err);
-        return null;
-    };
+fn readBeneathWaiting(allocator: std.mem.Allocator, root: []const u8, path: []const u8, limit: usize) BeneathRead {
+    return runBeneath("read", readBeneathBlocking, .{ allocator, root, path, limit });
 }
 
-/// `Files.Access.read_text!`: read a bounded UTF-8 file into a `Str`.
+fn listBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) BeneathRead {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var base = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = beneathErrorCode(err, listErrorCode) };
+    defer base.close(io);
+    var dir = confined_path.openDir(io, base, path, .{}) catch |err| return .{ .failed = beneathErrorCode(err, listErrorCode) };
+    defer dir.close(io);
+    var encoded: ?[]u8 = null;
+    const code = encodeListingIn(dir, io, allocator, ".", &encoded);
+    return if (encoded) |bytes| .{ .bytes = bytes } else .{ .failed = if (code == 0) READ_ERR_FAILED else code };
+}
+
+fn statBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) StatOutcome {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var dir = confined_path.openRoot(io, root, false) catch |err| return statFailure(beneathErrorCode(err, statErrorCode));
+    defer dir.close(io);
+    return statBeneathIn(dir, io, path);
+}
+
+/// Stat beneath an already open root, so a test can point it at a temporary
+/// tree.
+fn statBeneathIn(dir: std.Io.Dir, io: std.Io, path: []const u8) StatOutcome {
+    const stat = confined_path.statFile(io, dir, path) catch |err| return statFailure(beneathErrorCode(err, statErrorCode));
+    return statOutcome(stat);
+}
+
+fn writeBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, bytes: []const u8) u8 {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var dir = confined_path.openRoot(io, root, false) catch |err| return beneathErrorCode(err, writeErrorCode);
+    defer dir.close(io);
+    return writeBeneathIn(dir, io, path, bytes);
+}
+
+/// Write beneath an already open root, so a test can point it at a temporary
+/// tree.
+fn writeBeneathIn(dir: std.Io.Dir, io: std.Io, path: []const u8, bytes: []const u8) u8 {
+    confined_path.writeFile(io, dir, path, bytes) catch |err| return beneathErrorCode(err, writeErrorCode);
+    return 0;
+}
+
+/// `Files.ReadDir.read_text!`: read a bounded UTF-8 file into a `Str`.
 ///
 /// The whole file is copied into the string, so the ceiling is the small one:
 /// this is the only read whose cost on the frame thread is proportional to the
 /// file. A file that is not valid UTF-8 is reported rather than delivered,
 /// because `RocStr.fromSlice` only copies and every later string operation on
 /// an invalid one would be undefined.
-/// Name a read code in `Files.Access.read_text!`'s vocabulary.
+/// Name a read code in `read_text!`'s vocabulary.
 fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1011,24 +1091,34 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_UTF8 => .not_utf8,
+        READ_ERR_NOT_PERMITTED => .permission_denied,
         else => .read_failed,
     };
 }
 
-fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
+/// A refused outcome is the host declining or the app leaving; anything else
+/// is the filesystem's answer.
+fn filesOutcome(code: u8) observatory.EffectOutcome {
+    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED) .refused else .runtime_error;
+}
+
+fn hostedFilesReadText(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
     const Result = abi.HostFiles_read_textResult;
-    enforcePhase("Files.Access.read_text!", during_wait);
-    var effect = EffectScope.begin("Files.Access.read_text!", path_arg.asSlice().len);
+    enforcePhase("Files.ReadDir.read_text!", during_wait);
+    var effect = EffectScope.begin("Files.ReadDir.read_text!", path_arg.asSlice().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
-    var err: u8 = READ_ERR_FAILED;
     const external_started = observatoryDetailMeasurementStart();
-    const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse {
-        effect.setExternalElapsed(external_started);
-        effect.setOutcome(if (err == READ_ERR_BUSY or err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
-        return abiTryErr(Result, filesReadTextError(err));
+    const bytes = switch (readBeneathWaiting(allocator, root_arg.asSlice(), path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1)) {
+        .failed => |code| {
+            effect.setExternalElapsed(external_started);
+            effect.setOutcome(filesOutcome(code));
+            return abiTryErr(Result, filesReadTextError(code));
+        },
+        .bytes => |bytes| bytes,
     };
     effect.setExternalElapsed(external_started);
     defer allocator.free(bytes);
@@ -1047,53 +1137,55 @@ fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) ab
     return abiTryOk(Result, contents);
 }
 
-fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
-    return hostedFilesReadText(activeHost(), path_arg);
+fn exportedFilesReadText(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
+    return hostedFilesReadText(activeHost(), root_arg, path_arg);
 }
 
-/// `Files.Access.read_bytes!`: read a bounded file without copying its payload.
+/// `Files.ReadDir.read_bytes!`: read a bounded file without copying its payload.
 ///
 /// The buffer the read filled is the buffer Roc gets: it moves into the typed
 /// byte-list heap and out again as an owning seamless `List(U8)`, so a 16 MiB
 /// file costs one allocation and no copy. A delivery slot is reserved before
 /// any I/O starts, so a full heap answers `Busy` rather than reading a file and
 /// discarding it.
-/// Name a read code in `Files.Access.read_bytes!`'s vocabulary.
+/// Name a read code in `read_bytes!`'s vocabulary.
 fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
         READ_ERR_BUSY => .busy,
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
+        READ_ERR_NOT_PERMITTED => .permission_denied,
         else => .read_failed,
     };
 }
 
-fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+fn hostedFilesReadBytes(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
     const Result = abi.HostFiles_read_bytesResult;
-    enforcePhase("Files.Access.read_bytes!", during_wait);
-    var effect = EffectScope.begin("Files.Access.read_bytes!", path_arg.asSlice().len);
+    enforcePhase("Files.ReadDir.read_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.ReadDir.read_bytes!", path_arg.asSlice().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const result = readByteListWaiting(roc_host, path_arg.asSlice(), .read);
+    const result = readByteListWaiting(roc_host, root_arg.asSlice(), path_arg.asSlice(), .read);
     if (result.err != 0) {
-        effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+        effect.setOutcome(filesOutcome(result.err));
         return abiTryErr(Result, filesReadBytesError(result.err));
     }
     effect.addOwnershipTransferBytes(result.bytes.items().len);
     return abiTryOk(Result, result.bytes);
 }
 
-fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
-    return hostedFilesReadBytes(activeHost(), path_arg);
+fn exportedFilesReadBytes(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+    return hostedFilesReadBytes(activeHost(), root_arg, path_arg);
 }
 
-/// `Files.Access.list!`: one directory's entries, encoded into the same byte list a
-/// read delivers and decoded by `Files`.
-/// Name a read code in `Files.Access.list!`'s vocabulary.
+/// `Files.ReadDir.list!`: one directory's entries, encoded into the same byte
+/// list a read delivers and decoded by `Files`.
+/// Name a read code in `list!`'s vocabulary.
 ///
 /// A listing is the only one of the three that can be refused for not being a
-/// directory, which is why it does not share `Files.Access.read_bytes!`'s union.
+/// directory, which is why it does not share `read_bytes!`'s union.
 fn filesListError(code: u8) abi.HostFiles_listErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
@@ -1101,26 +1193,28 @@ fn filesListError(code: u8) abi.HostFiles_listErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
+        READ_ERR_NOT_PERMITTED => .permission_denied,
         else => .read_failed,
     };
 }
 
-fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
+fn hostedFilesList(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
     const Result = abi.HostFiles_listResult;
-    enforcePhase("Files.Access.list!", during_wait);
-    var effect = EffectScope.begin("Files.Access.list!", path_arg.asSlice().len);
+    enforcePhase("Files.ReadDir.list!", during_wait);
+    var effect = EffectScope.begin("Files.ReadDir.list!", path_arg.asSlice().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
+    const result = readByteListWaiting(roc_host, root_arg.asSlice(), path_arg.asSlice(), .list);
     if (result.err != 0) {
-        effect.setOutcome(if (result.err == READ_ERR_BUSY or result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+        effect.setOutcome(filesOutcome(result.err));
         return abiTryErr(Result, filesListError(result.err));
     }
     return abiTryOk(Result, result.bytes);
 }
 
-fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
-    return hostedFilesList(activeHost(), path_arg);
+fn exportedFilesList(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
+    return hostedFilesList(activeHost(), root_arg, path_arg);
 }
 
 /// Name a failed stat in the app's vocabulary.
@@ -1137,10 +1231,8 @@ fn statErrorCode(err: anyerror) u8 {
     };
 }
 
-/// The listing kind byte for what a stat found at the end of a path.
-///
-/// Symbolic links do not appear: a stat follows them, so what is reported is
-/// the kind of the thing the link points at.
+/// The listing kind byte for what a stat found at the end of a path. A stat
+/// beneath a handle does not follow a link, so a link is `Other`.
 fn statEntryKind(kind: std.Io.File.Kind) u8 {
     return switch (kind) {
         .file => DIR_ENTRY_FILE,
@@ -1149,15 +1241,18 @@ fn statEntryKind(kind: std.Io.File.Kind) u8 {
     };
 }
 
-/// Stat one path on the waiting path, parked rather than blocking.
-///
-/// Shaped exactly like a read: the phase guard, the park, and the trace are
-/// the same, and the difference is only that the answer is five numbers rather
-/// than a payload, so there is no delivery slot to reserve and nothing to
-/// bound but the wait itself.
-fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) StatOutcome {
-    const stat = base.statFile(io, path, .{ .follow_symlinks = true }) catch |err|
-        return .{ .err = statErrorCode(err), .found = std.mem.zeroes(abi.HostFiles_metadataOk) };
+/// A finished stat, before it is named in the app's vocabulary. `found` is
+/// meaningful only when `err` is zero.
+const StatOutcome = struct {
+    err: u8,
+    found: abi.HostFiles_metadataOk,
+};
+
+fn statFailure(code: u8) StatOutcome {
+    return .{ .err = code, .found = std.mem.zeroes(abi.HostFiles_metadataOk) };
+}
+
+fn statOutcome(stat: std.Io.File.Stat) StatOutcome {
     const modified = timestampFromNanos(stat.mtime.nanoseconds);
     return .{
         .err = 0,
@@ -1170,98 +1265,53 @@ fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) StatOutcome {
     };
 }
 
-/// A finished stat, before it is named in the app's vocabulary. `found` is
-/// meaningful only when `err` is zero.
-const StatOutcome = struct {
-    err: u8,
-    found: abi.HostFiles_metadataOk,
-};
-
-/// Name a stat code in `Files.Access.metadata!`'s vocabulary.
+/// Name a stat code in `metadata!`'s vocabulary.
 fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
         READ_ERR_UNAVAILABLE => .unavailable,
         WRITE_ERR_ACCESS_REFUSED => .access_refused,
+        READ_ERR_NOT_PERMITTED => .permission_denied,
         else => .read_failed,
     };
 }
 
-/// `Files.Access.metadata!`: what one path is, how big it is, and when it changed.
-fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
+/// `Files.ReadDir.metadata!`: what one path is, how big it is, and when it changed.
+fn hostedFilesMetadata(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
     const Result = abi.HostFiles_metadataResult;
-    enforcePhase("Files.Access.metadata!", during_wait);
-    var effect = EffectScope.begin("Files.Access.metadata!", path_arg.asSlice().len);
+    enforcePhase("Files.ReadDir.metadata!", during_wait);
+    var effect = EffectScope.begin("Files.ReadDir.metadata!", path_arg.asSlice().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const scope = WaitScope.enter();
-    defer scope.leave();
-    const park = AppTasks.observePark("stat", 0);
-    defer AppTasks.observeResume(park, "stat");
-    const result = statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+    const result = runBeneath("stat", statBeneathBlocking, .{ allocatorFromHost(roc_host), root_arg.asSlice(), path_arg.asSlice() });
     if (result.err != 0) {
-        effect.setOutcome(if (result.err == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+        effect.setOutcome(filesOutcome(result.err));
         return abiTryErr(Result, filesMetadataError(result.err));
     }
     return abiTryOk(Result, result.found);
 }
 
-fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
-    return hostedFilesMetadata(activeHost(), path_arg);
+fn exportedFilesMetadata(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
+    return hostedFilesMetadata(activeHost(), root_arg, path_arg);
 }
 
-/// Replace a whole file on the waiting path, parked rather than blocking.
-///
-/// Missing parent directories are created, which is what `writeWholeFile` does
-/// for every file the host writes itself; the two differ only in that this one
-/// names its failure in the app's vocabulary instead of the capture codes.
-///
-/// The path is used as the app gave it. `Files` is not sandboxed in either
-/// direction -- reads take any path the process can open, and so do writes.
-/// `Capture` is the one part of this host with an output root, and it confines
-/// captures only.
-fn writeFileWaiting(path: []const u8, bytes: []const u8) u8 {
-    const scope = WaitScope.enter();
-    defer scope.leave();
-    const park = AppTasks.observePark("write", 0);
-    defer AppTasks.observeResume(park, "write");
-    // Written through std's threaded implementation on zio's blocking pool
-    // rather than through the runtime's own file backend: creating
-    // directories and files through that backend fails on Windows. The pool
-    // parks the calling task the same way the event loop would, and the
-    // worker touches only the host-visible path and payload bytes.
-    const allocator = allocatorFromHost(activeHost());
-    const rt = AppTasks.currentRuntime() orelse return writeFileBlocking(allocator, path, bytes);
-    var blocking = rt.spawnBlocking(writeFileBlocking, .{ allocator, path, bytes }) catch return READ_ERR_FAILED;
-    return blocking.join();
+/// Replace a whole file beneath a root, parked rather than blocking. Missing
+/// parent directories are created; an existing link at the path is refused.
+fn writeFileWaiting(root: []const u8, path: []const u8, bytes: []const u8) u8 {
+    return runBeneath("write", writeBeneathBlocking, .{ allocatorFromHost(activeHost()), root, path, bytes });
 }
 
-/// The write itself, on whichever thread the caller chose.
-fn writeFileBlocking(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) u8 {
-    var threaded: std.Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    return writeFileWaitingIn(std.Io.Dir.cwd(), threaded.io(), path, bytes);
-}
-
-/// `writeFileWaiting` against an explicit base directory, so a test can point
-/// it at a temporary tree without depending on the process working directory.
-fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []const u8) u8 {
-    if (std.fs.path.dirname(path)) |parent| {
-        base.createDirPath(io, parent) catch |err| return writeErrorCode(err);
-    }
-    base.writeFile(io, .{ .sub_path = path, .data = bytes }) catch |err| return writeErrorCode(err);
-    return 0;
-}
-
-/// `Files.Access.write_text!`: replace a file's contents with a UTF-8 string.
-fn hostedFilesWriteTextCode(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) u8 {
-    enforcePhase("Files.Access.write_text!", during_wait);
-    var effect = EffectScope.begin("Files.Access.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
+/// `Files.Dir.write_text!`: replace a file's contents with a UTF-8 string.
+fn hostedFilesWriteTextCode(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr, contents_arg: abi.RocStr) u8 {
+    enforcePhase("Files.Dir.write_text!", during_wait);
+    var effect = EffectScope.begin("Files.Dir.write_text!", path_arg.asSlice().len +| contents_arg.asSlice().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
     defer contents_arg.decref(roc_host);
-    const result = writeFileWaiting(path_arg.asSlice(), contents_arg.asSlice());
-    if (result != 0) effect.setOutcome(if (result == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    const result = writeFileWaiting(root_arg.asSlice(), path_arg.asSlice(), contents_arg.asSlice());
+    if (result != 0) effect.setOutcome(filesOutcome(result));
     return result;
 }
 
@@ -1279,36 +1329,197 @@ fn filesWriteResult(code: u8) abi.HostFiles_write_textResult {
         READ_ERR_UNAVAILABLE => abiTryErr(Result, Union.unavailable),
         WRITE_ERR_ACCESS_REFUSED => abiTryErr(Result, Union.access_refused),
         WRITE_ERR_NO_SPACE => abiTryErr(Result, Union.no_space),
+        READ_ERR_NOT_PERMITTED => abiTryErr(Result, Union.permission_denied),
         else => abiTryErr(Result, Union.write_failed),
     };
 }
 
-fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
-    return filesWriteResult(hostedFilesWriteTextCode(roc_host, path_arg, contents_arg));
+fn hostedFilesWriteText(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
+    return filesWriteResult(hostedFilesWriteTextCode(roc_host, root_arg, path_arg, contents_arg));
 }
 
-fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
-    return filesWriteResult(hostedFilesWriteBytesCode(roc_host, path_arg, bytes_arg));
+fn hostedFilesWriteBytes(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
+    return filesWriteResult(hostedFilesWriteBytesCode(roc_host, root_arg, path_arg, bytes_arg));
 }
 
-fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
-    return hostedFilesWriteText(activeHost(), path_arg, contents_arg);
+fn exportedFilesWriteText(root_arg: abi.RocStr, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
+    return hostedFilesWriteText(activeHost(), root_arg, path_arg, contents_arg);
 }
 
-/// `Files.Access.write_bytes!`: replace a file's contents with the app's bytes.
-fn hostedFilesWriteBytesCode(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) u8 {
-    enforcePhase("Files.Access.write_bytes!", during_wait);
-    var effect = EffectScope.begin("Files.Access.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
+/// `Files.Dir.write_bytes!`: replace a file's contents with the app's bytes.
+fn hostedFilesWriteBytesCode(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) u8 {
+    enforcePhase("Files.Dir.write_bytes!", during_wait);
+    var effect = EffectScope.begin("Files.Dir.write_bytes!", path_arg.asSlice().len +| bytes_arg.items().len);
     defer effect.end();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
     defer bytes_arg.decref(roc_host);
-    const result = writeFileWaiting(path_arg.asSlice(), bytes_arg.items());
-    if (result != 0) effect.setOutcome(if (result == READ_ERR_UNAVAILABLE) .refused else .runtime_error);
+    const result = writeFileWaiting(root_arg.asSlice(), path_arg.asSlice(), bytes_arg.items());
+    if (result != 0) effect.setOutcome(filesOutcome(result));
     return result;
 }
 
-fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
-    return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
+fn exportedFilesWriteBytes(root_arg: abi.RocStr, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
+    return hostedFilesWriteBytes(activeHost(), root_arg, path_arg, bytes_arg);
+}
+
+/// Where a directory handle may start, as `Files` asks for it.
+const FilesRoot = @FieldType(abi.HostFiles_open_rootArgs, "arg1");
+
+/// The effect name an open reports under, in the app's vocabulary.
+fn filesRootOperation(root: *const FilesRoot, writable: bool) []const u8 {
+    return switch (root.tag) {
+        .AppData => "Files.Access.app_data!",
+        .AppConfig => "Files.Access.app_config!",
+        .AppCache => "Files.Access.app_cache!",
+        .BesideExecutable => "Files.Access.beside_executable!",
+        .WorkingDirectory => if (writable) "Files.Access.working_directory!" else "Files.Access.working_directory_read!",
+        .Declared => if (writable) "Files.Access.open_dir!" else "Files.Access.open_dir_read!",
+    };
+}
+
+/// A root resolved on a worker: the canonical absolute path, or why not.
+const RootResolution = union(enum) { path: [:0]u8, failed: abi.HostFiles_open_rootErr };
+
+/// The app's private storage kinds, which differ only in their base directory.
+const AppStorage = enum { data, config, cache };
+
+/// The per-user directory an app's private storage lives under, following each
+/// system's convention: the XDG base directories, `~/Library` on macOS, and
+/// `%APPDATA%` and `%LOCALAPPDATA%` on Windows. Owned by `allocator`.
+fn appStorageBase(allocator: std.mem.Allocator, kind: AppStorage) ![]u8 {
+    switch (builtin.os.tag) {
+        .windows => {
+            const variable = if (kind == .cache) "LOCALAPPDATA" else "APPDATA";
+            return allocator.dupe(u8, hostGetEnv(variable) orelse return error.FileNotFound);
+        },
+        .macos => {
+            const home = hostGetEnv("HOME") orelse return error.FileNotFound;
+            const suffix = if (kind == .cache) "Library/Caches" else "Library/Application Support";
+            return std.fs.path.join(allocator, &.{ home, suffix });
+        },
+        else => {
+            const xdg = switch (kind) {
+                .data => "XDG_DATA_HOME",
+                .config => "XDG_CONFIG_HOME",
+                .cache => "XDG_CACHE_HOME",
+            };
+            // The XDG specification ignores a relative value.
+            if (hostGetEnv(xdg)) |value| if (std.fs.path.isAbsolute(value)) return allocator.dupe(u8, value);
+            const home = hostGetEnv("HOME") orelse return error.FileNotFound;
+            const suffix = switch (kind) {
+                .data => ".local/share",
+                .config => ".config",
+                .cache => ".cache",
+            };
+            return std.fs.path.join(allocator, &.{ home, suffix });
+        },
+    }
+}
+
+fn openRootErrorCode(err: anyerror) abi.HostFiles_open_rootErr {
+    return switch (err) {
+        error.FileNotFound => .not_found,
+        error.NotDir => .not_adirectory,
+        error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => .access_refused,
+        error.Canceled => .unavailable,
+        else => .open_failed,
+    };
+}
+
+/// What a root names before it is canonicalized, and whether it may be made.
+const RootRequest = struct {
+    kind: enum { beside_executable, working_directory, declared, app_storage },
+    storage: AppStorage = .data,
+    /// The declared path, or the app id for private storage.
+    text: []const u8 = "",
+    create: bool = false,
+};
+
+fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootResolution {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const named = switch (request.kind) {
+        .beside_executable => std.process.executableDirPathAlloc(io, allocator),
+        .working_directory => std.process.currentPathAlloc(io, allocator),
+        .declared => if (std.fs.path.isAbsolute(request.text))
+            allocator.dupe(u8, request.text)
+        else blk: {
+            const cwd = std.process.currentPathAlloc(io, allocator) catch |err| break :blk err;
+            defer allocator.free(cwd);
+            break :blk std.fs.path.join(allocator, &.{ cwd, request.text });
+        },
+        .app_storage => blk: {
+            const base = appStorageBase(allocator, request.storage) catch |err| break :blk err;
+            defer allocator.free(base);
+            break :blk std.fs.path.join(allocator, &.{ base, request.text });
+        },
+    } catch |err| return .{ .failed = openRootErrorCode(err) };
+    defer allocator.free(named);
+    if (request.create) std.Io.Dir.cwd().createDirPath(io, named) catch |err| return .{ .failed = openRootErrorCode(err) };
+    // Canonical, so a handle's root does not change meaning if the working
+    // directory does, and so a directory is what it names.
+    const canonical = std.Io.Dir.realPathFileAbsoluteAlloc(io, named, allocator) catch |err|
+        return .{ .failed = openRootErrorCode(err) };
+    var dir = std.Io.Dir.openDirAbsolute(io, canonical, .{}) catch |err| {
+        allocator.free(canonical);
+        return .{ .failed = openRootErrorCode(err) };
+    };
+    dir.close(io);
+    return .{ .path = canonical };
+}
+
+/// `Files.Access` roots: resolve where a handle starts. The capability
+/// boundary has already checked the declaration; this names the directory,
+/// creates it when the handle may write and the directory is the app's own or
+/// declared writable, and canonicalizes it.
+fn hostedFilesOpenRoot(roc_host: *RocHost, root: FilesRoot, writable: bool) callconv(.c) abi.HostFiles_open_rootResult {
+    const Result = abi.HostFiles_open_rootResult;
+    const operation = filesRootOperation(&root, writable);
+    enforcePhase(operation, during_wait);
+    var effect = EffectScope.begin(operation, 0);
+    defer effect.end();
+    defer root.decref(roc_host);
+
+    const request: RootRequest = switch (root.tag) {
+        .BesideExecutable => .{ .kind = .beside_executable },
+        .WorkingDirectory => .{ .kind = .working_directory },
+        .Declared => .{ .kind = .declared, .text = root.payload_declared().asSlice(), .create = writable },
+        .AppData, .AppConfig, .AppCache => .{
+            .kind = .app_storage,
+            .storage = switch (root.tag) {
+                .AppConfig => .config,
+                .AppCache => .cache,
+                else => .data,
+            },
+            .text = active_policy.appId() orelse unreachable,
+            .create = true,
+        },
+    };
+    const allocator = allocatorFromHost(roc_host);
+    switch (runBeneath("open root", resolveRootBlocking, .{ allocator, request })) {
+        .failed => |code| {
+            effect.setOutcome(.runtime_error);
+            return abiTryErr(Result, code);
+        },
+        .path => |path| {
+            defer allocator.free(path);
+            return abiTryOk(Result, abi.RocStr.fromSlice(path, roc_host));
+        },
+    }
+}
+
+/// The last app-id requirement that stopped the app, recorded in tests.
+var last_missing_app_id: ?[]const u8 = null;
+
+/// Private storage is keyed by the app id, so opening it without one is a
+/// programmer error fixed by one line of config.
+fn requireAppId(operation: []const u8) bool {
+    if (active_policy.appId() != null) return true;
+    last_missing_app_id = operation;
+    if (comptime builtin.is_test) return false;
+    std.debug.panic("roc-ray: {s} was called, but this app has no app id to keep its private storage under. Name the app: App.default.with_app_id(\"dev.example.my-app\").", .{operation});
 }
 
 /// Split a wall-clock reading into the normalized parts `Time.Timestamp` holds.
@@ -1524,7 +1735,7 @@ fn hostedCaptureScreenshotCode(roc_host: *RocHost, path_arg: abi.RocStr) u8 {
     }
 
     var resolved_storage: [capture.path_capacity]u8 = undefined;
-    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+    const resolved = confineCapturePath(&resolved_storage, path) orelse
         return capture.err_write_failed;
     var resolved_copy: [capture.path_capacity]u8 = undefined;
     @memcpy(resolved_copy[0..resolved.len], resolved);
@@ -1671,7 +1882,7 @@ fn hostedCaptureScreenshotTextureCode(roc_host: *RocHost, args: abi.HostCapture_
     defer still_budget.release(reserved);
 
     var resolved_storage: [capture.path_capacity]u8 = undefined;
-    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+    const resolved = confineCapturePath(&resolved_storage, path) orelse
         return capture.err_write_failed;
 
     const scope = WaitScope.enter();
@@ -1974,7 +2185,7 @@ const ByteListOutcome = struct {
     bytes: abi.RocListWith(u8, false),
 };
 
-fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait) ByteListOutcome {
+fn readByteListWaiting(roc_host: *RocHost, root: []const u8, path: []const u8, kind: ByteListWait) ByteListOutcome {
     const empty = abi.RocListWith(u8, false).empty();
     // Reserve before any filesystem work starts. A terminal `Busy` here means
     // precisely that nothing was read.
@@ -1984,24 +2195,13 @@ fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait)
     defer file_bytes_delivery_reservations.release();
 
     const allocator = allocatorFromHost(roc_host);
-    const bytes = switch (kind) {
-        .read => blk: {
-            var err: u8 = READ_ERR_FAILED;
-            break :blk readFileWaiting(allocator, path, MAX_FILE_READ_BYTES + 1, &err) orelse
-                return .{ .err = err, .bytes = empty };
-        },
-        .list => blk: {
-            const scope = WaitScope.enter();
-            defer scope.leave();
-            const park = AppTasks.observePark("list", 0);
-            defer AppTasks.observeResume(park, "list");
-            var encoded: ?[]u8 = null;
-            const err = encodeListing(waitingIo(), allocator, path, &encoded);
-            break :blk encoded orelse return .{
-                .err = if (err == 0) READ_ERR_FAILED else err,
-                .bytes = empty,
-            };
-        },
+    const outcome = switch (kind) {
+        .read => readBeneathWaiting(allocator, root, path, MAX_FILE_READ_BYTES + 1),
+        .list => runBeneath("list", listBeneathBlocking, .{ allocator, root, path }),
+    };
+    const bytes = switch (outcome) {
+        .failed => |code| return .{ .err = code, .bytes = empty },
+        .bytes => |bytes| bytes,
     };
 
     return installReadBytes(allocator, bytes);
@@ -2548,7 +2748,30 @@ fn sqliteQueryResult(
 /// this is parked, so the task must see its own phase again when the answer
 /// arrives. Roc's own arguments are decref'd here; everything a worker reads
 /// was copied out of them first.
+/// SQLite's in-memory database name. It touches no file, so it is accepted
+/// only with no root, which is what `Sqlite.Service.open_memory!` sends.
+const sqlite_memory_path = ":memory:";
+
+/// SQLite's `SQLITE_CANTOPEN`, for a database whose directory could not be
+/// reached before SQLite was asked.
+const SQLITE_CANTOPEN: u8 = 14;
+
+/// A database path resolved beneath its root: the absolute path SQLite opens,
+/// or the error that stopped it.
+const SqlitePath = union(enum) { path: []u8, failed: anyerror };
+
+fn resolveSqlitePathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, create_parents: bool) SqlitePath {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var dir = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = err };
+    defer dir.close(io);
+    const resolved = confined_path.checkedPath(io, root, dir, path, create_parents, allocator) catch |err| return .{ .failed = err };
+    return .{ .path = resolved };
+}
+
 fn hostedSqliteOpen(
+    root_arg: abi.RocStr,
     path_arg: abi.RocStr,
     mode: u8,
     busy_timeout_ms: u64,
@@ -2559,7 +2782,37 @@ fn hostedSqliteOpen(
     var effect = EffectScope.begin("Sqlite.Service.open!", path_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
+    defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
+    const allocator = allocatorFromHost(roc_host);
+
+    // SQLite takes a path, not a directory handle, so the path is checked
+    // beneath its root first -- no escape, no link -- and SQLite is handed
+    // the absolute result. `ATTACH` is disabled on every connection, so the
+    // database cannot reach a second file afterwards.
+    const in_memory = root_arg.asSlice().len == 0 and std.mem.eql(u8, path_arg.asSlice(), sqlite_memory_path);
+    var resolved_path: ?[]u8 = null;
+    defer if (resolved_path) |path| allocator.free(path);
+    if (!in_memory) {
+        const create = mode == sqlite_effect.MODE_READ_WRITE_CREATE;
+        switch (runBeneath("sqlite.resolve", resolveSqlitePathBlocking, .{ allocator, root_arg.asSlice(), path_arg.asSlice(), create })) {
+            .path => |path| resolved_path = path,
+            .failed => |err| switch (err) {
+                error.Escapes => {
+                    effect.setOutcome(.refused);
+                    return permissionDenied(Result);
+                },
+                else => {
+                    effect.setOutcome(.runtime_error);
+                    const message = abi.RocStr.fromSlice("the directory for this database could not be opened", roc_host);
+                    return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, SQLITE_CANTOPEN, message));
+                },
+            },
+        }
+    }
+    const open_path = if (resolved_path) |path| abi.RocStr.fromSlice(path, roc_host) else abi.RocStr.fromSlice(sqlite_memory_path, roc_host);
+    defer open_path.decref(roc_host);
+
     const scope = WaitScope.enter();
     defer scope.leave();
     const park = AppTasks.observePark("sqlite.open", 0);
@@ -2568,7 +2821,7 @@ fn hostedSqliteOpen(
     const result = sqlite_effect.open(
         roc_host,
         AppTasks.currentRuntime(),
-        path_arg,
+        open_path,
         mode,
         busy_timeout_ms,
         max_result_bytes,
@@ -4423,6 +4676,7 @@ test "ABI Try constructors preserve typed success and error payloads" {
 fn tilemapLoadError(err: tmx_loader.LoadError) abi.HostTilemap_load_tmxErr {
     return switch (err) {
         error.NotFound => .not_found,
+        error.PathInvalid => .path_invalid,
         error.ReadFailed => .read_failed,
         error.Unsupported => .unsupported,
         else => .parse_failed,
@@ -5841,7 +6095,8 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
 
     var music: [16]*u64 = undefined;
     for (&music) |*item| item.* = storeMusic(.headless).?;
-    const refused_music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice("README.md", &roc_host));
+    const readme_store = openTestStore(&roc_host, ".");
+    const refused_music = hostedAudioLoadMusic(&roc_host, .{ .store = readme_store, .path = abi.RocStr.fromSlice("README.md", &roc_host) });
     try std.testing.expectEqual(abi.HostAudio_load_musicResultTag.Err, refused_music.tag);
     try std.testing.expectEqual(abi.HostAudio_load_musicErr.resource_limit, refused_music.payload_err());
     for (music) |item| releaseResourceBox(&roc_host, item);
@@ -6138,22 +6393,12 @@ fn isSafeStoreRelativePath(path: []const u8) bool {
     return true;
 }
 
-fn isSafeRootRelativePath(path: []const u8) bool {
-    return isSafeStoreRelativePath(path);
-}
-
-fn openStoreRootRelative(io: std.Io, base: std.Io.Dir, root: []const u8) !std.Io.Dir {
-    if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
-    return base.openDir(io, root, .{});
-}
-
 fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
         .permission_denied => "no declared permission covers the store's directory",
         .root_not_found => "root directory was not found",
         .root_not_directory => "root is not a directory",
         .root_unreadable => "root directory is not readable",
-        .invalid_root_path => "invalid root location",
         .invalid_expected_content_hash => "expected SHA-256 is not 64 hexadecimal characters",
         .manifest_missing => "required roc-assets.manifest was not found",
         .manifest_unreadable => "required roc-assets.manifest could not be read",
@@ -6168,6 +6413,7 @@ fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
 
 fn storeOpenError(error_value: anyerror) abi.HostStore_openErr {
     return switch (error_value) {
+        error.Escapes => .permission_denied,
         error.FileNotFound => .root_not_found,
         error.NotDir => .root_not_directory,
         error.AccessDenied => .root_unreadable,
@@ -6175,28 +6421,12 @@ fn storeOpenError(error_value: anyerror) abi.HostStore_openErr {
     };
 }
 
-fn openStoreDirectoryIn(io: std.Io, allocator: std.mem.Allocator, location_kind: u8, root: []const u8) !std.Io.Dir {
-    switch (location_kind) {
-        // The executable directory is opened first, then the configured root
-        // is opened through that handle. This remains CWD-independent even if
-        // another library changes CWD later in the process lifetime.
-        0 => {
-            const executable_dir_path = try std.process.executableDirPathAlloc(io, allocator);
-            defer allocator.free(executable_dir_path);
-            const executable_dir = try std.Io.Dir.openDirAbsolute(io, executable_dir_path, .{});
-            defer executable_dir.close(io);
-            return openStoreRootRelative(io, executable_dir, root);
-        },
-        1 => {
-            if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
-            return std.Io.Dir.cwd().openDir(io, root, .{});
-        },
-        2 => {
-            if (!std.fs.path.isAbsolute(root) or std.mem.indexOfScalar(u8, root, 0) != null) return error.InvalidRootPath;
-            return std.Io.Dir.openDirAbsolute(io, root, .{});
-        },
-        else => return error.InvalidRootPath,
-    }
+/// Open the directory a `Files.ReadDir` names as a store: its root, then the
+/// path beneath it, walked without following a link.
+fn openStoreDirectoryIn(io: std.Io, root: []const u8, path: []const u8) !std.Io.Dir {
+    var base = try confined_path.openRoot(io, root, false);
+    defer base.close(io);
+    return confined_path.openDir(io, base, path, .{});
 }
 
 /// The outcome of one directory open or one store-relative read, carried back
@@ -6213,28 +6443,21 @@ const StoreDirRead = union(enum) { bytes: []u8, failed: anyerror };
 /// implementation later would mix two ownership models over one fd. The pool
 /// parks the calling task exactly as the event loop would, and the worker sees
 /// only the host-owned directory, path and bytes -- never a Roc value.
-fn openStoreDirectoryBlocking(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) StoreDirOpen {
+fn openStoreDirectoryBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) StoreDirOpen {
     var threaded: std.Io.Threaded = .init(allocator, .{});
     defer threaded.deinit();
-    const dir = openStoreDirectoryIn(threaded.io(), allocator, location_kind, root) catch |err| return .{ .failed = err };
+    const dir = openStoreDirectoryIn(threaded.io(), root, path) catch |err| return .{ .failed = err };
     return .{ .dir = dir };
 }
 
-fn openStoreDirectoryWaiting(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) StoreDirOpen {
-    const scope = WaitScope.enter();
-    defer scope.leave();
-    const park = AppTasks.observePark("store open", 0);
-    defer AppTasks.observeResume(park, "store open");
-    const rt = AppTasks.currentRuntime() orelse return openStoreDirectoryBlocking(allocator, location_kind, root);
-    var blocking = rt.spawnBlocking(openStoreDirectoryBlocking, .{ allocator, location_kind, root }) catch
-        return openStoreDirectoryBlocking(allocator, location_kind, root);
-    return blocking.join();
+fn openStoreDirectoryWaiting(allocator: std.mem.Allocator, root: []const u8, path: []const u8) StoreDirOpen {
+    return runBeneath("store open", openStoreDirectoryBlocking, .{ allocator, root, path });
 }
 
 fn readDirFileBlocking(allocator: std.mem.Allocator, dir: std.Io.Dir, path: []const u8, limit: usize) StoreDirRead {
     var threaded: std.Io.Threaded = .init(allocator, .{});
     defer threaded.deinit();
-    const bytes = dir.readFileAlloc(threaded.io(), path, allocator, .limited(limit)) catch |err| return .{ .failed = err };
+    const bytes = confined_path.readFileAlloc(threaded.io(), dir, path, allocator, .limited(limit)) catch |err| return .{ .failed = err };
     return .{ .bytes = bytes };
 }
 
@@ -6359,18 +6582,27 @@ test "asset store paths are portable and cannot lexically escape their root" {
     try std.testing.expect(!isSafeStoreRelativePath("textures\x00floor.png"));
 }
 
-test "executable-relative asset roots resolve from the opened executable directory" {
+test "a store opens beneath a handle's root and refuses a link on the way" {
+    const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.createDirPath(std.testing.io, "installed/assets");
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "installed/assets/sentinel", .data = "not from CWD" });
-    const executable_dir = try tmp.dir.openDir(std.testing.io, "installed", .{});
-    defer executable_dir.close(std.testing.io);
-    var root = try openStoreRootRelative(std.testing.io, executable_dir, "assets");
-    defer root.close(std.testing.io);
-    const bytes = try root.readFileAlloc(std.testing.io, "sentinel", std.testing.allocator, .limited(64));
+    try tmp.dir.createDirPath(io, "installed/assets");
+    try tmp.dir.createDirPath(io, "elsewhere");
+    try tmp.dir.writeFile(io, .{ .sub_path = "installed/assets/sentinel", .data = "not from CWD" });
+    const root = try tmp.dir.realPathFileAlloc(io, "installed", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+
+    var store = try openStoreDirectoryIn(io, root, "assets");
+    defer store.close(io);
+    const bytes = try confined_path.readFileAlloc(io, store, "sentinel", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualStrings("not from CWD", bytes);
+
+    if (builtin.os.tag == .windows) return;
+    var installed = try tmp.dir.openDir(io, "installed", .{});
+    defer installed.close(io);
+    try installed.symLink(io, "../elsewhere", "linked", .{ .is_directory = true });
+    try std.testing.expectError(error.Escapes, openStoreDirectoryIn(io, root, "linked"));
 }
 
 test "asset manifests compare declared identity without walking loose files" {
@@ -6412,15 +6644,21 @@ test "asset store owns its directory capability through typed ARC" {
     try std.testing.expectEqual(@as(usize, 0), heap.active());
 }
 
+/// Store-open arguments for a root named relative to the test's working
+/// directory, resolved to the absolute root a `Files.ReadDir` carries.
 fn testStoreOpenArgs(host: *RocHost, root: []const u8, manifest_required: bool, content_hash_mode: u8, content_hash: []const u8) abi.HostStore_openArg1 {
+    const cwd = std.process.currentPathAlloc(std.testing.io, std.testing.allocator) catch @panic("test cwd");
+    defer std.testing.allocator.free(cwd);
+    const absolute = std.fs.path.join(std.testing.allocator, &.{ cwd, root }) catch @panic("test path");
+    defer std.testing.allocator.free(absolute);
     return .{
         .asset_set = abi.RocStr.fromSlice("test-assets", host),
         .content_hash = abi.RocStr.fromSlice(content_hash, host),
-        .root = abi.RocStr.fromSlice(root, host),
+        .root = abi.RocStr.fromSlice(absolute, host),
+        .path = abi.RocStr.empty(),
         .content_version = 1,
         .schema = 1,
         .content_hash_mode = content_hash_mode,
-        .location_kind = 1,
         .manifest_required = manifest_required,
     };
 }
@@ -6509,7 +6747,7 @@ test "opening a store and loading a texture from it wait rather than load" {
         last_phase_violation = null;
         _ = hostedStoreOpenRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Assets.Loader.open!", violation.operation);
+        try std.testing.expectEqualStrings("Assets.open!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(Phase.update, violation.actual);
     }
@@ -6601,7 +6839,8 @@ test "embedded texture and font bytes are consumed exactly once" {
     bad_font_bytes.decref(&roc_host);
 }
 
-/// `Assets.Loader.open!`: open a store root and check its manifest.
+/// `Assets.open!`: open the directory a handle names as a store and check its
+/// manifest.
 ///
 /// Opening a directory and reading a manifest are both filesystem work, so
 /// this waits: it parks a task and blocks `init!`. The validation that follows
@@ -6609,10 +6848,11 @@ test "embedded texture and font bytes are consumed exactly once" {
 fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
     const Result = abi.HostStore_openResult;
     const Error = abi.HostStore_openErr;
-    enforcePhase("Assets.Loader.open!", during_wait);
-    const effect = EffectScope.begin("Assets.Loader.open!", 0);
+    enforcePhase("Assets.open!", during_wait);
+    const effect = EffectScope.begin("Assets.open!", 0);
     defer effect.end();
     defer args.root.decref(host);
+    defer args.path.decref(host);
     defer args.asset_set.decref(host);
     defer args.content_hash.decref(host);
     const root_path = args.root.asSlice();
@@ -6624,12 +6864,9 @@ fn hostedStoreOpenRaw(host: *RocHost, args: abi.HostStore_openArg1) callconv(.c)
         },
         else => {},
     }
-    var root = switch (openStoreDirectoryWaiting(allocator, args.location_kind, root_path)) {
+    var root = switch (openStoreDirectoryWaiting(allocator, root_path, args.path.asSlice())) {
         .failed => |err| {
-            const open_error: Error = switch (err) {
-                error.InvalidRootPath => .invalid_root_path,
-                else => storeOpenError(err),
-            };
+            const open_error = storeOpenError(err);
             reportStoreOpenFailure(open_error, root_path, null);
             return abiTryErr(Result, open_error);
         },
@@ -6656,10 +6893,17 @@ fn exportedStoreOpenRaw(args: abi.HostStore_openArg1) callconv(.c) abi.HostStore
 const StoreRead = union(enum) { bytes: []u8, path_invalid, not_found, failed };
 
 fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []const u8) StoreRead {
+    return readStoreAssetLimited(allocator, store, path, MAX_ASSET_FILE_BYTES);
+}
+
+/// Read one file out of a store, at most `limit` bytes. A path that would
+/// leave the store, or that meets a link, is `path_invalid`.
+fn readStoreAssetLimited(allocator: std.mem.Allocator, store: *StoreResource, path: []const u8, limit: usize) StoreRead {
     if (!isSafeStoreRelativePath(path)) return .path_invalid;
-    return switch (readDirFileWaiting(allocator, store.root, path, MAX_ASSET_FILE_BYTES)) {
+    return switch (readDirFileWaiting(allocator, store.root, path, limit)) {
         .failed => |err| switch (err) {
             error.FileNotFound => .not_found,
+            error.Escapes => .path_invalid,
             else => .failed,
         },
         .bytes => |bytes| .{ .bytes = bytes },
@@ -7979,31 +8223,39 @@ fn exportedAppReadEnvPosix(key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
     return hostedAppReadEnvPosix(activeHost(), key_arg);
 }
 
-/// Read one TMX or TSX file on the waiting path.
+/// Read one TMX or TSX file out of the store a map is loaded from, on the
+/// waiting path.
 ///
 /// The loader calls this once for the map and once more for every external
 /// tileset the map references, so a map spread across several files parks the
 /// task once per file and parses in between, on the frame thread, with each
-/// file's bytes in hand.
-fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []const u8) tmx_loader.LoadError![]u8 {
-    var err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path, tmx_loader.max_file_bytes, &err) orelse
-        return if (err == READ_ERR_NOT_FOUND) error.NotFound else error.ReadFailed;
-    return bytes;
+/// file's bytes in hand. The loader resolves each reference within the store
+/// before asking.
+fn readTilemapFileWaiting(context: ?*anyopaque, allocator: std.mem.Allocator, path: []const u8) tmx_loader.LoadError![]u8 {
+    const store: *StoreResource = @ptrCast(@alignCast(context.?));
+    return switch (readStoreAssetLimited(allocator, store, path, tmx_loader.max_file_bytes)) {
+        .path_invalid => error.PathInvalid,
+        .not_found => error.NotFound,
+        .failed => error.ReadFailed,
+        .bytes => |bytes| bytes,
+    };
 }
 
-/// `Tilemap.Loader.load_tmx!`: read a Tiled map and parse it into flat records.
+/// `Tilemap.load_tmx!`: read a Tiled map out of a store and parse it into
+/// flat records.
 ///
 /// Every read waits -- parking a task, blocking `init!` -- and the XML parse
 /// and the conversion into Roc values run on the frame thread between them.
-fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
-    enforcePhase("Tilemap.Loader.load_tmx!", during_wait);
-    const effect = EffectScope.begin("Tilemap.Loader.load_tmx!", path_arg.asSlice().len);
+fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, args: abi.HostTilemap_load_tmxArgs) callconv(.c) TilemapLoadTmxResult {
+    enforcePhase("Tilemap.load_tmx!", during_wait);
+    const effect = EffectScope.begin("Tilemap.load_tmx!", args.path.asSlice().len);
     defer effect.end();
-    defer path_arg.decref(roc_host);
+    defer args.path.decref(roc_host);
+    defer releaseResourceBox(roc_host, args.store);
 
-    const path = path_arg.asSlice();
-    const reader = tmx_loader.FileReader{ .read = readTilemapFileWaiting };
+    const path = args.path.asSlice();
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(TilemapLoadTmxResult, abi.HostTilemap_load_tmxErr.read_failed);
+    const reader = tmx_loader.FileReader{ .context = store, .read = readTilemapFileWaiting };
     var map = tmx_loader.load(allocatorFromHost(roc_host), reader, path) catch |err| {
         return abiTryErr(TilemapLoadTmxResult, tilemapLoadError(err));
     };
@@ -8012,8 +8264,8 @@ fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     return abiTryOk(TilemapLoadTmxResult, convertTilemapRawMap(roc_host, map.raw));
 }
 
-fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
-    return hostedTilemapLoadTmxRaw(activeHost(), path_arg);
+fn exportedTilemapLoadTmxRaw(args: abi.HostTilemap_load_tmxArgs) callconv(.c) TilemapLoadTmxResult {
+    return hostedTilemapLoadTmxRaw(activeHost(), args);
 }
 
 const TILEMAP_SELECTOR_LAYER = tilemap_batch.selector_layer;
@@ -8298,11 +8550,40 @@ fn captureOutputDir() []const u8 {
 /// parent directories, so an app can record into `frames/run/` without first
 /// having to make the directory itself.
 fn prepareCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
-    const joined = capture.joinOutputPath(buffer, captureOutputDir(), path) orelse return null;
-    if (std.fs.path.dirname(joined)) |parent| {
-        std.Io.Dir.cwd().createDirPath(mainThreadIo(), parent) catch return null;
+    return confineCapturePath(buffer, path);
+}
+
+/// Join a validated capture path under the output directory and make sure it
+/// stays there on disk.
+///
+/// Captures need no permission because they are confined: the output
+/// directory was checked lexically at startup and the request path when it
+/// arrived, and here every directory on the way is walked from the working
+/// directory without following a link -- and created if it is missing -- and
+/// an existing link at the name is refused. Returns the clean relative path,
+/// `.` components dropped, in `buffer`.
+fn confineCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
+    var joined_storage: [capture.path_capacity]u8 = undefined;
+    const joined = capture.joinOutputPath(&joined_storage, captureOutputDir(), path) orelse return null;
+    var len: usize = 0;
+    var parts = std.mem.tokenizeAny(u8, joined, "/\\");
+    while (parts.next()) |part| {
+        if (std.mem.eql(u8, part, ".")) continue;
+        const separator: usize = if (len == 0) 0 else 1;
+        if (len + separator + part.len > buffer.len) return null;
+        if (separator == 1) buffer[len] = '/';
+        len += separator;
+        @memcpy(buffer[len..][0..part.len], part);
+        len += part.len;
     }
-    return joined;
+    const clean = buffer[0..len];
+    const io = mainThreadIo();
+    const parent = confined_path.openParent(io, std.Io.Dir.cwd(), clean, true) catch return null;
+    defer parent.dir.close(io);
+    if (parent.dir.statFile(io, parent.name, .{ .follow_symlinks = false })) |existing| {
+        if (existing.kind == .sym_link) return null;
+    } else |_| {}
+    return clean;
 }
 
 /// Write one captured image to a validated path, returning a capture error code.
@@ -8967,24 +9248,30 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
     return null;
 }
 
-/// `Audio.Loader.load_sound!`: read an audio file and decode it onto the device.
+/// `Audio.load_sound!`: read an audio file out of a store and decode it onto
+/// the device.
 ///
 /// The read waits -- it parks a task and blocks `init!` -- and the decode and
 /// the upload run on the frame thread once the bytes are back. Nothing of the
 /// file survives the call: `LoadSoundFromWave` copies the samples it needs.
-fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
+fn hostedAudioLoadSound(host: *RocHost, args: abi.HostAudio_load_soundArgs) callconv(.c) abi.HostAudio_load_soundResult {
     const Result = abi.HostAudio_load_soundResult;
     const Error = abi.HostAudio_load_soundErr;
-    enforcePhase("Audio.Loader.load_sound!", during_wait);
-    const effect = EffectScope.begin("Audio.Loader.load_sound!", path_arg.asSlice().len);
+    enforcePhase("Audio.load_sound!", during_wait);
+    const effect = EffectScope.begin("Audio.load_sound!", args.path.asSlice().len);
     defer effect.end();
-    defer path_arg.decref(host);
+    defer args.path.decref(host);
+    defer releaseResourceBox(host, args.store);
 
-    const path_slice = path_arg.asSlice();
+    const path_slice = args.path.asSlice();
     const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return abiTryErr(Result, Error.sound_load_failed);
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
+    const bytes = switch (readStoreAssetLimited(allocator, store, path_slice, MAX_AUDIO_FILE_BYTES + 1)) {
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
+        .bytes => |value| value,
+    };
     defer allocator.free(bytes);
 
     if (headlessMode()) {
@@ -8999,29 +9286,35 @@ fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
     return abiTryOk(Result, stored);
 }
 
-fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
-    return hostedAudioLoadSound(activeHost(), path_arg);
+fn exportedAudioLoadSound(args: abi.HostAudio_load_soundArgs) callconv(.c) abi.HostAudio_load_soundResult {
+    return hostedAudioLoadSound(activeHost(), args);
 }
 
-/// `Audio.Loader.load_music!`: read an audio file and open a stream over it.
+/// `Audio.load_music!`: read an audio file out of a store and open a stream
+/// over it.
 ///
 /// The read waits the same way `load_sound!` does, but the bytes are not
 /// released afterwards: raylib's memory decoders read out of that buffer for
 /// as long as the stream plays, so the slot takes ownership of it and frees it
 /// only once the stream has been unloaded.
-fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
+fn hostedAudioLoadMusic(host: *RocHost, args: abi.HostAudio_load_musicArgs) callconv(.c) abi.HostAudio_load_musicResult {
     const Result = abi.HostAudio_load_musicResult;
     const Error = abi.HostAudio_load_musicErr;
-    enforcePhase("Audio.Loader.load_music!", during_wait);
-    const effect = EffectScope.begin("Audio.Loader.load_music!", path_arg.asSlice().len);
+    enforcePhase("Audio.load_music!", during_wait);
+    const effect = EffectScope.begin("Audio.load_music!", args.path.asSlice().len);
     defer effect.end();
-    defer path_arg.decref(host);
+    defer args.path.decref(host);
+    defer releaseResourceBox(host, args.store);
 
-    const path_slice = path_arg.asSlice();
+    const path_slice = args.path.asSlice();
     const allocator = allocatorFromHost(host);
-    var read_err: u8 = READ_ERR_FAILED;
-    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
-        return abiTryErr(Result, Error.music_load_failed);
+    const store = store_heap.get(args.store.*) orelse return abiTryErr(Result, Error.read_failed);
+    const bytes = switch (readStoreAssetLimited(allocator, store, path_slice, MAX_AUDIO_FILE_BYTES + 1)) {
+        .path_invalid => return abiTryErr(Result, Error.path_invalid),
+        .not_found => return abiTryErr(Result, Error.not_found),
+        .failed => return abiTryErr(Result, Error.read_failed),
+        .bytes => |value| value,
+    };
     var bytes_transferred = false;
     defer if (!bytes_transferred) allocator.free(bytes);
 
@@ -9041,8 +9334,8 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.H
     return abiTryOk(Result, stored);
 }
 
-fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
-    return hostedAudioLoadMusic(activeHost(), path_arg);
+fn exportedAudioLoadMusic(args: abi.HostAudio_load_musicArgs) callconv(.c) abi.HostAudio_load_musicResult {
+    return hostedAudioLoadMusic(activeHost(), args);
 }
 
 test "the audio file loaders wait rather than load" {
@@ -9062,43 +9355,46 @@ test "the audio file loaders wait rather than load" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blip.wav", .data = "not decoded in headless tests" });
-    var path_buffer: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blip.wav", .{tmp.sub_path});
+    var root_path: [256]u8 = undefined;
+    const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
 
     {
         const update = PhaseScope.enter(.update);
         defer update.leave();
         last_phase_violation = null;
-        _ = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+        _ = hostedAudioLoadSound(&roc_host, .{ .store = allocateTestResourceStub(&roc_host), .path = abi.RocStr.fromSlice("blip.wav", &roc_host) });
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Audio.Loader.load_sound!", violation.operation);
+        try std.testing.expectEqualStrings("Audio.load_sound!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(Phase.update, violation.actual);
 
         last_phase_violation = null;
-        _ = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+        _ = hostedAudioLoadMusic(&roc_host, .{ .store = allocateTestResourceStub(&roc_host), .path = abi.RocStr.fromSlice("blip.wav", &roc_host) });
         const music_violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Audio.Loader.load_music!", music_violation.operation);
+        try std.testing.expectEqualStrings("Audio.load_music!", music_violation.operation);
         try std.testing.expect(music_violation.allowed.eql(during_wait));
     }
 
     // `init!` blocks for the read and a task parks for it; both answer.
     const startup = PhaseScope.enter(.startup);
     last_phase_violation = null;
-    const sound = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    const sound = hostedAudioLoadSound(&roc_host, .{ .store = openTestStore(&roc_host, relative_root), .path = abi.RocStr.fromSlice("blip.wav", &roc_host) });
     try std.testing.expectEqual(abi.HostAudio_load_soundResultTag.Ok, sound.tag);
     startup.leave();
 
     const task = PhaseScope.enter(.task);
     defer task.leave();
-    const music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    const music = hostedAudioLoadMusic(&roc_host, .{ .store = openTestStore(&roc_host, relative_root), .path = abi.RocStr.fromSlice("blip.wav", &roc_host) });
     try std.testing.expectEqual(abi.HostAudio_load_musicResultTag.Ok, music.tag);
     try std.testing.expect(last_phase_violation == null);
 
-    // A path with nothing behind it is a load failure rather than a resource.
-    const missing = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-sound.wav", &roc_host));
+    // A path with nothing behind it is not found; one that leaves the store is
+    // refused before anything is read.
+    const missing = hostedAudioLoadSound(&roc_host, .{ .store = openTestStore(&roc_host, relative_root), .path = abi.RocStr.fromSlice("no-such-sound.wav", &roc_host) });
     try std.testing.expectEqual(abi.HostAudio_load_soundResultTag.Err, missing.tag);
-    try std.testing.expectEqual(abi.HostAudio_load_soundErr.sound_load_failed, missing.payload_err());
+    try std.testing.expectEqual(abi.HostAudio_load_soundErr.not_found, missing.payload_err());
+    const escaping = hostedAudioLoadSound(&roc_host, .{ .store = openTestStore(&roc_host, relative_root), .path = abi.RocStr.fromSlice("../blip.wav", &roc_host) });
+    try std.testing.expectEqual(abi.HostAudio_load_soundErr.path_invalid, escaping.payload_err());
 
     releaseResourceBox(&roc_host, sound.payload_ok());
     releaseResourceBox(&roc_host, music.payload_ok());
@@ -9468,8 +9764,8 @@ comptime {
         @export(&hostedTextureSetWrapRaw, .{ .name = "roc_texture_set_wrap_raw" });
         @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
-        @export(&capsExportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
-        @export(&capsExportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
+        @export(&exportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
+        @export(&exportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
         @export(&hostedAudioPauseMusic, .{ .name = "roc_audio_pause_music_raw" });
         @export(&hostedAudioPause, .{ .name = "roc_audio_pause_raw" });
         @export(&hostedAudioPlayMusic, .{ .name = "roc_audio_play_music_raw" });
@@ -9542,6 +9838,7 @@ comptime {
         @export(&hostedEntropy, .{ .name = "roc_random_entropy" });
         @export(&hostedExit, .{ .name = "roc_app_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
+        @export(&capsExportedFilesOpenRoot, .{ .name = "roc_files_open_root" });
         @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&capsExportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&capsExportedFilesList, .{ .name = "roc_files_list" });
@@ -9574,7 +9871,7 @@ comptime {
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
-        @export(&capsExportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
+        @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
         @export(&capsHostedHttpSend, .{ .name = "roc_http_send" });
         @export(&hostedTimeNow, .{ .name = "roc_time_now" });
         @export(&capsExportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
@@ -11447,19 +11744,20 @@ test "a file that is not text is refused rather than made into a Str" {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "text", .data = "caf\u{e9}" });
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "empty", .data = "" });
 
-    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
 
-    const binary = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "binary"));
+    const binary = hostedFilesReadText(&roc_host, abi.RocStr.fromSlice(root, &roc_host), abi.RocStr.fromSlice("binary", &roc_host));
     try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Err, binary.tag);
     try std.testing.expectEqual(abi.HostFiles_read_textErr.not_utf8, binary.payload_err());
 
-    const text = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "text"));
+    const text = hostedFilesReadText(&roc_host, abi.RocStr.fromSlice(root, &roc_host), abi.RocStr.fromSlice("text", &roc_host));
     try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, text.tag);
     try std.testing.expectEqualStrings("caf\u{e9}", text.payload_ok().asSlice());
     text.payload_ok().decref(&roc_host);
 
     // The empty file is text too, and the shortest way to get it wrong.
-    const empty = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "empty"));
+    const empty = hostedFilesReadText(&roc_host, abi.RocStr.fromSlice(root, &roc_host), abi.RocStr.fromSlice("empty", &roc_host));
     try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, empty.tag);
     try std.testing.expectEqual(@as(usize, 0), empty.payload_ok().asSlice().len);
     empty.payload_ok().decref(&roc_host);
@@ -11485,24 +11783,32 @@ test "a read above the inline cap is refused rather than copied on the frame thr
     @memset(over_limit, 'x');
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "over", .data = over_limit });
 
-    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
 
-    const fits = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "at-limit"));
+    const fits = hostedFilesReadText(&roc_host, abi.RocStr.fromSlice(root, &roc_host), abi.RocStr.fromSlice("at-limit", &roc_host));
     try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Ok, fits.tag);
     try std.testing.expectEqual(MAX_INLINE_READ_BYTES, fits.payload_ok().asSlice().len);
     fits.payload_ok().decref(&roc_host);
 
-    const refused = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "over"));
+    const refused = hostedFilesReadText(&roc_host, abi.RocStr.fromSlice(root, &roc_host), abi.RocStr.fromSlice("over", &roc_host));
     // Nothing was copied: the answer is the refusal alone, with no payload.
     try std.testing.expectEqual(abi.HostFiles_read_textResultTag.Err, refused.tag);
     try std.testing.expectEqual(abi.HostFiles_read_textErr.too_large, refused.payload_err());
 }
 
-/// A Roc-owned path string for a file `std.testing.tmpDir` created, resolved
-/// the way the effects resolve one: against the test's working directory.
-fn tmpPathString(roc_host: *RocHost, buffer: []u8, sub_path: []const u8, name: []const u8) abi.RocStr {
-    const path = std.fmt.bufPrint(buffer, testing_tmp_prefix ++ "{s}/{s}", .{ sub_path, name }) catch unreachable;
-    return abi.RocStr.fromSlice(path, roc_host);
+/// A `std.testing.tmpDir` as the canonical absolute root a `Files` handle
+/// carries. Owned by `std.testing.allocator`.
+fn tmpRootAlloc(tmp: *std.testing.TmpDir) ![:0]u8 {
+    return tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+}
+
+/// Open a test directory as an asset store, returning the handle a loader
+/// consumes. Call it from a phase where opening a store is legal.
+fn openTestStore(roc_host: *RocHost, relative_root: []const u8) *u64 {
+    const opened = hostedStoreOpenRaw(roc_host, testStoreOpenArgs(roc_host, relative_root, false, 0, ""));
+    if (opened.tag != .Ok) @panic("test store did not open");
+    return opened.payload_ok();
 }
 
 /// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.
@@ -11833,7 +12139,7 @@ test "a full byte-list heap refuses a read before it opens the path" {
 
     // This must report `Busy`, not `NotFound`: admission happens before the
     // path is opened, so a doomed read never starts.
-    const refused = readByteListWaiting(&roc_host, testing_tmp_prefix ++ "definitely-not-here.txt", .read);
+    const refused = readByteListWaiting(&roc_host, "/", "definitely-not-here.txt", .read);
     try std.testing.expectEqual(READ_ERR_BUSY, refused.err);
     try std.testing.expectEqual(@as(usize, 0), refused.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
@@ -11869,23 +12175,25 @@ test "a parked read delivers bytes and releases its reservation either way" {
     const payload = "read on a coroutine, delivered as bytes";
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bytes.txt", .data = payload });
 
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/bytes.txt", .{tmp.sub_path});
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
 
-    const read = readByteListWaiting(&roc_host, path, .read);
+    const read = readByteListWaiting(&roc_host, root, "bytes.txt", .read);
     try std.testing.expectEqual(@as(u8, 0), read.err);
     try std.testing.expectEqualStrings(payload, read.bytes.items());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
-    const missing = readByteListWaiting(&roc_host, testing_tmp_prefix ++ "definitely-not-here.txt", .read);
+    const missing = readByteListWaiting(&roc_host, root, "definitely-not-here.txt", .read);
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
+
+    // A path the handle does not reach is refused before anything is opened.
+    const escaping = readByteListWaiting(&roc_host, root, "../bytes.txt", .read);
+    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, escaping.err);
     try std.testing.expectEqual(@as(usize, 0), missing.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
     // A listing rides the same path, and answers with the encoded entries.
-    var dir_buffer: [capture.path_capacity]u8 = undefined;
-    const dir_path = try std.fmt.bufPrint(&dir_buffer, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
-    const listed = readByteListWaiting(&roc_host, dir_path, .list);
+    const listed = readByteListWaiting(&roc_host, root, "", .list);
     try std.testing.expectEqual(@as(u8, 0), listed.err);
     try std.testing.expectEqualStrings("bytes.txt", listed.bytes.items()[1 .. listed.bytes.len() - 1]);
     try std.testing.expectEqual(DIR_ENTRY_FILE, listed.bytes.items()[0]);
@@ -12073,7 +12381,7 @@ test "loading a map from a frame or an update is rejected, and from a task is no
     // returns; under `zig test` the guard records instead, so what the test can
     // check is that it fired and named the right things.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
+    var roc_host = routingTestHost(&roc_env);
     defer last_phase_violation = null;
 
     for ([_]Phase{ .render, .update }) |phase| {
@@ -12081,11 +12389,11 @@ test "loading a map from a frame or an update is rejected, and from a task is no
         defer scope.leave();
         last_phase_violation = null;
 
-        const result = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice("examples/assets/nothing.tmx", &roc_host));
+        const result = hostedTilemapLoadTmxRaw(&roc_host, .{ .store = allocateTestResourceStub(&roc_host), .path = abi.RocStr.fromSlice("nothing.tmx", &roc_host) });
         try std.testing.expectEqual(abi.HostTilemap_load_tmxResultTag.Err, result.tag);
 
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-        try std.testing.expectEqualStrings("Tilemap.Loader.load_tmx!", violation.operation);
+        try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
         try std.testing.expect(violation.allowed.eql(during_wait));
         try std.testing.expectEqual(phase, violation.actual);
     }
@@ -12109,16 +12417,20 @@ test "loading a map from a frame or an update is rejected, and from a task is no
         \\</map>
         ,
     });
-    var path_buffer: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/map.tmx", .{tmp.sub_path});
+    var root_path: [256]u8 = undefined;
+    const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
 
     // On a task both reads park, and the parse in between still answers. Two
     // files, so this also covers the referenced tileset going through the same
     // waiting path rather than a blocking one.
     const task = PhaseScope.enter(.task);
     defer task.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        store_heap.deinitAll();
+    }
     last_phase_violation = null;
-    const loaded = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    const loaded = hostedTilemapLoadTmxRaw(&roc_host, .{ .store = openTestStore(&roc_host, relative_root), .path = abi.RocStr.fromSlice("map.tmx", &roc_host) });
     try std.testing.expectEqual(abi.HostTilemap_load_tmxResultTag.Ok, loaded.tag);
     try std.testing.expect(last_phase_violation == null);
     releaseTilemapRawMap(&roc_host, loaded.payload_ok());
@@ -13730,7 +14042,7 @@ test "a write creates the directories above it and replaces the whole file" {
 
     try std.testing.expectEqual(
         @as(u8, 0),
-        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "the first contents"),
+        writeBeneathIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "the first contents"),
     );
     const first = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(first);
@@ -13740,7 +14052,7 @@ test "a write creates the directories above it and replaces the whole file" {
     // file rather than leave the tail of the previous contents behind.
     try std.testing.expectEqual(
         @as(u8, 0),
-        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "second"),
+        writeBeneathIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "second"),
     );
     const second = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(second);
@@ -13754,7 +14066,7 @@ test "a write whose parent is a file is refused by name" {
 
     try std.testing.expectEqual(
         READ_ERR_NOT_FOUND,
-        writeFileWaitingIn(tmp.dir, std.testing.io, "plain.txt/nested.txt", "x"),
+        writeBeneathIn(tmp.dir, std.testing.io, "plain.txt/nested.txt", "x"),
     );
 }
 
@@ -13773,7 +14085,7 @@ test "a stat reports what a path is, how big it is, and when it changed" {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "notes.txt", .data = "twelve bytes" });
     try tmp.dir.createDirPath(std.testing.io, "assets");
 
-    const file = statPathIn(tmp.dir, std.testing.io, "notes.txt");
+    const file = statBeneathIn(tmp.dir, std.testing.io, "notes.txt");
     try std.testing.expectEqual(@as(u8, 0), file.err);
     try std.testing.expectEqual(DIR_ENTRY_FILE, file.found.kind);
     try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.found.size_bytes);
@@ -13784,13 +14096,13 @@ test "a stat reports what a path is, how big it is, and when it changed" {
     try std.testing.expect(file.found.modified_seconds > 1_577_836_800);
     try std.testing.expect(file.found.modified_nanosecond < 1_000_000_000);
 
-    const dir = statPathIn(tmp.dir, std.testing.io, "assets");
+    const dir = statBeneathIn(tmp.dir, std.testing.io, "assets");
     try std.testing.expectEqual(@as(u8, 0), dir.err);
     try std.testing.expectEqual(DIR_ENTRY_DIR, dir.found.kind);
 
     // A failed stat answers with the reason and zeroes, so an app cannot read
     // a size or a time out of an answer that has neither.
-    const missing = statPathIn(tmp.dir, std.testing.io, "absent.txt");
+    const missing = statBeneathIn(tmp.dir, std.testing.io, "absent.txt");
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
     try std.testing.expectEqual(@as(u64, 0), missing.found.size_bytes);
     try std.testing.expectEqual(@as(i64, 0), missing.found.modified_seconds);
@@ -13800,12 +14112,12 @@ test "a stat rewrites a modification a hot-reload loop can compare" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "one" });
-    const before = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+    const before = statBeneathIn(tmp.dir, std.testing.io, "shader.fs");
 
     // Polling `modified` is the whole hot-reload story, so rewriting the file
     // has to move the instant an app is comparing against.
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "two but longer" });
-    const after = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+    const after = statBeneathIn(tmp.dir, std.testing.io, "shader.fs");
 
     try std.testing.expect(after.found.size_bytes > before.found.size_bytes);
     const moved = after.found.modified_seconds > before.found.modified_seconds or
@@ -14522,52 +14834,73 @@ fn admitPathEffect(operation: []const u8, authority: u64, path: []const u8, writ
     return authorityIsLive(authority) and admitDeclared(operation, .files, active_policy.admitPath(path, write));
 }
 
-/// Capability boundary for files_read_text!; the implementation below it is trusted host code.
-fn capsExportedFilesReadText(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
-    const name = "Files.Access.read_text!";
+// A `Files` handle carries its authority: the host minted its root through
+// `files_open_root!`, which is where the declaration was checked. What is left
+// here is that the authority is this lifetime's; the path beneath the root is
+// checked again by the confined walk itself.
+
+/// Capability boundary for files_open_root!: where declarations and the app
+/// id are checked, before anything is resolved.
+fn capsExportedFilesOpenRoot(authority: u64, root: FilesRoot, writable: bool) callconv(.c) abi.HostFiles_open_rootResult {
+    const name = filesRootOperation(&root, writable);
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_read_textResult, name, .{path_arg});
-    return exportedFilesReadText(path_arg);
+    const admitted = authorityIsLive(authority) and switch (root.tag) {
+        // The app's own bundle, never writable.
+        .BesideExecutable => !writable,
+        .AppData, .AppConfig, .AppCache => requireAppId(name),
+        .WorkingDirectory => admitDeclared(name, .files, active_policy.admitWorkingDirectory(writable)),
+        .Declared => admitDeclared(name, .files, active_policy.admitPath(root.payload_declared().asSlice(), writable)),
+    };
+    if (!admitted) return refuseEffect(abi.HostFiles_open_rootResult, name, .{root});
+    return hostedFilesOpenRoot(activeHost(), root, writable);
+}
+
+/// Capability boundary for files_read_text!; the implementation below it is trusted host code.
+fn capsExportedFilesReadText(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
+    const name = "Files.ReadDir.read_text!";
+    enforcePhase(name, during_wait);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_read_textResult, name, .{ root_arg, path_arg });
+    return exportedFilesReadText(root_arg, path_arg);
 }
 
 /// Capability boundary for files_read_bytes!; the implementation below it is trusted host code.
-fn capsExportedFilesReadBytes(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
-    const name = "Files.Access.read_bytes!";
+fn capsExportedFilesReadBytes(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+    const name = "Files.ReadDir.read_bytes!";
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_read_bytesResult, name, .{path_arg});
-    return exportedFilesReadBytes(path_arg);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_read_bytesResult, name, .{ root_arg, path_arg });
+    return exportedFilesReadBytes(root_arg, path_arg);
 }
 
 /// Capability boundary for files_list!; the implementation below it is trusted host code.
-fn capsExportedFilesList(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
-    const name = "Files.Access.list!";
+fn capsExportedFilesList(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
+    const name = "Files.ReadDir.list!";
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_listResult, name, .{path_arg});
-    return exportedFilesList(path_arg);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_listResult, name, .{ root_arg, path_arg });
+    return exportedFilesList(root_arg, path_arg);
 }
 
 /// Capability boundary for files_metadata!; the implementation below it is trusted host code.
-fn capsExportedFilesMetadata(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
-    const name = "Files.Access.metadata!";
+fn capsExportedFilesMetadata(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
+    const name = "Files.ReadDir.metadata!";
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_metadataResult, name, .{path_arg});
-    return exportedFilesMetadata(path_arg);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_metadataResult, name, .{ root_arg, path_arg });
+    return exportedFilesMetadata(root_arg, path_arg);
 }
 
 /// Capability boundary for files_write_text!; the implementation below it is trusted host code.
-fn capsExportedFilesWriteText(authority: u64, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
-    const name = "Files.Access.write_text!";
+fn capsExportedFilesWriteText(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
+    const name = "Files.Dir.write_text!";
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), true)) return refuseEffect(abi.HostFiles_write_textResult, name, .{ path_arg, contents_arg });
-    return exportedFilesWriteText(path_arg, contents_arg);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_write_textResult, name, .{ root_arg, path_arg, contents_arg });
+    return exportedFilesWriteText(root_arg, path_arg, contents_arg);
 }
 
 /// Capability boundary for files_write_bytes!; the implementation below it is trusted host code.
-fn capsExportedFilesWriteBytes(authority: u64, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
-    const name = "Files.Access.write_bytes!";
+fn capsExportedFilesWriteBytes(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
+    const name = "Files.Dir.write_bytes!";
     enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), true)) return refuseEffect(abi.HostFiles_write_bytesResult, name, .{ path_arg, bytes_arg });
-    return exportedFilesWriteBytes(path_arg, bytes_arg);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_write_bytesResult, name, .{ root_arg, path_arg, bytes_arg });
+    return exportedFilesWriteBytes(root_arg, path_arg, bytes_arg);
 }
 
 /// Capability boundary for http_send!; the implementation below it is trusted host code.
@@ -14644,60 +14977,25 @@ fn capsExportedUdpBind(authority: u64, args: abi.HostUdp_bindArg1) callconv(.c) 
     return exportedUdpBind(args);
 }
 
-/// SQLite's in-memory database name. It touches no file, so it needs no
-/// declaration.
-const sqlite_memory_path = ":memory:";
-
 /// Capability boundary for sqlite_open!; the implementation below it is trusted host code.
-fn capsHostedSqliteOpen(authority: u64, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
+///
+/// The directory handle a database is opened beneath carries its authority,
+/// and the in-memory database needs none.
+fn capsHostedSqliteOpen(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
     const name = "Sqlite.Service.open!";
     enforcePhase(name, during_wait);
-    const path = path_arg.asSlice();
-    const in_memory = std.mem.eql(u8, path, sqlite_memory_path);
-    const admitted = authorityIsLive(authority) and
-        (in_memory or admitPathEffect(name, authority, path, mode != sqlite_effect.MODE_READ_ONLY));
-    if (!admitted) return refuseEffect(abi.HostSqlite_openResult, name, .{ path_arg, mode, busy_timeout_ms, max_result_bytes });
-    return hostedSqliteOpen(path_arg, mode, busy_timeout_ms, max_result_bytes);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostSqlite_openResult, name, .{ root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes });
+    return hostedSqliteOpen(root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes);
 }
-
-/// Store roots numbered as `Assets.StoreLocation` crosses the boundary.
-const store_location_beside_executable: u8 = 0;
 
 /// Capability boundary for store_open!; the implementation below it is trusted host code.
 ///
-/// A store beside the executable is the app's own bundle and needs no
-/// declaration. Any other root is a directory the app must have declared.
+/// A store is opened from a `Files.ReadDir`, which carries its authority.
 fn capsExportedStoreOpenRaw(authority: u64, args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
-    const name = "Assets.Loader.open!";
+    const name = "Assets.open!";
     enforcePhase(name, during_wait);
-    const admitted = authorityIsLive(authority) and
-        (args.location_kind == store_location_beside_executable or admitPathEffect(name, authority, args.root.asSlice(), false));
-    if (!admitted) return refuseEffect(abi.HostStore_openResult, name, .{args});
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostStore_openResult, name, .{args});
     return exportedStoreOpenRaw(args);
-}
-
-/// Capability boundary for audio_load_sound!; the implementation below it is trusted host code.
-fn capsExportedAudioLoadSound(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
-    const name = "Audio.Loader.load_sound!";
-    enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostAudio_load_soundResult, name, .{path_arg});
-    return exportedAudioLoadSound(path_arg);
-}
-
-/// Capability boundary for audio_load_music!; the implementation below it is trusted host code.
-fn capsExportedAudioLoadMusic(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
-    const name = "Audio.Loader.load_music!";
-    enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostAudio_load_musicResult, name, .{path_arg});
-    return exportedAudioLoadMusic(path_arg);
-}
-
-/// Capability boundary for tilemap_load_tmx!; the implementation below it is trusted host code.
-fn capsExportedTilemapLoadTmxRaw(authority: u64, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
-    const name = "Tilemap.Loader.load_tmx!";
-    enforcePhase(name, during_wait);
-    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(TilemapLoadTmxResult, name, .{path_arg});
-    return exportedTilemapLoadTmxRaw(path_arg);
 }
 
 /// Capability boundary for window_read_clipboard!; the implementation below it is trusted host code.
@@ -14856,6 +15154,14 @@ fn testPolicyDeclaringEverything() !permissions.Policy {
 
 const long_test_text = "denied argument longer than the small string representation";
 
+/// A `Files` root as the platform would send it; `text` is the declared path.
+fn testFilesRoot(comptime tag: @FieldType(FilesRoot, "tag"), text: []const u8, roc_host: *RocHost) FilesRoot {
+    var root = std.mem.zeroes(FilesRoot);
+    root.tag = tag;
+    if (tag == .Declared) @as(*abi.RocStr, @ptrCast(@alignCast(&root.payload))).* = abi.RocStr.fromSlice(text, roc_host);
+    return root;
+}
+
 test "every gated entry point refuses a stub authority and consumes arguments" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -14871,23 +15177,21 @@ test "every gated entry point refuses a stub authority and consumes arguments" {
     const phase = PhaseScope.enter(.startup);
     defer phase.leave();
     const stub: u64 = 0;
-    try expectPermissionDenied(capsExportedFilesReadText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesReadBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesList(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesMetadata(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesWriteText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesWriteBytes(stub, abi.RocStr.fromSlice("denied-long-file-name-never-opened", &roc_host), abi.RocListWith(u8, false).empty()));
+    try expectPermissionDenied(capsExportedFilesOpenRoot(stub, testFilesRoot(.Declared, long_test_text, &roc_host), true));
+    try expectPermissionDenied(capsExportedFilesReadText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesReadBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesList(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesMetadata(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice("denied-long-file-name-never-opened", &roc_host), abi.RocListWith(u8, false).empty()));
     try expectPermissionDenied(capsHostedHttpSend(stub, deniedTestArgument(http_effect.Request)));
     try expectPermissionDenied(capsExportedCmdRun(stub, deniedTestArgument(abi.HostCmd_runArg1)));
     try expectPermissionDenied(capsExportedStdioWriteLine(stub, deniedTestArgument(u8), abi.RocStr.fromSlice(long_test_text, &roc_host)));
     try expectPermissionDenied(capsExportedStdioWriteText(stub, deniedTestArgument(u8), abi.RocStr.fromSlice(long_test_text, &roc_host)));
     try expectPermissionDenied(capsExportedStdioWriteBytes(stub, 0, abi.RocListWith(u8, false).empty()));
     try expectPermissionDenied(capsExportedUdpBind(stub, deniedTestArgument(abi.HostUdp_bindArg1)));
-    try expectPermissionDenied(capsHostedSqliteOpen(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), deniedTestArgument(u8), deniedTestArgument(u64), deniedTestArgument(u64)));
+    try expectPermissionDenied(capsHostedSqliteOpen(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host), deniedTestArgument(u8), deniedTestArgument(u64), deniedTestArgument(u64)));
     try expectPermissionDenied(capsExportedStoreOpenRaw(stub, deniedTestArgument(abi.HostStore_openArg1)));
-    try expectPermissionDenied(capsExportedAudioLoadSound(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedAudioLoadMusic(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
     try expectPermissionDenied(capsExportedReadClipboard(stub));
     try expectPermissionDenied(capsExportedSetClipboardText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
     {
@@ -14929,13 +15233,14 @@ test "a target outside every declared scope is refused with PermissionDenied and
     const live = active_io_authority;
     const outside = "../outside-the-working-directory-and-long-enough";
 
-    try expectPermissionDenied(capsExportedFilesReadText(live, abi.RocStr.fromSlice(outside, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesReadBytes(live, abi.RocStr.fromSlice("/etc/an-absolute-path-no-declaration-covers", &roc_host)));
-    try expectPermissionDenied(capsExportedFilesList(live, abi.RocStr.fromSlice(outside, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesMetadata(live, abi.RocStr.fromSlice(outside, &roc_host)));
-    // Read-only declarations do not admit writes, even beneath them.
-    try expectPermissionDenied(capsExportedFilesWriteText(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.txt", &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesWriteBytes(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.bin", &roc_host), abi.RocListWith(u8, false).empty()));
+    // A root outside every declaration is refused before anything is resolved.
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, outside, &roc_host), false));
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "/etc/an-absolute-path-no-declaration-covers", &roc_host), false));
+    // A read-only declaration does not admit a writable handle, even beneath it.
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.WorkingDirectory, "", &roc_host), true));
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "inside-but-read-only-and-long-enough", &roc_host), true));
+    // The bundle beside the executable is never writable.
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.BesideExecutable, "", &roc_host), true));
     var request = deniedTestArgument(http_effect.Request);
     request.uri = abi.RocStr.fromSlice("https://elsewhere.example.com/not-the-declared-origin", &roc_host);
     try expectPermissionDenied(capsHostedHttpSend(live, request));
@@ -14946,14 +15251,6 @@ test "a target outside every declared scope is refused with PermissionDenied and
     bind.ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host);
     bind.port = 40001;
     try expectPermissionDenied(capsExportedUdpBind(live, bind));
-    try expectPermissionDenied(capsHostedSqliteOpen(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.db", &roc_host), sqlite_effect.MODE_READ_WRITE_CREATE, 0, 0));
-    var store = deniedTestArgument(abi.HostStore_openArg1);
-    store.location_kind = 1;
-    store.root = abi.RocStr.fromSlice(outside, &roc_host);
-    try expectPermissionDenied(capsExportedStoreOpenRaw(live, store));
-    try expectPermissionDenied(capsExportedAudioLoadSound(live, abi.RocStr.fromSlice(outside, &roc_host)));
-    try expectPermissionDenied(capsExportedAudioLoadMusic(live, abi.RocStr.fromSlice(outside, &roc_host)));
-    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(live, abi.RocStr.fromSlice(outside, &roc_host)));
     if (builtin.os.tag == .windows) {
         try expectPermissionDenied(capsExportedAppReadEnvWindows(live, abi.RocStr.fromSlice("AN_UNDECLARED_VARIABLE_WITH_A_LONG_NAME", &roc_host)));
     } else {
@@ -14988,8 +15285,14 @@ test "using a facility the app never declared is a programmer error that names t
         }
     }.check;
 
-    try expectPermissionDenied(capsExportedFilesReadText(live, abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectUndeclared(.{ .facility = .files, .operation = "Files.Access.read_text!" });
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.WorkingDirectory, "", &roc_host), false));
+    try expectUndeclared(.{ .facility = .files, .operation = "Files.Access.working_directory_read!" });
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, long_test_text, &roc_host), true));
+    try expectUndeclared(.{ .facility = .files, .operation = "Files.Access.open_dir!" });
+    last_missing_app_id = null;
+    defer last_missing_app_id = null;
+    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.AppData, "", &roc_host), true));
+    try std.testing.expectEqualStrings("Files.Access.app_data!", last_missing_app_id.?);
     var request = deniedTestArgument(http_effect.Request);
     request.uri = abi.RocStr.fromSlice("not a url at all, but http is undeclared anyway", &roc_host);
     try expectPermissionDenied(capsHostedHttpSend(live, request));

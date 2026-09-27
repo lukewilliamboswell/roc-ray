@@ -1,6 +1,10 @@
 ## Reads text, bytes, and file details while continuing to animate the window.
 ## Press Escape to quit. This example introduces tasks for work that may take
 ## time, messages that return task results to `update!`, and typed file errors.
+##
+## Files are read through a directory handle. The config declares the working
+## directory, read-only, and `init!` opens it once and keeps the handle in the
+## model; every read names a path beneath it.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
@@ -16,6 +20,7 @@ import rr.Permission
 ## operation's progress or result, animation time, and prepared labels needed
 ## to draw the next frame.
 Model : {
+	repo : Files.ReadDir,
 	small : ReadState,
 	large : BytesState,
 	meta : MetaState,
@@ -49,12 +54,14 @@ large_path = "src/roc_platform_abi.zig"
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [ResourceLimit])
+init! : App.Init(Model, [ResourceLimit, WorkingDirectoryUnavailable])
 init! = App.init(
 	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)).with_permission(WorkingDirectory(ReadOnly)),
-	|_io| {
+	|io| {
+		repo = io.files().working_directory_read!() ? |_| WorkingDirectoryUnavailable
 		font = Draw.default_font!()
 		Ok({
+			repo,
 			small: Waiting,
 			large: Waiting,
 			meta: Waiting,
@@ -67,12 +74,13 @@ init! = App.init(
 )
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, io| {
+update! = |model, program_input, _io| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		Task.spawn!(program_input, || SmallReadFinished(io.files().read_text!(small_path)))
-		Task.spawn!(program_input, || BytesReadFinished(io.files().read_bytes!(large_path)))
-		Task.spawn!(program_input, || MetadataFinished(io.files().metadata!(small_path)))
+		repo = model.repo
+		Task.spawn!(program_input, || SmallReadFinished(repo.read_text!(small_path)))
+		Task.spawn!(program_input, || BytesReadFinished(repo.read_bytes!(large_path)))
+		Task.spawn!(program_input, || MetadataFinished(repo.metadata!(small_path)))
 	}
 
 	if program_input.devices.key_pressed(KeyEscape) {
@@ -98,7 +106,7 @@ meta_state = |result|
 		Ok(meta) => Described("${describe_kind(meta.kind)}, ${U64.to_str(meta.size_bytes)} bytes, modified ${meta.modified.to_iso_8601()}")
 		Err(NotFound) => Failed("not found")
 		Err(AccessRefused) => Failed("not allowed to look")
-		Err(PermissionDenied) => Failed("outside the declared directories")
+		Err(PermissionDenied) => Failed("outside the directory handle")
 		Err(ReadFailed) => Failed("stat failed")
 		Err(Unavailable) => Failed("stats unavailable")
 	}
@@ -123,7 +131,7 @@ string_state = |result|
 	match result {
 		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
 		Err(NotFound) => Failed("not found")
-		Err(PermissionDenied) => Failed("outside the declared directories")
+		Err(PermissionDenied) => Failed("outside the directory handle")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")
@@ -136,7 +144,7 @@ bytes_state = |result|
 	match result {
 		Ok(bytes) => Held(bytes)
 		Err(NotFound) => Failed("not found")
-		Err(PermissionDenied) => Failed("outside the declared directories")
+		Err(PermissionDenied) => Failed("outside the directory handle")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")

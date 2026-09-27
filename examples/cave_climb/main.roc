@@ -70,8 +70,9 @@ screen_w = 800.F32
 
 screen_h = 600.F32
 
+## The map's name inside the asset store.
 map_path : Str
-map_path = "examples/cave_climb/assets/cave_climb.tmx"
+map_path = "cave_climb.tmx"
 
 player_width = 42.F32
 
@@ -139,12 +140,12 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)).with_permission(Directory(asset_root, ReadOnly)),
 	|io| {
-		assets = io.assets().open!(Assets.working_directory(asset_root))?
+		assets = Assets.open!(io.files().open_dir_read!(asset_root)?, IgnoreManifest)?
 		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
 		characters = Assets.load_texture!(assets, "kenney-platformer/spritesheet-characters-default.png")?
 		enemies_texture = Assets.load_texture!(assets, "kenney-platformer/spritesheet-enemies-default.png")?
 		background = Assets.load_texture!(assets, "kenney-platformer/background_color_hills.png")?
-		raw_map = io.tilemaps().load_tmx!(map_path)?
+		raw_map = Tilemap.load_tmx!(assets, map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_tileset_texture(

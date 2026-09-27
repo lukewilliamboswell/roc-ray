@@ -29,14 +29,14 @@ init! = App.init(App.default.with_title("sqlite").with_permission(Directory("pro
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which property went wrong.
 expected_score : U64
-expected_score = 2047
+expected_score = 4095
 
 score : Bool, U64 -> U64
 score = |held, bit| if held bit else 0
 
 expect score(Bool.True, 8) == 8
 expect score(Bool.False, 8) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 + 2048 == expected_score
 
 ## Text with a NUL-unsafe shape on purpose: a binding that went through a C
 ## string would truncate at the newline-free tail, and a length-confused one
@@ -55,15 +55,16 @@ schema = "CREATE TABLE kinds(i INTEGER NOT NULL, r REAL NOT NULL, s TEXT NOT NUL
 ## Write every `Value` kind, read them back, and compare.
 check! : App.Io => Msg
 check! = |io| {
-	# Opening a database does not create its parent directory, so make one the
-	# way an app would. A write creates the tree on its way.
-	match io.files().write_bytes!("probe_out/.keep", []) {
-		Ok({}) => {}
-		Err(_) => return Checked(0)
-	}
+	# A database opens beneath a writable directory handle, which is created
+	# on the way.
+	out =
+		match io.files().open_dir!("probe_out") {
+			Ok(dir) => dir
+			Err(_) => return Checked(0)
+		}
 
 	db =
-		match io.sqlite().open!("probe_out/probe.db") {
+		match io.sqlite().open!(out, "probe.db") {
 			Ok(opened) => opened
 			Err(_) => return Checked(0)
 		}
@@ -137,7 +138,15 @@ check! = |io| {
 			}
 		}
 
-	Checked(changed + rowid + read_back + names + missing + reused + error_paths!(db))
+	# A database path is confined like any other: one that would leave the
+	# handle is refused before SQLite sees it.
+	escaped =
+		match io.sqlite().open!(out, "../escaped.db") {
+			Err(PermissionDenied) => 2048
+			_ => 0
+		}
+
+	Checked(changed + rowid + read_back + names + missing + reused + escaped + error_paths!(db))
 }
 
 ## The failures an app is most likely to meet, each as its own typed outcome.
@@ -197,8 +206,16 @@ error_paths! = |db| {
 			_ => Bool.False
 		}
 
+	# `ATTACH` is disabled on every connection, so a database cannot reach a
+	# second file.
+	attached =
+		match Sqlite.execute!({ db, query: "ATTACH DATABASE 'other.db' AS other", bindings: [] }) {
+			Err(SqliteErr(_, _)) => Bool.True
+			_ => Bool.False
+		}
+
 	score(
-		wrong_call and constrained and syntax and no_rows and too_many and stubbed and multiple,
+		wrong_call and constrained and syntax and no_rows and too_many and stubbed and multiple and attached,
 		1024,
 	)
 }

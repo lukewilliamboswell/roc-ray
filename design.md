@@ -827,7 +827,9 @@ followed redirect is checked like the request that caused it.
 
 Filesystem authority is a typed directory or file handle, never an ambient
 path. Every relative path resolves beneath its handle's root: absolute paths,
-parent components, and links that lead outside the root are refused. Read-only
+parent components, and symbolic links beneath the root are refused, whether or
+not they would lead outside it, so the rule is the same on every system. The
+root itself is what was granted, however the filesystem spells it. Read-only
 and writable handles are distinct types, so a write through a read-only grant
 does not type-check, and a writable handle narrows to a read-only one or to a
 subdirectory. Asset stores, audio and map loaders, and on-disk databases open

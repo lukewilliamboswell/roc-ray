@@ -109,8 +109,9 @@ about before changing anything.
 under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
 newer runner than the build matrix: it is the only target that links the system
 libc directly, and the vendored raylib references glibc 2.38 symbols that
-ubuntu-22.04 lacks. The platform and examples link through the generated libc
-stub and are unaffected.
+ubuntu-22.04 lacks. Apps are unaffected: the host defines those aliases
+(`src/isoc23_shims.s`), and `scripts/all_tests.py` checks that no built example
+leaves one for the dynamic linker.
 
 Both expose only primitives and opaque pointers to Zig through a small C shim,
 so the freestanding host module never needs C headers. Each produces its own
@@ -119,7 +120,7 @@ static archive, released as a linker input and named in the `targets:` block of
 checks the SIMD kernels; the producer workflow runs it on arm64 and x64.
 
 libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
-added to the glibc link stubs in `platform/targets/x64glibc/libc_stub.s`. SQLite's unix
+added to the glibc link stubs in `platform/targets/x64v1glibc/libc_stub.s`. SQLite's unix
 VFS and its serialized threading mode added ten more there and in
 `libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
 library: the stub files are hand-written assembly, and a missing symbol shows up
@@ -149,8 +150,8 @@ scripts/bundle.sh --platform wayland
 Both bundles take the host archives that `zig build` writes under
 `platform/targets/`, and install their other linker inputs from the locked
 release into a fresh staging directory. The default package takes the
-`x64mac`, `arm64mac`, `x64glibc-x11`, and `x64win` profiles, and the Wayland
-package takes `x64glibc-wayland`. So a local checkout can build a complete
+`x64mac`, `arm64mac`, `x64v1glibc-x11`, and `x64win` profiles, and the Wayland
+package takes `x64v1glibc-wayland`. So a local checkout can build a complete
 bundle, which is what `scripts/all_tests.py` relies on. The Wayland raylib
 archive itself (`vendor/raylib/linux-x64-wayland/libraylib.a`, rebuilt with
 `scripts/build-raylib-wayland.sh`) is a producer input like the other vendored

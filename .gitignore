@@ -64,9 +64,9 @@ app
 !vendor/raylib/**/*.lib
 
 # Exception: keep CRT runtime files for cross-compilation
-!platform/targets/x64glibc/Scrt1.o
-!platform/targets/x64glibc/crti.o
-!platform/targets/x64glibc/crtn.o
+!platform/targets/x64v1glibc/Scrt1.o
+!platform/targets/x64v1glibc/crti.o
+!platform/targets/x64v1glibc/crtn.o
 
 .claude
 

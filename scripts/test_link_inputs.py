@@ -82,10 +82,10 @@ class LinkInputTests(unittest.TestCase):
         for header in ("platform/main.roc", "platform/main-wayland.roc"):
             text = (release.ROOT / header).read_text()
             self.assertIn('"libhost.a"', text)
-        self.assertEqual(release.declared_inputs("x64glibc-x11"), sorted(
+        self.assertEqual(release.declared_inputs("x64v1glibc-x11"), sorted(
             ["Scrt1.o", "crti.o", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a",
              "libm.so", "libX11.so", "libc.so", "crtn.o"]))
-        self.assertNotIn("libX11.so", release.declared_inputs("x64glibc-wayland"))
+        self.assertNotIn("libX11.so", release.declared_inputs("x64v1glibc-wayland"))
         self.assertIn("bcryptprimitives.lib", release.declared_inputs("x64win"))
         self.assertNotIn("host.lib", release.declared_inputs("x64win"))
 
@@ -102,7 +102,7 @@ class LinkInputTests(unittest.TestCase):
         cache = self.root / "cache"
         server = FakeRelease(self.root / "candidate")
         with mock.patch.object(link_inputs, "urlopen", server):
-            link_inputs.install(["x64glibc-x11"], self.root / "one", lock_path=lock, cache=cache)
+            link_inputs.install(["x64v1glibc-x11"], self.root / "one", lock_path=lock, cache=cache)
         self.assertEqual(len(server.requests), 1)
 
         def offline(*_args, **_kwargs):
@@ -110,11 +110,11 @@ class LinkInputTests(unittest.TestCase):
 
         with mock.patch.object(link_inputs, "urlopen", offline), \
                 mock.patch.object(link_inputs, "file_sha256", wraps=link_inputs.file_sha256) as hashed:
-            link_inputs.install(["x64glibc-x11"], self.root / "two", lock_path=lock, cache=cache)
-        cached = cache / f"{json.loads(lock.read_text())['targets']['x64glibc-x11']['sha256']}-link-inputs-x64glibc-x11.tar"
+            link_inputs.install(["x64v1glibc-x11"], self.root / "two", lock_path=lock, cache=cache)
+        cached = cache / f"{json.loads(lock.read_text())['targets']['x64v1glibc-x11']['sha256']}-link-inputs-x64v1glibc-x11.tar"
         self.assertIn(mock.call(cached), hashed.call_args_list)
-        installed = self.root / "two/targets/x64glibc/libX11.so"
-        self.assertEqual(installed.read_bytes(), b"x64glibc-x11:targets/x64glibc/libX11.so")
+        installed = self.root / "two/targets/x64v1glibc/libX11.so"
+        self.assertEqual(installed.read_bytes(), b"x64v1glibc-x11:targets/x64v1glibc/libX11.so")
         self.assertTrue((self.root / "two/licenses/LICENSE.libvpx").is_file())
 
     def test_poisoned_cache_entry_is_removed_and_fails(self, _):
@@ -190,11 +190,11 @@ class LinkInputTests(unittest.TestCase):
     def test_wayland_archive_cannot_stand_in_for_x11(self, _):
         manifest = compose(self.root)
         lock = json.loads(lock_for(self.root, manifest).read_text())
-        wayland = self.root / "candidate" / manifest["assets"]["x64glibc-wayland"]["asset"]
-        with self.assertRaisesRegex(link_inputs.LinkInputError, "x64glibc-x11 profile"):
-            link_inputs.unpack(wayland, "x64glibc-x11", lock, self.root / "stage")
+        wayland = self.root / "candidate" / manifest["assets"]["x64v1glibc-wayland"]["asset"]
+        with self.assertRaisesRegex(link_inputs.LinkInputError, "x64v1glibc-x11 profile"):
+            link_inputs.unpack(wayland, "x64v1glibc-x11", lock, self.root / "stage")
         with self.assertRaisesRegex(link_inputs.LinkInputError, "cannot be installed together"):
-            link_inputs.install(["x64glibc-x11", "x64glibc-wayland"], self.root / "out",
+            link_inputs.install(["x64v1glibc-x11", "x64v1glibc-wayland"], self.root / "out",
                                 lock_path=self.root / "link-inputs.lock.json", cache=self.root / "cache")
 
     def test_stale_lock_fails_instead_of_rebuilding(self, fingerprint):
@@ -206,7 +206,7 @@ class LinkInputTests(unittest.TestCase):
     def test_lock_must_select_every_profile(self, _):
         lock_path = lock_for(self.root, compose(self.root))
         lock = json.loads(lock_path.read_text())
-        del lock["targets"]["x64glibc-wayland"]
+        del lock["targets"]["x64v1glibc-wayland"]
         lock_path.write_text(json.dumps(lock))
         with self.assertRaisesRegex(link_inputs.LinkInputError, "every profile"):
             link_inputs.read_lock(lock_path)

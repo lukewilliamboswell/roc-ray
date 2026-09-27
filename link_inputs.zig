@@ -25,7 +25,7 @@ pub const RocTarget = enum {
     // x64 (x86_64) targets
     x64mac,
     x64win,
-    x64glibc,
+    x64v1glibc,
 
     // arm64 (aarch64) targets
     arm64mac,
@@ -34,7 +34,7 @@ pub const RocTarget = enum {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .msvc },
-            .x64glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+            .x64v1glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
         };
     }
@@ -43,7 +43,7 @@ pub const RocTarget = enum {
         return switch (self) {
             .x64mac => "x64mac",
             .x64win => "x64win",
-            .x64glibc => "x64glibc",
+            .x64v1glibc => "x64v1glibc",
             .arm64mac => "arm64mac",
         };
     }
@@ -59,7 +59,7 @@ pub const RocTarget = enum {
     pub fn vendoredRaylibDir(self: RocTarget) []const u8 {
         return switch (self) {
             .x64mac, .arm64mac => "macos",
-            .x64glibc => "linux-x64",
+            .x64v1glibc => "linux-x64",
             .x64win => "windows-x64",
         };
     }
@@ -102,7 +102,7 @@ pub const RocTarget = enum {
     /// architecture. See vendor/libvpx/config/README.md.
     pub fn libvpxConfigDir(self: RocTarget) []const u8 {
         return switch (self) {
-            .x64mac, .x64win, .x64glibc => "vendor/libvpx/config/x86_64",
+            .x64mac, .x64win, .x64v1glibc => "vendor/libvpx/config/x86_64",
             .arm64mac => "vendor/libvpx/config/arm64",
         };
     }
@@ -110,7 +110,7 @@ pub const RocTarget = enum {
     /// The SIMD sources matching that config.
     pub fn libvpxSimdSources(self: RocTarget) []const []const u8 {
         return switch (self) {
-            .x64mac, .x64win, .x64glibc => &libvpx_x86_64_sources,
+            .x64mac, .x64win, .x64v1glibc => &libvpx_x86_64_sources,
             .arm64mac => &libvpx_arm64_sources,
         };
     }
@@ -280,7 +280,7 @@ const libvpx_arm64_sources = [_][]const u8{
 /// into the final executable link, so these symbols must resolve. We ship a
 /// `libX11.so` stub (SONAME `libX11.so.6`) that declares them; at runtime the
 /// real libX11 (already loaded by GLFW) provides the implementations. See
-/// `generateX11SoStub` and the `x64glibc` link list in `platform/main.roc`.
+/// `generateX11SoStub` and the `x64v1glibc` link list in `platform/main.roc`.
 const x11_clipboard_syms = [_][]const u8{
     "XConvertSelection", "XNextEvent",          "XGetWindowProperty", "XFree",
     "XDestroyWindow",    "XCreateSimpleWindow", "XInternAtom",
@@ -317,7 +317,7 @@ pub fn generateLibcStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         }),
     });
 
-    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64glibc/libc_stub.s"));
+    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64v1glibc/libc_stub.s"));
     return stub_lib;
 }
 
@@ -333,14 +333,14 @@ pub fn generateLibmStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         }),
     });
 
-    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64glibc/libm_stub.s"));
+    stub_lib.root_module.addAssemblyFile(b.path("platform/targets/x64v1glibc/libm_stub.s"));
     return stub_lib;
 }
 
 /// Generate libX11 stub shared library with SONAME libX11.so.6.
 /// Declares the Xlib symbols raylib 6.0's `GetClipboardImage()` references
 /// directly (see `x11_clipboard_syms`); the real libX11 loaded at runtime by
-/// GLFW provides the implementations. Needed in the `x64glibc` link list so the
+/// GLFW provides the implementations. Needed in the `x64v1glibc` link list so the
 /// `rcore.o` references resolve even though roc-ray never calls clipboard image.
 pub fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step.Compile {
     const stub_lib = b.addLibrary(.{
@@ -572,23 +572,23 @@ pub fn buildMsfGif(
 
 /// One independently released set of linker inputs.
 ///
-/// A profile is not a Roc target: X11 and Wayland share Roc's `x64glibc`
-/// target and install into the same `targets/x64glibc/` directory, but link
+/// A profile is not a Roc target: X11 and Wayland share Roc's `x64v1glibc`
+/// target and install into the same `targets/x64v1glibc/` directory, but link
 /// different raylib builds and different stubs. Each profile therefore has its
 /// own archive and identity, and the archive manifest names the profile so one
 /// can never be accepted in place of the other.
 pub const Profile = enum {
     x64mac,
     arm64mac,
-    @"x64glibc-x11",
-    @"x64glibc-wayland",
+    @"x64v1glibc-x11",
+    @"x64v1glibc-wayland",
     x64win,
 
     pub fn rocTarget(self: Profile) RocTarget {
         return switch (self) {
             .x64mac => .x64mac,
             .arm64mac => .arm64mac,
-            .@"x64glibc-x11", .@"x64glibc-wayland" => .x64glibc,
+            .@"x64v1glibc-x11", .@"x64v1glibc-wayland" => .x64v1glibc,
             .x64win => .x64win,
         };
     }
@@ -597,8 +597,8 @@ pub const Profile = enum {
     fn raylibArchive(self: Profile) []const u8 {
         return switch (self) {
             .x64mac, .arm64mac => "vendor/raylib/macos/libraylib.a",
-            .@"x64glibc-x11" => "vendor/raylib/linux-x64/libraylib.a",
-            .@"x64glibc-wayland" => "vendor/raylib/linux-x64-wayland/libraylib.a",
+            .@"x64v1glibc-x11" => "vendor/raylib/linux-x64/libraylib.a",
+            .@"x64v1glibc-wayland" => "vendor/raylib/linux-x64-wayland/libraylib.a",
             .x64win => "vendor/raylib/windows-x64/raylib.lib",
         };
     }
@@ -636,16 +636,16 @@ pub fn addProducerStep(b: *std.Build) *std.Build.Step {
         }
 
         switch (roc_target) {
-            .x64glibc => {
+            .x64v1glibc => {
                 for ([_][]const u8{ "Scrt1.o", "crti.o", "crtn.o" }) |crt| {
-                    install(b, step, b.path(b.fmt("platform/targets/x64glibc/{s}", .{crt})), b.fmt("{s}/{s}", .{ dir, crt }));
+                    install(b, step, b.path(b.fmt("platform/targets/x64v1glibc/{s}", .{crt})), b.fmt("{s}/{s}", .{ dir, crt }));
                 }
                 install(b, step, generateLibcStub(b, target).getEmittedBin(), b.fmt("{s}/libc.so", .{dir}));
                 install(b, step, generateLibmStub(b, target).getEmittedBin(), b.fmt("{s}/libm.so", .{dir}));
                 // Only the X11 raylib references Xlib directly (see
                 // `x11_clipboard_syms`); platform/main-wayland.roc names no
                 // libX11 input.
-                if (profile == .@"x64glibc-x11") {
+                if (profile == .@"x64v1glibc-x11") {
                     install(b, step, generateX11SoStub(b, target).getEmittedBin(), b.fmt("{s}/libX11.so", .{dir}));
                 }
             },

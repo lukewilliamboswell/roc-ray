@@ -56,7 +56,7 @@ measured slightly faster than the plain search.
 ## `config/`
 
 libvpx's `configure` *generates* these; they are vendored so no configure run is
-needed at build time. `config/x86_64/` serves x64glibc, x64mac and x64win, and
+needed at build time. `config/x86_64/` serves x64v1glibc, x64mac and x64win, and
 `config/arm64/` serves arm64mac: the generated headers vary by CPU architecture,
 not by OS. `build.zig` puts exactly one of the two on the include path, so a
 source can only ever see the config for the architecture it is being built for.

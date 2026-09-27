@@ -26,14 +26,14 @@ WORKFLOW = f"{REPOSITORY}/.github/workflows/link-inputs.yml"
 KIND = "roc-ray-link-inputs"
 MANIFEST = "link-inputs.json"
 
-# Profile -> Roc target directory. X11 and Wayland share Roc's `x64glibc`
+# Profile -> Roc target directory. X11 and Wayland share Roc's `x64v1glibc`
 # target but not their bytes, so they are separate profiles with separate
 # archives, and each archive's manifest names its profile.
 PROFILES = {
     "x64mac": "x64mac",
     "arm64mac": "arm64mac",
-    "x64glibc-x11": "x64glibc",
-    "x64glibc-wayland": "x64glibc",
+    "x64v1glibc-x11": "x64v1glibc",
+    "x64v1glibc-wayland": "x64v1glibc",
     "x64win": "x64win",
 }
 
@@ -43,8 +43,8 @@ PROFILES = {
 PLATFORM_HEADERS = {
     "x64mac": "platform/main.roc",
     "arm64mac": "platform/main.roc",
-    "x64glibc-x11": "platform/main.roc",
-    "x64glibc-wayland": "platform/main-wayland.roc",
+    "x64v1glibc-x11": "platform/main.roc",
+    "x64v1glibc-wayland": "platform/main-wayland.roc",
     "x64win": "platform/main.roc",
 }
 
@@ -63,11 +63,11 @@ SOURCE_PATHS = (
     "vendor/msf_gif",
     "vendor/libvpx",
     "vendor/sqlite",
-    "platform/targets/x64glibc/Scrt1.o",
-    "platform/targets/x64glibc/crti.o",
-    "platform/targets/x64glibc/crtn.o",
-    "platform/targets/x64glibc/libc_stub.s",
-    "platform/targets/x64glibc/libm_stub.s",
+    "platform/targets/x64v1glibc/Scrt1.o",
+    "platform/targets/x64v1glibc/crti.o",
+    "platform/targets/x64v1glibc/crtn.o",
+    "platform/targets/x64v1glibc/libc_stub.s",
+    "platform/targets/x64v1glibc/libm_stub.s",
     "platform/targets/windows-def",
     "scripts/link_input_release.py",
     ".github/workflows/link-inputs.yml",

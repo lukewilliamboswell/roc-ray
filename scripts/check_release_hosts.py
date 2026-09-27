@@ -7,7 +7,7 @@ from pathlib import Path
 HOST_LIBRARIES = (
     Path("platform/targets/x64mac/libhost.a"),
     Path("platform/targets/arm64mac/libhost.a"),
-    Path("platform/targets/x64glibc/libhost.a"),
+    Path("platform/targets/x64v1glibc/libhost.a"),
     Path("platform/targets/x64win/host.lib"),
 )
 DEBUG_ALLOCATOR_MARKERS = (

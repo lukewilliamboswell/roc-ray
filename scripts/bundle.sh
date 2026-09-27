@@ -173,10 +173,10 @@ case "$package" in
     default)
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
 
-        install_link_inputs x64mac arm64mac x64glibc-x11 x64win
+        install_link_inputs x64mac arm64mac x64v1glibc-x11 x64win
         copy_host x64mac libhost.a
         copy_host arm64mac libhost.a
-        copy_host x64glibc libhost.a
+        copy_host x64v1glibc libhost.a
         copy_host x64win host.lib
 
         if [[ ! -d "$macos_interfaces_dir" ]]; then
@@ -188,8 +188,8 @@ case "$package" in
     wayland)
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
 
-        install_link_inputs x64glibc-wayland
-        copy_host x64glibc libhost.a
+        install_link_inputs x64v1glibc-wayland
+        copy_host x64v1glibc libhost.a
         ;;
 esac
 

@@ -30,11 +30,11 @@ and `link-inputs.lock.json` selects exact bytes for them.
 | --- | --- | --- |
 | `x64mac` | `targets/x64mac/` | `platform/main.roc` |
 | `arm64mac` | `targets/arm64mac/` | `platform/main.roc` |
-| `x64glibc-x11` | `targets/x64glibc/` | `platform/main.roc` |
-| `x64glibc-wayland` | `targets/x64glibc/` | `platform/main-wayland.roc` |
+| `x64v1glibc-x11` | `targets/x64v1glibc/` | `platform/main.roc` |
+| `x64v1glibc-wayland` | `targets/x64v1glibc/` | `platform/main-wayland.roc` |
 | `x64win` | `targets/x64win/` | `platform/main.roc` (COFF, `host.lib` contract) |
 
-X11 and Wayland share Roc's `x64glibc` target but not their bytes. Each has
+X11 and Wayland share Roc's `x64v1glibc` target but not their bytes. Each has
 its own archive, and each archive's manifest names its profile. The consumer
 rejects an archive installed under the wrong profile, and it refuses to
 install both profiles into one tree.
@@ -64,7 +64,7 @@ and producer workflow.
 ## Changing a linker input (maintainers)
 
 Producer inputs are `link_inputs.zig`, `vendor/{raylib,msf_gif,libvpx,sqlite}`,
-the committed x64glibc CRT objects and stub sources, `platform/targets/windows-def`,
+the committed x64v1glibc CRT objects and stub sources, `platform/targets/windows-def`,
 `scripts/link_input_release.py`, and `.github/workflows/link-inputs.yml`. Their
 committed git tree is the lock's `input_fingerprint`. Once any of them changes,
 an ordinary build reports the lock as stale until a new release is adopted.
@@ -94,6 +94,11 @@ an ordinary build reports the lock as stale until a new release is adopted.
 5. Merge with a merge commit, so the attested producer commit and the signed
    lock commit stay in history. Never rebuild, retag, or replace the release.
 
-Keep the X11 archive's glibc baseline in mind: the vendored Linux raylib
-references glibc 2.38 symbols (issue #170). A new release must not claim
-broader compatibility than it has been shown to have.
+Keep the Linux glibc baseline in mind. The vendored Linux raylib references
+glibc 2.38's `__isoc23_*` aliases; the host defines them
+(`src/isoc23_shims.s`), so apps run on older glibc only because they resolve
+inside the app. `scripts/all_tests.py` fails if a built example leaves one for
+the dynamic linker. A release must not claim broader compatibility than it has
+been shown to have. Every archive an app links must also run at the
+`x64v1glibc` CPU level, baseline x86-64 with SSE2 and nothing newer, unless a
+code path is dispatched on a runtime CPU check.

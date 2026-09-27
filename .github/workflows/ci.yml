@@ -164,8 +164,8 @@ jobs:
         os:
           - macos-15         # arm64mac
           - macos-15-intel   # x64mac
-          - ubuntu-22.04     # x64glibc, oldest supported glibc
-          - ubuntu-24.04     # x64glibc
+          - ubuntu-22.04     # x64v1glibc, oldest supported glibc
+          - ubuntu-24.04     # x64v1glibc
           - windows-2022     # x64win
     defaults:
       run:

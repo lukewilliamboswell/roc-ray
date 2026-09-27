@@ -1583,7 +1583,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
                     failed.append(f"wayland main.roc contains {token}")
 
             expected_target = (
-                'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
+                'x64v1glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
                 '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, '
                 '"libc.so", "crtn.o"] }'
             )
@@ -1592,16 +1592,16 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
                 failed.append("wayland main.roc target section")
 
         expected_files = {
-            "targets/x64glibc/Scrt1.o",
-            "targets/x64glibc/crti.o",
-            "targets/x64glibc/crtn.o",
-            "targets/x64glibc/libhost.a",
-            "targets/x64glibc/libraylib.a",
-            "targets/x64glibc/libmsf_gif.a",
-            "targets/x64glibc/libvpx.a",
-            "targets/x64glibc/libsqlite3.a",
-            "targets/x64glibc/libm.so",
-            "targets/x64glibc/libc.so",
+            "targets/x64v1glibc/Scrt1.o",
+            "targets/x64v1glibc/crti.o",
+            "targets/x64v1glibc/crtn.o",
+            "targets/x64v1glibc/libhost.a",
+            "targets/x64v1glibc/libraylib.a",
+            "targets/x64v1glibc/libmsf_gif.a",
+            "targets/x64v1glibc/libvpx.a",
+            "targets/x64v1glibc/libsqlite3.a",
+            "targets/x64v1glibc/libm.so",
+            "targets/x64v1glibc/libc.so",
         }
         for expected_file in expected_files:
             if expected_file not in names:
@@ -1615,7 +1615,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
             "targets/macos-sysroot/",
         )
         for name in sorted(names):
-            if name == "targets/x64glibc/libX11.so":
+            if name == "targets/x64v1glibc/libX11.so":
                 print("  Wayland bundle unexpectedly includes libX11.so")
                 failed.append("wayland bundle includes libX11.so")
             if name.startswith(forbidden_prefixes):

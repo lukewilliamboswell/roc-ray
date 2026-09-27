@@ -742,42 +742,104 @@ service they need. Selecting or copying a service neither performs I/O nor
 widens its authority. Captured services remain valid for the application
 lifetime; phase restrictions apply independently of possession.
 
-External services are denied by default. Their operations return typed
-`PermissionDenied` before admitting work or touching the external system.
-The launcher flag `--host-caps-allow-all` explicitly grants the existing broad
-external services, subject to the same phase rules and resource bounds.
-There are no per-service launch flags, interactive prompts, or revocation in
-this policy. The flag is host-owned and is removed from application arguments.
-
-The default profile retains the interactive surface, input, window control,
-audio playback, resource construction from app-owned bytes, clocks, entropy,
-timers, and reads of the app's own framebuffer. Filesystem access (including
-cwd writes and packaged assets), HTTP, UDP, processes, SQLite, environment,
-clipboard, stdout/stderr, and capture output require external authority.
-Indirect file loaders and configured file fonts obey the same policy. Dropped
-file paths are observations, not grants. Configuration may describe a recording
-but cannot start external work: the application explicitly starts it through
-its capture capability during initialization or another permitted phase.
-
-Each service states the extent of its authority. The initial allow-all grant
-is broad: files are not directory-confined, HTTP is not origin-confined,
-processes are not executable-confined, and SQLite is not a restricted VFS.
-An asset store still enforces its relative path contract, but this is not a
-general filesystem sandbox. These typed boundaries prepare for narrower future
-grants without claiming operating-system isolation today. Derived resources
-retain the authority required for their documented operations.
-
-App-controlled diagnostic payloads cannot bypass denied raw output. Restricted
-runs suppress payloads from debug, failed expectations, and crash text while
-retaining fixed host diagnostics. An operator may separately request host
-Observatory output; that is launcher authority, not an application grant.
-
 There is no arbitrary native-call facility. Effectful closures exist for
 exactly one purpose — the body of a task — and a task runs on the frame thread
 under the same phase guard as every other application code. No API accepts a
 closure the host will run at an unspecified time, on an unspecified thread, or
 outside a phase. New host work is represented by a typed effect, waiting
 effect, input field, render operation, or host authority.
+
+### What authority protects against
+
+Authority policy exists to bound what application code can reach, not to
+contain a hostile native binary. A RocRay application has no foreign-function
+facility: everything it does outside pure computation goes through a hosted
+effect, so the platform's API is the whole of its reach. That makes three
+threats addressable:
+
+- a compromised or careless dependency inside a trusted application, which can
+  reach only what the application hands it;
+- a confused deputy, where runtime data — a save name, a dropped path, a
+  network reply — steers an effect somewhere the application never meant to
+  go;
+- source code the operator has not audited, which can reach no further than
+  what that source visibly declares.
+
+Policy does not defend against a malicious shipped executable, whose author
+controls the host as well as the application; it is not an operating-system
+sandbox; and it does not make decoding hostile data safe. Those are stated as
+non-goals rather than implied away.
+
+### Tiers of authority
+
+Authority is sorted by whose resource an effect touches.
+
+1. **Intrinsic.** The interactive surface, input, window control, audio
+   playback, resources constructed from application-owned bytes, clocks,
+   entropy, timers, and reads of the application's own framebuffer. These
+   belong to the running application and need nothing further.
+2. **Application-scoped.** Standard output and error; capture output confined
+   beneath the configured output directory; the read-only directory beside the
+   executable; private data, configuration, and cache directories keyed by a
+   declared application identifier; and in-memory databases. These touch only
+   the application's own things or the operator's terminal, and are always
+   available. Diagnostic payloads from debugging, failed expectations, and
+   crashes are ordinary standard-error output.
+3. **User-designated.** A file or directory the user dropped on the window, or
+   a path the operator named as an application argument. The designation is
+   the consent: the application converts it into a read-only handle scoped to
+   exactly that file or directory. A drop is converted during the `update!`
+   that observed it; a dropped path held past that cycle is only a string. An
+   argument is converted only if it is byte-identical to one the host received.
+   There is no application-drawn or platform-drawn chooser.
+4. **Declared reach.** Network origins and peers, directories beyond the
+   application's own, the working directory, subprocess executables,
+   environment variables, and clipboard reads and writes. The application
+   declares each in its startup `Config`, scoped as narrowly as the facility
+   allows — an HTTP origin, a UDP port or peer, an executable name, a variable
+   name, a directory and whether it may be written. Each facility also has one
+   explicit unscoped declaration, spelled so that it is conspicuous in review.
+
+### Declarations are the grant
+
+There are no launch flags, interactive prompts, install-time approvals, or
+revocation. What the source declares is what the host grants, so the reach of
+an application is read from its configuration and changed only by changing
+source. A declaration may depend on application arguments; every alternative
+is still written in the source.
+
+The host validates declarations at startup, before initialization runs, into a
+fixed-capacity policy. A malformed declaration — an origin that does not parse,
+an unsafe output directory, an invalid application identifier, more
+declarations than the policy holds — fails startup and names the entry.
+
+Using a facility the application never declared is a programmer error: the
+fact is fixed by the source, so the host fails immediately, naming the effect
+and the declaration that would permit it. Reaching outside a declared scope is
+a runtime outcome, because the target — a URL, a path, a peer, a variable name
+— may be runtime data; the effect returns typed `PermissionDenied` before
+admitting work or touching the external system. `PermissionDenied` means only
+this; an operating system's refusal is reported under its own name. A scope
+check applies to every step the host takes on the application's behalf, so a
+followed redirect is checked like the request that caused it.
+
+### Files are handles, not paths
+
+Filesystem authority is a typed directory or file handle, never an ambient
+path. Every relative path resolves beneath its handle's root: absolute paths,
+parent components, and links that lead outside the root are refused. Read-only
+and writable handles are distinct types, so a write through a read-only grant
+does not type-check, and a writable handle narrows to a read-only one or to a
+subdirectory. Asset stores, audio and map loaders, and on-disk databases open
+through a handle and inherit its confinement; a database cannot attach files
+outside it. Handles are bounded host resources released with their last
+reference.
+
+Configuration may describe a recording but cannot start external work: the
+application explicitly starts it through its capture capability during
+initialization or another permitted phase. An operator may separately request
+host Observatory output; that is launcher authority over host diagnostics, not
+an application grant.
 
 ## Targets and capability profiles
 
@@ -876,6 +938,8 @@ RocRay does not provide:
   FFI, or any facility that runs an application closure outside a task and its
   phase guard;
 - an implicit promise that every target supports every host capability;
+- an operating-system sandbox, or protection against a malicious executable
+  whose author also controls the host;
 - universal deterministic output in the presence of uncontrolled external
   input, task completion ordering, clocks, devices, or backend differences.
 

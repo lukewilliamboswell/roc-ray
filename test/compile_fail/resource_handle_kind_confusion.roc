@@ -1,6 +1,6 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	roc: "nightly-2026-09-22-e494788",
+	roc: "nightly-2026-09-27-a3ce7f1",
 }
 
 # The shared handle representation must not let one resource kind stand in for

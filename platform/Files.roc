@@ -14,8 +14,14 @@
 ## ```
 ##
 ## Paths are used as the app gives them, resolved against the process working
-## directory. Filesystem access is not sandboxed; `Capture` confines only its
-## own outputs.
+## directory. A path must be covered by a declared `Permission`:
+## `WorkingDirectory` covers relative paths without `..`,
+## `Directory` covers one directory and what lies beneath it, and
+## `FilesAny` covers everything. A path outside every
+## declaration is `PermissionDenied`, and using `Files` with no file
+## declaration at all stops the app as a programmer error. The check is on the
+## path as written; it does not follow symbolic links, so it is policy rather
+## than a sandbox.
 import Host
 import Resource
 import Time
@@ -74,14 +80,15 @@ Files := [].{
 	##
 	## `NotFound` is nothing at that path, including a path a component of
 	## which is a file rather than a directory, and a name this filesystem
-	## cannot represent. `PermissionDenied` is a directory on the way to the
-	## path this process may not look inside -- the one failure a stat can name
-	## that a read cannot. `Unavailable` is the app shutting down while the
-	## stat was parked, and `ReadFailed` is every other refusal.
+	## cannot represent. `AccessRefused` is a directory on the way to the path
+	## this process may not look inside -- the one failure a stat can name that
+	## a read cannot. `PermissionDenied` is a path no declared `Permission`
+	## covers. `Unavailable` is the app shutting down while the stat was
+	## parked, and `ReadFailed` is every other refusal.
 	##
 	## There is no `Busy`: a stat holds no host-owned payload, so there is no
 	## delivery slot for it to run out of.
-	MetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
+	MetadataError : [NotFound, AccessRefused, PermissionDenied, ReadFailed, Unavailable]
 
 	## Why a write did not leave the file on disk. This is `Files`' own
 	## `WriteError`; `Stdout` and `Stderr` declare a different one under the
@@ -90,11 +97,15 @@ Files := [].{
 	## `NotFound` means a component of the path is a file rather than a
 	## directory, or names something that cannot be created; the missing
 	## directories a write would otherwise trip over are created for it.
-	## `NoSpace` is the filesystem being full or over quota, and `WriteFailed`
-	## is every other refusal the host cannot name more precisely.
-	WriteError : [NotFound, PermissionDenied, NoSpace, WriteFailed, Unavailable]
+	## `NoSpace` is the filesystem being full or over quota. `AccessRefused` is
+	## the operating system refusing the write, such as a read-only file or
+	## filesystem; `PermissionDenied` is a path no writable `Permission`
+	## declaration covers. `WriteFailed` is every other refusal the host cannot
+	## name more precisely.
+	WriteError : [NotFound, AccessRefused, PermissionDenied, NoSpace, WriteFailed, Unavailable]
 
-	## Opaque files authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque files authority supplied by App.Io. A path no declared `Permission`
+	## covers is `PermissionDenied`.
 	Access :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -206,11 +217,9 @@ Files := [].{
 		## make `saves/`.
 		##
 		## The path is used as the app gave it, resolved against the process
-		## working directory, exactly as `read_text!` resolves one. `Files` is not
-		## sandboxed in either direction: an app that can read `/etc/hosts` can
-		## write `/tmp/out.txt`. The one output root this platform enforces belongs
-		## to `Capture`, whose paths are computed by recording machinery rather
-		## than written out by the app, and it confines captures only.
+		## working directory, exactly as `read_text!` resolves one. It must be
+		## covered by a `ReadWrite` declaration, such as
+		## `WorkingDirectory(ReadWrite)`.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
@@ -255,6 +264,7 @@ lifted = |result|
 		Ok({}) => Ok({})
 		Err(NoSpace) => Err(NoSpace)
 		Err(NotFound) => Err(NotFound)
+		Err(AccessRefused) => Err(AccessRefused)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(Unavailable) => Err(Unavailable)
 		Err(WriteFailed) => Err(WriteFailed)
@@ -401,6 +411,7 @@ perform_metadata! = |authority, path|
 				Err(InvalidNanosecond) => crash ("roc-ray: Files.Access.metadata! received a modification time the host had not normalized")
 			}
 		Err(NotFound) => Err(NotFound)
+		Err(AccessRefused) => Err(AccessRefused)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(Unavailable) => Err(Unavailable)

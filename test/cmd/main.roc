@@ -4,6 +4,7 @@ import rr.App
 import rr.Cmd
 import rr.Files
 import rr.Task
+import rr.Permission
 
 ## Does `Cmd.run!` start a real program, read it back, bound it, and park?
 ##
@@ -25,7 +26,18 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("cmd"), |_io| Ok({ started_cycle: 0 }))
+init! = App.init(
+	App.default
+		.with_title("cmd")
+	# The shell is stat'd to decide which one this machine has.
+		.with_permissions([
+			Directory("/bin", ReadOnly),
+			Command("/bin/sh"),
+			Command("cmd.exe"),
+			Command("roc-ray-definitely-not-a-program"),
+		]),
+	|_io| Ok({ started_cycle: 0 }),
+)
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code's companion -- the score -- says which one.
@@ -91,7 +103,11 @@ check! = |io| {
 
 	# A program that is not there is named, rather than reported as a generic
 	# failure or as a child that exited non-zero.
-	missing = io.commands().run!(Cmd.new("roc-ray-definitely-not-a-program")) == Err(CommandNotFound)
+	# A declared program that is not installed is not found; an undeclared
+	# one is refused before anything looks for it.
+	missing =
+		io.commands().run!(Cmd.new("roc-ray-definitely-not-a-program")) == Err(CommandNotFound)
+			and io.commands().run!(Cmd.new("roc-ray-undeclared-program")) == Err(PermissionDenied)
 
 	# More output than the command allowed is refused outright: no truncated
 	# prefix, and no `Ok`.

@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 import rr.App
 import rr.Color
 import rr.Draw
+import rr.Permission
 
 ## A measurement app: does a large collection in the model survive a frame
 ## without being copied?
@@ -59,7 +60,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [PermissionDenied])
 init! = App.init(
-	App.default.with_title("Model allocation probe"),
+	App.default.with_title("Model allocation probe").with_permission(EnvVar("ROC_RAY_MODEL_PATTERN")),
 	|io| {
 		requested =
 			match io.env().read!("ROC_RAY_MODEL_PATTERN") {

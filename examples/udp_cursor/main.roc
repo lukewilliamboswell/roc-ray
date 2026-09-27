@@ -12,6 +12,7 @@ import rr.Draw
 import rr.Task
 import rr.Text
 import rr.Udp
+import rr.Permission
 
 ## State retained between updates: the socket and peer address, whether a
 ## receive Task is active, the latest local and peer pointers, send/receive
@@ -41,7 +42,9 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, BindFailed])
 init! = App.init_for_args(
-	|_args| App.default.with_title("RocRay UDP Cursor").with_frame_pacing(Capped(60)),
+	# Both instances, and a lone instance talking to itself, stay on this
+	# machine, so loopback is all the network this example declares.
+	|_args| App.default.with_title("RocRay UDP Cursor").with_frame_pacing(Capped(60)).with_permission(UdpLoopback),
 	|io| {
 		args = io.args!()
 		font = Draw.default_font!()

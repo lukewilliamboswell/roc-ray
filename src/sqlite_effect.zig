@@ -695,6 +695,14 @@ fn immediateQuery(comptime Record: type, roc_host: *RocHost, code: i64, text: []
     };
 }
 
+/// `Sqlite.Mode.ReadWriteCreate` as `Sqlite.roc` numbers it.
+pub const MODE_READ_WRITE_CREATE: u8 = 0;
+/// `Sqlite.Mode.ReadWrite` as `Sqlite.roc` numbers it.
+pub const MODE_READ_WRITE: u8 = 1;
+/// `Sqlite.Mode.ReadOnly` as `Sqlite.roc` numbers it: the one mode a
+/// read-only directory declaration admits.
+pub const MODE_READ_ONLY: u8 = 2;
+
 /// `Sqlite.Db.open_with!`: open or create a database.
 pub fn open(
     roc_host: *RocHost,

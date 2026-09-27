@@ -22,6 +22,7 @@ import rr.Devices
 import rr.Draw
 import rr.Math
 import rr.Tilemap
+import rr.Permission
 import Game
 import GameAssets
 import Hazard
@@ -61,7 +62,10 @@ music_won_volume = 0.08.F32
 ## Configures the interactive window or the repeatable hidden gallery recording.
 top_down_config : List(Str) -> App.Config
 top_down_config = |args| {
-	base = App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))
+	base = App.default
+		.with_title("RocRay Spark Run")
+		.with_frame_pacing(Capped(120))
+		.with_permission(Directory("examples/top_down/assets", ReadOnly))
 	if List.contains(args, record_demo_flag) {
 		base
 			.with_visible(Bool.False)

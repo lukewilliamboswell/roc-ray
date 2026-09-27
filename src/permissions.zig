@@ -38,33 +38,32 @@ pub const text_capacity: usize = 16 * 1024;
 /// The longest application identifier accepted.
 pub const app_id_max_bytes: usize = 128;
 
-/// Declaration kinds. Mirrored in `platform/Permission.roc`; the numbers are
-/// the transport encoding and must not be reused.
-pub const Kind = enum(u8) {
-    http_origin = 1,
-    http_any = 2,
-    udp_bind = 3,
-    udp_peer = 4,
-    udp_any = 5,
-    command = 6,
-    command_any = 7,
-    env_var = 8,
-    env_any = 9,
-    clipboard_read = 10,
-    clipboard_write = 11,
-    working_directory = 12,
-    directory = 13,
-    files_anywhere = 14,
-    _,
+/// Whether a directory declaration permits writes.
+pub const Mode = enum { read_only, read_write };
+
+/// One declaration as `platform/Permission.roc` spells it, with slices
+/// borrowed from the caller. `add` validates it and copies what it keeps.
+pub const Declaration = union(enum) {
+    /// `scheme://host[:port]`, already reduced to an origin by the platform.
+    http_origin: []const u8,
+    http_any,
+    udp_bind: u16,
+    udp_peer: struct { address: []const u8, port: u16 },
+    udp_loopback,
+    udp_any,
+    command: []const u8,
+    command_any,
+    env_var: []const u8,
+    env_any,
+    clipboard_read,
+    clipboard_write,
+    working_directory: Mode,
+    directory: struct { path: []const u8, mode: Mode },
+    files_any: Mode,
 };
 
-/// Whether a directory declaration permits writes. Mirrored in
-/// `platform/Permission.roc`.
-pub const Mode = enum(u8) {
-    read_only = 0,
-    read_write = 1,
-    _,
-};
+/// A declaration's kind, which is what the table keeps and matches on.
+pub const Kind = std.meta.Tag(Declaration);
 
 /// A facility as the gate asks about it. Several kinds serve one facility --
 /// an origin and `http_any` both answer for `http` -- which is why
@@ -86,8 +85,6 @@ pub const Admission = enum { allow, out_of_scope, undeclared };
 pub const ValidationError = error{
     TooManyDeclarations,
     DeclarationTextTooLong,
-    UnknownKind,
-    UnknownMode,
     InvalidOrigin,
     InvalidPort,
     InvalidPeer,
@@ -137,42 +134,41 @@ pub const Policy = struct {
         self.app_id_len = id.len;
     }
 
-    /// Validate one transported declaration and add it to the table.
-    pub fn add(self: *Policy, kind_code: u8, mode_code: u8, port: u16, text: []const u8) ValidationError!void {
+    /// Validate one declaration and add it to the table.
+    pub fn add(self: *Policy, declaration: Declaration) ValidationError!void {
         if (self.len == capacity) return error.TooManyDeclarations;
-        const kind: Kind = @enumFromInt(kind_code);
-        const mode: Mode = switch (@as(Mode, @enumFromInt(mode_code))) {
-            .read_only, .read_write => |m| m,
-            _ => return error.UnknownMode,
-        };
-        var entry: Entry = .{ .kind = kind, .mode = mode, .port = port };
-        switch (kind) {
-            .http_any, .udp_any, .command_any, .env_any, .clipboard_read, .clipboard_write => {},
-            .working_directory, .files_anywhere => {},
-            .http_origin => {
+        var entry: Entry = .{ .kind = declaration };
+        switch (declaration) {
+            .http_any, .udp_any, .udp_loopback, .command_any, .env_any, .clipboard_read, .clipboard_write => {},
+            .working_directory, .files_any => |mode| entry.mode = mode,
+            .http_origin => |text| {
                 const origin = parseOrigin(text) orelse return error.InvalidOrigin;
                 entry.scheme = if (origin.https) "https" else "http";
                 entry.port = origin.port;
                 entry.text = try self.lowerCopy(origin.host);
             },
-            .udp_bind => if (port == 0) return error.InvalidPort,
-            .udp_peer => {
+            .udp_bind => |port| {
                 if (port == 0) return error.InvalidPort;
-                entry.ip = parseIp4(text) orelse return error.InvalidPeer;
+                entry.port = port;
             },
-            .command => {
-                if (text.len == 0 or std.mem.indexOfScalar(u8, text, 0) != null) return error.InvalidCommand;
-                entry.text = try self.copy(text);
+            .udp_peer => |peer| {
+                if (peer.port == 0) return error.InvalidPort;
+                entry.port = peer.port;
+                entry.ip = parseIp4(peer.address) orelse return error.InvalidPeer;
             },
-            .env_var => {
-                if (!isValidEnvName(text)) return error.InvalidEnvName;
-                entry.text = try self.copy(text);
+            .command => |program| {
+                if (program.len == 0 or std.mem.indexOfScalar(u8, program, 0) != null) return error.InvalidCommand;
+                entry.text = try self.copy(program);
             },
-            .directory => {
-                if (!isSafeDeclaredDirectory(text)) return error.InvalidDirectory;
-                entry.text = try self.copy(trimTrailingSeparators(text));
+            .env_var => |name| {
+                if (!isValidEnvName(name)) return error.InvalidEnvName;
+                entry.text = try self.copy(name);
             },
-            _ => return error.UnknownKind,
+            .directory => |directory| {
+                if (!isSafeDeclaredDirectory(directory.path)) return error.InvalidDirectory;
+                entry.mode = directory.mode;
+                entry.text = try self.copy(trimTrailingSeparators(directory.path));
+            },
         }
         self.entries[self.len] = entry;
         self.len += 1;
@@ -222,12 +218,13 @@ pub const Policy = struct {
         return .out_of_scope;
     }
 
-    /// Admit binding a UDP socket to a local port. Port `0` asks the system
-    /// for an ephemeral port; any UDP declaration permits that.
-    pub fn admitUdpBind(self: *const Policy, port: u16) Admission {
+    /// Admit binding a UDP socket to a local IPv4 address and port. Port `0`
+    /// asks the system for an ephemeral port, which a declared peer permits.
+    pub fn admitUdpBind(self: *const Policy, ip: u32, port: u16) Admission {
         if (!self.declares(.udp)) return .undeclared;
         for (self.entries[0..self.len]) |entry| switch (entry.kind) {
             .udp_any => return .allow,
+            .udp_loopback => if (isLoopback(ip)) return .allow,
             .udp_bind => if (entry.port == port) return .allow,
             .udp_peer => if (port == 0) return .allow,
             else => {},
@@ -240,6 +237,7 @@ pub const Policy = struct {
         if (!self.declares(.udp)) return .undeclared;
         for (self.entries[0..self.len]) |entry| switch (entry.kind) {
             .udp_any => return .allow,
+            .udp_loopback => if (isLoopback(ip)) return .allow,
             .udp_peer => if (entry.ip == ip and entry.port == port) return .allow,
             else => {},
         };
@@ -281,7 +279,7 @@ pub const Policy = struct {
     /// The check is lexical. A relative path is covered by
     /// `working_directory` or by a relative `directory` it lies beneath; an
     /// absolute path by an absolute `directory` it lies beneath. A path with a
-    /// `..` component is covered only by `files_anywhere`, because lexically
+    /// `..` component is covered only by `files_any`, because lexically
     /// it can name anything.
     pub fn admitPath(self: *const Policy, path: []const u8, write: bool) Admission {
         if (!self.declares(.files)) return .undeclared;
@@ -290,7 +288,7 @@ pub const Policy = struct {
         for (self.entries[0..self.len]) |entry| {
             if (write and entry.mode != .read_write) continue;
             switch (entry.kind) {
-                .files_anywhere => return .allow,
+                .files_any => return .allow,
                 .working_directory => if (!absolute and !has_parent) return .allow,
                 .directory => {
                     if (has_parent) continue;
@@ -309,7 +307,7 @@ pub const Policy = struct {
         for (self.entries[0..self.len]) |entry| {
             if (write and entry.mode != .read_write) continue;
             switch (entry.kind) {
-                .files_anywhere, .working_directory => return .allow,
+                .files_any, .working_directory => return .allow,
                 else => {},
             }
         }
@@ -317,16 +315,15 @@ pub const Policy = struct {
     }
 };
 
-fn facilityOf(kind: Kind) ?Facility {
+fn facilityOf(kind: Kind) Facility {
     return switch (kind) {
         .http_origin, .http_any => .http,
-        .udp_bind, .udp_peer, .udp_any => .udp,
+        .udp_bind, .udp_peer, .udp_any, .udp_loopback => .udp,
         .command, .command_any => .command,
         .env_var, .env_any => .env,
         .clipboard_read => .clipboard_read,
         .clipboard_write => .clipboard_write,
-        .working_directory, .directory, .files_anywhere => .files,
-        _ => null,
+        .working_directory, .directory, .files_any => .files,
     };
 }
 
@@ -334,13 +331,13 @@ fn facilityOf(kind: Kind) ?Facility {
 /// undeclared use fails with.
 pub fn fix(facility: Facility) []const u8 {
     return switch (facility) {
-        .http => "Declare the origin it talks to: App.default.with_permission(Permission.http_origin(\"https://example.com\")).",
-        .udp => "Declare the port it binds and the peers it sends to: App.default.with_permission(Permission.udp_bind(port)) and .with_permission(Permission.udp_peer(\"127.0.0.1\", port)).",
-        .command => "Declare the executable it runs: App.default.with_permission(Permission.command(\"name\")).",
-        .env => "Declare the variable it reads: App.default.with_permission(Permission.env_var(\"NAME\")).",
-        .clipboard_read => "Declare clipboard reads: App.default.with_permission(Permission.clipboard_read).",
-        .clipboard_write => "Declare clipboard writes: App.default.with_permission(Permission.clipboard_write).",
-        .files => "Declare the directory it uses: App.default.with_permission(Permission.working_directory(ReadOnly)) or Permission.directory(\"path\", ReadWrite).",
+        .http => "Declare the origin it talks to: App.default.with_permission(HttpOrigin(\"https://example.com\")).",
+        .udp => "Declare the port it binds and the peers it sends to: App.default.with_permission(UdpBind(port)) and .with_permission(UdpPeer(\"192.168.1.20\", port)), or UdpLoopback for this machine only.",
+        .command => "Declare the executable it runs: App.default.with_permission(Command(\"name\")).",
+        .env => "Declare the variable it reads: App.default.with_permission(EnvVar(\"NAME\")).",
+        .clipboard_read => "Declare clipboard reads: App.default.with_permission(ClipboardRead).",
+        .clipboard_write => "Declare clipboard writes: App.default.with_permission(ClipboardWrite).",
+        .files => "Declare the directory it uses: App.default.with_permission(WorkingDirectory(ReadOnly)) or Directory(\"path\", ReadWrite).",
     };
 }
 
@@ -349,8 +346,6 @@ pub fn describe(err: ValidationError) []const u8 {
     return switch (err) {
         error.TooManyDeclarations => "more permission declarations than the host holds",
         error.DeclarationTextTooLong => "permission declarations are longer in total than the host holds",
-        error.UnknownKind => "an unrecognised permission kind",
-        error.UnknownMode => "an unrecognised directory mode",
         error.InvalidOrigin => "an HTTP origin must be scheme://host[:port] with an http or https scheme and no path, query, or credentials",
         error.InvalidPort => "a UDP port must be between 1 and 65535",
         error.InvalidPeer => "a UDP peer must be a dotted-quad IPv4 address",
@@ -402,6 +397,11 @@ pub fn parseIp4(text: []const u8) ?u32 {
     return (@as(u32, octets[0]) << 24) | (@as(u32, octets[1]) << 16) | (@as(u32, octets[2]) << 8) | octets[3];
 }
 
+/// Whether an IPv4 address, in host order, is in `127.0.0.0/8`.
+fn isLoopback(ip: u32) bool {
+    return (ip >> 24) == 127;
+}
+
 fn isValidEnvName(name: []const u8) bool {
     if (name.len == 0) return false;
     return std.mem.indexOfAny(u8, name, "=\x00") == null;
@@ -447,7 +447,7 @@ fn trimTrailingSeparators(path: []const u8) []const u8 {
 fn isSafeDeclaredDirectory(path: []const u8) bool {
     if (path.len == 0 or std.mem.indexOfScalar(u8, path, 0) != null) return false;
     if (hasParentComponent(path)) return false;
-    // The filesystem root is `files_anywhere`, which says so.
+    // The filesystem root is `files_any`, which says so.
     var parts = std.mem.tokenizeAny(u8, path, "/\\");
     const first = parts.next() orelse return false;
     if (isAbsolute(path) and first.len == 2 and first[1] == ':' and parts.peek() == null) return false;
@@ -473,16 +473,16 @@ fn nextComponent(parts: *std.mem.TokenIterator(u8, .any)) ?[]const u8 {
     return null;
 }
 
-fn testPolicy(declarations: []const struct { Kind, Mode, u16, []const u8 }) !Policy {
+fn testPolicy(declarations: []const Declaration) !Policy {
     var policy: Policy = .{};
-    for (declarations) |d| try policy.add(@intFromEnum(d[0]), @intFromEnum(d[1]), d[2], d[3]);
+    for (declarations) |declaration| try policy.add(declaration);
     return policy;
 }
 
 test "an empty policy reports every facility undeclared" {
     const policy: Policy = .{};
     try std.testing.expectEqual(Admission.undeclared, policy.admitHttp(try std.Uri.parse("https://example.com/")));
-    try std.testing.expectEqual(Admission.undeclared, policy.admitUdpBind(4000));
+    try std.testing.expectEqual(Admission.undeclared, policy.admitUdpBind(0x7f000001, 4000));
     try std.testing.expectEqual(Admission.undeclared, policy.admitUdpPeer(0x7f000001, 4000));
     try std.testing.expectEqual(Admission.undeclared, policy.admitCommand("git"));
     try std.testing.expectEqual(Admission.undeclared, policy.admitEnv("HOME"));
@@ -493,7 +493,7 @@ test "an empty policy reports every facility undeclared" {
 }
 
 test "http origins match scheme, host, and port exactly" {
-    const policy = try testPolicy(&.{.{ .http_origin, .read_only, 0, "https://API.Example.com" }});
+    const policy = try testPolicy(&.{.{ .http_origin = "https://API.Example.com" }});
     try std.testing.expectEqual(Admission.allow, policy.admitHttp(try std.Uri.parse("https://api.example.com/v1?q=1")));
     try std.testing.expectEqual(Admission.allow, policy.admitHttp(try std.Uri.parse("https://api.example.com:443/")));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitHttp(try std.Uri.parse("http://api.example.com/")));
@@ -504,7 +504,7 @@ test "http origins match scheme, host, and port exactly" {
 }
 
 test "http_any admits any http or https target and nothing else" {
-    const policy = try testPolicy(&.{.{ .http_any, .read_only, 0, "" }});
+    const policy = try testPolicy(&.{.http_any});
     try std.testing.expectEqual(Admission.allow, policy.admitHttp(try std.Uri.parse("http://127.0.0.1:8080/x")));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitHttp(try std.Uri.parse("file:///etc/passwd")));
 }
@@ -513,44 +513,53 @@ test "origins with a path, query, or credentials are refused at startup" {
     var policy: Policy = .{};
     const bad = [_][]const u8{ "https://example.com/api", "https://u:p@example.com", "https://example.com?x", "example.com", "ftp://example.com", "https://" };
     for (bad) |origin| {
-        try std.testing.expectError(error.InvalidOrigin, policy.add(@intFromEnum(Kind.http_origin), 0, 0, origin));
+        try std.testing.expectError(error.InvalidOrigin, policy.add(.{ .http_origin = origin }));
     }
-    try policy.add(@intFromEnum(Kind.http_origin), 0, 0, "http://localhost:8080/");
+    try policy.add(.{ .http_origin = "http://localhost:8080/" });
     try std.testing.expectEqual(Admission.allow, policy.admitHttp(try std.Uri.parse("http://localhost:8080/path")));
 }
 
 test "udp binds and peers are scoped separately" {
     const policy = try testPolicy(&.{
-        .{ .udp_bind, .read_only, 40000, "" },
-        .{ .udp_peer, .read_only, 40001, "127.0.0.1" },
+        .{ .udp_bind = 40000 },
+        .{ .udp_peer = .{ .address = "127.0.0.1", .port = 40001 } },
     });
-    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(40000));
-    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(0));
-    try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpBind(40002));
+    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(0, 40000));
+    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(0x7f000001, 0));
+    try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpBind(0x7f000001, 40002));
     try std.testing.expectEqual(Admission.allow, policy.admitUdpPeer(0x7f000001, 40001));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpPeer(0x7f000001, 40000));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpPeer(0x0a000001, 40001));
 }
 
 test "an ephemeral bind needs a peer or udp_any, not just any udp declaration" {
-    const binds_only = try testPolicy(&.{.{ .udp_bind, .read_only, 40000, "" }});
-    try std.testing.expectEqual(Admission.out_of_scope, binds_only.admitUdpBind(0));
-    const any = try testPolicy(&.{.{ .udp_any, .read_only, 0, "" }});
-    try std.testing.expectEqual(Admission.allow, any.admitUdpBind(0));
+    const binds_only = try testPolicy(&.{.{ .udp_bind = 40000 }});
+    try std.testing.expectEqual(Admission.out_of_scope, binds_only.admitUdpBind(0x7f000001, 0));
+    const any = try testPolicy(&.{.udp_any});
+    try std.testing.expectEqual(Admission.allow, any.admitUdpBind(0, 0));
     try std.testing.expectEqual(Admission.allow, any.admitUdpPeer(0x08080808, 53));
+}
+
+test "loopback covers every port on 127.0.0.0/8 and nothing beyond it" {
+    const policy = try testPolicy(&.{.udp_loopback});
+    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(0x7f000001, 0));
+    try std.testing.expectEqual(Admission.allow, policy.admitUdpBind(0x7f000001, 7001));
+    try std.testing.expectEqual(Admission.allow, policy.admitUdpPeer(0x7f000002, 9));
+    try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpBind(0, 7001));
+    try std.testing.expectEqual(Admission.out_of_scope, policy.admitUdpPeer(0xc0a80101, 7001));
 }
 
 test "udp declarations are validated" {
     var policy: Policy = .{};
-    try std.testing.expectError(error.InvalidPort, policy.add(@intFromEnum(Kind.udp_bind), 0, 0, ""));
-    try std.testing.expectError(error.InvalidPeer, policy.add(@intFromEnum(Kind.udp_peer), 0, 9, "localhost"));
-    try std.testing.expectError(error.InvalidPeer, policy.add(@intFromEnum(Kind.udp_peer), 0, 9, "010.0.0.1"));
+    try std.testing.expectError(error.InvalidPort, policy.add(.{ .udp_bind = 0 }));
+    try std.testing.expectError(error.InvalidPeer, policy.add(.{ .udp_peer = .{ .address = "localhost", .port = 9 } }));
+    try std.testing.expectError(error.InvalidPeer, policy.add(.{ .udp_peer = .{ .address = "010.0.0.1", .port = 9 } }));
 }
 
 test "commands and environment variables match exactly" {
     const policy = try testPolicy(&.{
-        .{ .command, .read_only, 0, "git" },
-        .{ .env_var, .read_only, 0, "GITHUB_TOKEN" },
+        .{ .command = "git" },
+        .{ .env_var = "GITHUB_TOKEN" },
     });
     try std.testing.expectEqual(Admission.allow, policy.admitCommand("git"));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitCommand("/tmp/git"));
@@ -561,13 +570,13 @@ test "commands and environment variables match exactly" {
 }
 
 test "clipboard reads and writes are declared independently" {
-    const read_only = try testPolicy(&.{.{ .clipboard_read, .read_only, 0, "" }});
+    const read_only = try testPolicy(&.{.clipboard_read});
     try std.testing.expectEqual(Admission.allow, read_only.admitClipboard(false));
     try std.testing.expectEqual(Admission.undeclared, read_only.admitClipboard(true));
 }
 
 test "the working directory covers relative paths without parent components" {
-    const policy = try testPolicy(&.{.{ .working_directory, .read_only, 0, "" }});
+    const policy = try testPolicy(&.{.{ .working_directory = .read_only }});
     try std.testing.expectEqual(Admission.allow, policy.admitPath("assets/logo.png", false));
     try std.testing.expectEqual(Admission.allow, policy.admitWorkingDirectory(false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("assets/logo.png", true));
@@ -579,8 +588,8 @@ test "the working directory covers relative paths without parent components" {
 
 test "directories cover what lies beneath them by component" {
     const policy = try testPolicy(&.{
-        .{ .directory, .read_write, 0, "/srv/data/" },
-        .{ .directory, .read_only, 0, "saves" },
+        .{ .directory = .{ .path = "/srv/data/", .mode = .read_write } },
+        .{ .directory = .{ .path = "saves", .mode = .read_only } },
     });
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/srv/data/a.txt", true));
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/srv/data", false));
@@ -592,8 +601,8 @@ test "directories cover what lies beneath them by component" {
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitWorkingDirectory(false));
 }
 
-test "files_anywhere covers every path in its mode" {
-    const policy = try testPolicy(&.{.{ .files_anywhere, .read_only, 0, "" }});
+test "files_any covers every path in its mode" {
+    const policy = try testPolicy(&.{.{ .files_any = .read_only }});
     try std.testing.expectEqual(Admission.allow, policy.admitPath("../x", false));
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/etc/hosts", false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("/tmp/x", true));
@@ -602,20 +611,18 @@ test "files_anywhere covers every path in its mode" {
 test "directory declarations are validated" {
     var policy: Policy = .{};
     for ([_][]const u8{ "", "../up", "a/../b", "/", "C:\\" }) |dir| {
-        try std.testing.expectError(error.InvalidDirectory, policy.add(@intFromEnum(Kind.directory), 0, 0, dir));
+        try std.testing.expectError(error.InvalidDirectory, policy.add(.{ .directory = .{ .path = dir, .mode = .read_only } }));
     }
-    try std.testing.expectError(error.UnknownMode, policy.add(@intFromEnum(Kind.directory), 7, 0, "ok"));
-    try std.testing.expectError(error.UnknownKind, policy.add(200, 0, 0, ""));
 }
 
 test "the table is bounded" {
     var policy: Policy = .{};
-    for (0..capacity) |_| try policy.add(@intFromEnum(Kind.clipboard_read), 0, 0, "");
-    try std.testing.expectError(error.TooManyDeclarations, policy.add(@intFromEnum(Kind.clipboard_read), 0, 0, ""));
+    for (0..capacity) |_| try policy.add(.clipboard_read);
+    try std.testing.expectError(error.TooManyDeclarations, policy.add(.clipboard_read));
     var long: Policy = .{};
     const big = [_]u8{'a'} ** 4096;
-    for (0..4) |_| try long.add(@intFromEnum(Kind.command), 0, 0, &big);
-    try std.testing.expectError(error.DeclarationTextTooLong, long.add(@intFromEnum(Kind.command), 0, 0, "x"));
+    for (0..4) |_| try long.add(.{ .command = &big });
+    try std.testing.expectError(error.DeclarationTextTooLong, long.add(.{ .command = "x" }));
 }
 
 test "app ids are one safe path component" {

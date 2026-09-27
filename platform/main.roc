@@ -6,9 +6,11 @@
 ## authority and folds one `App.Input` into the next model;
 ## `render!` may then draw that model through a `Draw.Frame`.
 ##
-## Select external services with receivers such as `io.files()` and `io.http()`.
-## External effects return `PermissionDenied` unless the launcher grants
-## `--host-caps-allow-all`. Phase rules and resource bounds still apply.
+## Select services with receivers such as `io.files()` and `io.http()`. Reach
+## beyond the app's own resources -- network origins, directories, programs,
+## environment variables, the clipboard -- is declared in the startup config
+## with `Permission`, and the declaration is the grant. Phase rules and
+## resource bounds still apply.
 ##
 ## Host-state effects are legal in `init!`, `update!`, and tasks. Drawing is
 ## legal only in `render!`. Waiting effects are legal in `init!`, where they
@@ -63,7 +65,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace]
+	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace, Permission]
 	packages {
 		roc: "nightly-2026-09-27-a3ce7f1",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -258,6 +260,7 @@ import Stdout
 import Stderr
 import Sqlite
 import Cmd
+import Permission
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the

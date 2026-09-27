@@ -14,7 +14,10 @@ wrong and most expensive to get wrong:
 * the same fetch under `max_response_bytes` smaller than the body, which must
   fail rather than hand the app a truncated body;
 * a fetch of a deliberately slow route under a short `timeout_ms`, which must
-  fail as a timeout rather than as some other transport error.
+  fail as a timeout rather than as some other transport error;
+* a redirect within the declared origin, which must be followed;
+* a redirect to an origin the app did not declare, which must be refused as
+  `PermissionDenied` before anything connects to it.
 
 Each run also asserts on `ROC_RAY_TRACE_TASKS` output, so a pass means both the
 host and the app saw the same thing.
@@ -60,6 +63,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     """Serve one known file, and one route that answers too late."""
 
     def do_GET(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
+        if self.path in ("/redirect-home", "/redirect-away"):
+            # `localhost` and `127.0.0.1` are different origins even though
+            # they reach the same server, so only the first is declared.
+            port = self.server.server_address[1]
+            target = "/data.txt" if self.path == "/redirect-home" else f"http://localhost:{port}/data.txt"
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/slow":
             time.sleep(SLOW_ROUTE_SECONDS)
         elif self.path != "/data.txt":
@@ -111,7 +124,7 @@ def _run_case(
     """Run one probe invocation; return a failure description or None."""
     command = [
         str(executable),
-        "--host-headless", "--host-caps-allow-all",
+        "--host-headless",
         f"--host-headless-frames={FRAMES}",
         *args,
     ]
@@ -205,6 +218,21 @@ def run_http_client_test(
                     "timed out",
                 ],
                 "http GET failed: Timeout",
+            ),
+            (
+                "redirect within the declared origin",
+                ["--http-url", f"{base_url}/redirect-home", "--http-expect", token],
+                f"http body: {token}",
+            ),
+            (
+                "redirect to an undeclared origin",
+                [
+                    "--http-url",
+                    f"{base_url}/redirect-away",
+                    "--http-expect-error",
+                    "the origin was not declared",
+                ],
+                "http GET failed: RedirectNotPermitted",
             ),
         )
         for name, args, expected_trace in cases:

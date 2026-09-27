@@ -5,6 +5,7 @@ import rr.Draw
 import rr.Files
 import rr.Sqlite
 import rr.Task
+import rr.Permission
 
 ## Does a value written to a database come back as the value that was written?
 ##
@@ -23,7 +24,7 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("sqlite"), |_io| Ok({ checked: Bool.False }))
+init! = App.init(App.default.with_title("sqlite").with_permission(Directory("probe_out", ReadWrite)), |_io| Ok({ checked: Bool.False }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which property went wrong.

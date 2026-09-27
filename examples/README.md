@@ -97,10 +97,11 @@ Use these as focused references, not starter projects.
 Exhaustive API probes and invalid-input cases belong in [`../test/`](../test/),
 where they can be explicit without making an example harder to understand.
 
-## Development permissions
+## Permissions
 
-Pass `--host-caps-allow-all` after `--` when using `scripts/run-example.py` for
-examples that load files, use external services, or write captures. Without it,
-those effects return `PermissionDenied`, including writes in the working
-directory. `hello_world` uses the built-in font and runs with the default
-restricted policy. Recording examples start capture explicitly in `init!`.
+Each example declares what it reaches beyond its own resources in its startup
+config, with `Permission`: `http_fetch` declares the one origin it fetches,
+`udp_cursor` declares loopback networking, and the asset-loading examples
+declare their own asset directory, read-only. Nothing is passed on the command
+line. Printing, recording, and captures need no declaration, so most examples
+declare nothing. Recording examples start capture explicitly in `init!`.

@@ -11,6 +11,8 @@ import Capture
 import Host
 import Keys
 import Mouse
+import Permission
+import Url
 
 capture_format_code = |value|
 	match value {
@@ -78,6 +80,8 @@ AppHostConfig : {
 	record_quality : U8,
 	default_font_path : Str,
 	default_font_size : I32,
+	app_id : Str,
+	permissions : List(Host.PermissionDeclaration),
 }
 
 AppConfig := [].{
@@ -120,6 +124,8 @@ AppConfig := [].{
 			record_quality: record.quality,
 			default_font_path: default_font.path,
 			default_font_size: default_font.size,
+			app_id: cfg.app_id(),
+			permissions: cfg.permissions().map(permission_for_host),
 		}
 	}
 }
@@ -245,3 +251,45 @@ expect {
 	host = AppConfig.to_host({}, App.default)
 	host.record_path == "" and host.record_scale_denominator == 1 and host.record_every_nth == 1 and host.record_quality == 1
 }
+
+## One declaration as the host validates it: the same tag, with an
+## `HttpOrigin` reduced to the origin the host checks against.
+permission_for_host : Permission -> Host.PermissionDeclaration
+permission_for_host = |permission|
+	match permission {
+		HttpOrigin(url) => HttpOrigin(origin_of(url))
+		HttpAny => HttpAny
+		UdpBind(port) => UdpBind(port)
+		UdpPeer(address, port) => UdpPeer({ address, port })
+		UdpLoopback => UdpLoopback
+		UdpAny => UdpAny
+		Command(program) => Command(program)
+		CommandAny => CommandAny
+		EnvVar(name) => EnvVar(name)
+		EnvAny => EnvAny
+		ClipboardRead => ClipboardRead
+		ClipboardWrite => ClipboardWrite
+		WorkingDirectory(mode) => WorkingDirectory(mode)
+		Directory(path, mode) => Directory({ path, mode })
+		FilesAny(mode) => FilesAny(mode)
+	}
+
+## A URL's origin, `scheme://host[:port]`: the only part of an `HttpOrigin`
+## the host checks against.
+origin_of : Url -> Str
+origin_of = |url| {
+	scheme = match url.scheme() {
+		Http => "http"
+		Https => "https"
+	}
+	port = match url.port() {
+		Some(number) => ":${U16.to_str(number)}"
+		None => ""
+	}
+	"${scheme}://${url.host()}${port}"
+}
+
+expect permission_for_host(HttpOrigin("https://api.example.com")) == HttpOrigin("https://api.example.com")
+expect permission_for_host(HttpOrigin("http://Example.test:8080/data.json?q=1")) == HttpOrigin("http://example.test:8080")
+expect permission_for_host(UdpPeer("127.0.0.1", 9000)) == UdpPeer({ address: "127.0.0.1", port: 9000 })
+expect permission_for_host(Directory("/srv/data", ReadWrite)) == Directory({ path: "/srv/data", mode: ReadWrite })

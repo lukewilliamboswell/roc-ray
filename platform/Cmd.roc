@@ -30,8 +30,9 @@
 ## verbatim; spaces, globs, pipes, and redirects are not interpreted.
 ##
 ## A child inherits this process's user, working directory, and, unless
-## `with_clear_envs` is used, environment. `Cmd` does not restrict executable
-## paths or child authority; use it only in apps trusted with the host machine.
+## `with_clear_envs` is used, environment. The program must be declared with
+## `Command`, matched exactly as the app names it; a child then has
+## all of the user's authority, which no declaration can narrow.
 ##
 ## Standard input is closed. Standard output and error are captured up to the
 ## configured limits rather than inherited.
@@ -97,7 +98,9 @@ Cmd := {
 	## A non-zero exit status is not one of these; it is an `Ok`.
 	##
 	## `CommandNotFound` is no such executable on `PATH` or at that path, and
-	## `PermissionDenied` is one that is there and may not be started.
+	## `AccessRefused` is one that is there and the operating system will not
+	## start. `PermissionDenied` is a program the app did not declare with
+	## `Command`; nothing was started.
 	## `SpawnFailed` is every other refusal to start the child or to run it to
 	## its end, including a working directory that is not there and an
 	## environment name this operating system cannot represent -- one that is
@@ -114,6 +117,7 @@ Cmd := {
 	## `Unavailable` is the app shutting down while the child was running.
 	CmdErr : [
 		CommandNotFound,
+		AccessRefused,
 		PermissionDenied,
 		SpawnFailed,
 		Busy,
@@ -223,7 +227,8 @@ Cmd := {
 	with_stderr_limit : Cmd, U64 -> Cmd
 	with_stderr_limit = |cmd, limit_bytes| { ..cmd, stderr_limit_bytes: limit_bytes }
 
-	## Opaque commands authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque process authority supplied by App.Io, scoped by the app's declared
+	## `Command` entries.
 	Runner :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -318,6 +323,7 @@ perform_run! = |authority, cmd| {
 		Err(Timeout(output)) => Err(Timeout(output))
 		Err(Busy) => Err(Busy)
 		Err(CommandNotFound) => Err(CommandNotFound)
+		Err(AccessRefused) => Err(AccessRefused)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(SpawnFailed) => Err(SpawnFailed)
 		Err(StderrLimitExceeded) => Err(StderrLimitExceeded)

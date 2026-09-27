@@ -22,6 +22,7 @@ import rr.Draw
 import rr.Math
 import rr.Task
 import rr.Text
+import rr.Permission
 
 ## Walk a source tree and plot every line while it is still being discovered.
 ##
@@ -498,6 +499,8 @@ live_plot_config = |args| {
 		.with_min_size({ width: 980, height: 640 })
 		.with_resizable(Bool.True)
 		.with_frame_pacing(VSync)
+	# The plot walks and reads the directory it was launched from.
+		.with_permission(WorkingDirectory(ReadOnly))
 
 	if List.contains(args, record_demo_flag) {
 		base
@@ -752,7 +755,7 @@ describe_list_error = |reason|
 	match reason {
 		NotFound => "not found"
 		NotADirectory => "not a directory"
-		PermissionDenied => "file access was not granted"
+		PermissionDenied => "outside the declared directories"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "listings unavailable"
@@ -763,7 +766,7 @@ describe_read_error : Files.ReadBytesError -> Str
 describe_read_error = |reason|
 	match reason {
 		NotFound => "not found"
-		PermissionDenied => "file access was not granted"
+		PermissionDenied => "outside the declared directories"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "reads unavailable"

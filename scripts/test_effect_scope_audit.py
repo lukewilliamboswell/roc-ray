@@ -22,6 +22,11 @@ ALLOWLIST = {
 }
 
 
+# A capability boundary that refuses an effect records its scope through
+# `refuseEffect`; the call it admits opens its own scope in the hosted body.
+SCOPE_CALLS = ("EffectScope.begin(", "refuseEffect(")
+
+
 def function_blocks(source: str):
     """Yield (name, body) for Zig functions using brace-depth parsing."""
     # Boundary effects use `hosted` or `caps` prefixes and single-line
@@ -48,7 +53,7 @@ class EffectScopeAudit(unittest.TestCase):
         for name, body in function_blocks(SOURCE.read_text()):
             if "enforcePhase(" not in body or name in ALLOWLIST:
                 continue
-            if "EffectScope.begin(" not in body:
+            if not any(call in body for call in SCOPE_CALLS):
                 failures.append(name)
         self.assertEqual([], failures, "phase guards missing EffectScope or explicit allowlist")
 

@@ -13,6 +13,7 @@ import rr.Sqlite
 import rr.Task
 import rr.Text
 import rr.Time
+import rr.Permission
 
 ## State retained between updates: the open database and reusable insert
 ## statement, the displayed rows and request status, random score generation,
@@ -77,7 +78,12 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, ..])
 init! = App.init(
-	App.default.with_title("RocRay SQLite Scores").with_size({ width: 880, height: 560 }).with_frame_pacing(Capped(60)),
+	App.default
+		.with_title("RocRay SQLite Scores")
+		.with_size({ width: 880, height: 560 })
+		.with_frame_pacing(Capped(60))
+	# The database, and the directory it lives in, is all this app writes.
+		.with_permission(Directory(db_dir, ReadWrite)),
 	|io| {
 		# A write builds the tree on its way, which is how the directory the
 		# database lives in comes to exist.

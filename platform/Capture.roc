@@ -474,7 +474,8 @@ Capture := [].{
 	max_readback_bytes : U64
 	max_readback_bytes = 128 * 1024 * 1024
 
-	## Opaque capture authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque capture authority supplied by App.Io. Captures are the app's own
+	## output, confined beneath its output directory, and need no declaration.
 	Writer :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

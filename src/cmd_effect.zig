@@ -66,7 +66,7 @@ pub const ERR_STDERR_LIMIT: u8 = 7;
 
 /// The executable is there and this process may not start it. Shares the
 /// permission code `Files` uses for a write.
-pub const ERR_PERMISSION_DENIED: u8 = 8;
+pub const ERR_ACCESS_REFUSED: u8 = 8;
 
 /// How many children may exist at once.
 ///
@@ -558,7 +558,7 @@ pub fn validEnvName(name: []const u8) bool {
 pub fn spawnErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound, error.BadPathName, error.NameTooLong, error.InvalidName => ERR_COMMAND_NOT_FOUND,
-        error.AccessDenied, error.PermissionDenied => ERR_PERMISSION_DENIED,
+        error.AccessDenied, error.PermissionDenied => ERR_ACCESS_REFUSED,
         error.Canceled => ERR_UNAVAILABLE,
         else => ERR_SPAWN_FAILED,
     };
@@ -587,8 +587,8 @@ test "an environment name has to be representable" {
 
 test "a spawn failure is named in the app's vocabulary" {
     try std.testing.expectEqual(ERR_COMMAND_NOT_FOUND, spawnErrorCode(error.FileNotFound));
-    try std.testing.expectEqual(ERR_PERMISSION_DENIED, spawnErrorCode(error.AccessDenied));
-    try std.testing.expectEqual(ERR_PERMISSION_DENIED, spawnErrorCode(error.PermissionDenied));
+    try std.testing.expectEqual(ERR_ACCESS_REFUSED, spawnErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(ERR_ACCESS_REFUSED, spawnErrorCode(error.PermissionDenied));
     try std.testing.expectEqual(ERR_UNAVAILABLE, spawnErrorCode(error.Canceled));
     try std.testing.expectEqual(ERR_SPAWN_FAILED, spawnErrorCode(error.InvalidExe));
 }

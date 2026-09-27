@@ -589,7 +589,8 @@ Tilemap :: {
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
 	}
 
-	## Opaque tilemaps authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque tilemap-loading authority supplied by App.Io. A map path must be
+	## covered by a declared `Permission`, as a `Files` path is.
 	Loader :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

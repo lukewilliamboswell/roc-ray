@@ -137,7 +137,8 @@ Window := [].{
 	suggest_monitor! : I32 => {}
 	suggest_monitor! = |index| Host.window_suggest_monitor!(index)
 
-	## Opaque clipboard authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque clipboard authority supplied by App.Io. Reads need
+	## `ClipboardRead` and writes need `ClipboardWrite`.
 	Clipboard :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

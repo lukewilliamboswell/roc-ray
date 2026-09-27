@@ -208,7 +208,6 @@ def run_headless_examples(
             [
                 str(executable),
                 "--host-headless",
-                *([] if name == "hello_world" else ["--host-caps-allow-all"]),
                 f"--host-headless-frames={frames}",
             ],
             f"headless run {name}",
@@ -297,7 +296,7 @@ def _check_windowed_case(
         for stale in root.glob(expect_png["glob"]):
             stale.unlink()
 
-    cmd = [str(executable), "--host-hidden", "--host-caps-allow-all", f"--host-frames={frames}"]
+    cmd = [str(executable), "--host-hidden", f"--host-frames={frames}"]
     if "keys" in case:
         cmd.append(f"--host-keys={case['keys']}")
     if "text" in case:
@@ -438,7 +437,7 @@ def run_graphical_observatory_probe(
     graphical_run = subprocess.run(
         [
             str(executable),
-            "--host-hidden", "--host-caps-allow-all",
+            "--host-hidden",
             "--host-frames=3",
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
@@ -525,32 +524,66 @@ def run_graphical_observatory_probe(
     return failures
 
 
+UNDECLARED_PROBES = {
+    "http": "HttpOrigin",
+    "udp": "UdpBind",
+    "command": "Command",
+    "env": "EnvVar",
+    "clipboard-read": "ClipboardRead",
+    "clipboard-write": "ClipboardWrite",
+    "files": "WorkingDirectory",
+}
+
+
 def run_capability_probe(root: Path, packages: local_bundles.ServedPackages, verbose: bool) -> list[str]:
-    """The same app must deny by default and admit explicitly granted work."""
+    """Declared scopes admit, undeclared targets refuse, undeclared facilities stop the app."""
+    print("\nRunning capability probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(
         root / "test/capabilities/main.roc", packages, packages.scratch_dir / "capabilities"
     )
     if not run_cmd(["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS],
                    "build capability probe", verbose, cwd=staged.parent):
         return ["build capability probe"]
+    executable = str(executable_for(staged))
     failures = []
-    for allowed in (False, True):
-        cwd = staged.parent / ("allowed" if allowed else "denied")
+
+    def probe(name: str, *args: str) -> tuple[subprocess.CompletedProcess, Path]:
+        cwd = staged.parent / name
         cwd.mkdir()
-        command = [str(executable_for(staged)), "--host-headless", "--host-headless-frames=200"]
-        if allowed:
-            command.extend(["--host-caps-allow-all", "--expect-allowed"])
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
-        if result.returncode or "DENIED_OUTPUT_LEAK" in result.stdout + result.stderr:
-            failures.append(f"capability probe allowed={allowed}: {result.returncode} {result.stderr}")
-        if (cwd / "denied.txt").exists() or (cwd / "stub.txt").exists() or (cwd / "task.txt").exists() != allowed:
-            failures.append(f"capability probe touched unexpected files: allowed={allowed}")
-    crashed = subprocess.run(
-        [str(executable_for(staged)), "--host-headless", "--probe-crash"],
-        cwd=staged.parent, capture_output=True, text=True, timeout=60,
-    )
-    if crashed.returncode != 1 or "DENIED_OUTPUT_LEAK" in crashed.stdout + crashed.stderr:
-        failures.append("restricted crash diagnostics leaked a payload or lost the failure")
+        result = subprocess.run(
+            [executable, "--host-headless", "--host-headless-frames=200", *args],
+            cwd=cwd, capture_output=True, text=True, timeout=60,
+        )
+        return result, cwd
+
+    scoped, cwd = probe("scoped", "--probe=scoped")
+    if scoped.returncode != 0:
+        failures.append(f"capability probe scoped: exit {scoped.returncode} {scoped.stderr}")
+    if "OWN_STDOUT_WRITTEN" not in scoped.stdout:
+        failures.append("capability probe scoped: standard output was not written without a declaration")
+    if (cwd / "stub.txt").exists() or not (cwd / "task.txt").exists():
+        failures.append("capability probe scoped: a stub wrote, or a declared task write did not")
+    if Path("/tmp/roc-ray-caps-must-not-exist.txt").exists():
+        failures.append("capability probe scoped: an out-of-scope write reached the disk")
+
+    for facility, declaration in UNDECLARED_PROBES.items():
+        result, _ = probe(f"undeclared-{facility}", f"--probe=undeclared-{facility}")
+        stderr = result.stderr
+        if result.returncode == 0 or "declares no permission" not in stderr or declaration not in stderr:
+            failures.append(
+                f"capability probe undeclared {facility}: expected a failure naming {declaration}, "
+                f"got exit {result.returncode}: {stderr[-400:]}"
+            )
+
+    for name in ("invalid-directory", "escaping-output"):
+        result, _ = probe(name, f"--probe={name}")
+        if result.returncode != 1 or "startup config is invalid" not in result.stderr:
+            failures.append(f"capability probe {name}: startup was not refused: {result.returncode} {result.stderr[-400:]}")
+
+    crashed, _ = probe("crash", "--probe-crash")
+    if crashed.returncode != 1 or "CRASH_PAYLOAD_VISIBLE" not in crashed.stdout + crashed.stderr:
+        failures.append("capability probe crash: the failure or its payload was lost")
+    print("ok" if not failures else "FAILED")
     return failures
 
 
@@ -573,7 +606,7 @@ def run_cli_args_integration(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=3",
             "--cli-args-config",
             "--headless",
@@ -613,7 +646,7 @@ def run_task_delivery_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
         ],
         "run task delivery probe",
@@ -644,7 +677,7 @@ def run_observatory_probe(
     recorded_run = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -675,7 +708,7 @@ def run_observatory_probe(
     unwritable = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={staged.parent / 'missing-parent' / 'capture.rrstats'}",
         ],
@@ -695,7 +728,7 @@ def run_observatory_probe(
     refusal = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -714,7 +747,7 @@ def run_observatory_probe(
     race_capture = staged.parent / "race.rrstats"
     race_command = [
         str(executable_for(staged)),
-        "--host-headless", "--host-caps-allow-all",
+        "--host-headless",
         "--host-headless-frames=8",
         f"--host-stats-output={race_capture}",
         "--host-stats-detail=summary",
@@ -973,7 +1006,7 @@ def run_observatory_probe(
         process = subprocess.Popen(
             [
                 str(executable_for(abrupt_staged)),
-                "--host-headless", "--host-caps-allow-all",
+                "--host-headless",
                 "--host-headless-frames=1000000000",
                 f"--host-stats-output={abrupt_capture}",
                 "--host-stats-detail=summary",
@@ -1067,7 +1100,7 @@ def run_task_cap_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=400",
         ],
         "run task cap probe",
@@ -1109,7 +1142,7 @@ def run_file_write_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'file-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1153,7 +1186,7 @@ def run_cmd_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=400",
             f"--host-stats-output={staged.parent / 'cmd-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1208,7 +1241,7 @@ def run_udp_probe(
         ok = run_cmd(
             [
                 str(executable_for(staged)),
-                "--host-headless", "--host-caps-allow-all",
+                "--host-headless",
                 "--host-headless-frames=300",
                 *extra,
             ],
@@ -1248,7 +1281,7 @@ def run_virtual_keys_probe(
         return ["build virtual keys probe"]
 
     ok = run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-caps-allow-all", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
         "run virtual keys probe",
         verbose,
         cwd=staged.parent,
@@ -1289,7 +1322,7 @@ def run_sqlite_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'sqlite-privacy.rrstats'}",
             "--host-stats-detail=full",

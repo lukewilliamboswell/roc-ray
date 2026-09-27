@@ -11,6 +11,7 @@ import rr.Files
 import rr.Math
 import rr.Task
 import rr.Text
+import rr.Permission
 
 ## The Model keeps the current status, decoded texture, overflow warning, and
 ## font and prepared title between updates. The dropped path itself is handled
@@ -48,7 +49,9 @@ init! = App.init(
 	App.default
 		.with_title("RocRay Drop Viewer")
 		.with_size({ width: 900, height: 620 })
-		.with_frame_pacing(Capped(120)),
+		.with_frame_pacing(Capped(120))
+	# A dropped file can be anywhere, so this reads anywhere.
+		.with_permission(FilesAny(ReadOnly)),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({

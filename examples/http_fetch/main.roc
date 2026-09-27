@@ -1,9 +1,13 @@
 ## Fetch a web page while the window remains responsive.
 ##
-## Press R to fetch again and Escape to quit. Pass `--url URL`, or set
-## `ROC_RAY_HTTP_URL`, to replace the default address. This example shows a
-## `Task`: work that may wait, such as an HTTP request. A finished Task returns
-## one `Message`, which a later `Input` delivers to `update!`.
+## Press R to fetch again and Escape to quit. Pass `--url URL` to replace the
+## default address. This example shows a `Task`: work that may wait, such as an
+## HTTP request. A finished Task returns one `Message`, which a later `Input`
+## delivers to `update!`.
+##
+## It also shows a declared permission. The startup config declares the one
+## origin this run fetches from, and the host refuses every other: a redirect
+## to a different origin arrives as `PermissionDenied`.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
@@ -13,6 +17,8 @@ app [Model, program] {
 import rr.App
 import rr.Task
 import rr.Http
+import rr.Permission
+import rr.Url
 import rr.Math
 import rr.Color
 import rr.Draw
@@ -68,10 +74,10 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init_for_args(
-	|_args| App.default.with_title("RocRay HTTP Fetch").with_size({ width: 900, height: 640 }).with_frame_pacing(Capped(60)),
+	startup_config,
 	|io| {
 		font = Draw.default_font!()
-		url = chosen_url(io.args!(), io.env().read!("ROC_RAY_HTTP_URL"))
+		url = chosen_url(io.args!())
 		Ok({
 			url,
 			state: Waiting,
@@ -85,9 +91,9 @@ init! = App.init_for_args(
 	},
 )
 
-## `--url X` wins, then the environment, then the built-in default.
-chosen_url : List(Str), Try(Str, [NotFound, ..]) -> Str
-chosen_url = |args, from_env| {
+## `--url X` wins, then the built-in default.
+chosen_url : List(Str) -> Str
+chosen_url = |args| {
 	var $found = ""
 	var $index = 0
 	for arg in args {
@@ -96,13 +102,21 @@ chosen_url = |args, from_env| {
 		}
 		$index = $index + 1
 	}
-	if $found != "" {
-		$found
-	} else {
-		match from_env {
-			Ok(value) if value != "" => value
-			_ => default_url
-		}
+	if $found != "" $found else default_url
+}
+
+## Declare the one origin this run fetches from, and nothing else.
+##
+## The config sees the same arguments `init!` will, so it can name the origin
+## of the URL that will be fetched. A `--url` that does not parse declares
+## nothing: `send!` reports it as `InvalidUrl` before any request is made, so
+## the missing declaration is never reached.
+startup_config : List(Str) -> App.Config
+startup_config = |args| {
+	base = App.default.with_title("RocRay HTTP Fetch").with_size({ width: 900, height: 640 }).with_frame_pacing(Capped(60))
+	match Url.parse(chosen_url(args)) {
+		Ok(url) => base.with_permission(HttpOrigin(url))
+		Err(_) => base
 	}
 }
 
@@ -154,7 +168,7 @@ fetch! = |http, id, url|
 				Ok(body) => Arrived(id, Response.status(response), body)
 				Err(_) => Broke(id, "the response body was not valid UTF-8")
 			}
-		Err(PermissionDenied) => Broke(id, "HTTP access was not granted")
+		Err(PermissionDenied) => Broke(id, "the server redirected to an origin this app did not declare")
 		Err(InvalidUrl(_)) => Broke(id, "that is not a URL this platform will fetch")
 		Err(HttpErr(Timeout)) => Broke(id, "the request timed out")
 		Err(HttpErr(NetworkError)) => Broke(id, "the request failed at the network layer")
@@ -319,13 +333,13 @@ state_color = |state|
 		Failed(_) => Color.from_hex_rgb(0xef7d7d)
 	}
 
-expect chosen_url(["--url", "http://example.test/"], Err(NotFound)) == "http://example.test/"
-expect chosen_url([], Ok("http://from-env.test/")) == "http://from-env.test/"
-expect chosen_url([], Err(NotFound)) == default_url
+expect chosen_url(["--url", "http://example.test/"]) == "http://example.test/"
+expect chosen_url([]) == default_url
+expect chosen_url(["--url"]) == default_url
 
-# An argument wins over the environment, and an empty environment value does not.
-expect chosen_url(["--url", "http://arg.test/"], Ok("http://env.test/")) == "http://arg.test/"
-expect chosen_url([], Ok("")) == default_url
+# The declared origin is the fetched URL's, whichever URL that is.
+expect startup_config(["--url", "http://example.test:8080/data.json"]).permissions() == [HttpOrigin("http://example.test:8080/data.json")]
+expect startup_config(["--url", "not a url"]).permissions().len() == 0
 
 ## Keep a preview line inside the panel. Falling back to the whole line when
 ## the cut lands mid-codepoint is a wider row, never mojibake.

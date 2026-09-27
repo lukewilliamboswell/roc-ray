@@ -19,6 +19,7 @@ import rr.Gamepad
 import rr.App
 import rr.Capture
 import rr.Stdout
+import rr.Permission
 
 ## State kept between updates: accumulated typed text, clipboard feedback, the
 ## latest device snapshot, and the last colour read beneath the pointer. The
@@ -90,7 +91,8 @@ init! = App.init(
 	# Without this raylib closes the window on Escape, so the Esc indicator
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
+		.with_frame_pacing(Capped(120))
+		.with_permissions([ClipboardRead, ClipboardWrite]),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({

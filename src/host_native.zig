@@ -21,6 +21,7 @@ const udp_effect = @import("udp_effect.zig");
 const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
 const cmd_effect = @import("cmd_effect.zig");
+const permissions = @import("permissions.zig");
 const observatory = @import("observatory.zig");
 const build_metadata = @import("build_metadata");
 
@@ -37,6 +38,7 @@ test {
     _ = http_effect;
     _ = sqlite_effect;
     _ = cmd_effect;
+    _ = permissions;
 }
 
 // Import backend
@@ -143,7 +145,7 @@ const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 /// `NOT_FOUND`, `FAILED` and `UNAVAILABLE` with a read, and the two failures
 /// only a write can have get codes of their own, so one code never means two
 /// things across the boundary.
-const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
+const WRITE_ERR_ACCESS_REFUSED: u8 = 8;
 /// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
 const WRITE_ERR_NO_SPACE: u8 = 9;
 /// How many entries one listing may report, and how many bytes it may encode
@@ -206,13 +208,13 @@ fn listErrorCode(err: anyerror) u8 {
 /// Name a failed write in the app's vocabulary.
 ///
 /// Only the failures an app can act on differently are separated: retry
-/// somewhere else (`PERMISSION_DENIED`), free space (`NO_SPACE`), fix the path
+/// somewhere else (`ACCESS_REFUSED`), free space (`NO_SPACE`), fix the path
 /// (`NOT_FOUND`). Everything else is a plain failure, because an app cannot do
 /// anything different about it.
 fn writeErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
-        error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_PERMISSION_DENIED,
+        error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_ACCESS_REFUSED,
         error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
         else => READ_ERR_FAILED,
     };
@@ -1129,7 +1131,7 @@ fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult
 fn statErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
-        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
+        error.AccessDenied, error.PermissionDenied => WRITE_ERR_ACCESS_REFUSED,
         error.Canceled => READ_ERR_UNAVAILABLE,
         else => READ_ERR_FAILED,
     };
@@ -1180,7 +1182,7 @@ fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
     return switch (code) {
         READ_ERR_NOT_FOUND => .not_found,
         READ_ERR_UNAVAILABLE => .unavailable,
-        WRITE_ERR_PERMISSION_DENIED => .permission_denied,
+        WRITE_ERR_ACCESS_REFUSED => .access_refused,
         else => .read_failed,
     };
 }
@@ -1275,7 +1277,7 @@ fn filesWriteResult(code: u8) abi.HostFiles_write_textResult {
         0 => abiTryEmptyOk(Result),
         READ_ERR_NOT_FOUND => abiTryErr(Result, Union.not_found),
         READ_ERR_UNAVAILABLE => abiTryErr(Result, Union.unavailable),
-        WRITE_ERR_PERMISSION_DENIED => abiTryErr(Result, Union.permission_denied),
+        WRITE_ERR_ACCESS_REFUSED => abiTryErr(Result, Union.access_refused),
         WRITE_ERR_NO_SPACE => abiTryErr(Result, Union.no_space),
         else => abiTryErr(Result, Union.write_failed),
     };
@@ -2047,7 +2049,7 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendRe
     active_phase = .idle;
     defer active_phase = resume_phase;
     const external_started = observatoryMeasurementStart();
-    const result = http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+    const result = http_effect.send(roc_host, allocatorFromHost(roc_host), request, admitHttpHop);
     effect.setExternalElapsed(external_started);
     if (result.err == http_effect.ERR_OK) {
         result.err_message.decref(roc_host);
@@ -2075,6 +2077,10 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendRe
         http_effect.ERR_BAD_BODY => blk: {
             result.err_message.decref(roc_host);
             break :blk abiUnion(Union, .MalformedResponse);
+        },
+        http_effect.ERR_NOT_PERMITTED => blk: {
+            result.err_message.decref(roc_host);
+            break :blk abiUnion(Union, .PermissionDenied);
         },
         else => abiUnionPayload(Union, .Other, "other", result.err_message),
     });
@@ -2115,7 +2121,7 @@ fn cmdRunError(code: u8) abi.HostCmd_runErr {
         cmd_effect.ERR_UNAVAILABLE => abiUnion(Union, .Unavailable),
         cmd_effect.ERR_STDOUT_LIMIT => abiUnion(Union, .StdoutLimitExceeded),
         cmd_effect.ERR_STDERR_LIMIT => abiUnion(Union, .StderrLimitExceeded),
-        cmd_effect.ERR_PERMISSION_DENIED => abiUnion(Union, .PermissionDenied),
+        cmd_effect.ERR_ACCESS_REFUSED => abiUnion(Union, .AccessRefused),
         else => abiUnion(Union, .SpawnFailed),
     };
 }
@@ -2308,7 +2314,7 @@ fn udpBindFailure(code: u8) abi.HostUdp_bindResult {
         udp_effect.ERR_RESOURCE_LIMIT => abiUnion(Union, .resource_limit),
         udp_effect.ERR_ADDRESS_IN_USE => abiUnion(Union, .address_in_use),
         udp_effect.ERR_ADDRESS_UNAVAILABLE => abiUnion(Union, .address_unavailable),
-        udp_effect.ERR_PERMISSION_DENIED => abiUnion(Union, .permission_denied),
+        udp_effect.ERR_ACCESS_REFUSED => abiUnion(Union, .access_refused),
         else => abiUnion(Union, .unavailable),
     });
 }
@@ -2336,6 +2342,13 @@ fn hostedUdpSendCode(host: *RocHost, args: abi.HostUdp_sendArgs) u8 {
         effect.setOutcome(.runtime_error);
         return udp_effect.ERR_INVALID_ADDRESS;
     };
+    // A socket exists only because a declared bind admitted it, so UDP is
+    // declared by now and a peer outside the declarations is a refusal.
+    if (!admitDeclared("Udp.Socket.send!", .udp, active_policy.admitUdpPeer(ip, args.port))) {
+        effect.setValidationElapsed(validation_started);
+        effect.setOutcome(.refused);
+        return udp_effect.ERR_NOT_PERMITTED;
+    }
     effect.setValidationElapsed(validation_started);
     const external_started = observatoryMeasurementStart();
     const result = udp_effect.send(socket, ip, args.port, args.bytes.items());
@@ -2356,7 +2369,8 @@ fn udpSendResult(code: u8) abi.HostUdp_sendResult {
         0 => abiTryEmptyOk(Result),
         udp_effect.ERR_UNAVAILABLE => abiTryErr(Result, Union.unavailable),
         udp_effect.ERR_INVALID_ADDRESS => abiTryErr(Result, Union.invalid_address),
-        udp_effect.ERR_PERMISSION_DENIED => abiTryErr(Result, Union.permission_denied),
+        udp_effect.ERR_ACCESS_REFUSED => abiTryErr(Result, Union.access_refused),
+        udp_effect.ERR_NOT_PERMITTED => abiTryErr(Result, Union.permission_denied),
         udp_effect.ERR_TOO_LARGE => abiTryErr(Result, Union.too_large),
         udp_effect.ERR_WOULD_BLOCK => abiTryErr(Result, Union.would_block),
         udp_effect.ERR_UNREACHABLE => abiTryErr(Result, Union.no_route),
@@ -4095,11 +4109,6 @@ fn activeHost() *RocHost {
 
 /// Custom dbg handler that sets flag and prints to stderr.
 fn nativeDbg(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
-    if (!external_caps_allowed) {
-        debug_or_expect_called.store(true, .release);
-        std.debug.print("roc-ray: debug message suppressed\n", .{});
-        return;
-    }
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[36m[ROC DBG]\x1b[0m {s}\n", .{msg});
@@ -4107,11 +4116,6 @@ fn nativeDbg(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
 
 /// Custom expect handler that sets flag and prints to stderr.
 fn nativeExpectFailed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
-    if (!external_caps_allowed) {
-        debug_or_expect_called.store(true, .release);
-        std.debug.print("roc-ray: expectation failed (details suppressed)\n", .{});
-        return;
-    }
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[33m[ROC EXPECT]\x1b[0m {s}\n", .{msg});
@@ -4119,11 +4123,6 @@ fn nativeExpectFailed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) 
 
 /// Crash handler - prints to stderr and exits.
 fn nativeCrashed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
-    if (!external_caps_allowed) {
-        debug_or_expect_called.store(true, .release);
-        std.debug.print("roc-ray: application crashed (details suppressed)\n", .{});
-        std.process.exit(1);
-    }
     const msg = bytes[0..len];
     std.debug.print("\x1b[31m[ROC CRASHED]\x1b[0m {s}\n", .{msg});
     std.process.exit(1);
@@ -6150,7 +6149,7 @@ fn openStoreRootRelative(io: std.Io, base: std.Io.Dir, root: []const u8) !std.Io
 
 fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
-        .permission_denied => "external access was not granted",
+        .permission_denied => "no declared permission covers the store's directory",
         .root_not_found => "root directory was not found",
         .root_not_directory => "root is not a directory",
         .root_unreadable => "root directory is not readable",
@@ -9591,7 +9590,6 @@ comptime {
 const RuntimeOptions = struct {
     const StatsDetail = enum { summary, standard, full };
 
-    caps_allow_all: bool = false,
     headless: bool = false,
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
     /// Cycles a windowed run is allowed before it exits by itself, or null for
@@ -9986,7 +9984,6 @@ fn printUsage() void {
         \\           [--host-stats-buffer-mib=N] [--host-stats-max-mib=N]
         \\           [app arguments...]
         \\
-        \\  --host-caps-allow-all  allow external services under existing resource limits
         \\  --host-frames=N   exit after N cycles of a real windowed run
         \\  --host-hidden     open the real window hidden (needs a display server)
         \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32";
@@ -10268,9 +10265,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
     var i: usize = 1;
     while (i < argc) : (i += 1) {
         const arg = std.mem.span(argv[i]);
-        if (std.mem.eql(u8, arg, "--host-caps-allow-all")) {
-            options.caps_allow_all = true;
-        } else if (std.mem.eql(u8, arg, "--host-headless")) {
+        if (std.mem.eql(u8, arg, "--host-headless")) {
             options.headless = true;
         } else if (std.mem.startsWith(u8, arg, "--host-headless-frames=")) {
             options.headless = true;
@@ -10366,7 +10361,6 @@ test "runtime options reserve host switches and preserve complete app argv" {
     var argv = [_][*:0]u8{
         @constCast("breakout"),
         @constCast("--record-demo"),
-        @constCast("--host-caps-allow-all"),
         @constCast("--host-headless"),
         @constCast("--host-headless-frames=7"),
         @constCast("--headless"),
@@ -10375,7 +10369,6 @@ test "runtime options reserve host switches and preserve complete app argv" {
     defer options.deinit(std.testing.allocator);
 
     try std.testing.expect(options.headless);
-    try std.testing.expect(options.caps_allow_all);
     try std.testing.expectEqual(@as(u64, 7), options.headless_frames);
     try std.testing.expectEqual(@as(usize, 3), options.app_args.len);
     try std.testing.expectEqualStrings("breakout", std.mem.span(options.app_args[0]));
@@ -13482,9 +13475,6 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         return 0;
     }
 
-    beginIoLifetime(options.caps_allow_all);
-    defer endIoLifetime();
-
     // Capture envp on Linux. Roc links with -nostdlib, so glibc's
     // __libc_start_main (which normally initializes environ) doesn't run. We
     // manually extract envp from the stack where the kernel placed it:
@@ -13566,6 +13556,24 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     const config_phase = PhaseScope.enter(.startup);
     var app_config = app_config_for_host();
     config_phase.leave();
+
+    // What the app may reach is what its config declares. A malformed
+    // declaration is a mistake in the app's source, found before `init!`
+    // runs, so the app does not start rather than running with less reach
+    // than its author wrote down.
+    const startup_policy = std.heap.smp_allocator.create(permissions.Policy) catch {
+        app_config.decref(&roc_host);
+        std.debug.print("roc-ray: out of memory reading the app's permissions\n", .{});
+        return 1;
+    };
+    defer std.heap.smp_allocator.destroy(startup_policy);
+    if (policyFromConfig(app_config, startup_policy)) |problem| {
+        app_config.decref(&roc_host);
+        std.debug.print("roc-ray: the app's startup config is invalid: {s}.\n", .{problem});
+        return 1;
+    }
+    beginIoLifetime(startup_policy);
+    defer endIoLifetime();
     startup_font_config = .{
         .path = app_config.default_font_path.asSlice(),
         .size = app_config.default_font_size,
@@ -13753,7 +13761,7 @@ test "a write whose parent is a file is refused by name" {
 test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.FileNotFound));
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.NotDir));
-    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, writeErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(WRITE_ERR_ACCESS_REFUSED, writeErrorCode(error.AccessDenied));
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
     try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
@@ -13808,7 +13816,7 @@ test "a stat rewrites a modification a hot-reload loop can compare" {
 test "a stat names the refusals apart from the failures" {
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.FileNotFound));
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.NotDir));
-    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, statErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(WRITE_ERR_ACCESS_REFUSED, statErrorCode(error.AccessDenied));
     try std.testing.expectEqual(READ_ERR_UNAVAILABLE, statErrorCode(error.Canceled));
     try std.testing.expectEqual(READ_ERR_FAILED, statErrorCode(error.Unexpected));
 
@@ -14383,21 +14391,114 @@ test "a pixel readback called from render! is rejected" {
 /// Zero denotes a test stub. The sequence prevents reuse across hosted lifetimes.
 var io_generation: u64 = 0;
 var active_io_authority: u64 = 0;
-var external_caps_allowed: bool = false;
 
-fn beginIoLifetime(allow_all: bool) void {
+/// What this application declared in its startup `Config`, validated once
+/// before `init!` and read-only afterwards. Workers that check a redirect read
+/// it without synchronization for that reason.
+var active_policy: permissions.Policy = .{};
+
+fn beginIoLifetime(policy: *const permissions.Policy) void {
     io_generation = std.math.add(u64, io_generation, 1) catch @panic("IO authority generation exhausted");
     active_io_authority = io_generation;
-    external_caps_allowed = allow_all;
+    active_policy = policy.*;
 }
 
 fn endIoLifetime() void {
     active_io_authority = 0;
-    external_caps_allowed = false;
+    active_policy = .{};
 }
 
-fn allowsExternal(authority: u64) bool {
-    return authority != 0 and authority == active_io_authority and external_caps_allowed;
+/// Whether `authority` is this lifetime's, rather than a test stub or one
+/// captured from an earlier lifetime. Neither carries any declared scope.
+fn authorityIsLive(authority: u64) bool {
+    return authority != 0 and authority == active_io_authority;
+}
+
+/// The rejection an undeclared use produced, recorded instead of aborting in tests.
+const UndeclaredUse = struct { operation: []const u8, facility: permissions.Facility };
+var last_undeclared_use: ?UndeclaredUse = null;
+
+/// Answer whether an effect may go ahead under the declared policy.
+///
+/// `out_of_scope` is a runtime outcome -- the target may be runtime data -- so
+/// the caller refuses with `PermissionDenied`. `undeclared` is fixed by the
+/// application's source, so it is a programmer error and stops the app with
+/// the declaration that would permit the effect. Under `zig test` the
+/// violation is recorded rather than raised, as `enforcePhase` does.
+fn admitDeclared(operation: []const u8, facility: permissions.Facility, admission: permissions.Admission) bool {
+    switch (admission) {
+        .allow => return true,
+        .out_of_scope => return false,
+        .undeclared => {
+            last_undeclared_use = .{ .operation = operation, .facility = facility };
+            if (comptime builtin.is_test) return false;
+            std.debug.panic("roc-ray: {s} was called, but this app declares no permission for it. {s}", .{
+                operation,
+                permissions.fix(facility),
+            });
+        },
+    }
+}
+
+/// Refuse a gated effect: record the refusal, release what the caller
+/// transferred, and answer `PermissionDenied` in the effect's own result type.
+fn refuseEffect(comptime Result: type, operation: []const u8, arguments: anytype) Result {
+    var effect = EffectScope.begin(operation, 0);
+    defer effect.end();
+    effect.setOutcome(.refused);
+    inline for (arguments) |argument| releaseDeniedArgument(argument);
+    return permissionDenied(Result);
+}
+
+/// Read one transported `Permission` as the policy's own declaration. The
+/// slices borrow the config's strings, which outlive the call to `add`.
+fn declarationFromConfig(declaration: *const abi.App_config_for_hostPermissions) permissions.Declaration {
+    return switch (declaration.tag) {
+        .HttpOrigin => .{ .http_origin = declaration.payload_http_origin().asSlice() },
+        .HttpAny => .http_any,
+        .UdpBind => .{ .udp_bind = declaration.payload_udp_bind() },
+        .UdpPeer => blk: {
+            const peer = declaration.payload_udp_peer();
+            break :blk .{ .udp_peer = .{ .address = peer.address.asSlice(), .port = peer.port } };
+        },
+        .UdpLoopback => .udp_loopback,
+        .UdpAny => .udp_any,
+        .Command => .{ .command = declaration.payload_command().asSlice() },
+        .CommandAny => .command_any,
+        .EnvVar => .{ .env_var = declaration.payload_env_var().asSlice() },
+        .EnvAny => .env_any,
+        .ClipboardRead => .clipboard_read,
+        .ClipboardWrite => .clipboard_write,
+        .WorkingDirectory => .{ .working_directory = directoryMode(declaration.payload_working_directory()) },
+        .Directory => blk: {
+            const directory = declaration.payload_directory();
+            break :blk .{ .directory = .{ .path = directory.path.asSlice(), .mode = directoryMode(directory.mode) } };
+        },
+        .FilesAny => .{ .files_any = directoryMode(declaration.payload_files_any()) },
+    };
+}
+
+fn directoryMode(mode: abi.ReadOnlyOrReadWrite) permissions.Mode {
+    return switch (mode) {
+        .read_only => .read_only,
+        .read_write => .read_write,
+    };
+}
+
+/// Build the policy from the startup config, or describe why it cannot be.
+///
+/// A malformed declaration is a programmer error in the app's source, found
+/// before `init!` runs, so the caller refuses to start and names the entry.
+fn policyFromConfig(config: AppConfig, policy: *permissions.Policy) ?[]const u8 {
+    policy.* = .{};
+    policy.setAppId(config.app_id.asSlice()) catch |err| return permissions.describe(err);
+    for (config.permissions.items()) |*declaration| {
+        policy.add(declarationFromConfig(declaration)) catch |err| return permissions.describe(err);
+    }
+    if (!capture.isSafeOutputDir(config.output_dir.asSlice())) {
+        return "the capture output directory must be relative, contain no '..', and no NUL";
+    }
+    return null;
 }
 
 /// Hosted calls consume their arguments even when admission is refused.
@@ -14415,124 +14516,100 @@ fn releaseDeniedArgument(value: anytype) void {
     }
 }
 
+/// Admit a path-taking effect: live authority, then a declaration covering
+/// the path in the needed mode.
+fn admitPathEffect(operation: []const u8, authority: u64, path: []const u8, write: bool) bool {
+    return authorityIsLive(authority) and admitDeclared(operation, .files, active_policy.admitPath(path, write));
+}
+
 /// Capability boundary for files_read_text!; the implementation below it is trusted host code.
 fn capsExportedFilesReadText(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
-    enforcePhase("Files.Access.read_text!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.read_text!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostFiles_read_textResult);
-    }
+    const name = "Files.Access.read_text!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_read_textResult, name, .{path_arg});
     return exportedFilesReadText(path_arg);
 }
 
 /// Capability boundary for files_read_bytes!; the implementation below it is trusted host code.
 fn capsExportedFilesReadBytes(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
-    enforcePhase("Files.Access.read_bytes!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.read_bytes!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostFiles_read_bytesResult);
-    }
+    const name = "Files.Access.read_bytes!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_read_bytesResult, name, .{path_arg});
     return exportedFilesReadBytes(path_arg);
 }
 
 /// Capability boundary for files_list!; the implementation below it is trusted host code.
 fn capsExportedFilesList(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
-    enforcePhase("Files.Access.list!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.list!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostFiles_listResult);
-    }
+    const name = "Files.Access.list!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_listResult, name, .{path_arg});
     return exportedFilesList(path_arg);
 }
 
 /// Capability boundary for files_metadata!; the implementation below it is trusted host code.
 fn capsExportedFilesMetadata(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_metadataResult {
-    enforcePhase("Files.Access.metadata!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.metadata!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostFiles_metadataResult);
-    }
+    const name = "Files.Access.metadata!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostFiles_metadataResult, name, .{path_arg});
     return exportedFilesMetadata(path_arg);
 }
 
 /// Capability boundary for files_write_text!; the implementation below it is trusted host code.
 fn capsExportedFilesWriteText(authority: u64, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) abi.HostFiles_write_textResult {
-    enforcePhase("Files.Access.write_text!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.write_text!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        releaseDeniedArgument(contents_arg);
-        return permissionDenied(abi.HostFiles_write_textResult);
-    }
+    const name = "Files.Access.write_text!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), true)) return refuseEffect(abi.HostFiles_write_textResult, name, .{ path_arg, contents_arg });
     return exportedFilesWriteText(path_arg, contents_arg);
 }
 
 /// Capability boundary for files_write_bytes!; the implementation below it is trusted host code.
 fn capsExportedFilesWriteBytes(authority: u64, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostFiles_write_bytesResult {
-    enforcePhase("Files.Access.write_bytes!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Files.Access.write_bytes!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        releaseDeniedArgument(bytes_arg);
-        return permissionDenied(abi.HostFiles_write_bytesResult);
-    }
+    const name = "Files.Access.write_bytes!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), true)) return refuseEffect(abi.HostFiles_write_bytesResult, name, .{ path_arg, bytes_arg });
     return exportedFilesWriteBytes(path_arg, bytes_arg);
 }
 
 /// Capability boundary for http_send!; the implementation below it is trusted host code.
+///
+/// The first request is checked here. A URL that does not parse is left for
+/// the exchange to report as `InvalidUrl`, but only once HTTP is declared, so
+/// an undeclared use fails the same way whatever the URL. Every redirect hop
+/// is checked again inside the exchange through `admitHttpHop`.
 fn capsHostedHttpSend(authority: u64, request: http_effect.Request) callconv(.c) abi.HostHttp_sendResult {
-    enforcePhase("Http.Client.send!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Http.Client.send!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(request);
-        return permissionDenied(abi.HostHttp_sendResult);
-    }
+    const name = "Http.Client.send!";
+    enforcePhase(name, during_wait);
+    const admission: permissions.Admission = if (std.Uri.parse(request.uri.asSlice())) |uri|
+        active_policy.admitHttp(uri)
+    else |_| if (active_policy.declares(.http)) .allow else .undeclared;
+    if (!authorityIsLive(authority) or !admitDeclared(name, .http, admission)) return refuseEffect(abi.HostHttp_sendResult, name, .{request});
     return hostedHttpSend(request);
+}
+
+/// Redirect-hop check handed to the HTTP exchange. HTTP is already declared
+/// by the time a hop exists, so the only answers are allow and refuse.
+fn admitHttpHop(uri: std.Uri) bool {
+    return active_policy.admitHttp(uri) == .allow;
 }
 
 /// Capability boundary for cmd_run!; the implementation below it is trusted host code.
 fn capsExportedCmdRun(authority: u64, args: abi.HostCmd_runArg1) callconv(.c) abi.HostCmd_runResult {
-    enforcePhase("Cmd.Runner.run!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Cmd.Runner.run!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(args);
-        return permissionDenied(abi.HostCmd_runResult);
+    const name = "Cmd.Runner.run!";
+    enforcePhase(name, during_wait);
+    if (!authorityIsLive(authority) or !admitDeclared(name, .command, active_policy.admitCommand(args.program.asSlice()))) {
+        return refuseEffect(abi.HostCmd_runResult, name, .{args});
     }
     return exportedCmdRun(args);
 }
+
+// Standard output and error belong to every app: the only refusal is an
+// authority that is not this lifetime's.
 
 /// Capability boundary for stdio_write_line!; the implementation below it is trusted host code.
 fn capsExportedStdioWriteLine(authority: u64, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_lineResult {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.line!" else "Stderr.Writer.line!";
     enforcePhase(name, during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin(name, 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(stream);
-        releaseDeniedArgument(text_arg);
-        return permissionDenied(abi.HostStdio_write_lineResult);
-    }
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostStdio_write_lineResult, name, .{ stream, text_arg });
     return exportedStdioWriteLine(stream, text_arg);
 }
 
@@ -14540,14 +14617,7 @@ fn capsExportedStdioWriteLine(authority: u64, stream: u8, text_arg: abi.RocStr) 
 fn capsExportedStdioWriteText(authority: u64, stream: u8, text_arg: abi.RocStr) callconv(.c) abi.HostStdio_write_textResult {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write!" else "Stderr.Writer.write!";
     enforcePhase(name, during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin(name, 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(stream);
-        releaseDeniedArgument(text_arg);
-        return permissionDenied(abi.HostStdio_write_textResult);
-    }
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostStdio_write_textResult, name, .{ stream, text_arg });
     return exportedStdioWriteText(stream, text_arg);
 }
 
@@ -14555,210 +14625,169 @@ fn capsExportedStdioWriteText(authority: u64, stream: u8, text_arg: abi.RocStr) 
 fn capsExportedStdioWriteBytes(authority: u64, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) abi.HostStdio_write_bytesResult {
     const name = if (stream == STDIO_STREAM_STDOUT) "Stdout.Writer.write_bytes!" else "Stderr.Writer.write_bytes!";
     enforcePhase(name, during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin(name, 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(stream);
-        releaseDeniedArgument(bytes_arg);
-        return permissionDenied(abi.HostStdio_write_bytesResult);
-    }
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostStdio_write_bytesResult, name, .{ stream, bytes_arg });
     return exportedStdioWriteBytes(stream, bytes_arg);
 }
 
 /// Capability boundary for udp_bind!; the implementation below it is trusted host code.
 fn capsExportedUdpBind(authority: u64, args: abi.HostUdp_bindArg1) callconv(.c) abi.HostUdp_bindResult {
-    enforcePhase("Udp.Network.bind!", during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Udp.Network.bind!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(args);
-        return permissionDenied(abi.HostUdp_bindResult);
+    const name = "Udp.Network.bind!";
+    enforcePhase(name, during_update);
+    // An address that does not parse is left for the bind to report as
+    // `InvalidAddress`, once UDP is known to be declared at all.
+    const admission: permissions.Admission = if (udp_effect.parseIp4(args.ip.asSlice())) |ip|
+        active_policy.admitUdpBind(ip, args.port)
+    else if (active_policy.declares(.udp)) .allow else .undeclared;
+    if (!authorityIsLive(authority) or !admitDeclared(name, .udp, admission)) {
+        return refuseEffect(abi.HostUdp_bindResult, name, .{args});
     }
     return exportedUdpBind(args);
 }
 
+/// SQLite's in-memory database name. It touches no file, so it needs no
+/// declaration.
+const sqlite_memory_path = ":memory:";
+
 /// Capability boundary for sqlite_open!; the implementation below it is trusted host code.
 fn capsHostedSqliteOpen(authority: u64, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
-    enforcePhase("Sqlite.Service.open!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Sqlite.Service.open!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        releaseDeniedArgument(mode);
-        releaseDeniedArgument(busy_timeout_ms);
-        releaseDeniedArgument(max_result_bytes);
-        return permissionDenied(abi.HostSqlite_openResult);
-    }
+    const name = "Sqlite.Service.open!";
+    enforcePhase(name, during_wait);
+    const path = path_arg.asSlice();
+    const in_memory = std.mem.eql(u8, path, sqlite_memory_path);
+    const admitted = authorityIsLive(authority) and
+        (in_memory or admitPathEffect(name, authority, path, mode != sqlite_effect.MODE_READ_ONLY));
+    if (!admitted) return refuseEffect(abi.HostSqlite_openResult, name, .{ path_arg, mode, busy_timeout_ms, max_result_bytes });
     return hostedSqliteOpen(path_arg, mode, busy_timeout_ms, max_result_bytes);
 }
 
+/// Store roots numbered as `Assets.StoreLocation` crosses the boundary.
+const store_location_beside_executable: u8 = 0;
+
 /// Capability boundary for store_open!; the implementation below it is trusted host code.
+///
+/// A store beside the executable is the app's own bundle and needs no
+/// declaration. Any other root is a directory the app must have declared.
 fn capsExportedStoreOpenRaw(authority: u64, args: abi.HostStore_openArg1) callconv(.c) abi.HostStore_openResult {
-    enforcePhase("Assets.Loader.open!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Assets.Loader.open!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(args);
-        return permissionDenied(abi.HostStore_openResult);
-    }
+    const name = "Assets.Loader.open!";
+    enforcePhase(name, during_wait);
+    const admitted = authorityIsLive(authority) and
+        (args.location_kind == store_location_beside_executable or admitPathEffect(name, authority, args.root.asSlice(), false));
+    if (!admitted) return refuseEffect(abi.HostStore_openResult, name, .{args});
     return exportedStoreOpenRaw(args);
 }
 
 /// Capability boundary for audio_load_sound!; the implementation below it is trusted host code.
 fn capsExportedAudioLoadSound(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_soundResult {
-    enforcePhase("Audio.Loader.load_sound!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Audio.Loader.load_sound!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostAudio_load_soundResult);
-    }
+    const name = "Audio.Loader.load_sound!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostAudio_load_soundResult, name, .{path_arg});
     return exportedAudioLoadSound(path_arg);
 }
 
 /// Capability boundary for audio_load_music!; the implementation below it is trusted host code.
 fn capsExportedAudioLoadMusic(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostAudio_load_musicResult {
-    enforcePhase("Audio.Loader.load_music!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Audio.Loader.load_music!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostAudio_load_musicResult);
-    }
+    const name = "Audio.Loader.load_music!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(abi.HostAudio_load_musicResult, name, .{path_arg});
     return exportedAudioLoadMusic(path_arg);
 }
 
 /// Capability boundary for tilemap_load_tmx!; the implementation below it is trusted host code.
 fn capsExportedTilemapLoadTmxRaw(authority: u64, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxResult {
-    enforcePhase("Tilemap.Loader.load_tmx!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Tilemap.Loader.load_tmx!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(TilemapLoadTmxResult);
-    }
+    const name = "Tilemap.Loader.load_tmx!";
+    enforcePhase(name, during_wait);
+    if (!admitPathEffect(name, authority, path_arg.asSlice(), false)) return refuseEffect(TilemapLoadTmxResult, name, .{path_arg});
     return exportedTilemapLoadTmxRaw(path_arg);
 }
 
 /// Capability boundary for window_read_clipboard!; the implementation below it is trusted host code.
 fn capsExportedReadClipboard(authority: u64) callconv(.c) abi.HostWindow_read_clipboardResult {
-    enforcePhase("Window.Clipboard.read_text!", during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        return permissionDenied(abi.HostWindow_read_clipboardResult);
+    const name = "Window.Clipboard.read_text!";
+    enforcePhase(name, during_update);
+    if (!authorityIsLive(authority) or !admitDeclared(name, .clipboard_read, active_policy.admitClipboard(false))) {
+        return refuseEffect(abi.HostWindow_read_clipboardResult, name, .{});
     }
     return exportedReadClipboard();
 }
 
 /// Capability boundary for window_set_clipboard_text!; the implementation below it is trusted host code.
 fn capsExportedSetClipboardText(authority: u64, text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
-    enforcePhase("Window.Clipboard.set_text!", during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Window.Clipboard.set_text!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(text_arg);
-        return permissionDenied(abi.HostWindow_set_clipboard_textResult);
+    const name = "Window.Clipboard.set_text!";
+    enforcePhase(name, during_update);
+    if (!authorityIsLive(authority) or !admitDeclared(name, .clipboard_write, active_policy.admitClipboard(true))) {
+        return refuseEffect(abi.HostWindow_set_clipboard_textResult, name, .{text_arg});
     }
     exportedSetClipboardText(text_arg);
     return .ok;
 }
 
+// Captures are the app's own output, confined beneath the output directory
+// the host validated at startup: the only refusal is an authority that is
+// not this lifetime's.
+
 /// Capability boundary for capture_screenshot!; the implementation below it is trusted host code.
 fn capsExportedCaptureScreenshot(authority: u64, path_arg: abi.RocStr) callconv(.c) abi.HostCapture_screenshotResult {
-    enforcePhase("Capture.Writer.screenshot!", during_frame_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Capture.Writer.screenshot!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(path_arg);
-        return permissionDenied(abi.HostCapture_screenshotResult);
-    }
+    const name = "Capture.Writer.screenshot!";
+    enforcePhase(name, during_frame_wait);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostCapture_screenshotResult, name, .{path_arg});
     return exportedCaptureScreenshot(path_arg);
 }
 
 /// Capability boundary for capture_screenshot_texture!; the implementation below it is trusted host code.
 fn capsExportedCaptureScreenshotTexture(authority: u64, args: abi.HostCapture_screenshot_textureArg1) callconv(.c) abi.HostCapture_screenshot_textureResult {
-    enforcePhase("Capture.Writer.screenshot_texture!", during_wait);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Capture.Writer.screenshot_texture!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(args);
-        return permissionDenied(abi.HostCapture_screenshot_textureResult);
-    }
+    const name = "Capture.Writer.screenshot_texture!";
+    enforcePhase(name, during_wait);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostCapture_screenshot_textureResult, name, .{args});
     return exportedCaptureScreenshotTexture(args);
 }
 
 /// Capability boundary for capture_start_recording!; the implementation below it is trusted host code.
 fn capsExportedCaptureStartRecording(authority: u64, args: abi.HostCapture_start_recordingArg1) callconv(.c) abi.HostCapture_start_recordingResult {
-    enforcePhase("Capture.Writer.start!", during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Capture.Writer.start!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(args);
-        return permissionDenied(abi.HostCapture_start_recordingResult);
-    }
+    const name = "Capture.Writer.start!";
+    enforcePhase(name, during_update);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostCapture_start_recordingResult, name, .{args});
     return exportedCaptureStartRecording(args);
 }
 
 /// Capability boundary for capture_stop_recording!; the implementation below it is trusted host code.
 fn capsHostedCaptureStopRecording(authority: u64) callconv(.c) abi.HostCapture_stop_recordingResult {
-    enforcePhase("Capture.Writer.stop!", during_update);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("Capture.Writer.stop!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        return permissionDenied(abi.HostCapture_stop_recordingResult);
-    }
+    const name = "Capture.Writer.stop!";
+    enforcePhase(name, during_update);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostCapture_stop_recordingResult, name, .{});
     return hostedCaptureStopRecording();
 }
 
 /// Capability boundary for app_read_env!; the implementation below it is trusted host code.
 fn capsExportedAppReadEnvWindows(authority: u64, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
-    enforcePhase("App.Environment.read!", during_startup);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("App.Environment.read!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(key_arg);
-        return permissionDenied(AppReadEnvResult);
+    const name = "App.Environment.read!";
+    enforcePhase(name, during_startup);
+    if (!authorityIsLive(authority) or !admitDeclared(name, .env, active_policy.admitEnv(key_arg.asSlice()))) {
+        return refuseEffect(AppReadEnvResult, name, .{key_arg});
     }
     return exportedAppReadEnvWindows(key_arg);
 }
 
 /// Capability boundary for app_read_env!; the implementation below it is trusted host code.
 fn capsExportedAppReadEnvPosix(authority: u64, key_arg: abi.RocStr) callconv(.c) AppReadEnvResult {
-    enforcePhase("App.Environment.read!", during_startup);
-    if (!allowsExternal(authority)) {
-        var effect = EffectScope.begin("App.Environment.read!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        releaseDeniedArgument(key_arg);
-        return permissionDenied(AppReadEnvResult);
+    const name = "App.Environment.read!";
+    enforcePhase(name, during_startup);
+    if (!authorityIsLive(authority) or !admitDeclared(name, .env, active_policy.admitEnv(key_arg.asSlice()))) {
+        return refuseEffect(AppReadEnvResult, name, .{key_arg});
     }
     return exportedAppReadEnvPosix(key_arg);
 }
 
 /// Capability boundary for text_startup_default_font!; the implementation below it is trusted host code.
+///
+/// The built-in font needs nothing. A configured font file is read from the
+/// working directory, so it needs that declared.
 fn capsExportedTextStartupDefaultFontRaw(authority: u64) callconv(.c) abi.HostText_startup_default_fontResult {
-    enforcePhase("App.Io.default_font!", during_startup);
-    if (startup_font_config.path.len != 0 and !allowsExternal(authority)) {
-        var effect = EffectScope.begin("App.Io.default_font!", 0);
-        defer effect.end();
-        effect.setOutcome(.refused);
-        return permissionDenied(abi.HostText_startup_default_fontResult);
-    }
+    const name = "App.Io.default_font!";
+    enforcePhase(name, during_startup);
+    const path = startup_font_config.path;
+    const admitted = authorityIsLive(authority) and
+        (path.len == 0 or admitPathEffect(name, authority, path, false));
+    if (!admitted) return refuseEffect(abi.HostText_startup_default_fontResult, name, .{});
     return exportedTextStartupDefaultFontRaw();
 }
 
@@ -14769,22 +14798,6 @@ fn permissionDenied(comptime Result: type) Result {
     var err = std.mem.zeroes(Error);
     err.tag = .PermissionDenied;
     return abiTryErr(Result, err);
-}
-
-test "external authority is fixed for one lifetime and never accepts a stub or stale identity" {
-    try std.testing.expect(!(RuntimeOptions{}).caps_allow_all);
-    beginIoLifetime(false);
-    const denied = active_io_authority;
-    try std.testing.expect(!allowsExternal(denied));
-    endIoLifetime();
-    beginIoLifetime(true);
-    defer endIoLifetime();
-    try std.testing.expect(allowsExternal(active_io_authority));
-    try std.testing.expect(!allowsExternal(0));
-    try std.testing.expect(!allowsExternal(denied));
-    const granted = active_io_authority;
-    endIoLifetime();
-    try std.testing.expect(!allowsExternal(granted));
 }
 
 fn expectPermissionDenied(result: anytype) !void {
@@ -14806,6 +14819,9 @@ fn expectPermissionDenied(result: anytype) !void {
 var denied_test_resource = [_]u64{ 0, std.math.maxInt(u64) };
 fn deniedTestArgument(comptime T: type) T {
     if (T == *u64) return &denied_test_resource[1];
+    // A zeroed Roc string or list has a null data pointer, which no real
+    // argument has; the empty value is what an app would actually send.
+    if (@typeInfo(T) == .@"struct" and @hasDecl(T, "empty")) return T.empty();
     if (@typeInfo(T) == .@"struct") {
         var value: T = undefined;
         inline for (std.meta.fields(T)) |field| @field(value, field.name) = deniedTestArgument(field.type);
@@ -14814,51 +14830,204 @@ fn deniedTestArgument(comptime T: type) T {
     return std.mem.zeroes(T);
 }
 
-test "every external entry point denies before touching the backend and consumes arguments" {
+test "io authority is fixed for one lifetime and never accepts a stub or stale identity" {
+    const empty: permissions.Policy = .{};
+    beginIoLifetime(&empty);
+    const first = active_io_authority;
+    try std.testing.expect(authorityIsLive(first));
+    try std.testing.expect(!authorityIsLive(0));
+    endIoLifetime();
+    try std.testing.expect(!authorityIsLive(first));
+    beginIoLifetime(&empty);
+    defer endIoLifetime();
+    try std.testing.expect(authorityIsLive(active_io_authority));
+    try std.testing.expect(!authorityIsLive(first));
+}
+
+/// A policy that declares every facility as widely as it can be declared, so
+/// a refusal under it can only come from the authority.
+fn testPolicyDeclaringEverything() !permissions.Policy {
+    var policy: permissions.Policy = .{};
+    for ([_]permissions.Declaration{ .http_any, .udp_any, .command_any, .env_any, .clipboard_read, .clipboard_write, .{ .files_any = .read_write } }) |declaration| {
+        try policy.add(declaration);
+    }
+    return policy;
+}
+
+const long_test_text = "denied argument longer than the small string representation";
+
+test "every gated entry point refuses a stub authority and consumes arguments" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
     const previous_host = active_roc_host;
     active_roc_host = &roc_host;
     defer active_roc_host = previous_host;
-    beginIoLifetime(false);
+    const everything = try testPolicyDeclaringEverything();
+    beginIoLifetime(&everything);
     defer endIoLifetime();
     const previous_font = startup_font_config;
     startup_font_config.path = "denied-font.ttf";
     defer startup_font_config = previous_font;
     const phase = PhaseScope.enter(.startup);
     defer phase.leave();
-    try expectPermissionDenied(capsExportedFilesReadText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedFilesReadBytes(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedFilesList(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedFilesMetadata(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedFilesWriteText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsHostedHttpSend(active_io_authority, deniedTestArgument(http_effect.Request)));
-    try expectPermissionDenied(capsExportedCmdRun(active_io_authority, deniedTestArgument(abi.HostCmd_runArg1)));
-    try expectPermissionDenied(capsExportedStdioWriteLine(active_io_authority, deniedTestArgument(u8), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedStdioWriteText(active_io_authority, deniedTestArgument(u8), abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedUdpBind(active_io_authority, deniedTestArgument(abi.HostUdp_bindArg1)));
-    try expectPermissionDenied(capsHostedSqliteOpen(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host), deniedTestArgument(u8), deniedTestArgument(u64), deniedTestArgument(u64)));
-    try expectPermissionDenied(capsExportedStoreOpenRaw(active_io_authority, deniedTestArgument(abi.HostStore_openArg1)));
-    try expectPermissionDenied(capsExportedAudioLoadSound(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedAudioLoadMusic(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
-    try expectPermissionDenied(capsExportedReadClipboard(active_io_authority));
-    try expectPermissionDenied(capsExportedSetClipboardText(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+    const stub: u64 = 0;
+    try expectPermissionDenied(capsExportedFilesReadText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesReadBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesList(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesMetadata(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteBytes(stub, abi.RocStr.fromSlice("denied-long-file-name-never-opened", &roc_host), abi.RocListWith(u8, false).empty()));
+    try expectPermissionDenied(capsHostedHttpSend(stub, deniedTestArgument(http_effect.Request)));
+    try expectPermissionDenied(capsExportedCmdRun(stub, deniedTestArgument(abi.HostCmd_runArg1)));
+    try expectPermissionDenied(capsExportedStdioWriteLine(stub, deniedTestArgument(u8), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedStdioWriteText(stub, deniedTestArgument(u8), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedStdioWriteBytes(stub, 0, abi.RocListWith(u8, false).empty()));
+    try expectPermissionDenied(capsExportedUdpBind(stub, deniedTestArgument(abi.HostUdp_bindArg1)));
+    try expectPermissionDenied(capsHostedSqliteOpen(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), deniedTestArgument(u8), deniedTestArgument(u64), deniedTestArgument(u64)));
+    try expectPermissionDenied(capsExportedStoreOpenRaw(stub, deniedTestArgument(abi.HostStore_openArg1)));
+    try expectPermissionDenied(capsExportedAudioLoadSound(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedAudioLoadMusic(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedReadClipboard(stub));
+    try expectPermissionDenied(capsExportedSetClipboardText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
     {
         const task = PhaseScope.enter(.task);
         defer task.leave();
-        try expectPermissionDenied(capsExportedCaptureScreenshot(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+        try expectPermissionDenied(capsExportedCaptureScreenshot(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
     }
-    try expectPermissionDenied(capsExportedCaptureScreenshotTexture(active_io_authority, deniedTestArgument(abi.HostCapture_screenshot_textureArg1)));
-    try expectPermissionDenied(capsExportedCaptureStartRecording(active_io_authority, deniedTestArgument(abi.HostCapture_start_recordingArg1)));
-    try expectPermissionDenied(capsHostedCaptureStopRecording(active_io_authority));
+    try expectPermissionDenied(capsExportedCaptureScreenshotTexture(stub, deniedTestArgument(abi.HostCapture_screenshot_textureArg1)));
+    try expectPermissionDenied(capsExportedCaptureStartRecording(stub, deniedTestArgument(abi.HostCapture_start_recordingArg1)));
+    try expectPermissionDenied(capsHostedCaptureStopRecording(stub));
     if (builtin.os.tag == .windows) {
-        try expectPermissionDenied(capsExportedAppReadEnvWindows(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+        try expectPermissionDenied(capsExportedAppReadEnvWindows(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    } else {
+        try expectPermissionDenied(capsExportedAppReadEnvPosix(stub, abi.RocStr.fromSlice(long_test_text, &roc_host)));
     }
+    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(stub));
+}
+
+test "a target outside every declared scope is refused with PermissionDenied and consumes arguments" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    var policy: permissions.Policy = .{};
+    try policy.add(.{ .http_origin = "https://api.example.com" });
+    try policy.add(.{ .udp_bind = 40000 });
+    try policy.add(.{ .command = "git" });
+    try policy.add(.{ .env_var = "ROC_RAY_DECLARED" });
+    try policy.add(.{ .working_directory = .read_only });
+    beginIoLifetime(&policy);
+    defer endIoLifetime();
+    const previous_font = startup_font_config;
+    startup_font_config.path = "../outside-font.ttf";
+    defer startup_font_config = previous_font;
+    last_undeclared_use = null;
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+    const live = active_io_authority;
+    const outside = "../outside-the-working-directory-and-long-enough";
+
+    try expectPermissionDenied(capsExportedFilesReadText(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesReadBytes(live, abi.RocStr.fromSlice("/etc/an-absolute-path-no-declaration-covers", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesList(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesMetadata(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    // Read-only declarations do not admit writes, even beneath them.
+    try expectPermissionDenied(capsExportedFilesWriteText(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.txt", &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesWriteBytes(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.bin", &roc_host), abi.RocListWith(u8, false).empty()));
+    var request = deniedTestArgument(http_effect.Request);
+    request.uri = abi.RocStr.fromSlice("https://elsewhere.example.com/not-the-declared-origin", &roc_host);
+    try expectPermissionDenied(capsHostedHttpSend(live, request));
+    var command = deniedTestArgument(abi.HostCmd_runArg1);
+    command.program = abi.RocStr.fromSlice("an-undeclared-program-with-a-long-name", &roc_host);
+    try expectPermissionDenied(capsExportedCmdRun(live, command));
+    var bind = deniedTestArgument(abi.HostUdp_bindArg1);
+    bind.ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host);
+    bind.port = 40001;
+    try expectPermissionDenied(capsExportedUdpBind(live, bind));
+    try expectPermissionDenied(capsHostedSqliteOpen(live, abi.RocStr.fromSlice("inside-but-read-only-and-long-enough.db", &roc_host), sqlite_effect.MODE_READ_WRITE_CREATE, 0, 0));
+    var store = deniedTestArgument(abi.HostStore_openArg1);
+    store.location_kind = 1;
+    store.root = abi.RocStr.fromSlice(outside, &roc_host);
+    try expectPermissionDenied(capsExportedStoreOpenRaw(live, store));
+    try expectPermissionDenied(capsExportedAudioLoadSound(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    try expectPermissionDenied(capsExportedAudioLoadMusic(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    try expectPermissionDenied(capsExportedTilemapLoadTmxRaw(live, abi.RocStr.fromSlice(outside, &roc_host)));
+    if (builtin.os.tag == .windows) {
+        try expectPermissionDenied(capsExportedAppReadEnvWindows(live, abi.RocStr.fromSlice("AN_UNDECLARED_VARIABLE_WITH_A_LONG_NAME", &roc_host)));
+    } else {
+        try expectPermissionDenied(capsExportedAppReadEnvPosix(live, abi.RocStr.fromSlice("AN_UNDECLARED_VARIABLE_WITH_A_LONG_NAME", &roc_host)));
+    }
+    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(live));
+    // Every facility above was declared, so none of these was a programmer error.
+    try std.testing.expect(last_undeclared_use == null);
+}
+
+test "using a facility the app never declared is a programmer error that names the facility" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    const empty: permissions.Policy = .{};
+    beginIoLifetime(&empty);
+    defer endIoLifetime();
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+    const live = active_io_authority;
+    defer last_undeclared_use = null;
+
+    const Case = struct { facility: permissions.Facility, operation: []const u8 };
+    const expectUndeclared = struct {
+        fn check(expected: Case) !void {
+            const use = last_undeclared_use orelse return error.TestExpectedUndeclaredUse;
+            try std.testing.expectEqual(expected.facility, use.facility);
+            try std.testing.expectEqualStrings(expected.operation, use.operation);
+            last_undeclared_use = null;
+        }
+    }.check;
+
+    try expectPermissionDenied(capsExportedFilesReadText(live, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectUndeclared(.{ .facility = .files, .operation = "Files.Access.read_text!" });
+    var request = deniedTestArgument(http_effect.Request);
+    request.uri = abi.RocStr.fromSlice("not a url at all, but http is undeclared anyway", &roc_host);
+    try expectPermissionDenied(capsHostedHttpSend(live, request));
+    try expectUndeclared(.{ .facility = .http, .operation = "Http.Client.send!" });
+    try expectPermissionDenied(capsExportedCmdRun(live, deniedTestArgument(abi.HostCmd_runArg1)));
+    try expectUndeclared(.{ .facility = .command, .operation = "Cmd.Runner.run!" });
+    try expectPermissionDenied(capsExportedUdpBind(live, deniedTestArgument(abi.HostUdp_bindArg1)));
+    try expectUndeclared(.{ .facility = .udp, .operation = "Udp.Network.bind!" });
+    try expectPermissionDenied(capsExportedReadClipboard(live));
+    try expectUndeclared(.{ .facility = .clipboard_read, .operation = "Window.Clipboard.read_text!" });
+    try expectPermissionDenied(capsExportedSetClipboardText(live, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectUndeclared(.{ .facility = .clipboard_write, .operation = "Window.Clipboard.set_text!" });
     if (builtin.os.tag != .windows) {
-        try expectPermissionDenied(capsExportedAppReadEnvPosix(active_io_authority, abi.RocStr.fromSlice("denied argument longer than the small string representation", &roc_host)));
+        try expectPermissionDenied(capsExportedAppReadEnvPosix(live, abi.RocStr.fromSlice(long_test_text, &roc_host)));
+        try expectUndeclared(.{ .facility = .env, .operation = "App.Environment.read!" });
     }
-    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(active_io_authority));
-    try expectPermissionDenied(capsExportedFilesWriteBytes(active_io_authority, abi.RocStr.fromSlice("denied-long-file-name-never-opened", &roc_host), abi.RocListWith(u8, false).empty()));
-    try expectPermissionDenied(capsExportedStdioWriteBytes(active_io_authority, 0, abi.RocListWith(u8, false).empty()));
+    // In-memory SQLite and a store beside the executable are the app's own.
+    try std.testing.expect(last_undeclared_use == null);
+}
+
+test "startup refuses an invalid declaration or an escaping output directory" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    var declaration = std.mem.zeroes(abi.App_config_for_hostPermissions);
+    declaration.tag = .HttpOrigin;
+    const origin = abi.RocStr.fromSlice("https://example.com/with/a/path", &roc_host);
+    @as(*abi.RocStr, @ptrCast(@alignCast(&declaration.payload))).* = origin;
+    defer origin.decref(&roc_host);
+    var declarations = [_]abi.App_config_for_hostPermissions{declaration};
+    var config = deniedTestArgument(AppConfig);
+    config.permissions = abi.RocList(abi.App_config_for_hostPermissions).fromSlice(&declarations, &roc_host);
+    defer config.permissions.decref(&roc_host);
+    var policy: permissions.Policy = .{};
+    try std.testing.expect(policyFromConfig(config, &policy) != null);
+
+    var valid = deniedTestArgument(AppConfig);
+    try std.testing.expect(policyFromConfig(valid, &policy) == null);
+    valid.output_dir = abi.RocStr.fromSlice("../outside", &roc_host);
+    defer valid.output_dir.decref(&roc_host);
+    try std.testing.expect(policyFromConfig(valid, &policy) != null);
 }

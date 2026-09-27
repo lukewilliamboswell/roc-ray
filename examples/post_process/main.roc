@@ -11,6 +11,7 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
+import rr.Permission
 
 ## State kept between updates: the offscreen drawing target, shader, prepared
 ## labels, and prepared time setting, plus the elapsed animation time.
@@ -33,7 +34,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }),
+	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }).with_permission(Directory("examples/post_process/assets", ReadOnly)),
 	|io| {
 
 		## This source tree example deliberately opts into CWD-relative assets.

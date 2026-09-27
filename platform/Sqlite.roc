@@ -484,7 +484,9 @@ Sqlite := [].{
 			Unknown(other) => "Unknown: result code ${I64.to_str(other)}"
 		}
 
-	## Opaque sqlite authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque SQLite authority supplied by App.Io. `":memory:"` needs no
+	## declaration; a database file must be covered by a declared `Permission`,
+	## writable unless it is opened read-only.
 	Service :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

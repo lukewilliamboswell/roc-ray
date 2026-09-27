@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 import rr.App
 import rr.Files
 import rr.Task
+import rr.Permission
 
 ## Does a file written by `Files.write_*` come back byte for byte?
 ##
@@ -21,7 +22,7 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("file write"), |_io| Ok({ checked: Bool.False }))
+init! = App.init(App.default.with_title("file write").with_permission(Directory("probe_out", ReadWrite)), |_io| Ok({ checked: Bool.False }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which half of the probe went wrong.

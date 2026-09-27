@@ -292,7 +292,9 @@ Assets := [].{
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3
 
-	## Opaque assets authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque asset-store authority supplied by App.Io. A store beside the
+	## executable needs no declaration; any other root must be covered by a
+	## declared `Permission`, as a `Files` path is.
 	Loader :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

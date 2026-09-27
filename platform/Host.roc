@@ -277,6 +277,36 @@ Host := [].{
 	## Legal in `render!` only.
 	shader_set_texture! : ShaderTexture => {}
 
+	## Permission declarations, as the host validates them at startup.
+
+	## Whether a declared directory may be written.
+	DirectoryMode : [ReadOnly, ReadWrite]
+
+	## A declared directory and its mode.
+	DirectoryDeclaration : { path : Str, mode : DirectoryMode }
+
+	## A declared UDP peer: a dotted-quad IPv4 address and a port.
+	UdpPeerDeclaration : { address : Str, port : U16 }
+
+	## One `Permission`, with an `HttpOrigin` reduced to its origin string.
+	PermissionDeclaration : [
+		HttpOrigin(Str),
+		HttpAny,
+		UdpBind(U16),
+		UdpPeer(UdpPeerDeclaration),
+		UdpLoopback,
+		UdpAny,
+		Command(Str),
+		CommandAny,
+		EnvVar(Str),
+		EnvAny,
+		ClipboardRead,
+		ClipboardWrite,
+		WorkingDirectory(DirectoryMode),
+		Directory(DirectoryDeclaration),
+		FilesAny(DirectoryMode),
+	]
+
 	## Store resource interface
 
 	## Parameters for opening a confined asset store.
@@ -509,7 +539,7 @@ Host := [].{
 	}
 
 	## Failures while stating one path.
-	FilesMetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
+	FilesMetadataError : [AccessRefused, NotFound, PermissionDenied, ReadFailed, Unavailable]
 
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -531,7 +561,7 @@ Host := [].{
 	##
 	## A write fails for reasons a read cannot, so it has a union of its own
 	## rather than sharing one with `files_read_bytes!`.
-	FilesWriteError : [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
+	FilesWriteError : [AccessRefused, NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
 
 	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -619,6 +649,7 @@ Host := [].{
 	## `Timeout` carries the output captured before the deadline expired, which
 	## is why it is the one variant with a payload.
 	CmdRunError : [
+		AccessRefused,
 		Busy,
 		CommandNotFound,
 		PermissionDenied,
@@ -669,7 +700,7 @@ Host := [].{
 	}
 
 	## Failures while opening and binding a socket.
-	UdpBindError : [AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable]
+	UdpBindError : [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable]
 
 	## One outgoing datagram. `ip` is a dotted-quad IPv4 literal.
 	UdpSendArgs : {
@@ -711,7 +742,7 @@ Host := [].{
 	## `NoRoute` is what `Udp` exposes as `Unreachable`; it is spelled
 	## differently here because `roc glue` lowers a tag to a Zig enum member
 	## and `unreachable` is a Zig keyword.
-	UdpSendError : [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
+	UdpSendError : [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
 
 	## Send one datagram.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

@@ -10,6 +10,7 @@ import rr.Time
 import rr.Color
 import rr.Draw
 import rr.Text
+import rr.Permission
 
 ## The Model is the app state kept between calls to `update!`. It stores each
 ## operation's progress or result, animation time, and prepared labels needed
@@ -50,7 +51,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)).with_permission(WorkingDirectory(ReadOnly)),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({
@@ -96,7 +97,8 @@ meta_state = |result|
 	match result {
 		Ok(meta) => Described("${describe_kind(meta.kind)}, ${U64.to_str(meta.size_bytes)} bytes, modified ${meta.modified.to_iso_8601()}")
 		Err(NotFound) => Failed("not found")
-		Err(PermissionDenied) => Failed("not allowed to look")
+		Err(AccessRefused) => Failed("not allowed to look")
+		Err(PermissionDenied) => Failed("outside the declared directories")
 		Err(ReadFailed) => Failed("stat failed")
 		Err(Unavailable) => Failed("stats unavailable")
 	}
@@ -121,7 +123,7 @@ string_state = |result|
 	match result {
 		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
 		Err(NotFound) => Failed("not found")
-		Err(PermissionDenied) => Failed("file access was not granted")
+		Err(PermissionDenied) => Failed("outside the declared directories")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")
@@ -134,7 +136,7 @@ bytes_state = |result|
 	match result {
 		Ok(bytes) => Held(bytes)
 		Err(NotFound) => Failed("not found")
-		Err(PermissionDenied) => Failed("file access was not granted")
+		Err(PermissionDenied) => Failed("outside the declared directories")
 		Err(ReadFailed) => Failed("read failed")
 		Err(Busy) => Failed("host busy")
 		Err(Unavailable) => Failed("reads unavailable")

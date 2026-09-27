@@ -46,6 +46,7 @@ import Stderr
 import Stdout
 import Cmd
 import Http
+import Permission
 import Keys
 import Mouse
 
@@ -262,6 +263,8 @@ App := [].{
 		output_dir : Str,
 		recording : AppRecording,
 		default_font : { path : Str, size : I32 },
+		app_id : Str,
+		permissions : List(Permission),
 	}.{
 
 		## Return a config with a different window title.
@@ -323,18 +326,17 @@ App := [].{
 		## Return a config whose captures are written under a different
 		## directory, created on first use.
 		##
-		## Every `Capture` path resolves beneath this directory, and one that
-		## would escape it -- an absolute path, or one containing `..` -- is
-		## refused rather than rewritten. The directory itself is the app
-		## author's choice and is used as given, so it may be absolute; what it
-		## bounds is where the paths an app computes at runtime can reach. An
-		## empty value means the working directory.
+		## Captures are the app's own output, so writing them needs no
+		## permission; in exchange the directory is confined. It is relative to
+		## the working directory and may not be absolute or contain `..`, and
+		## the host refuses to start with one that does. Every `Capture` path
+		## resolves beneath it, and one that would escape it is refused rather
+		## than rewritten. An empty value means the working directory.
 		with_output_dir : Config, Str -> Config
 		with_output_dir = |cfg, value| { ..cfg, output_dir: value }
 
 		## Store a recording description in the configuration. This is pure data;
 		## start it explicitly with `io.capture().start!(recording)` in `init!`.
-		## Starting requires external authority and may return PermissionDenied.
 		with_recording : Config, Capture.Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: Record(value) }
 
@@ -345,8 +347,40 @@ App := [].{
 		## Load the startup default font from a working-directory-relative asset
 		## path at the requested base pixel size. The path is validated and loaded
 		## once before `Io.default_font!` returns it.
+		##
+		## Reading it needs a declared directory covering the path, such as
+		## `Directory("assets", ReadOnly)`.
 		with_default_font : Config, { path : Str, size : I32 } -> Config
 		with_default_font = |cfg, value| { ..cfg, default_font: value }
+
+		## Name the app for its private storage: the data, config, and cache
+		## directories `Files` keeps for it under the user's home.
+		##
+		## Use a reverse-DNS style name the app will keep, such as
+		## `"dev.example.pong"` -- 1 to 128 ASCII letters, digits, `.`, `-`, or
+		## `_`. It becomes a directory name, so changing it later moves the app's
+		## saved data out of reach. An app that never touches private storage
+		## does not need one.
+		with_app_id : Config, Str -> Config
+		with_app_id = |cfg, value| { ..cfg, app_id: value }
+
+		## Declare reach beyond the app's own resources: a network origin, a
+		## directory, a program, an environment variable, the clipboard. The
+		## declaration is the grant; see `Permission`.
+		##
+		## Call it once per declaration. Declarations accumulate, and a
+		## duplicate is harmless.
+		with_permission : Config, Permission -> Config
+		with_permission = |cfg, value| { ..cfg, permissions: cfg.permissions.append(value) }
+
+		## Declare several permissions at once, in order, as repeated
+		## `with_permission` calls would:
+		##
+		## ```roc
+		## App.default.with_permissions([HttpOrigin("https://api.example.com"), EnvVar("API_TOKEN")])
+		## ```
+		with_permissions : Config, List(Permission) -> Config
+		with_permissions = |cfg, values| { ..cfg, permissions: cfg.permissions.concat(values) }
 
 		## Inspect the window title.
 		title : Config -> Str
@@ -397,6 +431,14 @@ App := [].{
 		## the backend's built-in font.
 		default_font : Config -> { path : Str, size : I32 }
 		default_font = |cfg| cfg.default_font
+
+		## Inspect the app id. Empty means none was declared.
+		app_id : Config -> Str
+		app_id = |cfg| cfg.app_id
+
+		## Inspect the declared permissions, in declaration order.
+		permissions : Config -> List(Permission)
+		permissions = |cfg| cfg.permissions
 	}
 
 	## Application-lifetime authority supplied by the host to init! and update!.
@@ -408,7 +450,7 @@ App := [].{
 		for_host : Resource.Authority -> Io
 		for_host = |authority| Io.(authority)
 
-		## IO for pure tests; it never grants access to external services.
+		## IO for pure tests. The host refuses every effect made through it with `PermissionDenied`.
 		stub : Io
 		stub = Io.(Resource.Authority.stub)
 
@@ -568,7 +610,10 @@ App := [].{
 		## none was configured. A configured path is resolved from the process
 		## working directory. The host loads it once; repeat calls return retained
 		## aliases of the same resource. Legal only in `init!`.
-		## A configured file requires external authority; otherwise PermissionDenied.
+		##
+		## Reading a configured file needs a declared directory covering its path,
+		## such as `WorkingDirectory(ReadOnly)`; calling this with no
+		## file declaration at all stops the app with a message naming one.
 		default_font! : Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 		default_font! = |io| app_default_font!(io)
 	}
@@ -576,7 +621,10 @@ App := [].{
 	## Opaque access to startup environment variables.
 	Environment :: Resource.Authority.{
 
-		## Read a variable; denied access is `PermissionDenied`. Legal only in `init!`.
+		## Read a variable. The name must be declared with `EnvVar`, or
+		## covered by `EnvAny`; an undeclared name is `PermissionDenied`,
+		## and reading with no environment declaration at all stops the app as a
+		## programmer error. Legal only in `init!`.
 		read! : Environment, Str => Try(Str, [NotFound, PermissionDenied])
 		read! = |Environment.(authority), key| match Host.app_read_env!(authority, key) {
 			Ok(value) => Ok(value)
@@ -618,6 +666,8 @@ App := [].{
 		output_dir: ".",
 		recording: NoRecording,
 		default_font: { path: "", size: 20 },
+		app_id: "",
+		permissions: [],
 	}
 
 	## Build initialization from a static startup configuration.
@@ -653,6 +703,8 @@ normalize_min_dimension = |value| if value > 0 value else 0
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
 expect App.default.frame_pacing() == Capped(240)
+expect App.default.with_permission(HttpAny).with_permissions([EnvVar("A"), ClipboardRead]).permissions() == [HttpAny, EnvVar("A"), ClipboardRead]
+expect App.default.permissions() == []
 expect App.default.frame_pacing() != Capped(60)
 expect App.default.frame_pacing() != VSync
 expect App.default.with_frame_pacing(VSync).frame_pacing() != Uncapped

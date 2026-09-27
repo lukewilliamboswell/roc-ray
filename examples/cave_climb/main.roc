@@ -22,6 +22,7 @@ import rr.Physics
 import rr.Sprite
 import rr.Tilemap
 import rr.Trace
+import rr.Permission
 import Cave
 
 GameState : Cave.GameState
@@ -130,11 +131,15 @@ ground_friction = 70.F32
 
 air_drag = 0.35.F32
 
+## Where the game's assets live, relative to the repository root it runs from.
+## The config declares this directory, read-only, and nothing else on disk.
+asset_root = "examples/cave_climb/assets"
+
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)).with_permission(Directory(asset_root, ReadOnly)),
 	|io| {
-		assets = io.assets().open!(Assets.working_directory("examples/cave_climb/assets"))?
+		assets = io.assets().open!(Assets.working_directory(asset_root))?
 		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
 		characters = Assets.load_texture!(assets, "kenney-platformer/spritesheet-characters-default.png")?
 		enemies_texture = Assets.load_texture!(assets, "kenney-platformer/spritesheet-enemies-default.png")?

@@ -150,7 +150,8 @@ Http := [].{
 		Ok(decoded)
 	}
 
-	## Opaque http authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque HTTP authority supplied by App.Io, scoped by the app's declared
+	## `HttpOrigin` entries.
 	Client :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

@@ -25,7 +25,8 @@ Stdout := [].{
 	## is an ordinary way for a pipeline to end, or the host is shutting down.
 	WriteError : [PermissionDenied, BufferFull, TooLarge, Unavailable]
 
-	## Opaque stdout authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque standard-output authority supplied by App.Io. Every app may write
+	## to standard output; no declaration is needed.
 	Writer :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

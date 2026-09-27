@@ -272,7 +272,8 @@ Audio := [].{
 	expect waveform_code(Sine) == 0
 	expect waveform_code(Noise) == 4
 
-	## Opaque audio authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque audio-loading authority supplied by App.Io. A sound or music path
+	## must be covered by a declared `Permission`, as a `Files` path is.
 	Loader :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.

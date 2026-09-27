@@ -200,6 +200,20 @@ Devices := [].{
 		with_mouse_button_released : Snapshot, Mouse.Button -> Snapshot
 		with_mouse_button_released = |input, button| with_mouse_button_state(input, button, released)
 
+		## Say that these codepoints were typed this cycle, in order, as
+		## `Devices.none.with_text_input([72, 105])` for typing "Hi".
+		##
+		## As the host does, at most 32 codepoints are kept; a longer burst keeps
+		## the first 32 and sets `text_input_overflow`. The key bits and the
+		## event record are not derived from it: a test that wants them to
+		## agree states them too, as the host would have.
+		with_text_input : Snapshot, List(U32) -> Snapshot
+		with_text_input = |input, codepoints| {
+			..snapshot_fields(input),
+			text_input: List.take_first(codepoints, text_input_capacity),
+			text_input_overflow: List.len(codepoints) > text_input_capacity,
+		}
+
 		## Say whether typed text was cut at the interval's capacity, which is
 		## what `text_input_overflow` reports.
 		with_text_input_overflow : Snapshot, Bool -> Snapshot
@@ -556,6 +570,10 @@ expect Devices.none.with_events([KeyPressed(KeyR)]).with_key_pressed(KeyR).key_p
 ## Text overflow is an ordinary flag on the sample, clear until stated.
 expect !(Devices.none.text_input_overflow)
 expect Devices.none.with_text_input_overflow(Bool.True).text_input_overflow
+expect Devices.none.with_text_input([72, 105]).text_input == [72, 105]
+expect !(Devices.none.with_text_input([72, 105]).text_input_overflow)
+expect Devices.none.with_text_input(List.repeat(97, 40)).text_input == List.repeat(97, 32)
+expect Devices.none.with_text_input(List.repeat(97, 40)).text_input_overflow
 expect !(Devices.none.with_text_input_overflow(Bool.True).with_text_input_overflow(Bool.False).text_input_overflow)
 expect Devices.none.with_text_input_overflow(Bool.True).with_key_pressed(KeyR).key_pressed(KeyR)
 
@@ -574,3 +592,6 @@ expect {
 			.with_key_pressed(KeyR)
 	input.mouse.position() == { x: 300, y: 500 } and input.mouse.button_down(Left) and input.key_pressed(KeyR)
 }
+
+## The most codepoints the host delivers in one input. Mirrored in the host.
+text_input_capacity = 32.U64

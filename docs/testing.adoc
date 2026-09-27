@@ -35,7 +35,8 @@ nothing recording. Its `with_*` receivers change one thing each:
 
 * `with_devices(snapshot)`: start from `Devices.none` and add keys and mouse
   state with `with_key_down`, `with_key_pressed`, `with_key_released`, and the
-  `with_mouse_*` receivers;
+  `with_mouse_*` receivers, typed text with `with_text_input([72, 105])`, and
+  the ordered event record with `with_events`;
 * `with_time(cycle)`, `with_window(snapshot)`, `with_capture(status)`;
 * `with_messages(list)` and `with_message(msg)`, to deliver task results;
 * `with_dropped(list)` and `with_dropped_overflow(bool)`.

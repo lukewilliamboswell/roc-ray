@@ -11,7 +11,6 @@ import rr.Files
 import rr.Math
 import rr.Task
 import rr.Text
-import rr.Permission
 
 ## The Model keeps the current status, decoded texture, overflow warning, and
 ## font and prepared title between updates. The dropped path itself is handled
@@ -49,9 +48,7 @@ init! = App.init(
 	App.default
 		.with_title("RocRay Drop Viewer")
 		.with_size({ width: 900, height: 620 })
-		.with_frame_pacing(Capped(120))
-	# A dropped file can be anywhere, so this reads anywhere.
-		.with_permission(FilesAny(ReadOnly)),
+		.with_frame_pacing(Capped(120)),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({
@@ -68,26 +65,21 @@ init! = App.init(
 	},
 )
 
-## Read a dropped file through a handle on the directory it is in.
-read_dropped! : Files.Access, Str => Try(List(U8), Files.ReadBytesError)
-read_dropped! = |files, path|
-	match Str.split_last(path, "/") {
-		Ok({ before, after }) =>
-			match files.open_dir_read!(if before == "" "/" else before) {
-				Ok(dir) => dir.read_bytes!(after)
-				Err(_) => Err(NotFound)
-			}
-		Err(_) => Err(NotFound)
-	}
-
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	# One dropped path starts one read. If several files are dropped, the app
 	# displays the result whose message arrives last.
+	# The user dropping a file is what lets the app read it: `accept_drop!`
+	# turns this cycle's dropped path into a handle on exactly that file,
+	# with no permission declared.
 	files = io.files()
 	List.for_each!(
 		input.dropped,
-		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, read_dropped!(files, drop.path))),
+		|drop|
+			match files.accept_drop!(drop.path) {
+				Ok(item) => Task.spawn!(input, || Opened(drop.path, drop.position, item.read_bytes!()))
+				Err(PermissionDenied) => {}
+			},
 	)
 
 	requested = match List.last(input.dropped) {

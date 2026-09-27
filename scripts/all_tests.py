@@ -31,6 +31,9 @@ This script runs:
                     cycle, annotation, gap and recorder-health tables.
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
+- designation     - Read a dropped file and one named on the command line with
+                    no permission declared, and refuse anything else
+                    (test/designation).
 - udp sockets     - Send datagrams between two loopback sockets and assert the
                     bytes, the sender address, and that a parked receive lets
                     the frame loop keep running (test/udp).
@@ -1114,6 +1117,49 @@ def run_task_cap_probe(
     return [] if ok else ["run task cap probe"]
 
 
+def run_designation_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a dropped file and a file named on the command line can be
+    read with no permission declared, and that nothing else can.
+
+    A `--host-drops` script drops a file through the same path a real drop
+    takes, so `accept_drop!` is exercised exactly as a user's drag would. The
+    probe also offers a made-up path, a stale drop, and a string that is not an
+    argument, each of which must be refused. Exit 3 means a check failed; exit
+    4 means the reads never answered.
+    """
+    fixture = root / "test" / "designation" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning designation probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "designation")
+    if not run_cmd(
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build designation probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build designation probe"]
+
+    dropped = staged.parent / "dropped.txt"
+    dropped.write_text("dropped contents")
+    (staged.parent / "named.txt").write_text("named contents")
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+            f"--host-drops=2:{dropped.resolve()}",
+            "named.txt",
+        ],
+        "run designation probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["designation probe"]
+
+
 def run_file_write_probe(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -1925,6 +1971,7 @@ def _run_example_stages(
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
+        failed.extend(run_designation_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
         failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
         failed.extend(run_cmd_probe(root, packages, args.verbose))

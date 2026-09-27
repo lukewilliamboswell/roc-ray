@@ -1510,6 +1510,157 @@ fn hostedFilesOpenRoot(roc_host: *RocHost, root: FilesRoot, writable: bool) call
     }
 }
 
+/// Where a designated path came from, as `Files` sends it.
+const FilesDesignation = @FieldType(abi.HostFiles_designateArgs, "arg1");
+
+fn designationOperation(source: *const FilesDesignation) []const u8 {
+    return switch (source.tag) {
+        .Drop => "Files.Access.accept_drop!",
+        .Arg => "Files.Access.from_arg!",
+    };
+}
+
+/// Whether `arg` is byte-identical to an argument the app was launched with.
+/// `argv[0]`, the program itself, is not something the operator designated.
+fn isLaunchArgument(arg: []const u8) bool {
+    if (active_app_args.len < 2) return false;
+    for (active_app_args[1..]) |candidate| {
+        if (std.mem.eql(u8, std.mem.span(candidate), arg)) return true;
+    }
+    return false;
+}
+
+/// `Files.Access.accept_drop!` and `from_arg!`: turn a designated path into
+/// the parts of a `Files.Designated`.
+///
+/// Nothing is opened. A drop is admitted only if the host delivered that exact
+/// path this cycle, and an argument only if it is byte-identical to one the app
+/// was launched with; anything else is refused. A relative argument is
+/// resolved against the working directory, so the handle does not change
+/// meaning if a later effect changes what the working directory is.
+fn hostedFilesDesignate(roc_host: *RocHost, source: FilesDesignation) callconv(.c) abi.HostFiles_designateResult {
+    const Result = abi.HostFiles_designateResult;
+    const operation = designationOperation(&source);
+    enforcePhase(operation, during_update);
+    var effect = EffectScope.begin(operation, 0);
+    defer effect.end();
+    defer source.decref(roc_host);
+
+    const allocator = allocatorFromHost(roc_host);
+    var owned: ?[]u8 = null;
+    defer if (owned) |bytes| allocator.free(bytes);
+    const path: []const u8 = switch (source.tag) {
+        .Drop => blk: {
+            const dropped = source.payload_drop().asSlice();
+            if (!std.fs.path.isAbsolute(dropped) or !current_drops.contains(dropped)) break :blk "";
+            break :blk dropped;
+        },
+        .Arg => blk: {
+            const arg = source.payload_arg().asSlice();
+            if (arg.len == 0 or !isLaunchArgument(arg)) break :blk "";
+            if (std.fs.path.isAbsolute(arg)) break :blk arg;
+            const cwd = std.process.currentPathAlloc(mainThreadIo(), allocator) catch break :blk "";
+            defer allocator.free(cwd);
+            owned = std.fs.path.join(allocator, &.{ cwd, arg }) catch break :blk "";
+            break :blk owned.?;
+        },
+    };
+    if (path.len == 0) {
+        effect.setOutcome(.refused);
+        return permissionDenied(Result);
+    }
+    const parent = std.fs.path.dirname(path) orelse path;
+    return abiTryOk(Result, abi.HostFiles_designateOk{
+        .path = abi.RocStr.fromSlice(path, roc_host),
+        .parent = abi.RocStr.fromSlice(parent, roc_host),
+        .name = abi.RocStr.fromSlice(std.fs.path.basename(path), roc_host),
+    });
+}
+
+/// Capability boundary for files_designate!. A designation needs no
+/// declaration -- the user choosing the item is the grant -- so what is checked
+/// here is only that the authority is this lifetime's; the hosted function
+/// checks that the path was designated.
+fn capsExportedFilesDesignate(authority: u64, source: FilesDesignation) callconv(.c) abi.HostFiles_designateResult {
+    const name = designationOperation(&source);
+    enforcePhase(name, during_update);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_designateResult, name, .{source});
+    return hostedFilesDesignate(activeHost(), source);
+}
+
+/// A designation as the platform would send it.
+fn testDesignation(comptime tag: @FieldType(FilesDesignation, "tag"), text: []const u8, roc_host: *RocHost) FilesDesignation {
+    var source = std.mem.zeroes(FilesDesignation);
+    source.tag = tag;
+    @as(*abi.RocStr, @ptrCast(@alignCast(&source.payload))).* = abi.RocStr.fromSlice(text, roc_host);
+    return source;
+}
+
+test "a designation admits only what the user designated, and only while it is current" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    const empty: permissions.Policy = .{};
+    beginIoLifetime(&empty);
+    defer endIoLifetime();
+    const phase = PhaseScope.enter(.update);
+    defer phase.leave();
+    const live = active_io_authority;
+
+    const previous_script = active_drop_script;
+    defer active_drop_script = previous_script;
+    defer current_drops.reset();
+    active_drop_script = "3:/tmp/dropped/one-with-a-long-enough-name.png,3:/tmp/two.png,4:/tmp/later.png";
+
+    // Cycle 3 delivers two drops; either can become a handle, and the handle
+    // names the directory that holds it and its own name.
+    const dropped = scriptedDropsSnapshot(&roc_host, 3);
+    try std.testing.expectEqual(@as(usize, 2), dropped.files.len());
+    dropped.files.deinit(&roc_host);
+    const accepted = capsExportedFilesDesignate(live, testDesignation(.Drop, "/tmp/dropped/one-with-a-long-enough-name.png", &roc_host));
+    try std.testing.expectEqual(abi.HostFiles_designateResultTag.Ok, accepted.tag);
+    const item = accepted.payload_ok();
+    try std.testing.expectEqualStrings("/tmp/dropped", item.parent.asSlice());
+    try std.testing.expectEqualStrings("one-with-a-long-enough-name.png", item.name.asSlice());
+    item.decref(&roc_host);
+
+    // A path the host did not deliver is only a string.
+    try expectPermissionDenied(capsExportedFilesDesignate(live, testDesignation(.Drop, "/home/made/up/and-long-enough-to-allocate.png", &roc_host)));
+
+    // The next cycle replaces the drops, so the earlier one is no longer current.
+    const next = scriptedDropsSnapshot(&roc_host, 4);
+    next.files.deinit(&roc_host);
+    try expectPermissionDenied(capsExportedFilesDesignate(live, testDesignation(.Drop, "/tmp/dropped/one-with-a-long-enough-name.png", &roc_host)));
+
+    // An argument is designated by being on the command line, byte for byte;
+    // the program name is not something the operator designated.
+    var argv = [_][*:0]u8{ @constCast("the-program"), @constCast("data-file-named-on-the-command-line.csv") };
+    const previous_args = active_app_args;
+    active_app_args = &argv;
+    defer active_app_args = previous_args;
+    const from_arg = capsExportedFilesDesignate(live, testDesignation(.Arg, "data-file-named-on-the-command-line.csv", &roc_host));
+    try std.testing.expectEqual(abi.HostFiles_designateResultTag.Ok, from_arg.tag);
+    const arg_item = from_arg.payload_ok();
+    try std.testing.expect(std.fs.path.isAbsolute(arg_item.path.asSlice()));
+    try std.testing.expectEqualStrings("data-file-named-on-the-command-line.csv", arg_item.name.asSlice());
+    arg_item.decref(&roc_host);
+    try expectPermissionDenied(capsExportedFilesDesignate(live, testDesignation(.Arg, "the-program", &roc_host)));
+    try expectPermissionDenied(capsExportedFilesDesignate(live, testDesignation(.Arg, "not-on-the-command-line-at-all.csv", &roc_host)));
+
+    // A stub authority designates nothing.
+    try expectPermissionDenied(capsExportedFilesDesignate(0, testDesignation(.Arg, "data-file-named-on-the-command-line.csv", &roc_host)));
+}
+
+test "runtime options accept a drop script" {
+    var argv = [_][*:0]u8{ @constCast("viewer"), @constCast("--host-drops=2:/tmp/a.png,2:/tmp/b.png") };
+    const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
+    defer options.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("2:/tmp/a.png,2:/tmp/b.png", options.drop_script.?);
+    try std.testing.expectEqual(@as(usize, 1), options.app_args.len);
+}
+
 /// The last app-id requirement that stopped the app, recorded in tests.
 var last_missing_app_id: ?[]const u8 = null;
 
@@ -9839,6 +9990,7 @@ comptime {
         @export(&hostedExit, .{ .name = "roc_app_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
         @export(&capsExportedFilesOpenRoot, .{ .name = "roc_files_open_root" });
+        @export(&capsExportedFilesDesignate, .{ .name = "roc_files_designate" });
         @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&capsExportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&capsExportedFilesList, .{ .name = "roc_files_list" });
@@ -9902,6 +10054,8 @@ const RuntimeOptions = struct {
     key_script: ?[]const u8 = null,
     /// Scripted typed text, in the `--host-text` syntax below.
     text_script: ?[]const u8 = null,
+    /// Scripted file drops, in the `--host-drops` syntax below.
+    drop_script: ?[]const u8 = null,
     debug_allocator: bool = false,
     record_stats: bool = false,
     stats_output: ?[]const u8 = null,
@@ -10171,11 +10325,78 @@ const DroppedFiles = struct {
 /// of them cross in a cycle. Past that the extra paths are discarded and
 /// `overflowed` is set, so an app that received half a drop can say so rather
 /// than believing it got all of it.
+/// The paths delivered as drops on the current cycle.
+///
+/// A drop is the user choosing a file for the app, so the app may turn a
+/// dropped path into a handle -- but only one the host actually delivered,
+/// and only while it is current. Keeping this cycle's paths lets
+/// `accept_drop!` admit exactly those and refuse a string the app made up or
+/// kept from an earlier cycle. Bounded by the drop capacity and replaced every
+/// cycle, so it never grows.
+const DropRegistry = struct {
+    paths: [raylib.DROPPED_FILES_CAPACITY][]u8 = undefined,
+    len: usize = 0,
+
+    fn reset(self: *DropRegistry) void {
+        for (self.paths[0..self.len]) |path| std.heap.smp_allocator.free(path);
+        self.len = 0;
+    }
+
+    fn record(self: *DropRegistry, path: []const u8) void {
+        if (self.len == self.paths.len) return;
+        // A path that cannot be kept is simply not acceptable later: the drop
+        // is still delivered as an observation.
+        const copy = std.heap.smp_allocator.dupe(u8, path) catch return;
+        self.paths[self.len] = copy;
+        self.len += 1;
+    }
+
+    fn contains(self: *const DropRegistry, path: []const u8) bool {
+        for (self.paths[0..self.len]) |delivered| {
+            if (std.mem.eql(u8, delivered, path)) return true;
+        }
+        return false;
+    }
+};
+
+var current_drops: DropRegistry = .{};
+
+/// A `--host-drops` script, set for one app lifetime.
+var active_drop_script: ?[]const u8 = null;
+
+/// This cycle's scripted drops, delivered exactly as dropped files are: the
+/// same record, the same registry, the same capacity. A path may not contain a
+/// comma, which separates entries.
+fn scriptedDropsSnapshot(roc_host: *RocHost, cycle: u64) DroppedFiles {
+    current_drops.reset();
+    const spec = active_drop_script orelse return .{ .files = abi.RocList(DroppedFile).empty(), .overflowed = false };
+    var buffer: [raylib.DROPPED_FILES_CAPACITY]DroppedFile = undefined;
+    var delivered: usize = 0;
+    var overflowed = false;
+    var segments = std.mem.splitScalar(u8, spec, ',');
+    while (segments.next()) |segment| {
+        const colon = std.mem.indexOfScalar(u8, segment, ':') orelse continue;
+        const at = std.fmt.parseUnsigned(u64, segment[0..colon], 10) catch continue;
+        if (at != cycle) continue;
+        if (delivered == buffer.len) {
+            overflowed = true;
+            continue;
+        }
+        const path = segment[colon + 1 ..];
+        buffer[delivered] = .{ .path = abi.RocStr.fromSlice(path, roc_host), .position = .{ .x = 0, .y = 0 } };
+        current_drops.record(path);
+        delivered += 1;
+    }
+    if (delivered == 0) return .{ .files = abi.RocList(DroppedFile).empty(), .overflowed = overflowed };
+    return .{ .files = abi.RocList(DroppedFile).fromSlice(buffer[0..delivered], roc_host), .overflowed = overflowed };
+}
+
 fn droppedFilesSnapshot(
     roc_host: *RocHost,
     paths: []const [*:0]const u8,
     position: DroppedPosition,
 ) DroppedFiles {
+    current_drops.reset();
     const capacity = raylib.DROPPED_FILES_CAPACITY;
     const overflowed = paths.len > capacity;
     const delivered = @min(paths.len, capacity);
@@ -10183,10 +10404,12 @@ fn droppedFilesSnapshot(
 
     var buffer: [raylib.DROPPED_FILES_CAPACITY]DroppedFile = undefined;
     for (paths[0..delivered], buffer[0..delivered]) |path, *slot| {
+        const span = std.mem.span(path);
         slot.* = .{
-            .path = abi.RocStr.fromSlice(std.mem.span(path), roc_host),
+            .path = abi.RocStr.fromSlice(span, roc_host),
             .position = position,
         };
+        current_drops.record(span);
     }
     return .{
         .files = abi.RocList(DroppedFile).fromSlice(buffer[0..delivered], roc_host),
@@ -10275,6 +10498,7 @@ fn printUsage() void {
     std.debug.print(
         \\usage: app [--host-headless] [--host-headless-frames=N] [--host-frames=N]
         \\           [--host-hidden] [--host-keys=SCRIPT] [--host-text=SCRIPT]
+        \\           [--host-drops=SCRIPT]
         \\           [--host-debug-allocator] [--host-stats-record]
         \\           [--host-stats-output=PATH]
         \\           [--host-stats-detail=summary|standard|full]
@@ -10287,6 +10511,7 @@ fn printUsage() void {
         \\                      a ~ suffix taps the key inside that cycle instead
         \\                      of holding it, e.g. "3:ESCAPE~"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
+        \\  --host-drops=SCRIPT  drop files on given cycles, e.g. "2:/tmp/a.png,2:/tmp/b.png"
         \\  --host-stats-record  record host statistics to an .rrstats database
         \\  --host-stats-output=PATH  choose the recording path (also enables recording)
         \\  --host-stats-detail=LEVEL  summary, standard (default), or full
@@ -10603,6 +10828,13 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
                 return error.InvalidArgument;
             };
             options.text_script = value;
+        } else if (std.mem.startsWith(u8, arg, "--host-drops=")) {
+            const value = arg["--host-drops=".len..];
+            validateScript(value, false) catch {
+                std.debug.print("invalid --host-drops script: {s}\n", .{value});
+                return error.InvalidArgument;
+            };
+            options.drop_script = value;
         } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--host-stats-record")) {
@@ -13489,7 +13721,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // are copied into Roc strings first and handed back immediately. The
         // pointer position is this cycle's, which is where the drop landed.
         const dropped_paths = raylib.takeDroppedFiles();
-        const dropped = droppedFilesSnapshot(roc_host, dropped_paths, .{ .x = mouse_pos.x, .y = mouse_pos.y });
+        // A scripted drop stands in for a real one in a windowed test run.
+        const dropped = if (dropped_paths.len == 0 and active_drop_script != null)
+            scriptedDropsSnapshot(roc_host, cycle_count)
+        else
+            droppedFilesSnapshot(roc_host, dropped_paths, .{ .x = mouse_pos.x, .y = mouse_pos.y });
         if (dropped.overflowed) recordInputOverflow("dropped files overflow", dropped.files.len());
         raylib.releaseDroppedFiles();
 
@@ -13700,6 +13936,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // the phase guard.
         const stats_update_start = observatoryMeasurementStart();
         recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
+        const headless_dropped = scriptedDropsSnapshot(roc_host, cycle_count);
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
             .window = windowState(),
@@ -13711,10 +13948,10 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             },
             .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
-            // A headless run has no window to drop a file onto, and its output
-            // has to be reproducible, so nothing is ever dropped there.
-            .dropped = abi.RocList(DroppedFile).empty(),
-            .dropped_overflow = false,
+            // A headless run has no window to drop a file onto, so the only
+            // drops are the reproducible ones a `--host-drops` script names.
+            .dropped = headless_dropped.files,
+            .dropped_overflow = headless_dropped.overflowed,
         });
         stats_update_ns = observatoryMeasurementElapsed(stats_update_start);
         recordObservatoryCallback(
@@ -13840,6 +14077,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     active_roc_host = &roc_host;
     active_headless = options.headless;
     active_app_args = options.app_args;
+    active_drop_script = options.drop_script;
     exit_requested = null;
     debug_or_expect_called.store(false, .release);
     defer {
@@ -13849,6 +14087,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_app_args = &.{};
+        active_drop_script = null;
+        current_drops.reset();
         active_roc_host = null;
     }
 
@@ -15091,6 +15331,13 @@ fn capsExportedTextStartupDefaultFontRaw(authority: u64) callconv(.c) abi.HostTe
 
 fn permissionDenied(comptime Result: type) Result {
     if (@typeInfo(Result) == .@"enum") return .err;
+    // An error union with `PermissionDenied` as its only tag carries no
+    // payload: the `Err` tag alone is the refusal.
+    if (!@hasDecl(Result, "payload_err")) {
+        var result = std.mem.zeroes(Result);
+        result.tag = .Err;
+        return result;
+    }
     const Error = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
     if (@typeInfo(Error) == .@"enum") return abiTryErr(Result, @as(Error, .permission_denied));
     var err = std.mem.zeroes(Error);
@@ -15101,6 +15348,8 @@ fn permissionDenied(comptime Result: type) Result {
 fn expectPermissionDenied(result: anytype) !void {
     if (@typeInfo(@TypeOf(result)) == .@"enum") {
         try std.testing.expectEqual(.err, result);
+    } else if (!@hasDecl(@TypeOf(result), "payload_err")) {
+        try std.testing.expectEqual(.Err, result.tag);
     } else {
         try std.testing.expectEqual(.Err, result.tag);
         const err = result.payload_err();

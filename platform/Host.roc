@@ -536,6 +536,19 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_open_root! : Resource.Authority, FilesRoot, Bool => Try(Str, FilesOpenError)
 
+	## A path the user designated: dropped on the window this cycle, or named
+	## as an application argument.
+	FilesDesignation : [Drop(Str), Arg(Str)]
+
+	## A designated path resolved to an absolute one, split into the directory
+	## that holds it and its own name.
+	FilesDesignated : { path : Str, parent : Str, name : Str }
+
+	## Turn a designated path into the handle's parts, or refuse a path that was
+	## not designated. Does no I/O.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	files_designate! : Resource.Authority, FilesDesignation => Try(FilesDesignated, [PermissionDenied])
+
 	## Failures while reading a file as validated UTF-8.
 	FilesReadTextError : [PermissionDenied, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 

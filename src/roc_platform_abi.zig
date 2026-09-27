@@ -2275,6 +2275,58 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_c497f4ed41e47ac1
+pub const __AnonStruct_c497f4ed41e47ac1 = if (@sizeOf(usize) == 4) extern struct {
+    name: RocStr,
+    parent: RocStr,
+    path: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.parent.decref(roc_host);
+        value.path.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.parent.incref(amount);
+        value.path.incref(amount);
+    }
+} else extern struct {
+    name: RocStr,
+    parent: RocStr,
+    path: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.parent.decref(roc_host);
+        value.path.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.parent.incref(amount);
+        value.path.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_c497f4ed41e47ac1) != 72) @compileError("__AnonStruct_c497f4ed41e47ac1 size mismatch");
+        if (@alignOf(__AnonStruct_c497f4ed41e47ac1) != 8) @compileError("__AnonStruct_c497f4ed41e47ac1 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_c497f4ed41e47ac1) != 36) @compileError("__AnonStruct_c497f4ed41e47ac1 size mismatch");
+        if (@alignOf(__AnonStruct_c497f4ed41e47ac1) != 4) @compileError("__AnonStruct_c497f4ed41e47ac1 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_a1f5c33e74b3920b
 pub const __AnonStruct_a1f5c33e74b3920b = if (@sizeOf(usize) == 4) extern struct {
     modified_seconds: i64,
@@ -8045,6 +8097,131 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostFiles_designateResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostFiles_designateResultPayload = extern union {
+    err: [0]u8,
+    ok: __AnonStruct_c497f4ed41e47ac1,
+};
+
+/// Tag union: Try
+pub const HostFiles_designateResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [36]u8 align(4),
+    tag: HostFiles_designateResultTag,
+    pub fn payload_ok(self: *const @This()) __AnonStruct_c497f4ed41e47ac1 {
+        const ptr: *const __AnonStruct_c497f4ed41e47ac1 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_designateResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_designateResult(self, amount);
+    }
+} else extern struct {
+    payload: HostFiles_designateResultPayload,
+    tag: HostFiles_designateResultTag,
+    pub fn payload_ok(self: *const @This()) __AnonStruct_c497f4ed41e47ac1 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_designateResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_designateResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostFiles_designateResult) != 80) @compileError("HostFiles_designateResult size mismatch");
+        if (@alignOf(HostFiles_designateResult) != 8) @compileError("HostFiles_designateResult alignment mismatch");
+        if (@offsetOf(HostFiles_designateResult, "tag") != 72) @compileError("HostFiles_designateResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostFiles_designateResult) != 40) @compileError("HostFiles_designateResult size mismatch");
+        if (@alignOf(HostFiles_designateResult) != 4) @compileError("HostFiles_designateResult alignment mismatch");
+        if (@offsetOf(HostFiles_designateResult, "tag") != 36) @compileError("HostFiles_designateResult tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for ArgOrDrop.
+pub const ArgOrDropTag = enum(u8) {
+    Arg = 0,
+    Drop = 1,
+};
+
+/// Payload union for ArgOrDrop.
+pub const ArgOrDropPayload = extern union {
+    arg: RocStr,
+    drop: RocStr,
+};
+
+/// Tag union: ArgOrDrop
+pub const ArgOrDrop = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: ArgOrDropTag,
+    pub fn payload_arg(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_drop(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefArgOrDrop(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfArgOrDrop(self, amount);
+    }
+} else extern struct {
+    payload: ArgOrDropPayload,
+    tag: ArgOrDropTag,
+    pub fn payload_arg(self: *const @This()) RocStr {
+        return self.payload.arg;
+    }
+    pub fn payload_drop(self: *const @This()) RocStr {
+        return self.payload.drop;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefArgOrDrop(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfArgOrDrop(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ArgOrDrop) != 32) @compileError("ArgOrDrop size mismatch");
+        if (@alignOf(ArgOrDrop) != 8) @compileError("ArgOrDrop alignment mismatch");
+        if (@offsetOf(ArgOrDrop, "tag") != 24) @compileError("ArgOrDrop tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ArgOrDrop) != 16) @compileError("ArgOrDrop size mismatch");
+        if (@alignOf(ArgOrDrop) != 4) @compileError("ArgOrDrop alignment mismatch");
+        if (@offsetOf(ArgOrDrop, "tag") != 12) @compileError("ArgOrDrop tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostFiles_read_textResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -13110,6 +13287,14 @@ pub const HostFiles_open_rootArgs = extern struct {
     arg2: bool,
 };
 
+/// Arguments for Host.files_designate!
+/// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_designateArgs = extern struct {
+    arg0: u64,
+    arg1: ArgOrDrop,
+};
+
 /// Arguments for Host.files_read_text!
 /// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Refcounted fields are owned by the hosted function.
@@ -14667,6 +14852,7 @@ pub const HostDraw_textArg0 = __AnonStruct_a794ed9ee3bc5d8d;
 pub const HostDraw_triangle_linesArg0 = __AnonStruct_563f890a3b4ea7a0;
 pub const HostDraw_triangleArg0 = __AnonStruct_d48cb861dff2afaa;
 pub const HostFiles_open_rootErr = AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPermissionDeniedOrUnavailable;
+pub const HostFiles_designateOk = __AnonStruct_c497f4ed41e47ac1;
 pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
@@ -15561,6 +15747,64 @@ fn increfAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirect
 
 pub const AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryRelease = struct {
     pub fn release(value: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostFiles_designateResult(value: HostFiles_designateResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostFiles_designateResult(value: HostFiles_designateResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostFiles_designateResultRelease = struct {
+    pub fn release(value: HostFiles_designateResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_c497f4ed41e47ac1Release = struct {
+    pub fn release(value: __AnonStruct_c497f4ed41e47ac1, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefArgOrDrop(value: ArgOrDrop, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Arg => {
+            value.payload_arg().decref(roc_host);
+        },
+        .Drop => {
+            value.payload_drop().decref(roc_host);
+        },
+    }
+}
+
+fn increfArgOrDrop(value: ArgOrDrop, amount: isize) void {
+    switch (value.tag) {
+        .Arg => {
+            value.payload_arg().incref(amount);
+        },
+        .Drop => {
+            value.payload_drop().incref(amount);
+        },
+    }
+}
+
+pub const ArgOrDropRelease = struct {
+    pub fn release(value: ArgOrDrop, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -17116,6 +17360,9 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostAudio_load_musicResult) return HostAudio_load_musicResultRelease;
     if (T == HostFiles_open_rootResult) return HostFiles_open_rootResultRelease;
     if (T == AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) return AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryRelease;
+    if (T == HostFiles_designateResult) return HostFiles_designateResultRelease;
+    if (T == __AnonStruct_c497f4ed41e47ac1) return __AnonStruct_c497f4ed41e47ac1Release;
+    if (T == ArgOrDrop) return ArgOrDropRelease;
     if (T == HostFiles_read_textResult) return HostFiles_read_textResultRelease;
     if (T == HostFiles_read_bytesResult) return HostFiles_read_bytesResultRelease;
     if (T == HostFiles_listResult) return HostFiles_listResultRelease;
@@ -17615,6 +17862,14 @@ pub extern fn roc_draw_triangle_raw(arg0: HostDraw_triangleArgs) callconv(.c) vo
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, arg2: bool) callconv(.c) HostFiles_open_rootResult;
+
+/// Hosted symbol for Host.files_designate!
+/// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_designate(arg0: u64, arg1: ArgOrDrop) callconv(.c) HostFiles_designateResult;
 
 /// Hosted symbol for Host.files_read_text!
 /// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PermissionDenied, ReadFailed, TooLarge, Unavailable])

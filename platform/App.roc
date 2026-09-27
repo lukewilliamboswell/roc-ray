@@ -82,8 +82,19 @@ App := [].{
 	## landed.
 	##
 	## The path is the one the window system reported, absolute on every
-	## platform. It is an observation, not access: reading the file needs a
-	## `Files` handle on a directory that holds it.
+	## platform. It is an observation, not access: the user dropping the file
+	## is what grants it, so turn the path into a handle with
+	## `io.files().accept_drop!` in the `update!` that received it, then read
+	## through the handle on a task:
+	##
+	## ```roc
+	## match io.files().accept_drop!(drop.path) {
+	##     Ok(item) => Task.spawn!(input, || Opened(item.read_bytes!()))
+	##     Err(PermissionDenied) => {}
+	## }
+	## ```
+	##
+	## A path kept past that `update!` is only a string.
 	##
 	## `position` is the pointer position the host sampled for the cycle the
 	## drop arrived on, in the same logical coordinates as

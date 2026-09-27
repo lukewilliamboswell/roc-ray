@@ -31,6 +31,8 @@
 ##   when the app declares `WorkingDirectory`.
 ## - `open_dir!` and `open_dir_read!`: a directory a `Directory` or `FilesAny`
 ##   declaration covers.
+## - `accept_drop!` and `from_arg!`: a file or directory the user dropped on
+##   the window or named as an argument, as a `Designated` item.
 ##
 ## A `Dir` can write; a `ReadDir` cannot, and `Dir.read_only` narrows one to
 ## the other. `subdir` narrows either to a directory beneath it. A handle is an
@@ -43,7 +45,8 @@
 ## `PermissionDenied`, the same answer as any target outside what the app
 ## declared.
 ##
-## Every effect here waits except `subdir` and `read_only`, which are pure. A
+## Every effect here waits except `subdir`, `read_only`, `dir`,
+## `accept_drop!` and `from_arg!`, which open nothing. A
 ## waiting effect is legal in `init!`, where it blocks startup, and in tasks,
 ## where it parks the task; it is refused in `update!` and `render!`.
 import Host
@@ -252,6 +255,42 @@ Files := [].{
 		for_host = |Dir.(handle)| { authority: handle.authority, root: handle.root, path: handle.prefix }
 	}
 
+	## One file or directory the user chose for the app: dropped on its window,
+	## or named as an argument when it was launched. The choosing is the
+	## granting, so no permission is declared, and the handle reaches exactly
+	## that item and nothing beside it.
+	##
+	## Read it as a file with `read_text!`, `read_bytes!`, and `metadata!`, or,
+	## when it is a directory, reach beneath it with `dir`.
+	Designated :: { authority : Resource.Authority, path : Str, parent : Str, name : Str }.{
+
+		## Resource-free handle for pure tests. Every effect through it is
+		## `PermissionDenied`.
+		stub : Designated
+		stub = Designated.({ authority: Resource.Authority.stub, path: "", parent: "", name: "" })
+
+		## The absolute path that was designated, for showing to the user.
+		path : Designated -> Str
+		path = |Designated.(item)| item.path
+
+		## Read the designated file into a `Str`, as `ReadDir.read_text!` does.
+		read_text! : Designated => Try(Str, ReadTextError)
+		read_text! = |Designated.(item)| perform_read_text!(parent_handle(item), item.name)
+
+		## Read the designated file as bytes, as `ReadDir.read_bytes!` does.
+		read_bytes! : Designated => Try(List(U8), ReadBytesError)
+		read_bytes! = |Designated.(item)| perform_read_bytes!(parent_handle(item), item.name)
+
+		## What the designated item is, how big it is, and when it last changed.
+		metadata! : Designated => Try(Metadata, MetadataError)
+		metadata! = |Designated.(item)| perform_metadata!(parent_handle(item), item.name)
+
+		## The designated item as a directory, when it is one. Pure; an item that
+		## is not a directory is found out on first use.
+		dir : Designated -> ReadDir
+		dir = |Designated.(item)| ReadDir.({ authority: item.authority, root: item.path, prefix: "" })
+	}
+
 	## Opaque filesystem authority supplied by App.Io: where directory handles
 	## come from.
 	Access :: Resource.Authority.{
@@ -294,6 +333,38 @@ Files := [].{
 		## by `WorkingDirectory(ReadWrite)` for a relative path.
 		open_dir! : Access, Str => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		open_dir! = |Access.(authority), path| open_root!(authority, Declared(path), Bool.True) |> map_dir
+
+		## Accept a file or directory the user dropped on the window, from the
+		## `update!` whose `input.dropped` delivered it.
+		##
+		## ```roc
+		## update! = |model, input, io| {
+		##     for drop in input.dropped {
+		##         match io.files().accept_drop!(drop.path) {
+		##             Ok(item) => Task.spawn!(input, || Opened(item.path(), item.read_bytes!()))
+		##             Err(PermissionDenied) => {}
+		##         }
+		##     }
+		##     Ok(model)
+		## }
+		## ```
+		##
+		## Only a path the host delivered this cycle is accepted; a string made
+		## up, or kept from an earlier cycle, is `PermissionDenied`. Nothing is
+		## opened, so this is legal in `update!` as well as in `init!` and tasks;
+		## refused in `render!`.
+		accept_drop! : Access, Str => Try(Designated, [PermissionDenied])
+		accept_drop! = |Access.(authority), path| designate!(authority, Drop(path))
+
+		## Accept a file or directory named as an application argument, such
+		## as `my-tool data.csv`. The operator naming it is the grant.
+		##
+		## Only a string byte-identical to one of `io.args!()` is accepted, and
+		## the item is read-only. Relative paths are resolved against the
+		## working directory. Legal in `init!`, `update!`, and tasks; refused in
+		## `render!`.
+		from_arg! : Access, Str => Try(Designated, [PermissionDenied])
+		from_arg! = |Access.(authority), arg| designate!(authority, Arg(arg))
 
 		## A declared directory, read-only, covered by a declaration in either
 		## mode.
@@ -350,6 +421,16 @@ expect !is_safe_relative("C:x")
 expect joined("", "a") == "a"
 expect joined("a", "") == "a"
 expect joined("a", "b/c") == "a/b/c"
+
+designate! : Resource.Authority, Host.FilesDesignation => Try(Files.Designated, [PermissionDenied])
+designate! = |authority, source|
+	match Host.files_designate!(authority, source) {
+		Ok(item) => Ok(Files.Designated.({ authority, path: item.path, parent: item.parent, name: item.name }))
+		Err(PermissionDenied) => Err(PermissionDenied)
+	}
+
+parent_handle : { authority : Resource.Authority, path : Str, parent : Str, name : Str } -> Handle
+parent_handle = |item| { authority: item.authority, root: item.parent, prefix: "" }
 
 open_root! : Resource.Authority, Host.FilesRoot, Bool => Try(Handle, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 open_root! = |authority, root, writable|

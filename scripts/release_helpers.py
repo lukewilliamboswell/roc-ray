@@ -7,8 +7,10 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -78,6 +80,16 @@ def main() -> int:
     package.add_argument("--output-dir", default=".release")
     package.add_argument("--github-output", default="")
     package.set_defaults(func=cmd_package_examples)
+
+    docs = subcommands.add_parser(
+        "package-docs",
+        help="build the manual (HTML and PDF) and the API reference, and package them as release assets",
+    )
+    docs.add_argument("--release-version", default="")
+    docs.add_argument("--docs-version", default="")
+    docs.add_argument("--roc", default="roc")
+    docs.add_argument("--output-dir", default=".release")
+    docs.set_defaults(func=cmd_package_docs)
 
     args = parser.parse_args()
     try:
@@ -180,9 +192,18 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         "release; unzip and `roc examples/<name>/main.roc`.",
     ])
 
+    lines.extend(["", "## Docs", ""])
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
-        lines.extend(["", "## Docs", "", f"- [View docs for {release_version}]({docs_url})"])
+        lines.append(f"- [View the API reference for {release_version}]({docs_url})")
+    manual_pdf = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.pdf")
+    manual_zip = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.zip")
+    api_zip = release_asset_url(repo, release_version, f"roc-ray-api-docs-{release_version}.zip")
+    lines.extend([
+        f"- [The manual as a PDF]({manual_pdf})",
+        f"- [The manual as a static site]({manual_zip}); unzip and open `index.html`",
+        f"- [The API reference as a static site]({api_zip}); unzip and open `index.html`",
+    ])
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -268,6 +289,71 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
         example.write_text(rewritten, encoding="utf-8")
 
     print(f"Updated {len(examples)} example(s) to {default_url}")
+    return 0
+
+
+def zip_tree(source: Path, output: Path, prefix: str) -> None:
+    """Zip every file under `source` beneath one top-level `prefix` directory,
+    in a stable order, so an unzipped copy is one folder named for the release."""
+    files = sorted(path for path in source.rglob("*") if path.is_file())
+    if not files:
+        raise RuntimeError(f"nothing to package under {source}")
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            archive.write(path, f"{prefix}/{path.relative_to(source).as_posix()}")
+
+
+def cmd_package_docs(args: argparse.Namespace) -> int:
+    """Build the release's documentation and package it beside the bundles.
+
+    Produces three assets, each named for the release:
+
+    - `roc-ray-manual-<tag>.pdf`: the manual as one PDF;
+    - `roc-ray-manual-<tag>.zip`: the manual as a static site, opening at
+      `index.html`, with the PDF beside it;
+    - `roc-ray-api-docs-<tag>.zip`: the `roc docs` API reference.
+
+    Pages carries the latest of each; these keep every release's copy with the
+    release itself. Prints the asset paths, one per line, for the publish step.
+    """
+    tag = args.release_version or os.environ.get("RELEASE_VERSION", "")
+    if not tag or "/" in tag or "\\" in tag or not tag.strip():
+        raise RuntimeError(f"a valid release version is required, got {tag!r}")
+    docs_version = args.docs_version or tag
+    root = repo_root()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="rr-release-docs-") as scratch:
+        scratch_root = Path(scratch)
+
+        api_root = scratch_root / "api"
+        subprocess.run(
+            [sys.executable, str(root / "scripts" / "build_docs.py"), "--roc", args.roc,
+             "--docs-root", str(api_root), "--version", docs_version],
+            check=True, cwd=root,
+        )
+        api_zip = output_dir / f"roc-ray-api-docs-{tag}.zip"
+        zip_tree(api_root / docs_version, api_zip, f"roc-ray-api-docs-{tag}")
+
+        # The manual builds in a container that sees only the checkout, so its
+        # output has to be inside it; `.docs-out/` is ignored.
+        manual_root = root / ".docs-out" / f"release-{tag}"
+        try:
+            subprocess.run(
+                [sys.executable, str(root / "scripts" / "build_manual.py"), "--pdf",
+                 "--docs-version", tag, "--output", str(manual_root)],
+                check=True, cwd=root,
+            )
+            pdf = output_dir / f"roc-ray-manual-{tag}.pdf"
+            shutil.copyfile(manual_root / "roc-ray.pdf", pdf)
+            manual_zip = output_dir / f"roc-ray-manual-{tag}.zip"
+            zip_tree(manual_root / "site", manual_zip, f"roc-ray-manual-{tag}")
+        finally:
+            shutil.rmtree(manual_root, ignore_errors=True)
+
+    for asset in (manual_zip, pdf, api_zip):
+        print(asset)
     return 0
 
 

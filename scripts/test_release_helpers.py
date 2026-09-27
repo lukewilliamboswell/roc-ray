@@ -238,6 +238,26 @@ class ResolveDefaultBundleUrlTests(unittest.TestCase):
                 helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
 
 
+class ZipTreeTests(unittest.TestCase):
+    def test_files_sit_under_one_prefix_in_a_stable_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "site" / "b").mkdir(parents=True)
+            (root / "site" / "index.html").write_text("<p>hi</p>", encoding="utf-8")
+            (root / "site" / "b" / "a.css").write_text("p{}", encoding="utf-8")
+            output = root / "out.zip"
+            helpers.zip_tree(root / "site", output, "manual-0.10.0")
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.namelist(), ["manual-0.10.0/b/a.css", "manual-0.10.0/index.html"])
+
+    def test_an_empty_tree_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "site").mkdir()
+            with self.assertRaises(RuntimeError):
+                helpers.zip_tree(root / "site", root / "out.zip", "manual")
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def make_notes(self, root: Path, version: str) -> str:
         bundles = root / "bundles.json"
@@ -263,6 +283,8 @@ class ReleaseNotesTests(unittest.TestCase):
             self.assertTrue(body.startswith("# Highlights\n\nNew API.\n"))
             self.assertIn('platform "https://github.com/owner/repo/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"', body)
             self.assertIn("https://example.com/docs/", body)
+            for asset in ("roc-ray-manual-0.10.0.pdf", "roc-ray-manual-0.10.0.zip", "roc-ray-api-docs-0.10.0.zip"):
+                self.assertIn(f"https://github.com/owner/repo/releases/download/0.10.0/{asset}", body)
 
     def test_missing_versioned_notes_uses_generated_intro(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

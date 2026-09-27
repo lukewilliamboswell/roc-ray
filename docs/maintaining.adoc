@@ -174,6 +174,20 @@ reference and this manual, and opens a follow-up PR that updates example bundle
 URLs and the API docs index. Do not manually publish an untested local bundle as
 a release artifact.
 
+Besides the bundles, every GitHub release carries:
+
+* `examples-<version>.zip`: every example, its header pointing at this
+  release's default bundle, so an unzipped copy builds with no checkout;
+* `roc-ray-manual-<version>.pdf`: this manual as one PDF;
+* `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
+  it;
+* `roc-ray-api-docs-<version>.zip`: the `roc docs` API reference.
+
+`scripts/release_helpers.py package-examples` and `package-docs` build them,
+and the workflow's build job dry-runs both on every pull request. Pages serves
+the latest manual and every version of the API reference; the release assets
+keep each release's own copy.
+
 === Release notes
 
 Write the notes for a release in `docs/releases/<version>.adoc` and add it to

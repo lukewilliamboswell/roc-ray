@@ -185,6 +185,16 @@ jobs:
             --output .release/examples-dry-run.zip
           rm -f .release/examples-dry-run.zip
 
+      # The same cover for the documentation assets: the manual (HTML and PDF)
+      # and the `roc docs` API reference, built exactly as the publish job
+      # builds them, then thrown away.
+      - name: Check the documentation assets can be built
+        run: |
+          python3 scripts/release_helpers.py package-docs \
+            --release-version dry-run \
+            --output-dir .release/docs-dry-run
+          rm -rf .release/docs-dry-run
+
       - name: Upload release bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -305,11 +315,30 @@ jobs:
             --repo "${{ github.repository }}" \
             --output ".release/examples-${{ needs.build.outputs.release_version }}.zip"
 
+      - name: Install the pinned compiler
+        uses: ./.github/actions/setup-toolchain
+        with:
+          zig: "false"
+
+      # Every release carries its own documentation: the manual as a static
+      # site and as a PDF, and the `roc docs` API reference. Pages serves the
+      # latest; these keep each release's copy with the release.
+      - name: Package documentation
+        run: |
+          python3 scripts/release_helpers.py package-docs \
+            --release-version "${{ needs.build.outputs.release_version }}" \
+            --docs-version "${{ needs.build.outputs.docs_version }}" \
+            --output-dir .release
+
       - name: Publish release
         uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
-          additional_assets: .release/examples-${{ needs.build.outputs.release_version }}.zip
+          additional_assets: |
+            .release/examples-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-ray-manual-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-ray-manual-${{ needs.build.outputs.release_version }}.pdf
+            .release/roc-ray-api-docs-${{ needs.build.outputs.release_version }}.zip
           github_token: ${{ github.token }}
 
   publish-docs:

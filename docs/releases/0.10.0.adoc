@@ -141,7 +141,7 @@ Each kind of refusal has its own error:
 * *Files:* `read_text!`, `read_bytes!`, `list!`, `metadata!`, `write_text!` and `write_bytes!`. Large reads are handed to Roc without an extra copy.
 * *HTTP client:* `send!`, `send_with!`, `send_json!`, `get!` and `get_utf8!`, with timeouts and a response size limit. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/http_fetch/main.roc[`http_fetch`].
 * *UDP:* `bind!`, `send!` (queued, returns immediately) and `receive!`, which waits inside a task and returns every datagram that arrived, in a batch. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/udp_cursor/main.roc[`udp_cursor`].
-* *SQLite:* a bundled SQLite 3.50.4 with typed database and statement handles, and pure row decoders.
+* *SQLite:* a bundled SQLite 3.50.4 with typed database and statement handles, and pure row decoders. Queries are methods on the handle they run against: `+db.query!(sql, bindings)+`, `+db.execute!(sql, bindings)+`, `+db.prepare!(sql)+` and `+db.exec_script!(sql)+` on a `Db`, and `+stmt.query!(bindings)+` on a prepared `Stmt`.
 * *Subprocesses:* `Cmd` requires a timeout and output limits. A nonzero exit code is returned as data, and child processes are killed when the app exits.
 * *Standard output and error:* `+io.stdout().line!(...)+` can be called from `update!`. Writes go into a host buffer of limited size and are flushed on another thread, so printing never delays a frame. A full buffer is reported as a result, not a silent drop.
 * *Time and randomness:* `Time.now!` returns a UTC `Time.Timestamp`. `io.entropy!()` returns real OS entropy, which can seed a pure `Random` generator stored in the model. After seeding, an entire run can be replayed from that one number.

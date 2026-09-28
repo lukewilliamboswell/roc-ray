@@ -160,7 +160,7 @@ Two things commonly make a RocRay game slow:
   from Roc into the host. For hundreds or thousands of sprites of one texture, build a list
   and draw it with one `frame.texture_instances!` call (see <<drawing>>).
 * *Allocating every cycle.* Building new lists or strings every cycle is
-  cheap in small amounts but adds up. Prepare text once with `Text.prepare!`,
+  cheap in small amounts but adds up. Prepare text once with `+Text.from(str, font).prepare!()+`,
   and keep lists in the model to update rather than rebuilding them.
 
 To find out rather than guess, record a run with <<observatory>>, or set the

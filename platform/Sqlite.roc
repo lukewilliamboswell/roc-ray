@@ -4,8 +4,8 @@
 ## startup, and in tasks, where they park the task. They are refused in
 ## `update!` and `render!`.
 ##
-## Use the free `query!` and `execute!` functions for one-off SQL. Retain a
-## prepared `Stmt` when reusing the same query or command. Transactions use
+## Use `db.query!` and `db.execute!` for one-off SQL. Retain a prepared
+## `Stmt` from `db.prepare!` when reusing the same query or command. Transactions use
 ## explicit `BEGIN`, `COMMIT`, and `ROLLBACK` SQL.
 ##
 ## `Db` and `Stmt` are reference-counted host resources. Final release closes
@@ -205,6 +205,68 @@ Sqlite := [].{
 				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 			}
 
+		## Compile one statement for repeated use.
+		##
+		## The string must hold exactly one statement; several is
+		## `MultipleStatements`, and `exec_script!` is the call that runs those.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		prepare! : Db, Str => Try(Stmt, PrepareErr)
+		prepare! = |Db.(db), query| {
+			# closed error union to open error union
+			match Host.sqlite_prepare!(db, query) {
+				Ok(stmt) => Ok(Stmt.(stmt))
+				Err(TooManyStatements) => Err(TooManyStatements)
+				Err(MultipleStatements) => Err(MultipleStatements)
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
+			}
+		}
+
+		## Run one statement that changes data and does not return rows.
+		##
+		## This does not occupy a prepared-statement slot: the statement is
+		## compiled, run, and finalized inside the call. Use `prepare!` when the
+		## same SQL runs many times.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		execute! : Db, Str, List(Binding) => Try(Outcome, ExecuteErr)
+		execute! = |Db.(db), query, bindings|
+			executed(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run one query and decode every row it returns.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		query! : Db, Str, List(Binding) => Try(List(Row), QueryErr)
+		query! = |Db.(db), query, bindings|
+			queried(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run one query that must return exactly one row.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		query_exactly_one! : Db, Str, List(Binding) => Try(Row, ExactlyOneErr)
+		query_exactly_one! = |Db.(db), query, bindings|
+			exactly_one(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run every statement in a script, for schema setup and migrations.
+		##
+		## Takes no bindings and returns no rows, because a script is SQL the app
+		## wrote rather than SQL assembled from input. Anything that needs a
+		## parameter, or returns data, is a query.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
+		exec_script! = |Db.(db), script|
+		# closed error union to open error union
+			match Host.sqlite_exec_script!(db, script) {
+				Ok({}) => Ok({})
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
+			}
+
 		## Resource-free connection value for pure tests.
 		##
 		## The handle never resolves to an open database, so every call through
@@ -392,68 +454,6 @@ Sqlite := [].{
 		stub : Stmt
 		stub = Stmt.(Resource.Handle.stub)
 	}
-
-	## Compile one statement for repeated use.
-	##
-	## The string must hold exactly one statement; several is
-	## `MultipleStatements`, and `exec_script!` is the call that runs those.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	prepare! : Db, Str => Try(Stmt, PrepareErr)
-	prepare! = |Db.(db), query| {
-		# closed error union to open error union
-		match Host.sqlite_prepare!(db, query) {
-			Ok(stmt) => Ok(Stmt.(stmt))
-			Err(TooManyStatements) => Err(TooManyStatements)
-			Err(MultipleStatements) => Err(MultipleStatements)
-			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
-		}
-	}
-
-	## Run one statement that changes data and does not return rows.
-	##
-	## This does not occupy a prepared-statement slot: the statement is
-	## compiled, run, and finalized inside the call. Use `prepare!` when the
-	## same SQL runs many times.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	execute! : { db : Db, query : Str, bindings : List(Binding) } => Try(Outcome, ExecuteErr)
-	execute! = |{ db: Db.(db), query, bindings }|
-		executed(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run one query and decode every row it returns.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	query! : { db : Db, query : Str, bindings : List(Binding) } => Try(List(Row), QueryErr)
-	query! = |{ db: Db.(db), query, bindings }|
-		queried(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run one query that must return exactly one row.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	query_exactly_one! : { db : Db, query : Str, bindings : List(Binding) } => Try(Row, ExactlyOneErr)
-	query_exactly_one! = |{ db: Db.(db), query, bindings }|
-		exactly_one(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run every statement in a script, for schema setup and migrations.
-	##
-	## Takes no bindings and returns no rows, because a script is SQL the app
-	## wrote rather than SQL assembled from input. Anything that needs a
-	## parameter, or returns data, is a query.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
-	exec_script! = |Db.(db), script|
-	# closed error union to open error union
-		match Host.sqlite_exec_script!(db, script) {
-			Ok({}) => Ok({})
-			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
-		}
 
 	## Describe an error code, for a log line or an error screen.
 	errcode_to_str : ErrCode -> Str

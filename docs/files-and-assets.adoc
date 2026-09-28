@@ -257,8 +257,8 @@ usually the handle for the app's own data directory:
 ----
 data = io.files().app_data!()?
 db = io.sqlite().open!(data, "scores.db")?
-Sqlite.exec_script!(db, schema)?
-rows = Sqlite.query!({ db, query: top_ten, bindings: [] })?
+db.exec_script!(schema)?
+rows = db.query!(top_ten, [])?
 ----
 
 * `io.sqlite().open!(dir, name)` opens or creates a database beneath a `Dir`.
@@ -267,9 +267,10 @@ rows = Sqlite.query!({ db, query: top_ten, bindings: [] })?
 * `io.sqlite().open_memory!()` creates a private in-memory database, which
   needs no handle.
 
-Every database effect waits, so it runs in `init!` or a task. Use the
-module-level functions `Sqlite.query!` and `Sqlite.execute!` for one-off SQL, and keep a prepared
-statement from `Sqlite.prepare!` when running the same SQL repeatedly.
+Every database effect waits, so it runs in `init!` or a task. Use
+`db.query!(sql, bindings)` and `db.execute!(sql, bindings)` for one-off SQL,
+and keep a prepared statement from `db.prepare!(sql)` when running the same SQL
+repeatedly.
 Transactions use explicit `BEGIN`, `COMMIT`, and `ROLLBACK`. Rows are decoded
 with pure, typed accessors such as `row.str("name")`.
 

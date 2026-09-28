@@ -133,8 +133,8 @@ open_board! : App.Io => Try({ db : Sqlite.Db, insert : Sqlite.Stmt, rows : List(
 open_board! = |io| {
 	data = io.files().app_data!() ? |_| "the app's data directory could not be opened"
 	db = io.sqlite().open!(data, db_name) ? |err| describe(err)
-	Sqlite.exec_script!(db, schema) ? |err| describe(err)
-	insert = Sqlite.prepare!(db, insert_run) ? |err| describe(err)
+	db.exec_script!(schema) ? |err| describe(err)
+	insert = db.prepare!(insert_run) ? |err| describe(err)
 	rows = read_board!(db)?
 	Ok({ db, insert, rows })
 }
@@ -144,7 +144,7 @@ open_board! = |io| {
 ## Waits, so it is only ever reached from `init!` or from inside a task.
 read_board! : Sqlite.Db => Try(List(Entry), Str)
 read_board! = |db| {
-	rows = Sqlite.query!({ db, query: top_ten, bindings: [] }) ? |err| describe(err)
+	rows = db.query!(top_ten, []) ? |err| describe(err)
 	Ok(List.map(rows, decode_entry))
 }
 
@@ -199,14 +199,11 @@ record_run! = |db, insert, name, score| {
 	# costs the task nothing to ask on its own.
 	played_at = Time.now!()
 	written =
-		Sqlite.Stmt.execute!(
-			insert,
-			[
-				{ name: ":name", value: String(name) },
-				{ name: ":score", value: Integer(score) },
-				{ name: ":played_at", value: Real(epoch_seconds(played_at)) },
-			],
-		)
+		insert.execute!([
+			{ name: ":name", value: String(name) },
+			{ name: ":score", value: Integer(score) },
+			{ name: ":played_at", value: Real(epoch_seconds(played_at)) },
+		])
 
 	match written {
 		Err(SqliteErr(Constraint, _)) =>
@@ -230,7 +227,7 @@ record_run! = |db, insert, name, score| {
 ## here because the statement runs rarely and has nothing to bind.
 reset_board! : Sqlite.Db => Msg
 reset_board! = |db| {
-	match Sqlite.execute!({ db, query: clear_runs, bindings: [] }) {
+	match db.execute!(clear_runs, []) {
 		Err(err) => Failed(describe(err))
 		Ok(_outcome) =>
 			match read_board!(db) {

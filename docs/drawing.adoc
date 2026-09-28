@@ -256,7 +256,7 @@ model.title.draw!(frame, { pos: { x: 400, y: 60 }, color: Color.white, align: (T
 ----
 
 Preparing text is legal in `init!`, `update!`, and tasks, not in `render!`.
-`Text.from(str, font).size(n).draw!(frame, ...)` draws unprepared text with
+`+Text.from(str, font).size(n).draw!(frame, ...)+` draws unprepared text with
 alignment when it changes every frame.
 
 === Fonts

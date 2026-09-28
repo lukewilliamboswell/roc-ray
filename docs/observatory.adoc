@@ -18,7 +18,7 @@ chapter is for app authors investigating performance; it assumes
 
 == Record a run
 
-Start any built RocRay app with `--host-stats-record`:
+Start any built RocRay app with `+--host-stats-record+`:
 
 [source,sh]
 ----
@@ -27,7 +27,7 @@ Start any built RocRay app with `--host-stats-record`:
 
 When the app exits, the host has written a capture file with a timestamped
 name such as `20260825T235959Z-my-app.rrstats`. It is an ordinary SQLite
-database. Choose the name with `--host-stats-output=PATH` instead. The
+database. Choose the name with `+--host-stats-output=PATH+` instead. The
 recorder refuses to overwrite an existing file.
 
 Recording works in windowed, hidden, and headless runs. A headless run
@@ -98,11 +98,11 @@ it ran on, and the labels the app supplied.
 [cols="1,2",options="header"]
 |===
 |Flag |Meaning
-|`--host-stats-record` |Enable recording with the defaults.
-|`--host-stats-output=PATH` |Select the `.rrstats` destination and enable recording.
-|`--host-stats-detail=summary\|standard\|full` |Select captured detail; `standard` is the default. Summary records cycle and callback timing, aggregate counts and allocation traffic, annotations, backend facts, and recorder health. Standard adds non-drawing effects, tasks, queues, structural latency, and resource lifecycle transitions. Full adds individual allocations and draw operations.
-|`--host-stats-buffer-mib=N` |Bound recorder-owned memory in MiB; default 32, valid range 1–4096. Detail is omitted before reserved summary capacity is consumed.
-|`--host-stats-max-mib=N` |Stop admitting events once the database reaches this size; default 4096 MiB and must be greater than zero. The application continues.
+|`+--host-stats-record+` |Enable recording with the defaults.
+|`+--host-stats-output=PATH+` |Select the `.rrstats` destination and enable recording.
+|`+--host-stats-detail=summary\|standard\|full+` |Select captured detail; `standard` is the default. Summary records cycle and callback timing, aggregate counts and allocation traffic, annotations, backend facts, and recorder health. Standard adds non-drawing effects, tasks, queues, structural latency, and resource lifecycle transitions. Full adds individual allocations and draw operations.
+|`+--host-stats-buffer-mib=N+` |Bound recorder-owned memory in MiB; default 32, valid range 1–4096. Detail is omitted before reserved summary capacity is consumed.
+|`+--host-stats-max-mib=N+` |Stop admitting events once the database reaches this size; default 4096 MiB and must be greater than zero. The application continues.
 |===
 
 The output counter is the logical size of the main SQLite database plus its

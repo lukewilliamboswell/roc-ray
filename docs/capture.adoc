@@ -77,7 +77,7 @@ recording = Capture.default
 |===
 |Setting |Choices
 |`with_format` |`Png` (numbered stills), `Gif`, or `WebM` (VP8). GIF and WebM are encoded incrementally, so memory stays bounded by one frame.
-|`with_scale` |`Full`, `Half`, `Quarter`, or `Ratio(...)`, applied after rendering; it shrinks the file without changing the window
+|`with_scale` |`Full`, `Half`, `Quarter`, or `+Ratio(...)+`, applied after rendering; it shrinks the file without changing the window
 |`with_timing` |`FixedStep` (the default), which reports exactly one recorded frame's worth of time as each cycle's elapsed time, or `RealTime`, which reports the time that actually passed
 |`with_max_frames`, `with_every_nth` |How long to record, and how many frames to skip
 |`with_cursor` |`NoCursor` or `DrawCursor`; the operating system's pointer is not part of the framebuffer
@@ -143,8 +143,8 @@ Keys.set_text!(Keys.typing("hello"))
 
 While a script drives a device, real input from that device is ignored.
 {src}/examples/capture_ui_demo/main.roc[Capture UI Demo] records a
-reproducible interface walkthrough this way. The host's `--host-keys` and
-`--host-text` switches script input from the command line instead; see
+reproducible interface walkthrough this way. The host's `+--host-keys+` and
+`+--host-text+` switches script input from the command line instead; see
 <<testing>>.
 
 == Reading pixels

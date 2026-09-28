@@ -68,7 +68,7 @@ render! = |model, frame| {
 }
 ----
 
-Replace `"..."` with the platform URL from <<getting-started>>. Press Escape
+Replace `+"..."+` with the platform URL from <<getting-started>>. Press Escape
 or close the window to quit.
 
 The app's header, `app [Model, program]`, exposes two things to the platform:
@@ -79,7 +79,7 @@ the empty {langref}/tag-unions.md[tag union] `[]`.
 
 A name ending in `!` is an _effectful function_: calling it can do something
 beyond computing a value, such as drawing or opening a window. Its type uses
-`=>` where a pure function's uses `->`. See
+`+=>+` where a pure function's uses `+->+`. See
 {langref}/functions.md[Functions] in the Roc language reference.
 
 == The loop
@@ -141,7 +141,7 @@ init! = App.init(
 )
 ----
 
-The function returns a `Try`: `Ok(model)` to start the app, or `Err(...)` to
+The function returns a `Try`: `Ok(model)` to start the app, or `+Err(...)+` to
 stop it. The `?` after `prepare!()` returns early with the error if preparing
 the text fails; see {langref}/operators.md[Operators].
 
@@ -204,7 +204,7 @@ frame is drawn.
 A few effects are legal only in `init!`, because they are facts about the
 start of the run:
 
-* `io.args!()` returns the command line, with the host's own `--host-*`
+* `io.args!()` returns the command line, with the host's own `+--host-*+`
   switches removed. Keep what you need from it in the model.
 * `io.entropy!()` draws a number from the operating system to seed a random
   generator (see <<input-randomness>>).
@@ -225,7 +225,7 @@ update! = |model, input, _io| {
 
 `update!` receives the current model, one `App.Input`, and the same `App.Io`
 that `init!` had. It returns `Ok` with the next model, or `Err(Exit(code))` to
-stop the app with that exit code. `{ ..model, pointer: ... }` is a copy of
+stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
 `model` with some fields replaced; see {langref}/records.md[Records].
 
 `App.Input` is everything the platform observed for this cycle:

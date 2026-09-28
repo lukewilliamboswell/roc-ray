@@ -33,7 +33,7 @@ expect {
 }
 ----
 
-An `expect` with more than one line wraps them in braces, `expect { ... }`;
+An `expect` with more than one line wraps them in braces, `+expect { ... }+`;
 the last line is the condition that must be true. `update!` then calls
 `decide` and performs what it says.
 
@@ -61,19 +61,19 @@ test run may not.
 == Run the app unattended
 
 A built RocRay app accepts a few switches of its own, all beginning with
-`--host-`. The host removes them before the app sees its arguments. Pass them
-after `--` when running through `roc`, as in
-`roc main.roc -- --host-headless`.
+`+--host-+`. The host removes them before the app sees its arguments. Pass them
+after `+--+` when running through `roc`, as in
+`+roc main.roc -- --host-headless+`.
 
 [source,sh]
 ----
 ./my-app --host-headless --host-headless-frames=120
 ----
 
-`--host-headless` runs without a window, GPU, or audio device: every cycle,
+`+--host-headless+` runs without a window, GPU, or audio device: every cycle,
 task, and effect behaves as usual, but nothing is drawn, and every cycle
 reports exactly 1/60 of a second as its elapsed time. It is a test of the
-app's behaviour, not of its pixels. `--host-headless-frames=N` stops after N
+app's behaviour, not of its pixels. `+--host-headless-frames=N+` stops after N
 cycles (note the `=`).
 
 To exercise the real renderer without anyone watching, run a real window
@@ -89,7 +89,7 @@ A hidden window still needs a display server; on Linux without one, run under
 
 === Scripted keys and text
 
-`--host-keys` and `--host-text` script the keyboard on the cycles they name:
+`+--host-keys+` and `+--host-text+` script the keyboard on the cycles they name:
 
 [source,sh]
 ----
@@ -109,7 +109,7 @@ ignores them; an app can still drive its own input there with
 
 === Scripted close requests
 
-`--host-close=CYCLE` acts as if the user clicked the window's close button on
+`+--host-close=CYCLE+` acts as if the user clicked the window's close button on
 that cycle. It works in headless and hidden runs, so a test can check that an
 app using `with_close_request(Deliver)` saves and exits as it should (see
 <<app-model-closing>>):

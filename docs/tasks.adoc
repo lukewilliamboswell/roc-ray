@@ -56,7 +56,7 @@ Here pressing Enter stands in for clearing the level. Reading it from the
 top:
 
 * `Task.spawn!` starts a task. Its second argument is a function with no
-  arguments, written `|| { ... }`: the task's body.
+  arguments, written `+|| { ... }+`: the task's body.
 * Inside the body, `Task.sleep!(2000)` waits two thousand milliseconds. Only
   the task waits; the game keeps running, and `update!` and `render!` keep
   being called, so the "Well done!" screen stays up and responsive.
@@ -113,7 +113,7 @@ Task.spawn!(input, || LevelLoaded(load_level!(levels, "level-2.txt")))
 ----
 
 Here `model.levels` is a directory handle opened in `init!` (see
-<<files-and-assets>>), and `parse_level : Str -> Try(Level, LoadError)` is the
+<<files-and-assets>>), and `+parse_level : Str -> Try(Level, LoadError)+` is the
 app's own pure parser. `? |err| ReadFailed(err)` wraps a read error in the
 app's own error type before returning it. The message carries the whole
 result, errors included, so `apply_message` decides what a failed load

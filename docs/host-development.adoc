@@ -90,7 +90,7 @@ outside `exposes`. Keep that single fixture rather than adding one per domain.
 an effectful function, and the phase guard would refuse the effects inside one
 anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
 half, a headless example run for the whole path -- and shape the public wrapper
-so an app can keep its decisions in pure functions (`apply_message : Model, Msg -> Model` and friends) that `update!` only performs. Those pure functions are
+so an app can keep its decisions in pure functions (`+apply_message : Model, Msg -> Model+` and friends) that `update!` only performs. Those pure functions are
 what an app's own `expect`s exercise, using `App.Input.for_tests` and the
 resource `stub`s.
 

@@ -134,7 +134,7 @@ render! = |model, frame| {
 ----
 
 During development, run it from the directory that holds `main.roc` and
-`assets/`. Arguments after `--` go to the app:
+`assets/`. Arguments after `+--+` go to the app:
 
 [source,sh]
 ----

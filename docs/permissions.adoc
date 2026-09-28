@@ -71,7 +71,7 @@ line, needs no declaration either: the user choosing it is the consent.
 <<files-designated>> shows how to accept one.
 
 One startup setting does need a declaration: a font file named with
-`App.default.with_default_font(...)` is read from disk before `init!`, so a
+`+App.default.with_default_font(...)+` is read from disk before `init!`, so a
 file declaration must cover its path, such as `Directory("assets", ReadOnly)`
 for `"assets/ui.ttf"`. The built-in font needs nothing.
 

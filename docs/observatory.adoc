@@ -16,23 +16,84 @@ the host did, cycle by cycle, into a SQLite database you can query. This
 chapter is for app authors investigating performance; it assumes
 <<app-model>> and <<tasks>>, and some familiarity with SQL.
 
-Observatory is an opt-in host recorder for investigating slow host cycles and
-the work surrounding them. A capture is a versioned SQLite database with the
-`.rrstats` extension. Recording does not expose application payloads or the
-opaque model to the host worker.
+== Record a run
 
-Start any built RocRay application with:
+Start any built RocRay app with `--host-stats-record`:
 
-[source,text]
+[source,sh]
 ----
-my-app --host-stats-record
+./my-app --host-stats-record
 ----
 
-The default destination is a timestamped name such as
-`20260825T235959Z-my-app.rrstats`. The recorder refuses to overwrite an
-existing file.
+When the app exits, the host has written a capture file with a timestamped
+name such as `20260825T235959Z-my-app.rrstats`. It is an ordinary SQLite
+database. Choose the name with `--host-stats-output=PATH` instead. The
+recorder refuses to overwrite an existing file.
 
-== Host flags
+Recording works in windowed, hidden, and headless runs. A headless run
+measures `update!` and your tasks but draws nothing, so use a windowed or
+hidden run when drawing is what you are investigating. Measure the build you
+care about: an app run with `roc main.roc` is built for fast compiling, not
+fast running, and can be several times slower than one built with
+`roc build` (see <<coming-from-raylib>>).
+
+== Find the slow cycles
+
+The files in `scripts/observatory_queries/` in the RocRay repository are
+ready-made, read-only queries. Each one says at the top what question it
+answers. Start with `cycles.sql`, which lists the slowest cycles and what
+dominated each one:
+
+[source,sh]
+----
+sqlite3 -readonly -header -column capture.rrstats \
+  < scripts/observatory_queries/cycles.sql
+----
+
+Each row splits a cycle into `update!`, `render!`, the time spent running
+tasks, and other host work, and names the `dominant_component`. With a frame
+rate cap, most of an idle cycle is the host waiting for the next frame, which
+counts as other host work; that is expected, not a problem. Look for cycles
+where `update!` or `render!` is large, then look at what your app does there.
+
+The other queries cover tasks, effects, allocations, queues, drawing, and
+resources, and `compare.sql` compares two captures.
+
+== Mark your own code
+
+To see where time goes inside your own code, annotate it with `Trace`:
+
+[source,roc]
+----
+zone = Trace.begin!("animation")
+walk = Sprite.step(model.walk, input.time.elapsed_seconds)
+Trace.end!(zone)
+Trace.sample_i64!("particles", U64.to_i64_wrap(List.len(model.particles)), Count)
+Trace.mark!("level start")
+----
+
+`Trace.begin!` and `Trace.end!` bracket a _zone_ and record how long it took.
+`Trace.mark!` records a moment, and `Trace.sample_i64!` and
+`Trace.sample_f64!` record a number with a unit. `annotations.sql` lists them.
+They are legal in `init!`, `update!`, `render!`, and tasks, and cost almost
+nothing when nothing is recording. They cannot tell whether recording is on,
+so they never change what the app does.
+
+Zones must be ended by the callback or task that began them, in the reverse
+order they were begun; ending one out of order stops the app, even when
+nothing is recording. See the `Trace` page of the {api}[API reference] for
+the label and nesting rules.
+
+== Privacy
+
+A capture never contains your model, the contents of input, task messages,
+file contents, native pointers, or secrets. It does contain the labels you
+pass to `Trace`, verbatim, so do not put personal data, credentials, URLs
+containing secrets, or file contents in a label. Treat an `.rrstats` file as
+diagnostic data that may reveal the app's structure, its timing, the machine
+it ran on, and the labels the app supplied.
+
+== Details: recording options
 
 [cols="1,2",options="header"]
 |===
@@ -62,40 +123,12 @@ replacing or overwriting it. A failure after startup disables further
 recording, is reported by the host, and is reflected in final metadata where
 the database remains writable.
 
-== Privacy
+== Details: reading evidence
 
-Automatic recording excludes the opaque model, application payloads, input
-contents, task messages, file contents, native pointers, and secrets. Labels
-passed to `Trace` are application-provided diagnostic text and are stored
-verbatim. Do not put personal data, credentials, URLs containing secrets,
-file contents, or other sensitive values in a label. Treat an `.rrstats` file
-as diagnostic data that may reveal application structure, timing, host and
-architecture metadata, and the labels the application deliberately supplied.
-
-== Application annotations
-
-`Trace.mark!`, `Trace.begin!`/`Trace.end!`, `Trace.sample_i64!`, and
-`Trace.sample_f64!` are legal in `init!`, `update!`, `render!`, and tasks.
-They cannot discover whether recording is active or influence application
-behavior. Zones are strict LIFO capabilities and must be ended by the owner
-that began them. See the generated `Trace` API documentation for label, unit,
-nesting, and programmer-error rules.
-
-== Query a capture
-
-The standalone, read-only SQL files in `scripts/observatory_queries/` are the
-author-facing analysis API. Each file documents the question it answers, the
-detail level it requires, its result bound, and any interpretation limits.
-Run one with SQLite's command-line tool:
-
-[source,sh]
-----
-sqlite3 -readonly -header -column capture.rrstats \
-  < scripts/observatory_queries/cycles.sql
-----
-
-Every query returns `evidence_status` and `evidence_reason`. Measurements are
-SQL `NULL` when the required evidence is partial, not recorded, or unavailable.
+Every query returns `evidence_status` and `evidence_reason`. Check them
+before trusting a number: a capture may be incomplete because the recorder ran
+out of room, or because the detail level did not include that measurement.
+Measurements are SQL `NULL` when the required evidence is partial, not recorded, or unavailable.
 This deliberately prefers “not known from this capture” to a plausible but
 unsupported performance claim. The Python analyzer remains a non-public CI
 reference for the same rules; the SQL files are the supported interface.
@@ -108,9 +141,10 @@ inside `EndDrawing`, so RocRay reports that duration under the explicit
 split or call it GPU time. Headless captures record the render callback and
 explicit unavailable/omitted facts for the other phases.
 
-== Capture schema
+=== Capture schema
 
-`metadata.schema_version` is currently `1`. Consumers must check it before
+This section is for writing your own queries. `metadata.schema_version` is
+`1`. Consumers must check it before
 assuming table or column meanings.
 
 * `metadata` records schema, requested and effective detail, host environment,

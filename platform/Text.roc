@@ -117,7 +117,27 @@ Text := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		prepare! : Builder => Try(Prepared, [ResourceLimit])
-		prepare! = |builder| Text.prepare_builder!(builder)
+		prepare! = |builder| {
+			result = Host.text_prepare!({
+				text: builder.content,
+				size: builder.size,
+				spacing: builder.spacing,
+				font: builder.font.handle,
+			})
+			match result {
+				# closed error union to open error union
+				Ok(prepared_result) => Ok(
+					Prepared.(
+						{
+							resource: prepared_result.prepared,
+							measured: { width: prepared_result.width, height: prepared_result.height },
+						},
+					),
+				)
+				Err(ResourceLimit) => Err(ResourceLimit)
+				Err(InvalidResource) => crash "prepared text host invariant failed"
+			}
+		}
 	}
 
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
@@ -189,32 +209,6 @@ Text := [].{
 		size: 20,
 		spacing: Text.default_spacing,
 		font,
-	}
-
-	## Prepare a builder's text, as `Builder.prepare!` does.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	prepare_builder! : Builder => Try(Prepared, [ResourceLimit])
-	prepare_builder! = |builder| {
-		result = Host.text_prepare!({
-			text: builder.content,
-			size: builder.size,
-			spacing: builder.spacing,
-			font: builder.font.handle,
-		})
-		match result {
-			# closed error union to open error union
-			Ok(prepared_result) => Ok(
-				Prepared.(
-					{
-						resource: prepared_result.prepared,
-						measured: { width: prepared_result.width, height: prepared_result.height },
-					},
-				),
-			)
-			Err(ResourceLimit) => Err(ResourceLimit)
-			Err(InvalidResource) => crash "prepared text host invariant failed"
-		}
 	}
 
 	## How far the anchor named by an `Align` sits from the text's top-left

@@ -8306,8 +8306,8 @@ test "complete fonts retain a resource alongside an owned scalar metric snapshot
 fn hostedTextPrepareRaw(host: *RocHost, args: abi.HostText_prepareArgs) callconv(.c) abi.HostText_prepareResult {
     const Result = abi.HostText_prepareResult;
     const Error = abi.HostText_prepareErr;
-    enforcePhase("Text.prepare!", during_load);
-    const effect = EffectScope.begin("Text.prepare!", args.text.asSlice().len);
+    enforcePhase("Text.Builder.prepare!", during_load);
+    const effect = EffectScope.begin("Text.Builder.prepare!", args.text.asSlice().len);
     defer effect.end();
     defer args.text.decref(host);
     prepared_text_prepare_calls += 1;

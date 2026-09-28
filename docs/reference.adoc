@@ -25,15 +25,16 @@ publishes the reference for its version; its index opens the latest.
 
 Each release publishes two platform bundles that expose the same API:
 
-[cols="1,3",options="header"]
+[cols="1,3,2",options="header"]
 |===
-|Bundle |Use it for
-|Default |macOS on Intel and Apple silicon, Windows x86-64, and Linux x86-64 through raylib's X11 build (which also runs under XWayland)
-|Wayland |Linux x86-64 Wayland systems, when you want raylib's native Wayland build
+|Bundle |Use it for |`roc build --target`
+|Default |macOS on Intel and Apple silicon, Windows x86-64, and Linux x86-64 through raylib's X11 build (which also runs under XWayland) |`x64mac`, `arm64mac`, `x64win`, `x64v1glibc`
+|Wayland |Linux x86-64 Wayland systems, when you want raylib's native Wayland build |`x64v1glibc`
 |===
 
-ARM Linux is not currently included. The release notes name each bundle's URL
-and the exact Roc compiler the release supports.
+ARM Linux is not supported. The release notes name each bundle's URL and the
+exact Roc compiler the release supports. <<shipping>> explains building for
+each target.
 
 [#reference-switches]
 == Host switches
@@ -134,7 +135,8 @@ frees its place for another.
 
 == Permissions and phases
 
-* <<permissions>> lists every `Permission` and what it permits.
+* <<permissions>> lists every `Permission`, what it permits, and every error a
+  refusal returns.
 * <<phases>> lists which kinds of effect are legal in which callbacks.
 * <<architecture>> defines the vocabulary -- host cycle, task, message,
   phase, waiting effect -- precisely.

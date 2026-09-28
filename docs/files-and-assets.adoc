@@ -53,9 +53,11 @@ can only read. A write through a `ReadDir` does not compile.
 
 == Where a handle comes from
 
+Each of these is a method of `io.files()`, such as `io.files().app_data!()`.
+
 [cols="2,1,3",options="header"]
 |===
-|`io.files()` method |Returns |Needs
+|Method |Returns |Needs
 |`app_data!()`, `app_config!()`, `app_cache!()` |`Dir` |No declaration, but the app must name itself with `+App.default.with_app_id(...)+`. These are the app's private directories under the user's home, created on first use.
 |`beside_executable!()` |`ReadDir` |Nothing. This is the directory the executable is in, where a packaged app keeps its own files.
 |`working_directory!()` |`Dir` |`WorkingDirectory(ReadWrite)` or `FilesAny(ReadWrite)`

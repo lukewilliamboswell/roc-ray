@@ -162,7 +162,7 @@ time the app asks for them and survive reinstalling the game:
 
 [cols="1,3,3",options="header"]
 |===
-|System |`app_data!()` and `app_config!()` |`app_cache!()`
+|System |Data and configuration |Cache
 |Linux |`~/.local/share/<id>` and `~/.config/<id>`, or beneath `$XDG_DATA_HOME` and `$XDG_CONFIG_HOME` when those are set |`~/.cache/<id>`, or beneath `$XDG_CACHE_HOME`
 |macOS |Both `~/Library/Application Support/<id>` |`~/Library/Caches/<id>`
 |Windows |Both `%APPDATA%\<id>` |`%LOCALAPPDATA%\<id>`
@@ -181,7 +181,7 @@ another:
 
 [cols="2,1,3",options="header"]
 |===
-|System |`--target` |Notes
+|System |Target |Notes
 |Linux x86-64 |`x64v1glibc` |Runs on any x86-64 processor. The default bundle uses X11, which also runs under XWayland; the Wayland bundle, a separate platform URL, uses Wayland directly.
 |macOS, Intel |`x64mac` |
 |macOS, Apple silicon |`arm64mac` |

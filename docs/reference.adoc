@@ -27,7 +27,7 @@ Each release publishes two platform bundles that expose the same API:
 
 [cols="1,3,2",options="header"]
 |===
-|Bundle |Use it for |`roc build --target`
+|Bundle |Use it for |Build targets
 |Default |macOS on Intel and Apple silicon, Windows x86-64, and Linux x86-64 through raylib's X11 build (which also runs under XWayland) |`x64mac`, `arm64mac`, `x64win`, `x64v1glibc`
 |Wayland |Linux x86-64 Wayland systems, when you want raylib's native Wayland build |`x64v1glibc`
 |===

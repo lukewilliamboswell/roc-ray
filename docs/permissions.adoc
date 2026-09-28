@@ -196,7 +196,8 @@ The app never declared the facility at all::
 
 A declaration is malformed::
   The app stops before `init!` runs, with a message naming the declaration.
-  The startup checks refuse:
+  `HttpOrigin` takes a `Url`, so a malformed URL literal is already a compile
+  error. The startup checks refuse:
 +
 * a UDP port of `0` in `UdpBind` or `UdpPeer`;
 * a `UdpPeer` address that is not a dotted-quad IPv4 address, such as
@@ -207,9 +208,6 @@ A declaration is malformed::
   filesystem root;
 * an app id that is not 1 to 128 ASCII letters, digits, `.`, `-`, or `_`;
 * more than 64 declarations.
-+
-`HttpOrigin` takes a `Url`, so a quoted URL literal is checked when the app
-compiles, and a malformed one is a compile error.
 
 == What this protects against
 

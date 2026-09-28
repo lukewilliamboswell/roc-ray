@@ -104,7 +104,7 @@ Gamepad := [].{
 		right_stick = |pad| { x: pad.axis(RightX), y: pad.axis(RightY) }
 	}
 
-	## Resolve a slot into a snapshot-scoped connected receiver. Callers handle
+	## Resolve a slot into a snapshot-scoped connected view. Callers handle
 	## disconnect once, after which button and axis queries stay allocation-free.
 	lookup : Snapshot, Id -> [Connected(View), Disconnected]
 	lookup = |snapshot, gamepad|

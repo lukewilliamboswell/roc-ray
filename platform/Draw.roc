@@ -27,7 +27,7 @@
 ## `update!` and `render!`. Create long-lived resources in `init!` and retain
 ## them in the model.
 ##
-## Most shapes support equivalent receiver and free-function forms, such as
+## Most shapes support equivalent method and free-function forms, such as
 ## `frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`.
 ##
 ## `Draw.text!` draws at an already-resolved top-left origin without a layout
@@ -225,7 +225,7 @@ Draw := [].{
 		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
 		## centre points directly, and a render target's dimensions are already `F32`
 		## on `Texture`. `Window.Snapshot.size` stays `I32` because it is also the
-		## thing `Window.suggest_size` sets.
+		## thing `Window.suggest_size!` asks for.
 		##
 		## Reach for this when laying something out against the surface -- a HUD in a
 		## corner, a title centred across the top. Layout decisions that `update!`

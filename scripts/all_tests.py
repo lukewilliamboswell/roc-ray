@@ -32,6 +32,12 @@ This script runs:
                     cycle, annotation, gap and recorder-health tables.
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
+- close request   - Script the close button under each `CloseRequest` and assert
+                    Exit ends the app before update! sees it, Deliver reports
+                    each request once and waits for the app's own save, and
+                    the exit key still ends a Deliver app; also that a
+                    headless run honours --host-keys and --host-text
+                    (test/close_request).
 - designation     - Read a dropped file and one named on the command line with
                     no permission declared, and refuse anything else
                     (test/designation).
@@ -1154,6 +1160,84 @@ def run_task_cap_probe(
     return [] if ok else ["run task cap probe"]
 
 
+def run_close_request_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check what the window's close button does under each `CloseRequest`.
+
+    `--host-close` stands in for the button. Under the default `Exit` the host
+    must end the app before the requested cycle's `update!`, without waiting
+    for a task that never answers: the app prints every cycle it saw, and the
+    last one must be the cycle before the request. Under `Deliver` the window
+    must stay open, each request must reach exactly one input, and a save the
+    app starts on a task must answer before the app exits. Exit 3 means a
+    wrong report; exit 4 means the save never answered.
+
+    The exit key is not a close request: a scripted Escape must end a
+    `Deliver` app before the cycle it lands on, as a hardware one would. The
+    same runs check that a headless run honours `--host-keys` and
+    `--host-text`, which it has no hardware to fall back on.
+    """
+    fixture = root / "test" / "close_request" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning close request probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "close_request")
+    if not run_cmd(
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build close request probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build close request probe"]
+
+    executable = str(executable_for(staged))
+    failures = []
+    exit_mode = subprocess.run(
+        [executable, "--host-headless", "--host-headless-frames=200", "--host-close=3", "--mode=exit"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    cycles = [line for line in exit_mode.stdout.splitlines() if line.startswith("cycle ")]
+    if exit_mode.returncode != 0 or cycles != ["cycle 0", "cycle 1", "cycle 2"]:
+        failures.append(
+            f"close request probe exit: expected cycles 0-2 and exit 0, got exit {exit_mode.returncode}, "
+            f"{cycles}: {exit_mode.stderr[-400:]}"
+        )
+
+    deliver = subprocess.run(
+        [
+            executable, "--host-headless", "--host-headless-frames=200", "--host-close=3,5", "--mode=deliver",
+            "--host-keys=1:S", "--host-text=2:abc",
+        ],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    if deliver.returncode != 0:
+        failures.append(f"close request probe deliver: exit {deliver.returncode}: {deliver.stderr[-400:]}")
+    lines = deliver.stdout.splitlines()
+    if "key S" not in lines or "text 3" not in lines:
+        failures.append(f"close request probe: a headless run ignored --host-keys or --host-text: {lines[:12]}")
+
+    escape = subprocess.run(
+        [executable, "--host-headless", "--host-headless-frames=200", "--mode=deliver", "--host-keys=2:ESCAPE~"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    escape_cycles = [line for line in escape.stdout.splitlines() if line.startswith("cycle ")]
+    if escape.returncode != 0 or escape_cycles != ["cycle 0", "cycle 1"]:
+        failures.append(
+            f"close request probe escape: expected the exit key to end a Deliver app before cycle 2, got exit "
+            f"{escape.returncode}, {escape_cycles[-3:]}: {escape.stderr[-400:]}"
+        )
+
+    malformed = subprocess.run(
+        [executable, "--host-headless", "--host-close=soon"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    if malformed.returncode != 2 or "--host-close" not in malformed.stderr:
+        failures.append(f"close request probe: a malformed --host-close was not refused: {malformed.returncode}")
+
+    print("ok" if not failures else "FAILED")
+    return failures
+
+
 def run_designation_probe(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -2010,6 +2094,7 @@ def _run_example_stages(
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_designation_probe(root, packages, args.verbose))
+        failed.extend(run_close_request_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
         failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
         failed.extend(run_cmd_probe(root, packages, args.verbose))

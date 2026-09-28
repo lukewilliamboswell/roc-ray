@@ -47,7 +47,7 @@ Task := [].{
 	## shows the shape.
 	##
 	## This is the only way to start a task. `Input` is a pure platform value
-	## with no effectful receivers, so there is no
+	## with no effectful methods, so there is no
 	## `input.spawn!` form.
 	##
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`

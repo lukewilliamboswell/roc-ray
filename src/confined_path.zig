@@ -24,9 +24,13 @@ const std = @import("std");
 const Dir = std.Io.Dir;
 const File = std.Io.File;
 
-/// A resolution the rules above refuse. Everything else is the filesystem's
-/// own error, passed through for the caller to name.
-pub const Error = error{Escapes};
+/// A resolution the rules above refuse. `PathInvalid` is a path whose shape,
+/// or a link it meets, is refused; the app reports it as `PathInvalid`.
+/// `NotGranted` is a root that names nothing -- a stub handle's empty root --
+/// which the app reports as `PermissionDenied`, because no grant covers it.
+/// Everything else is the filesystem's own error, passed through for the
+/// caller to name.
+pub const Error = error{ PathInvalid, NotGranted };
 
 /// Whether `path` is plainly relative: non-empty, with no absolute prefix,
 /// drive, backslash, NUL, or empty, `.`, or `..` component.
@@ -43,7 +47,7 @@ pub fn isSafeRelative(path: []const u8) bool {
 
 /// Open the root a handle names. The caller closes it.
 pub fn openRoot(io: std.Io, root: []const u8, iterate: bool) !Dir {
-    if (root.len == 0 or !std.fs.path.isAbsolute(root)) return error.Escapes;
+    if (root.len == 0 or !std.fs.path.isAbsolute(root)) return error.NotGranted;
     return Dir.openDirAbsolute(io, root, .{ .iterate = iterate });
 }
 
@@ -51,7 +55,7 @@ pub fn openRoot(io: std.Io, root: []const u8, iterate: bool) !Dir {
 /// never following a link. An empty `path` is the root itself. With `create`,
 /// missing directories are made on the way.
 pub fn openDir(io: std.Io, root: Dir, path: []const u8, options: struct { create: bool = false, iterate: bool = false }) !Dir {
-    if (path.len != 0 and !isSafeRelative(path)) return error.Escapes;
+    if (path.len != 0 and !isSafeRelative(path)) return error.PathInvalid;
     // Reopen the root so the caller always owns what it gets back.
     var current = try root.openDir(io, ".", .{ .iterate = options.iterate and path.len == 0 });
     if (path.len == 0) return current;
@@ -77,9 +81,9 @@ fn openChild(io: std.Io, parent: Dir, name: []const u8, create: bool, iterate: b
                 error.PathAlreadyExists => {},
                 else => return create_err,
             };
-            return parent.openDir(io, name, options) catch |open_err| return linkIsEscape(io, parent, name, open_err);
+            return parent.openDir(io, name, options) catch |open_err| return linkIsInvalid(io, parent, name, open_err);
         },
-        else => return linkIsEscape(io, parent, name, err),
+        else => return linkIsInvalid(io, parent, name, err),
     };
 }
 
@@ -87,12 +91,12 @@ fn openChild(io: std.Io, parent: Dir, name: []const u8, create: bool, iterate: b
 /// spelling -- `ELOOP` for a file, `ENOTDIR` for a directory on Linux -- and
 /// `ENOTDIR` is also what a plain file in the way produces. A stat that does
 /// not follow the name tells the two apart.
-fn linkIsEscape(io: std.Io, parent: Dir, name: []const u8, err: anyerror) anyerror {
+fn linkIsInvalid(io: std.Io, parent: Dir, name: []const u8, err: anyerror) anyerror {
     switch (err) {
-        error.SymLinkLoop => return error.Escapes,
+        error.SymLinkLoop => return error.PathInvalid,
         error.NotDir => {
             const found = parent.statFile(io, name, .{ .follow_symlinks = false }) catch return err;
-            return if (found.kind == .sym_link) error.Escapes else err;
+            return if (found.kind == .sym_link) error.PathInvalid else err;
         },
         else => return err,
     }
@@ -105,7 +109,7 @@ pub const Parent = struct { dir: Dir, name: []const u8 };
 /// Open the directory that holds `path`'s last component, creating missing
 /// directories on the way when `create` is set.
 pub fn openParent(io: std.Io, root: Dir, path: []const u8, create: bool) !Parent {
-    if (!isSafeRelative(path)) return error.Escapes;
+    if (!isSafeRelative(path)) return error.PathInvalid;
     const split = std.mem.lastIndexOfScalar(u8, path, '/');
     const parent_path = if (split) |index| path[0..index] else "";
     const name = if (split) |index| path[index + 1 ..] else path;
@@ -122,11 +126,11 @@ pub fn openFile(io: std.Io, root: Dir, path: []const u8) !File {
         // stat instead, then open normally. The parents were already walked
         // without following, so only this last name is checked this way.
         const found = try parent.dir.statFile(io, parent.name, .{ .follow_symlinks = false });
-        if (found.kind == .sym_link) return error.Escapes;
+        if (found.kind == .sym_link) return error.PathInvalid;
         return parent.dir.openFile(io, parent.name, .{});
     }
     return parent.dir.openFile(io, parent.name, .{ .follow_symlinks = false, .resolve_beneath = true }) catch |err|
-        return linkIsEscape(io, parent.dir, parent.name, err);
+        return linkIsInvalid(io, parent.dir, parent.name, err);
 }
 
 /// Read a whole file beneath `root`, stopping at `limit`.
@@ -155,7 +159,7 @@ pub fn writeFile(io: std.Io, root: Dir, path: []const u8, bytes: []const u8) !vo
     const parent = try openParent(io, root, path, true);
     defer parent.dir.close(io);
     if (parent.dir.statFile(io, parent.name, .{ .follow_symlinks = false })) |existing| {
-        if (existing.kind == .sym_link) return error.Escapes;
+        if (existing.kind == .sym_link) return error.PathInvalid;
     } else |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
@@ -173,7 +177,7 @@ pub fn checkedPath(io: std.Io, root_path: []const u8, root: Dir, path: []const u
     const parent = try openParent(io, root, path, create_parents);
     defer parent.dir.close(io);
     if (parent.dir.statFile(io, parent.name, .{ .follow_symlinks = false })) |existing| {
-        if (existing.kind == .sym_link) return error.Escapes;
+        if (existing.kind == .sym_link) return error.PathInvalid;
     } else |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
@@ -202,7 +206,7 @@ test "reads, writes, and stats stay beneath the root" {
     const read = try readFileAlloc(io, root, "inner/a.txt", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(read);
     try std.testing.expectEqualStrings("inside", read);
-    try std.testing.expectError(error.Escapes, readFileAlloc(io, root, "../secret.txt", std.testing.allocator, .limited(64)));
+    try std.testing.expectError(error.PathInvalid, readFileAlloc(io, root, "../secret.txt", std.testing.allocator, .limited(64)));
 
     try writeFile(io, root, "made/on/the/way.txt", "new");
     const made = try statFile(io, root, "made/on/the/way.txt");
@@ -231,12 +235,12 @@ test "links beneath the root are refused, wherever they point" {
     try root.symLink(io, "../elsewhere/secret.txt", "out_file", .{});
     try root.symLink(io, "inner/a.txt", "in_file", .{});
 
-    try std.testing.expectError(error.Escapes, readFileAlloc(io, root, "out_dir/secret.txt", std.testing.allocator, .limited(64)));
-    try std.testing.expectError(error.Escapes, readFileAlloc(io, root, "out_file", std.testing.allocator, .limited(64)));
-    try std.testing.expectError(error.Escapes, readFileAlloc(io, root, "in_file", std.testing.allocator, .limited(64)));
-    try std.testing.expectError(error.Escapes, writeFile(io, root, "out_file", "clobber"));
-    try std.testing.expectError(error.Escapes, writeFile(io, root, "out_dir/new.txt", "planted"));
-    try std.testing.expectError(error.Escapes, openDir(io, root, "out_dir", .{}));
+    try std.testing.expectError(error.PathInvalid, readFileAlloc(io, root, "out_dir/secret.txt", std.testing.allocator, .limited(64)));
+    try std.testing.expectError(error.PathInvalid, readFileAlloc(io, root, "out_file", std.testing.allocator, .limited(64)));
+    try std.testing.expectError(error.PathInvalid, readFileAlloc(io, root, "in_file", std.testing.allocator, .limited(64)));
+    try std.testing.expectError(error.PathInvalid, writeFile(io, root, "out_file", "clobber"));
+    try std.testing.expectError(error.PathInvalid, writeFile(io, root, "out_dir/new.txt", "planted"));
+    try std.testing.expectError(error.PathInvalid, openDir(io, root, "out_dir", .{}));
     try std.testing.expectEqual(File.Kind.sym_link, (try statFile(io, root, "out_file")).kind);
 
     const untouched = try tmp.dir.readFileAlloc(io, "elsewhere/secret.txt", std.testing.allocator, .limited(64));

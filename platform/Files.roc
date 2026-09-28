@@ -8,7 +8,7 @@
 ##     App.default.with_app_id("dev.example.notes"),
 ##     |io| {
 ##         saves = io.files().app_data!()?
-##         Ok({ saves })
+##         Ok({ saves: saves })
 ##     },
 ## )
 ##
@@ -29,8 +29,8 @@
 ##   app's own bundle.
 ## - `working_directory!` and `working_directory_read!`: the launch directory,
 ##   when the app declares `WorkingDirectory`.
-## - `open_dir!` and `open_dir_read!`: a directory a `Directory` or `FilesAny`
-##   declaration covers.
+## - `open_dir!` and `open_dir_read!`: a directory a `Directory`,
+##   `WorkingDirectory`, or `FilesAny` declaration covers.
 ## - `accept_drop!` and `from_arg!`: a file or directory the user dropped on
 ##   the window or named as an argument, as a `Designated` item.
 ##
@@ -41,9 +41,17 @@
 ##
 ## A path given to a handle is plainly relative: no leading `/`, no drive, no
 ## backslash, and no empty, `.`, or `..` component. Symbolic links beneath a
-## handle are not followed. A path that breaks either rule is
-## `PermissionDenied`, the same answer as any target outside what the app
-## declared.
+## handle are not followed, and an existing link where a write would land is
+## not written through.
+##
+## Two errors say why a target was refused, and they mean different things:
+##
+## - `PathInvalid`: the path's shape, or a link it meets, is refused. The rule
+##   is the same wherever the path would have led, so fix the path.
+## - `PermissionDenied`: no grant covers the target. That is a directory no
+##   declaration covers, a stub handle, a drop that is not from this cycle, or
+##   a string that is not one of the app's arguments. Declare more, or ask
+##   the user to choose the item.
 ##
 ## Every effect here waits except `subdir`, `read_only`, `dir`,
 ## `accept_drop!` and `from_arg!`, which open nothing. A
@@ -63,9 +71,9 @@ Files := [].{
 
 	## Why `read_text!` produced no UTF-8 string.
 	##
-	## `PermissionDenied` is a path the handle does not reach: one that is not
-	## plainly relative, or that meets a symbolic link, or a stub handle.
-	## `NotFound` is no file at that path. `TooLarge` is a file past
+	## `PathInvalid` is a path that is not plainly relative, or that meets a
+	## symbolic link. `PermissionDenied` is a stub handle, which reaches
+	## nothing. `NotFound` is no file at that path. `TooLarge` is a file past
 	## `read_text!`'s 64 kibibyte ceiling, which is a refusal rather than a
 	## failure: nothing went wrong and the file is there. `NotUtf8` is a file
 	## that was read and is not valid UTF-8, reported rather than delivered as
@@ -78,7 +86,7 @@ Files := [].{
 	## not have is one of them: the host does not distinguish it from a read
 	## that failed for any other reason. `metadata!` does, so a path that may be
 	## unreadable can be stat'd first to tell the two apart.
-	ReadTextError : [PermissionDenied, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
+	ReadTextError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
 
 	## Why `read_bytes!` produced no byte list.
 	##
@@ -86,7 +94,7 @@ Files := [].{
 	## the bytes is inspected, and with a much larger ceiling: `TooLarge` here
 	## is a file past 16 mebibytes. `ReadFailed` covers a permission denial in
 	## exactly the same way.
-	ReadBytesError : [PermissionDenied, NotFound, ReadFailed, Busy, Unavailable, TooLarge]
+	ReadBytesError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## Why `list!` produced no directory entries.
 	##
@@ -94,7 +102,7 @@ Files := [].{
 	## directory whose listing would exceed 8192 entries or one mebibyte of
 	## encoded names, whichever binds first. The rest mean what they mean for a
 	## read, `ReadFailed` included.
-	ListError : [PermissionDenied, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+	ListError : [PermissionDenied, PathInvalid, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## What one path is, how big it is, and when it last changed.
 	##
@@ -111,13 +119,14 @@ Files := [].{
 	## which is a file rather than a directory, and a name this filesystem
 	## cannot represent. `AccessRefused` is a directory on the way to the path
 	## this process may not look inside -- the one failure a stat can name that
-	## a read cannot. `PermissionDenied` is a path the handle does not reach, as
-	## for a read. `Unavailable` is the app shutting down while the stat was
+	## a read cannot. `PathInvalid` and `PermissionDenied` mean what they mean
+	## for a read, except that a link at the end of the path is described as
+	## `Other` rather than refused. `Unavailable` is the app shutting down while the stat was
 	## parked, and `ReadFailed` is every other refusal.
 	##
 	## There is no `Busy`: a stat holds no host-owned payload, so there is no
 	## delivery slot for it to run out of.
-	MetadataError : [NotFound, AccessRefused, PermissionDenied, ReadFailed, Unavailable]
+	MetadataError : [NotFound, AccessRefused, PathInvalid, PermissionDenied, ReadFailed, Unavailable]
 
 	## Why a write did not leave the file on disk. This is `Files`' own
 	## `WriteError`; `Stdout` and `Stderr` declare a different one under the
@@ -128,20 +137,23 @@ Files := [].{
 	## directories a write would otherwise trip over are created for it.
 	## `NoSpace` is the filesystem being full or over quota. `AccessRefused` is
 	## the operating system refusing the write, such as a read-only file or
-	## filesystem; `PermissionDenied` is a path the handle does not reach, as
-	## for a read, or an existing symbolic link at the path. `WriteFailed` is
-	## every other refusal the host cannot name more precisely.
-	WriteError : [NotFound, AccessRefused, PermissionDenied, NoSpace, WriteFailed, Unavailable]
+	## filesystem. `PathInvalid` is a path that is not plainly relative, one
+	## that meets a symbolic link, or an existing symbolic link at the path
+	## itself. `PermissionDenied` is a stub handle. `WriteFailed` is every
+	## other refusal the host cannot name more precisely.
+	WriteError : [NotFound, AccessRefused, PathInvalid, PermissionDenied, NoSpace, WriteFailed, Unavailable]
 
 	## Why a directory handle could not be opened.
 	##
-	## `PermissionDenied` is a directory no declaration covers. `NotFound` is
+	## `PermissionDenied` is a directory no declaration covers. `PathInvalid`
+	## is a declared path with a `..` component, which only `FilesAny` can
+	## cover; only `open_dir!` and `open_dir_read!` answer it. `NotFound` is
 	## a read-only directory that is not there -- a writable one is created --
 	## and `NotADirectory` is a path that is there and is a file.
 	## `AccessRefused` is the operating system refusing to open it, and
 	## `OpenFailed` is every other refusal. `Unavailable` is the app shutting
 	## down while the open was parked.
-	OpenError : [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable]
+	OpenError : [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable]
 
 	## Why a path given to `subdir` is not one a handle accepts: it is empty,
 	## absolute, or has a backslash, a drive, a NUL, or an empty, `.`, or `..`
@@ -344,14 +356,14 @@ Files := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		app_data! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		app_data! : Access => Try(Dir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_data! = |Access.(authority)| open_root!(authority, AppData, Bool.True) |> map_dir
 
 		## The app's private configuration directory, created on first use.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		app_config! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		app_config! : Access => Try(Dir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_config! = |Access.(authority)| open_root!(authority, AppConfig, Bool.True) |> map_dir
 
 		## The app's private cache directory, created on first use: files it
@@ -359,21 +371,21 @@ Files := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		app_cache! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		app_cache! : Access => Try(Dir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		app_cache! = |Access.(authority)| open_root!(authority, AppCache, Bool.True) |> map_dir
 
 		## The directory the executable is in, read-only: the app's own bundle.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		beside_executable! : Access => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		beside_executable! : Access => Try(ReadDir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		beside_executable! = |Access.(authority)| open_root!(authority, BesideExecutable, Bool.False) |> map_read_dir
 
 		## The launch directory, writable. Needs `WorkingDirectory(ReadWrite)`.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		working_directory! : Access => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		working_directory! : Access => Try(Dir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		working_directory! = |Access.(authority)| open_root!(authority, WorkingDirectory, Bool.True) |> map_dir
 
 		## The launch directory, read-only. Needs `WorkingDirectory` in either
@@ -381,17 +393,32 @@ Files := [].{
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		working_directory_read! : Access => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		working_directory_read! : Access => Try(ReadDir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		working_directory_read! = |Access.(authority)| open_root!(authority, WorkingDirectory, Bool.False) |> map_read_dir
 
-		## A declared directory, writable, created if it is not there. The path
-		## is absolute, or relative to the working directory, and must be
-		## covered by a `ReadWrite` `Directory` or `FilesAny` declaration, or
-		## by `WorkingDirectory(ReadWrite)` for a relative path.
+		## A declared directory, writable. A directory that is not there is
+		## created, with any missing parents, so the first run of an app finds
+		## an empty directory rather than `NotFound`.
+		##
+		## An absolute path names the directory directly; a relative one is
+		## opened beneath the working directory. Whether a declaration covers
+		## the path is decided from its text, not by asking the filesystem:
+		##
+		## - `Directory(dir, ReadWrite)` covers `dir` and every path beneath it
+		##   written the same way: an absolute declaration covers absolute
+		##   paths, a relative one covers relative paths.
+		## - `WorkingDirectory(ReadWrite)` covers every relative path.
+		## - `FilesAny(ReadWrite)` covers every path.
+		##
+		## A path no declaration covers is `PermissionDenied`. A path with a
+		## `..` component is `PathInvalid` unless `FilesAny` covers it, because
+		## its text alone does not say where it leads. The directory the path
+		## names is the grant, however the filesystem spells it, so links on the
+		## way to it are followed; links beneath the handle never are.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		open_dir! : Access, Str => Try(Dir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		open_dir! : Access, Str => Try(Dir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		open_dir! = |Access.(authority), path| open_root!(authority, Declared(path), Bool.True) |> map_dir
 
 		## Accept a file or directory the user dropped on the window, from the
@@ -420,19 +447,22 @@ Files := [].{
 		## Accept a file or directory named as an application argument, such
 		## as `my-tool data.csv`. The operator naming it is the grant.
 		##
-		## Only a string byte-identical to one of `io.args!()` is accepted, and
-		## the item is read-only. Relative paths are resolved against the
-		## working directory. Legal in `init!`, `update!`, and tasks; refused in
-		## `render!`.
+		## Only a string byte-identical to one of the app's arguments (what
+		## `io.args!()` returns in `init!`) is accepted, and the item is
+		## read-only. Anything else is `PermissionDenied`: the operator did not
+		## name it. A relative argument names an item beneath the directory the
+		## app was launched in, fixed when it is accepted. Legal in `init!`,
+		## `update!`, and tasks; refused in `render!`.
 		from_arg! : Access, Str => Try(Designated, [PermissionDenied])
 		from_arg! = |Access.(authority), arg| designate!(authority, Arg(arg))
 
 		## A declared directory, read-only, covered by a declaration in either
-		## mode.
+		## mode. Coverage is decided as for `open_dir!`, but nothing is created:
+		## a directory that is not there is `NotFound`.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
-		open_dir_read! : Access, Str => Try(ReadDir, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+		open_dir_read! : Access, Str => Try(ReadDir, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 		open_dir_read! = |Access.(authority), path| open_root!(authority, Declared(path), Bool.False) |> map_read_dir
 	}
 
@@ -496,7 +526,7 @@ designate! = |authority, source|
 parent_handle : { authority : Resource.Authority, path : Str, parent : Str, name : Str } -> Handle
 parent_handle = |item| { authority: item.authority, root: item.parent, prefix: "" }
 
-open_root! : Resource.Authority, Host.FilesRoot, Bool => Try(Handle, [PermissionDenied, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
+open_root! : Resource.Authority, Host.FilesRoot, Bool => Try(Handle, [PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused, OpenFailed, Unavailable])
 open_root! = |authority, root, writable|
 	match Host.files_open_root!(authority, root, writable) {
 		Ok(path) => Ok({ authority, root: path, prefix: "" })
@@ -504,6 +534,7 @@ open_root! = |authority, root, writable|
 		Err(NotADirectory) => Err(NotADirectory)
 		Err(NotFound) => Err(NotFound)
 		Err(OpenFailed) => Err(OpenFailed)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(Unavailable) => Err(Unavailable)
 	}
@@ -522,6 +553,7 @@ lifted = |result|
 		Err(NoSpace) => Err(NoSpace)
 		Err(NotFound) => Err(NotFound)
 		Err(AccessRefused) => Err(AccessRefused)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(Unavailable) => Err(Unavailable)
 		Err(WriteFailed) => Err(WriteFailed)
@@ -621,6 +653,7 @@ perform_read_text! = |handle, path|
 		# closed error union to open error union
 		Ok(contents) => Ok(contents)
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(Busy) => Err(Busy)
 		Err(NotFound) => Err(NotFound)
 		Err(NotUtf8) => Err(NotUtf8)
@@ -635,6 +668,7 @@ perform_read_bytes! = |handle, path|
 		# closed error union to open error union
 		Ok(bytes) => Ok(bytes)
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(Busy) => Err(Busy)
 		Err(NotFound) => Err(NotFound)
 		Err(ReadFailed) => Err(ReadFailed)
@@ -648,6 +682,7 @@ perform_list! = |handle, path|
 		# closed error union to open error union
 		Ok(bytes) => Ok(decode_listing(bytes))
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(Busy) => Err(Busy)
 		Err(NotADirectory) => Err(NotADirectory)
 		Err(NotFound) => Err(NotFound)
@@ -671,6 +706,7 @@ perform_metadata! = |handle, path|
 			}
 		Err(NotFound) => Err(NotFound)
 		Err(AccessRefused) => Err(AccessRefused)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(Unavailable) => Err(Unavailable)

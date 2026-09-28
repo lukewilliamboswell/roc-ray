@@ -98,9 +98,12 @@ Sqlite := [].{
 
 	## Why a connection was not opened.
 	##
-	## `TooManyConnections` means eight are already open; releasing a `Db` the
-	## app no longer needs frees a slot.
-	OpenErr : [PermissionDenied, SqliteErr(ErrCode, Str), TooManyConnections]
+	## `PathInvalid` is a path that is not plainly relative, or that meets a
+	## symbolic link, as for a `Files` read. `PermissionDenied` is a stub
+	## directory handle, which reaches nothing. `TooManyConnections` means
+	## eight are already open; releasing a `Db` the app no longer needs frees
+	## a slot.
+	OpenErr : [PermissionDenied, PathInvalid, SqliteErr(ErrCode, Str), TooManyConnections]
 
 	## Why a statement was not prepared.
 	##
@@ -217,7 +220,7 @@ Sqlite := [].{
 	##
 	## A row is ordinary Roc data by the time an app sees it: the whole result
 	## crossed the boundary at once, so reading a column is a lookup rather
-	## than an effect. Decode with the receivers below.
+	## than an effect. Decode with the methods below.
 	Row := { names : List(Str), values : List(Value) }.{
 
 		## Two rows are equal when their names and values are. Worth having so
@@ -505,8 +508,8 @@ Sqlite := [].{
 		## db = io.sqlite().open!(data, "scores.db")?
 		## ```
 		##
-		## A path the handle does not reach is `PermissionDenied`, as for a
-		## `Files` read. Legal in `init!`, where it blocks startup, and in
+		## A path that is not plainly relative, or that meets a symbolic link,
+		## is `PathInvalid`, as for a `Files` read. Legal in `init!`, where it blocks startup, and in
 		## tasks, where it parks the task; refused in `update!` and `render!`.
 		open! : Service, Files.Dir, Str => Try(Db, OpenErr)
 		open! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, Sqlite.default_config)
@@ -873,6 +876,7 @@ perform_open! = |authority, handle, path, config| {
 	match result {
 		Ok(db) => Ok(Sqlite.Db.(db))
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(TooManyConnections) => Err(TooManyConnections)
 		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}

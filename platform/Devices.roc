@@ -25,7 +25,7 @@
 ## two characters.
 ##
 ## Tests can start from `Devices.none` and set only the relevant state with the
-## `with_key_*` and `with_mouse_*` receivers.
+## `with_key_*` and `with_mouse_*` methods.
 ##
 ## ```roc
 ## Devices.none.with_key_pressed(KeySpace)
@@ -38,7 +38,7 @@ Devices := [].{
 
 	## Everything the host sampled from the input devices for one cycle.
 	##
-	## Reach for the receivers rather than indexing the packed lists directly:
+	## Reach for the methods rather than indexing the packed lists directly:
 	## `input.key_pressed(KeyW)`, `input.mouse.position()`,
 	## `input.gamepad(One)`.
 	Snapshot := {
@@ -50,7 +50,7 @@ Devices := [].{
 		## key in one interval coalesce into one bit; the count and the order
 		## are not retained. A key tapped between two cycles is therefore
 		## pressed and released in one input and held in neither. Use the
-		## `key_down`/`key_pressed`/`key_released` receivers.
+		## `key_down`/`key_pressed`/`key_released` methods.
 		keys : List(U8),
 
 		## Unicode codepoints typed since the previous input, in the order
@@ -88,7 +88,7 @@ Devices := [].{
 		## Gamepad input sampled once per host-cycle input. The held bits and
 		## axes are state samples; the pressed and released bits are derived by
 		## comparing two samples, so a button pressed and released between two
-		## cycles is not seen. Use the `gamepad` receiver, or the `Gamepad`
+		## cycles is not seen. Use the `gamepad` method, or the `Gamepad`
 		## helpers, rather than indexing these flat lists.
 		gamepads : Gamepad.Snapshot,
 
@@ -227,7 +227,7 @@ Devices := [].{
 		##
 		## The bits are not derived from it: a test that wants both views to
 		## agree states both, as the host would have. Unlike the `with_key_*`
-		## receivers this works on `Devices.empty` too, since a list has no
+		## methods this works on `Devices.empty` too, since a list has no
 		## fixed length to fit.
 		with_events : Snapshot, List(Event) -> Snapshot
 		with_events = |input, events| {
@@ -270,7 +270,7 @@ Devices := [].{
 	## model seed needs and costs nothing. `none`'s are the lengths the host
 	## actually samples: 349 key bytes, 7 mouse-button bytes, 4 gamepad
 	## availability bytes, 4 x 18 gamepad button bytes, and 4 x 6 axes. That is
-	## what makes it writable, so the `with_key_*` and `with_mouse_*` receivers
+	## what makes it writable, so the `with_key_*` and `with_mouse_*` methods
 	## have somewhere to put a bit.
 	##
 	## ```roc
@@ -423,7 +423,7 @@ mouse_fields = |mouse| mouse
 ##
 ## A snapshot whose lists are shorter than the host's -- `Devices.empty`, whose
 ## lists are empty -- has nowhere to put the byte, so it comes back unchanged.
-## That is why the receivers document starting from `Devices.none`, and why the
+## That is why the methods document starting from `Devices.none`, and why the
 ## expects below check a decode rather than only an encode.
 set_byte : List(U8), U64, U8 -> List(U8)
 set_byte = |bytes, index, value|
@@ -530,7 +530,7 @@ expect !(Devices.none.with_key_pressed(KeySpace).key_pressed(KeyEscape))
 expect Devices.none.with_key_pressed(KeyKbMenu).key_pressed(KeyKbMenu)
 expect Devices.none.with_key_pressed(Raw(0)).key_pressed(Raw(0))
 
-## Keys are independent bytes, so the receivers compose.
+## Keys are independent bytes, so the methods compose.
 expect {
 	input = Devices.none.with_key_pressed(KeyEscape).with_key_down(KeyLeftShift).with_key_released(KeyW)
 	input.key_pressed(KeyEscape) and input.key_down(KeyLeftShift) and input.key_released(KeyW)
@@ -583,7 +583,7 @@ expect Devices.none.with_mouse_delta({ x: 3, y: -4 }).mouse.delta() == { x: 3, y
 expect Devices.none.with_mouse_wheel({ x: 0, y: 2 }).mouse.wheel_delta() == { x: 0, y: 2 }
 expect Devices.none.with_mouse_wheel({ x: 0, y: 2 }).mouse.wheel == 2
 
-## Mouse receivers compose with each other and with the key ones.
+## Mouse methods compose with each other and with the key ones.
 expect {
 	input =
 		Devices.none

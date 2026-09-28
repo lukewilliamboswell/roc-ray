@@ -15,17 +15,29 @@ import Resource
 
 Window := [].{
 
-	## The window's logical drawing size, whether it has keyboard focus, and
-	## whether it is minimized.
+	## The window's logical drawing size, whether it has keyboard focus,
+	## whether it is minimized, and whether the user asked it to close.
 	##
 	## `size` is in the same logical units as mouse positions and every drawing
 	## call, not in framebuffer pixels; multiply by `Window.scale!` for those.
 	## A minimized window still runs the frame loop, so an app that should idle
-	## while minimized has to check this.
+	## while minimized has to check this. These three are state samples: the
+	## latest value when the cycle began.
+	##
+	## `close_requested` is an interval event. It is `Bool.True` on the one
+	## cycle after the user clicked the window's close button (or the system
+	## asked the app to quit), and only when the app chose
+	## `App.Config.with_close_request(Deliver)`; under the default `Exit` the
+	## host closes the window itself and `update!` never sees the request.
+	## Several requests between two cycles arrive as one, and a request is
+	## never lost: the next input carries it. The exit key is separate -- it
+	## closes the app directly -- so set `with_exit_key(NoExitKey)` as well if
+	## the app must see every way out.
 	Snapshot : {
 		size : { width : I32, height : I32 },
 		focused : Bool,
 		minimized : Bool,
+		close_requested : Bool,
 	}
 
 	## Suggest a new logical window size to the window manager.

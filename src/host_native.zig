@@ -626,8 +626,8 @@ const Phase = enum {
 const PhaseSet = std.EnumSet(Phase);
 
 /// Startup-only operations: process arguments, environment, startup font,
-/// startup exit, and random seeds. Other Io receivers retain the phase sets
-/// of their corresponding host effects.
+/// and random seeds. `App.Io.exit!` changes host state and is `during_update`;
+/// other Io methods keep the phase sets of their corresponding host effects.
 const during_startup = PhaseSet.initOne(.startup);
 
 /// Drawing, and anything that changes how the draws after it are interpreted.
@@ -993,16 +993,21 @@ fn runBeneath(comptime label: []const u8, comptime work: anytype, args: anytype)
     return blocking.join();
 }
 
-/// A path a handle does not reach -- not plainly relative, meeting a link,
-/// or beneath a stub's empty root. Mirrored in `Files.roc` as
-/// `PermissionDenied`, and numbered past the write table.
+/// A handle that reaches nothing: a stub's empty root. Mirrored in
+/// `Files.roc` as `PermissionDenied`, and numbered past the write table.
 const READ_ERR_NOT_PERMITTED: u8 = 10;
+
+/// A path whose shape, or a link it meets, is refused: not plainly relative,
+/// a link on the way, or an existing link where a write would land. Mirrored
+/// in `Files.roc` as `PathInvalid`.
+const READ_ERR_PATH_INVALID: u8 = 11;
 
 /// Name a confined-resolution failure, deferring to `base` for the
 /// filesystem's own errors.
 fn beneathErrorCode(err: anyerror, comptime base: fn (anyerror) u8) u8 {
     return switch (err) {
-        error.Escapes => READ_ERR_NOT_PERMITTED,
+        error.PathInvalid => READ_ERR_PATH_INVALID,
+        error.NotGranted => READ_ERR_NOT_PERMITTED,
         else => base(err),
     };
 }
@@ -1092,6 +1097,7 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_UTF8 => .not_utf8,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1099,7 +1105,7 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
 /// A refused outcome is the host declining or the app leaving; anything else
 /// is the filesystem's answer.
 fn filesOutcome(code: u8) observatory.EffectOutcome {
-    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED) .refused else .runtime_error;
+    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED or code == READ_ERR_PATH_INVALID) .refused else .runtime_error;
 }
 
 fn hostedFilesReadText(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
@@ -1156,6 +1162,7 @@ fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1194,6 +1201,7 @@ fn filesListError(code: u8) abi.HostFiles_listErr {
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1272,6 +1280,7 @@ fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         WRITE_ERR_ACCESS_REFUSED => .access_refused,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1330,6 +1339,7 @@ fn filesWriteResult(code: u8) abi.HostFiles_write_textResult {
         WRITE_ERR_ACCESS_REFUSED => abiTryErr(Result, Union.access_refused),
         WRITE_ERR_NO_SPACE => abiTryErr(Result, Union.no_space),
         READ_ERR_NOT_PERMITTED => abiTryErr(Result, Union.permission_denied),
+        READ_ERR_PATH_INVALID => abiTryErr(Result, Union.path_invalid),
         else => abiTryErr(Result, Union.write_failed),
     };
 }
@@ -1482,6 +1492,27 @@ fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootR
     return .{ .path = canonical };
 }
 
+/// What a root names, read from the transported root in place: a declared
+/// path short enough to live inside its `RocStr` is only valid where the root
+/// itself is, so the slice must not come from a `payload_*()` copy.
+fn filesRootRequest(root: *const FilesRoot, writable: bool) RootRequest {
+    return switch (root.tag) {
+        .BesideExecutable => .{ .kind = .beside_executable },
+        .WorkingDirectory => .{ .kind = .working_directory },
+        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, root).asSlice(), .create = writable },
+        .AppData, .AppConfig, .AppCache => .{
+            .kind = .app_storage,
+            .storage = switch (root.tag) {
+                .AppConfig => .config,
+                .AppCache => .cache,
+                else => .data,
+            },
+            .text = active_policy.appId() orelse unreachable,
+            .create = true,
+        },
+    };
+}
+
 /// `Files.Access` roots: resolve where a handle starts. The capability
 /// boundary has already checked the declaration; this names the directory,
 /// creates it when the handle may write and the directory is the app's own or
@@ -1494,21 +1525,7 @@ fn hostedFilesOpenRoot(roc_host: *RocHost, root: FilesRoot, writable: bool) call
     defer effect.end();
     defer root.decref(roc_host);
 
-    const request: RootRequest = switch (root.tag) {
-        .BesideExecutable => .{ .kind = .beside_executable },
-        .WorkingDirectory => .{ .kind = .working_directory },
-        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, &root).asSlice(), .create = writable },
-        .AppData, .AppConfig, .AppCache => .{
-            .kind = .app_storage,
-            .storage = switch (root.tag) {
-                .AppConfig => .config,
-                .AppCache => .cache,
-                else => .data,
-            },
-            .text = active_policy.appId() orelse unreachable,
-            .create = true,
-        },
-    };
+    const request = filesRootRequest(&root, writable);
     const allocator = allocatorFromHost(roc_host);
     switch (runBeneath("open root", resolveRootBlocking, .{ allocator, request })) {
         .failed => |code| {
@@ -1530,6 +1547,12 @@ fn designationOperation(source: *const FilesDesignation) []const u8 {
         .Drop => "Files.Access.accept_drop!",
         .Arg => "Files.Access.from_arg!",
     };
+}
+
+/// The path a designation carries, read in place for the reason
+/// `filesRootRequest` gives.
+fn designatedText(source: *const FilesDesignation) []const u8 {
+    return payloadIn(abi.RocStr, source).asSlice();
 }
 
 /// Whether `arg` is byte-identical to an argument the app was launched with.
@@ -1563,12 +1586,12 @@ fn hostedFilesDesignate(roc_host: *RocHost, source: FilesDesignation) callconv(.
     defer if (owned) |bytes| allocator.free(bytes);
     const path: []const u8 = switch (source.tag) {
         .Drop => blk: {
-            const dropped = payloadIn(abi.RocStr, &source).asSlice();
+            const dropped = designatedText(&source);
             if (!std.fs.path.isAbsolute(dropped) or !current_drops.contains(dropped)) break :blk "";
             break :blk dropped;
         },
         .Arg => blk: {
-            const arg = payloadIn(abi.RocStr, &source).asSlice();
+            const arg = designatedText(&source);
             if (arg.len == 0 or !isLaunchArgument(arg)) break :blk "";
             if (std.fs.path.isAbsolute(arg)) break :blk arg;
             const cwd = std.process.currentPathAlloc(mainThreadIo(), allocator) catch break :blk "";
@@ -2961,7 +2984,11 @@ fn hostedSqliteOpen(
         switch (runBeneath("sqlite.resolve", resolveSqlitePathBlocking, .{ allocator, root_arg.asSlice(), path_arg.asSlice(), create })) {
             .path => |path| resolved_path = path,
             .failed => |err| switch (err) {
-                error.Escapes => {
+                error.PathInvalid => {
+                    effect.setOutcome(.refused);
+                    return abiTryErr(Result, abiUnionNamed(abi.HostSqlite_openErr, "PathInvalid"));
+                },
+                error.NotGranted => {
                     effect.setOutcome(.refused);
                     return permissionDenied(Result);
                 },
@@ -6249,6 +6276,12 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
         active_roc_host = null;
     }
 
+    // Past the duration cap is refused before a slot is looked at, headless
+    // or not, so a long sound is never quietly made shorter.
+    const too_long = hostedAudioGenTone(.{ .freq = 440, .ms = raylib.MAX_GEN_SOUND_MS + 1 });
+    try std.testing.expectEqual(abi.HostAudio_gen_toneResultTag.Err, too_long.tag);
+    try std.testing.expectEqual(abi.HostAudio_gen_toneErr.sound_generation_failed, too_long.payload_err());
+
     var sounds: [128]*u64 = undefined;
     for (&sounds) |*sound| sound.* = storeSound(.headless).?;
     const refused_tone = hostedAudioGenTone(.{ .freq = 440, .ms = 20 });
@@ -6529,7 +6562,7 @@ fn imageFileType(format: u8) ?[*:0]const u8 {
         0 => ".png",
         1 => ".jpg",
         2 => ".bmp",
-        3 => ".tga",
+        // 3 was TGA, which the bundled raylib is built without.
         4 => ".gif",
         5 => ".qoi",
         else => null,
@@ -6558,7 +6591,8 @@ fn isSafeStoreRelativePath(path: []const u8) bool {
 
 fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
-        .permission_denied => "no declared permission covers the store's directory",
+        .permission_denied => "the handle the store was opened from reaches nothing",
+        .path_invalid => "the store's directory meets a symbolic link beneath its handle",
         .root_not_found => "root directory was not found",
         .root_not_directory => "root is not a directory",
         .root_unreadable => "root directory is not readable",
@@ -6576,7 +6610,8 @@ fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
 
 fn storeOpenError(error_value: anyerror) abi.HostStore_openErr {
     return switch (error_value) {
-        error.Escapes => .permission_denied,
+        error.PathInvalid => .path_invalid,
+        error.NotGranted => .permission_denied,
         error.FileNotFound => .root_not_found,
         error.NotDir => .root_not_directory,
         error.AccessDenied => .root_unreadable,
@@ -6765,7 +6800,7 @@ test "a store opens beneath a handle's root and refuses a link on the way" {
     var installed = try tmp.dir.openDir(io, "installed", .{});
     defer installed.close(io);
     try installed.symLink(io, "../elsewhere", "linked", .{ .is_directory = true });
-    try std.testing.expectError(error.Escapes, openStoreDirectoryIn(io, root, "linked"));
+    try std.testing.expectError(error.PathInvalid, openStoreDirectoryIn(io, root, "linked"));
 }
 
 test "asset manifests compare declared identity without walking loose files" {
@@ -7066,7 +7101,7 @@ fn readStoreAssetLimited(allocator: std.mem.Allocator, store: *StoreResource, pa
     return switch (readDirFileWaiting(allocator, store.root, path, limit)) {
         .failed => |err| switch (err) {
             error.FileNotFound => .not_found,
-            error.Escapes => .path_invalid,
+            error.PathInvalid => .path_invalid,
             else => .failed,
         },
         .bytes => |bytes| .{ .bytes = bytes },
@@ -7108,12 +7143,19 @@ fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostTexture_load_storeArg
     return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
+test "only the image formats the bundled raylib decodes are offered" {
+    try std.testing.expect(imageFileTypeFromPath("a.png") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.JPEG") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.qoi") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.tga") == null);
+    try std.testing.expect(imageFileType(3) == null);
+}
+
 fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
     const extension = std.fs.path.extension(path);
     if (std.ascii.eqlIgnoreCase(extension, ".png")) return imageFileType(0);
     if (std.ascii.eqlIgnoreCase(extension, ".jpg") or std.ascii.eqlIgnoreCase(extension, ".jpeg")) return imageFileType(1);
     if (std.ascii.eqlIgnoreCase(extension, ".bmp")) return imageFileType(2);
-    if (std.ascii.eqlIgnoreCase(extension, ".tga")) return imageFileType(3);
     if (std.ascii.eqlIgnoreCase(extension, ".gif")) return imageFileType(4);
     if (std.ascii.eqlIgnoreCase(extension, ".qoi")) return imageFileType(5);
     return null;
@@ -7522,7 +7564,7 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.HostDraw_frame_size {
     const effect = EffectScope.begin("Draw.Frame.size!", 0);
     defer effect.end();
     if (render_texture_lease_count > 0) return render_target_sizes[render_texture_lease_count - 1];
-    const window = windowState();
+    const window = windowState(false);
     return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
 }
 
@@ -8315,7 +8357,7 @@ var exit_requested: ?i64 = null;
 var active_app_args: []const [*:0]u8 = &.{};
 
 fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
-    enforcePhase("App.Io.args!", during_load);
+    enforcePhase("App.Io.args!", during_startup);
     const effect = EffectScope.begin("App.Io.args!", 0);
     defer effect.end();
 
@@ -8690,8 +8732,52 @@ fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     enforcePhase("Keys.set_exit_key!", during_update);
     const effect = EffectScope.begin("Keys.set_exit_key!", 0);
     defer effect.end();
+    active_exit_key = nonNegativeCInt(key_code);
     if (active_headless) return;
     raylib.setExitKey(nonNegativeCInt(key_code));
+}
+
+/// The key that ends the app, as `App.Config.with_exit_key` and
+/// `Keys.set_exit_key!` last set it; `0` (raylib's `KEY_NULL`) is none.
+var active_exit_key: c_int = 0;
+
+/// Whether this cycle's keyboard pressed the exit key, from a source raylib
+/// does not watch.
+///
+/// raylib ends the loop itself for a hardware press, inside its own key
+/// callback, before the cycle that would have delivered it. A scripted
+/// keyboard -- `--host-keys`, or `Keys.set_source!` -- never reaches that
+/// callback, and a headless run has no raylib window at all, so the host
+/// honours the exit key for them here, at the same point: after the
+/// keyboard is derived and before `update!` sees the press. The exit key
+/// always ends the app directly, whatever `with_close_request` says.
+fn exitKeyPressedBy(source: raylib.InputSource) bool {
+    if (source != .virtual) return false;
+    if (active_exit_key <= 0 or active_exit_key >= ffi.KEY_COUNT) return false;
+    return raylib.getKeyState()[@intCast(active_exit_key)] & ffi.INPUT_PRESSED != 0;
+}
+
+test "a scripted exit key ends the app; a hardware one is raylib's to end" {
+    defer resetVirtualInput();
+    const previous = active_exit_key;
+    defer active_exit_key = previous;
+    active_exit_key = 256;
+
+    applyVirtualKeys(true, &.{});
+    raylib.recordVirtualKeyEdge(256, .press);
+    raylib.recordVirtualKeyEdge(256, .release);
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expect(exitKeyPressedBy(.virtual));
+    // raylib's own callback already ended the loop for a hardware press.
+    try std.testing.expect(!exitKeyPressedBy(.hardware));
+
+    // `NoExitKey` is no key at all.
+    active_exit_key = 0;
+    try std.testing.expect(!exitKeyPressedBy(.virtual));
+
+    // Another key is not the exit key.
+    active_exit_key = 'Q';
+    try std.testing.expect(!exitKeyPressedBy(.virtual));
 }
 
 /// Copy a path into fixed host storage, returning false if it does not fit.
@@ -9366,6 +9452,9 @@ fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAud
     enforcePhase("Audio.gen_tone!", during_load);
     const effect = EffectScope.begin("Audio.gen_tone!", 0);
     defer effect.end();
+    // `Audio` refuses this as `DurationTooLong` before it gets here; the host
+    // refuses it too, in every mode, rather than shortening the sound.
+    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);
@@ -9381,6 +9470,7 @@ fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostA
     enforcePhase("Audio.gen_sound!", during_load);
     const effect = EffectScope.begin("Audio.gen_sound!", 0);
     defer effect.end();
+    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);
@@ -9403,7 +9493,6 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
     if (std.ascii.eqlIgnoreCase(extension, ".ogg")) return ".ogg";
     if (std.ascii.eqlIgnoreCase(extension, ".mp3")) return ".mp3";
     if (std.ascii.eqlIgnoreCase(extension, ".qoa")) return ".qoa";
-    if (std.ascii.eqlIgnoreCase(extension, ".flac")) return ".flac";
     if (module_music) {
         if (std.ascii.eqlIgnoreCase(extension, ".xm")) return ".xm";
         if (std.ascii.eqlIgnoreCase(extension, ".mod")) return ".mod";
@@ -9567,6 +9656,9 @@ test "an extension raylib cannot decode is refused, and module music is music on
     try std.testing.expect(audioFileTypeFromPath("track.ogg", false) != null);
     try std.testing.expect(audioFileTypeFromPath("track.OGG", false) != null);
     try std.testing.expect(audioFileTypeFromPath("track.aiff", true) == null);
+    // The bundled raylib has no FLAC decoder, so the extension is refused
+    // here rather than advertised and failed inside the decoder.
+    try std.testing.expect(audioFileTypeFromPath("track.flac", true) == null);
     try std.testing.expect(audioFileTypeFromPath("track", true) == null);
     // `.xm` and `.mod` stream but never decode into a `Sound`.
     try std.testing.expect(audioFileTypeFromPath("theme.xm", true) != null);
@@ -10069,6 +10161,9 @@ const RuntimeOptions = struct {
     text_script: ?[]const u8 = null,
     /// Scripted file drops, in the `--host-drops` syntax below.
     drop_script: ?[]const u8 = null,
+    /// Cycles on which the user asks the window to close, in the
+    /// `--host-close` syntax below: comma-separated cycle numbers.
+    close_script: ?[]const u8 = null,
     debug_allocator: bool = false,
     record_stats: bool = false,
     stats_output: ?[]const u8 = null,
@@ -10486,11 +10581,13 @@ test "a drop past the per-cycle cap is reported rather than silently truncated" 
 }
 
 /// Sample the window for one cycle: logical drawing size, focus, minimization.
+/// Whether the user asked to close is the cycle's own interval event, taken by
+/// the loop and passed in; `Draw.Frame.size!` has none and passes false.
 ///
 /// A headless run never opens a window, so every field is a fixed constant
 /// rather than a raylib query -- `--host-headless` output has to be reproducible run
 /// to run, and asking a window that does not exist would not be.
-fn windowState() WindowSnapshot {
+fn windowState(close_requested: bool) WindowSnapshot {
     // `headlessMode()`, not `active_headless`: unit tests reach this through
     // `Draw.Frame.size!`, and the test binary does not link raylib.
     if (headlessMode()) {
@@ -10498,20 +10595,73 @@ fn windowState() WindowSnapshot {
             .size = .{ .width = headless_screen_width, .height = headless_screen_height },
             .focused = HEADLESS_WINDOW_FOCUSED,
             .minimized = HEADLESS_WINDOW_MINIMIZED,
+            .close_requested = close_requested,
         };
     }
     return .{
         .size = .{ .width = raylib.getScreenWidth(), .height = raylib.getScreenHeight() },
         .focused = raylib.isWindowFocused(),
         .minimized = raylib.isWindowMinimized(),
+        .close_requested = close_requested,
     };
+}
+
+/// Whether a `--host-close` script asks the window to close on `cycle`.
+///
+/// The script is comma-separated cycle numbers, already validated by the
+/// parser. It stands in for the user clicking the close button between the
+/// previous cycle and this one, in a headless or hidden run.
+fn scriptedCloseRequest(script: ?[]const u8, cycle: u64) bool {
+    const text = script orelse return false;
+    var entries = std.mem.splitScalar(u8, text, ',');
+    while (entries.next()) |entry| {
+        const at = std.fmt.parseUnsigned(u64, entry, 10) catch continue;
+        if (at == cycle) return true;
+    }
+    return false;
+}
+
+/// Whether `script` is a `--host-close` script: one or more cycle numbers,
+/// separated by commas.
+fn validCloseScript(script: []const u8) bool {
+    if (script.len == 0) return false;
+    var entries = std.mem.splitScalar(u8, script, ',');
+    while (entries.next()) |entry| {
+        _ = std.fmt.parseUnsigned(u64, entry, 10) catch return false;
+    }
+    return true;
+}
+
+test "a close script names the cycles a request arrives on" {
+    try std.testing.expect(validCloseScript("3"));
+    try std.testing.expect(validCloseScript("3,7,40"));
+    try std.testing.expect(!validCloseScript(""));
+    try std.testing.expect(!validCloseScript("3,"));
+    try std.testing.expect(!validCloseScript("three"));
+    try std.testing.expect(!validCloseScript("-1"));
+    try std.testing.expect(scriptedCloseRequest("3,7", 3));
+    try std.testing.expect(scriptedCloseRequest("3,7", 7));
+    try std.testing.expect(!scriptedCloseRequest("3,7", 4));
+    try std.testing.expect(!scriptedCloseRequest(null, 3));
+}
+
+test "the sampled window carries the cycle's close request and nothing else changes" {
+    const previous = active_headless;
+    active_headless = true;
+    defer active_headless = previous;
+    const quiet = windowState(false);
+    const asked = windowState(true);
+    try std.testing.expect(!quiet.close_requested);
+    try std.testing.expect(asked.close_requested);
+    try std.testing.expectEqual(quiet.size.width, asked.size.width);
+    try std.testing.expectEqual(quiet.focused, asked.focused);
 }
 
 fn printUsage() void {
     std.debug.print(
         \\usage: app [--host-headless] [--host-headless-frames=N] [--host-frames=N]
         \\           [--host-hidden] [--host-keys=SCRIPT] [--host-text=SCRIPT]
-        \\           [--host-drops=SCRIPT]
+        \\           [--host-drops=SCRIPT] [--host-close=CYCLE[,CYCLE...]]
         \\           [--host-debug-allocator] [--host-stats-record]
         \\           [--host-stats-output=PATH]
         \\           [--host-stats-detail=summary|standard|full]
@@ -10525,6 +10675,8 @@ fn printUsage() void {
         \\                      of holding it, e.g. "3:ESCAPE~"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
         \\  --host-drops=SCRIPT  drop files on given cycles, e.g. "2:/tmp/a.png,2:/tmp/b.png"
+        \\  --host-close=CYCLES  ask the window to close on given cycles, e.g. "30" or
+        \\                      "30,90", as the close button would
         \\  --host-stats-record  record host statistics to an .rrstats database
         \\  --host-stats-output=PATH  choose the recording path (also enables recording)
         \\  --host-stats-detail=LEVEL  summary, standard (default), or full
@@ -10848,6 +11000,13 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
                 return error.InvalidArgument;
             };
             options.drop_script = value;
+        } else if (std.mem.startsWith(u8, arg, "--host-close=")) {
+            const value = arg["--host-close=".len..];
+            if (!validCloseScript(value)) {
+                std.debug.print("invalid --host-close cycles: {s}\n", .{value});
+                return error.InvalidArgument;
+            }
+            options.close_script = value;
         } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--host-stats-record")) {
@@ -10925,6 +11084,7 @@ test "runtime options carry the windowed sweep switches" {
         @constCast("--host-hidden"),
         @constCast("--host-keys=3:S"),
         @constCast("--host-text=4:ab"),
+        @constCast("--host-close=9,12"),
     };
     const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
     defer options.deinit(std.testing.allocator);
@@ -10934,6 +11094,7 @@ test "runtime options carry the windowed sweep switches" {
     try std.testing.expect(options.hidden);
     try std.testing.expectEqualStrings("3:S", options.key_script.?);
     try std.testing.expectEqualStrings("4:ab", options.text_script.?);
+    try std.testing.expectEqualStrings("9,12", options.close_script.?);
     try std.testing.expectEqual(@as(usize, 1), options.app_args.len);
 }
 
@@ -10989,6 +11150,9 @@ test "runtime options reject malformed reserved host switches" {
 
     var bad_keys = [_][*:0]u8{ @constCast("app"), @constCast("--host-keys=3") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, bad_keys.len, &bad_keys));
+
+    var bad_close = [_][*:0]u8{ @constCast("app"), @constCast("--host-close=soon") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, bad_close.len, &bad_close));
 
     var zero_frames = [_][*:0]u8{ @constCast("app"), @constCast("--host-headless-frames=0") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, zero_frames.len, &zero_frames));
@@ -12431,9 +12595,14 @@ test "a parked read delivers bytes and releases its reservation either way" {
     const missing = readByteListWaiting(&roc_host, root, "definitely-not-here.txt", .read);
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
 
-    // A path the handle does not reach is refused before anything is opened.
+    // A path that is not plainly relative is refused before anything is
+    // opened, as a path problem rather than a missing grant.
     const escaping = readByteListWaiting(&roc_host, root, "../bytes.txt", .read);
-    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, escaping.err);
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, escaping.err);
+    // A stub handle's empty root reaches nothing: that is the missing grant.
+    const stub_read = readByteListWaiting(&roc_host, "", "bytes.txt", .read);
+    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, stub_read.err);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
     try std.testing.expectEqual(@as(usize, 0), missing.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
@@ -13591,6 +13760,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         nonNegativeCInt(app_config.min_height),
     );
     raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
+    active_exit_key = nonNegativeCInt(app_config.exit_key_code);
+    // Under `Deliver` the close button reports to `update!` instead of ending
+    // the loop. The exit key is unaffected: raylib raises the close flag for
+    // it directly, so it still ends the loop below.
+    if (app_config.deliver_close_request and !raylib.deliverCloseRequests()) {
+        std.log.warn("no GLFW window to watch for close requests; the close button will end the app", .{});
+    }
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
     if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
     active_mouse_cursor_code = 255;
@@ -13667,6 +13843,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
+        // A scripted request stands in for the close button. Under `Exit` it
+        // ends the loop here, before this cycle's input, exactly where a real
+        // click would have ended it; under `Deliver` it rides the input.
+        const scripted_close = scriptedCloseRequest(options.close_script, cycle_count);
+        if (scripted_close and !app_config.deliver_close_request) break;
         observatory_cycle = cycle_count;
         observatory_draw_calls = 0;
         observatory_cycle_counts = .{};
@@ -13703,6 +13884,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const scripted_text = takeVirtualText();
         const text_input = scripted_text orelse typed_text;
         input.updateFromRaylib(if (scripted_text != null) .virtual else .hardware);
+        // A hardware press of the exit key already ended the loop inside
+        // raylib; a scripted one ends it here, before `update!` sees it.
+        if (exitKeyPressedBy(if (virtual_keys_active) .virtual else .hardware)) break;
         const mouse_pos = if (virtual_mouse_active)
             raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
         else
@@ -13749,9 +13933,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // the phase guard.
         const stats_update_start = observatoryMeasurementStart();
         recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
+        // Taken every cycle, so a request is reported on exactly one input.
+        const close_requested = raylib.takeCloseRequest() or scripted_close;
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = windowState(close_requested),
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = now_ns,
@@ -13832,9 +14018,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     return finalExitCode(exit_code);
 }
 
-fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
+fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, options: RuntimeOptions) c_int {
+    const frames = options.headless_frames;
     beginAppLifetime();
     resetHeadlessRuntime(app_config);
+    active_exit_key = nonNegativeCInt(app_config.exit_key_code);
     defer deinitResources();
     // A failed or early-exiting run must not poison the next app lifetime.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
@@ -13892,6 +14080,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     reportStartupAllocStats();
     while (cycle_count < frames) : (cycle_count += 1) {
+        // There is no window to close, so a `--host-close` script is the only
+        // request there is: under `Exit` it ends the run before this cycle's
+        // input, and under `Deliver` it rides the input.
+        const close_requested = scriptedCloseRequest(options.close_script, cycle_count);
+        if (close_requested and !app_config.deliver_close_request) break;
         observatory_cycle = cycle_count;
         observatory_draw_calls = 0;
         observatory_cycle_counts = .{};
@@ -13913,9 +14106,15 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
+        // Scripted keys and text reach a headless run exactly as a windowed
+        // one: there is no hardware here, so a script is the only keyboard.
+        applyInputScripts(options, cycle_count);
         const scripted_text = takeVirtualText();
         const text_input = scripted_text orelse raylib.TextInput{ .codepoints = &.{}, .overflowed = false };
         input.updateHeadless(if (scripted_text != null) .virtual else .hardware);
+        // Every keyboard here is scripted, so the host is the one to honour
+        // the exit key, as it does for a script in a windowed run.
+        if (exitKeyPressedBy(.virtual)) break;
         // A headless run has no pointer, so a scripted one is the only pointer
         // there is. Everything a windowed run derives from it -- position,
         // delta, the wheel's single frame of movement -- is derived here the
@@ -13952,7 +14151,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         const headless_dropped = scriptedDropsSnapshot(roc_host, cycle_count);
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = windowState(close_requested),
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = timestamp_nanos,
@@ -14178,7 +14377,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     raylib.setInputQueueObserver(if (active_observatory != null) observeInputQueue else null);
     defer raylib.setInputQueueObserver(null);
     const app_exit_code = if (options.headless)
-        runHeadlessApp(&roc_host, app_config, options.headless_frames)
+        runHeadlessApp(&roc_host, app_config, options)
     else
         runNormalApp(&roc_host, allocator, app_config, options);
 
@@ -14321,6 +14520,36 @@ test "a write whose parent is a file is refused by name" {
         READ_ERR_NOT_FOUND,
         writeBeneathIn(tmp.dir, std.testing.io, "plain.txt/nested.txt", "x"),
     );
+}
+
+test "a refused path shape is PathInvalid in every Files union, and a stub root is PermissionDenied" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "elsewhere");
+    try tmp.dir.symLink(std.testing.io, "elsewhere", "linked_dir", .{ .is_directory = true });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "target.txt", .data = "x" });
+    try tmp.dir.symLink(std.testing.io, "target.txt", "linked_file", .{});
+
+    // An existing link at the write target, a link on the way, and a path
+    // that is not plainly relative are all the path's fault.
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "linked_file", "clobber"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "linked_dir/new.txt", "planted"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "../up.txt", "x"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, statBeneathIn(tmp.dir, std.testing.io, "linked_dir/x").err);
+
+    // Each union names the two refusals apart.
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.path_invalid, filesReadTextError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.permission_denied, filesReadTextError(READ_ERR_NOT_PERMITTED));
+    try std.testing.expectEqual(abi.HostFiles_read_bytesErr.path_invalid, filesReadBytesError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_listErr.path_invalid, filesListError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_metadataErr.path_invalid, filesMetadataError(READ_ERR_PATH_INVALID));
+    try expectPathInvalid(filesWriteResult(READ_ERR_PATH_INVALID));
+    try expectPermissionDenied(filesWriteResult(READ_ERR_NOT_PERMITTED));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, beneathErrorCode(error.PathInvalid, readErrorCode));
+    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, beneathErrorCode(error.NotGranted, readErrorCode));
+    try std.testing.expectEqual(abi.HostStore_openErr.path_invalid, storeOpenError(error.PathInvalid));
+    try std.testing.expectEqual(abi.HostStore_openErr.permission_denied, storeOpenError(error.NotGranted));
 }
 
 test "a write names the failures an app can act on differently" {
@@ -14986,14 +15215,16 @@ var last_undeclared_use: ?UndeclaredUse = null;
 /// Answer whether an effect may go ahead under the declared policy.
 ///
 /// `out_of_scope` is a runtime outcome -- the target may be runtime data -- so
-/// the caller refuses with `PermissionDenied`. `undeclared` is fixed by the
+/// the caller refuses with `PermissionDenied`; `path_invalid` is refused too,
+/// and a caller whose result can say so reports it as `PathInvalid` by
+/// asking the policy first. `undeclared` is fixed by the
 /// application's source, so it is a programmer error and stops the app with
 /// the declaration that would permit the effect. Under `zig test` the
 /// violation is recorded rather than raised, as `enforcePhase` does.
 fn admitDeclared(operation: []const u8, facility: permissions.Facility, admission: permissions.Admission) bool {
     switch (admission) {
         .allow => return true,
-        .out_of_scope => return false,
+        .out_of_scope, .path_invalid => return false,
         .undeclared => {
             last_undeclared_use = .{ .operation = operation, .facility = facility };
             if (comptime builtin.is_test) return false;
@@ -15013,6 +15244,17 @@ fn refuseEffect(comptime Result: type, operation: []const u8, arguments: anytype
     effect.setOutcome(.refused);
     inline for (arguments) |argument| releaseDeniedArgument(argument);
     return permissionDenied(Result);
+}
+
+/// Refuse a gated effect over the shape of its path, as `refuseEffect` does,
+/// but answering `PathInvalid`.
+fn refusePathEffect(comptime Result: type, operation: []const u8, arguments: anytype) Result {
+    var effect = EffectScope.begin(operation, 0);
+    defer effect.end();
+    effect.setOutcome(.refused);
+    inline for (arguments) |argument| releaseDeniedArgument(argument);
+    const Error = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    return abiTryErr(Result, abiUnionNamed(Error, "PathInvalid"));
 }
 
 /// Read one transported `Permission` as the policy's own declaration. The
@@ -15104,7 +15346,17 @@ fn admitPathEffect(operation: []const u8, authority: u64, path: []const u8, writ
 fn capsExportedFilesOpenRoot(authority: u64, root: FilesRoot, writable: bool) callconv(.c) abi.HostFiles_open_rootResult {
     const name = filesRootOperation(&root, writable);
     enforcePhase(name, during_wait);
-    const admitted = authorityIsLive(authority) and switch (root.tag) {
+    const live = authorityIsLive(authority);
+    // A declared path whose text no declaration can cover is the path's
+    // fault, not the grant's, so it answers `PathInvalid` rather than
+    // `PermissionDenied`. Only a live authority gets that far: a stub reaches
+    // nothing, whatever the path says.
+    if (live and root.tag == .Declared and
+        active_policy.admitPath(payloadIn(abi.RocStr, &root).asSlice(), writable) == .path_invalid)
+    {
+        return refusePathEffect(abi.HostFiles_open_rootResult, name, .{root});
+    }
+    const admitted = live and switch (root.tag) {
         // The app's own bundle, never writable.
         .BesideExecutable => !writable,
         .AppData, .AppConfig, .AppCache => requireAppId(name),
@@ -15343,6 +15595,9 @@ fn capsExportedTextStartupDefaultFontRaw(authority: u64) callconv(.c) abi.HostTe
     const name = "App.Io.default_font!";
     enforcePhase(name, during_startup);
     const path = startup_font_config.path;
+    // A path that is not plainly relative is `AssetPathInvalid` whatever the
+    // declarations say, so it is answered by the loader, not refused here.
+    if (authorityIsLive(authority) and path.len != 0 and !isSafeStoreRelativePath(path)) return exportedTextStartupDefaultFontRaw();
     const admitted = authorityIsLive(authority) and
         (path.len == 0 or admitPathEffect(name, authority, path, false));
     if (!admitted) return refuseEffect(abi.HostText_startup_default_fontResult, name, .{});
@@ -15363,6 +15618,16 @@ fn permissionDenied(comptime Result: type) Result {
     var err = std.mem.zeroes(Error);
     err.tag = .PermissionDenied;
     return abiTryErr(Result, err);
+}
+
+fn expectPathInvalid(result: anytype) !void {
+    try std.testing.expectEqual(.Err, result.tag);
+    const err = result.payload_err();
+    if (@typeInfo(@TypeOf(err)) == .@"enum") {
+        try std.testing.expectEqual(.path_invalid, err);
+    } else {
+        try std.testing.expectEqual(.PathInvalid, err.tag);
+    }
 }
 
 fn expectPermissionDenied(result: anytype) !void {
@@ -15503,8 +15768,11 @@ test "a target outside every declared scope is refused with PermissionDenied and
     const outside = "../outside-the-working-directory-and-long-enough";
 
     // A root outside every declaration is refused before anything is resolved.
-    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, outside, &roc_host), false));
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "/etc/an-absolute-path-no-declaration-covers", &roc_host), false));
+    // A `..` path is no declaration's to cover without `FilesAny`: that is
+    // the path's shape, so it is `PathInvalid`, not `PermissionDenied`.
+    try expectPathInvalid(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, outside, &roc_host), false));
+    try expectPathInvalid(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "/srv/data/../and-a-long-enough-escape", &roc_host), true));
     // A read-only declaration does not admit a writable handle, even beneath it.
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.WorkingDirectory, "", &roc_host), true));
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "inside-but-read-only-and-long-enough", &roc_host), true));
@@ -15525,7 +15793,11 @@ test "a target outside every declared scope is refused with PermissionDenied and
     } else {
         try expectPermissionDenied(capsExportedAppReadEnvPosix(live, abi.RocStr.fromSlice("AN_UNDECLARED_VARIABLE_WITH_A_LONG_NAME", &roc_host)));
     }
-    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(live));
+    // The configured font path climbs out with `..`, which is the path's
+    // fault: the loader's own `AssetPathInvalid`, before any file is read.
+    const font = capsExportedTextStartupDefaultFontRaw(live);
+    try std.testing.expectEqual(.Err, font.tag);
+    try std.testing.expectEqual(abi.HostText_startup_default_fontErr.asset_path_invalid, font.payload_err());
     // Every facility above was declared, so none of these was a programmer error.
     try std.testing.expect(last_undeclared_use == null);
 }
@@ -15580,6 +15852,88 @@ test "using a facility the app never declared is a programmer error that names t
     }
     // In-memory SQLite and a store beside the executable are the app's own.
     try std.testing.expect(last_undeclared_use == null);
+}
+
+/// Whether `slice` points into `container`'s own bytes.
+///
+/// A short `RocStr` keeps its bytes inside itself, so a slice read from a tag
+/// payload in place points into the payload; one read from a `payload_*()`
+/// copy points into a stack temporary that is gone by the next statement.
+/// Debug builds tend to leave that stack alone, so a dangling slice still
+/// reads correctly there and only goes wrong under ReleaseFast. Asking where
+/// the slice points is what makes the test fail in every build mode.
+fn sliceWithin(slice: []const u8, container: anytype) bool {
+    const start = @intFromPtr(container);
+    const end = start + @sizeOf(@TypeOf(container.*));
+    const at = @intFromPtr(slice.ptr);
+    return at >= start and at + slice.len <= end;
+}
+
+/// One transported declaration holding `text` in the payload's first `RocStr`.
+fn testDeclaration(comptime tag: @FieldType(abi.App_config_for_hostPermissions, "tag"), text: []const u8, roc_host: *RocHost) abi.App_config_for_hostPermissions {
+    var declaration = std.mem.zeroes(abi.App_config_for_hostPermissions);
+    declaration.tag = tag;
+    @as(*abi.RocStr, @ptrCast(@alignCast(&declaration.payload))).* = abi.RocStr.fromSlice(text, roc_host);
+    return declaration;
+}
+
+test "short strings in tag payloads are read in place, in every build mode" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+
+    // Every string below is short enough to live inside its `RocStr`.
+    var declarations = [_]abi.App_config_for_hostPermissions{
+        testDeclaration(.HttpOrigin, "http://a.test", &roc_host),
+        testDeclaration(.Command, "git", &roc_host),
+        testDeclaration(.EnvVar, "HOME", &roc_host),
+        testDeclaration(.Directory, "saves", &roc_host),
+        testDeclaration(.UdpPeer, "10.0.0.2", &roc_host),
+    };
+    @as(*@TypeOf(declarations[3].payload_directory()), @ptrCast(@alignCast(&declarations[3].payload))).mode = .read_write;
+    @as(*@TypeOf(declarations[4].payload_udp_peer()), @ptrCast(@alignCast(&declarations[4].payload))).port = 9000;
+    for (&declarations) |*declaration| {
+        const text = @as(*const abi.RocStr, @ptrCast(@alignCast(&declaration.payload)));
+        try std.testing.expect(text.isSmallStr());
+    }
+
+    // The declaration's slices point into the declaration itself.
+    for (&declarations) |*declaration| {
+        const text: []const u8 = switch (declarationFromConfig(declaration)) {
+            .http_origin => |origin| origin,
+            .command => |program| program,
+            .env_var => |name| name,
+            .directory => |directory| directory.path,
+            .udp_peer => |peer| peer.address,
+            else => unreachable,
+        };
+        try std.testing.expect(sliceWithin(text, declaration));
+    }
+
+    // And the policy built from them holds the text they said.
+    var config = deniedTestArgument(AppConfig);
+    config.permissions = abi.RocList(abi.App_config_for_hostPermissions).fromSlice(&declarations, &roc_host);
+    defer config.permissions.decref(&roc_host);
+    var policy: permissions.Policy = .{};
+    try std.testing.expect(policyFromConfig(config, &policy) == null);
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitCommand("git"));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitEnv("HOME"));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitPath("saves/slot1", true));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitUdpPeer(permissions.parseIp4("10.0.0.2").?, 9000));
+
+    // A files root and a designation carry their paths the same way.
+    const root = testFilesRoot(.Declared, "saves", &roc_host);
+    defer root.decref(&roc_host);
+    try std.testing.expect(sliceWithin(filesRootRequest(&root, true).text, &root));
+
+    const drop = testDesignation(.Drop, "/t/a.png", &roc_host);
+    defer drop.decref(&roc_host);
+    try std.testing.expect(sliceWithin(designatedText(&drop), &drop));
+    const arg = testDesignation(.Arg, "a.csv", &roc_host);
+    defer arg.decref(&roc_host);
+    try std.testing.expect(sliceWithin(designatedText(&arg), &arg));
 }
 
 test "startup refuses an invalid declaration or an escaping output directory" {

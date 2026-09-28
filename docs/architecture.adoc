@@ -145,7 +145,7 @@ out of `update!` can be exercised directly.
 
 Filesystem, network, process, and waiting operations do not run inside
 `update!` or `render!`. They run on a task, where waiting parks that task and
-the frame loop continues. The amount of synchronous work introduced by the
+the host loop continues. The amount of synchronous work introduced by the
 platform is bounded before it is admitted. Frame-scoped GPU and audio calls can
 still stall in a driver, so RocRay does not claim hard real-time deadlines.
 Saturation has deliberate semantics rather than causing unbounded retained
@@ -212,7 +212,7 @@ the model or reach general host work.
 Conceptually, the host drives this cycle:
 
 .One host cycle, and a task parked between cycles
-[mermaid]
+[mermaid,alt="Sequence diagram of one host cycle: the host gives tasks a turn, calls update! with an App.Input holding finished messages, the app makes direct effects and may spawn a task, returns the next model or Err(Exit(code)), the host gives tasks another turn, then may call render!. A second loop shows a live task parked on a waiting effect while cycles continue; its return value arrives as a message on a later App.Input."]
 ....
 sequenceDiagram
     participant Host as Host runtime
@@ -223,9 +223,9 @@ sequenceDiagram
         Host->>Host: give tasks a turn, collect finished messages
         Host->>App: update!(model, App.Input with those messages, App.Io)
         App->>Host: direct effects, in program order
-        App->>Task: Task.spawn!(input, closure) -- it may start at once
+        App->>Task: Task.spawn!(input, closure); it may start at once
         App-->>Host: next model, or Err(Exit(code))
-        Host->>Host: give tasks a turn -- every new task has reached its first wait
+        Host->>Host: give tasks a turn: every new task has reached its first wait
         opt Presentation is scheduled
             Host->>App: render!(next model, Draw.Frame)
             App-->>Host: ordered draw operations
@@ -233,7 +233,7 @@ sequenceDiagram
     end
 
     loop While a task is live, between callbacks
-        Task->>Host: waiting effect parks the task -- the frame loop continues
+        Task->>Host: waiting effect parks the task; the host loop continues
         Note over Host,App: the closure's return value is a message on a later App.Input
     end
 ....
@@ -263,6 +263,34 @@ The platform cannot prevent application code from taking too long. It can and
 does prevent `update!` and `render!` from becoming blocking I/O entry points:
 every effect that can wait is refused in those phases. Work that waits belongs
 on a task and answers on a later cycle.
+
+=== Ending the application
+
+An application ends in one of three ways, and each is a different authority:
+
+* `update!` returns `Err(Exit(code))`. This is the application's own
+decision, and the ordinary way to stop.
+* The exit key is pressed. The exit key is a startup-configured shortcut
+(`ExitKey(key)`, or `NoExitKey` for none) that ends the application
+directly, before any `update!` sees the press. A scripted press ends it the
+same way as a hardware one.
+* The user asks the window to close, with its close button or the operating
+system's quit command. This is a _close request_, and startup configuration
+decides who answers it. Under `Exit`, the default, the host ends the
+application before the next input. Under `Deliver`, the host keeps the
+surface open and reports the request as an interval event in the next
+`App.Input`; the application ends when `update!` returns `Err(Exit(code))`.
+A delivered request is never lost, and several between two inputs arrive as
+one.
+
+Ending is shutdown (invariant 7): live tasks are cancelled, and a message
+that has not reached an `Input` by the last cycle is never delivered. Work
+that must finish before the application ends — a save, say — is therefore
+the application's to wait for: it chooses `Deliver`, starts the work on a
+task when the request arrives, and returns `Err(Exit(code))` once the task's
+message does. The exit key does not wait; an application that needs every
+way out to pass through `update!` sets `NoExitKey` and handles the key it
+wants as ordinary input.
 
 == Invariants
 
@@ -337,8 +365,8 @@ by one of these protocols is ordinarily an API change only.
 === Input: `App.Input(msg)`
 
 `Input` is immutable data supplied to one call of `update!`. It contains three
-kinds of information, which are not falsely presented as one atomic operating-
-system snapshot:
+kinds of information, which are not falsely presented as one atomic
+operating-system snapshot:
 
 * *state samples* report the latest value at the cycle boundary, such as
 held keys, surface dimensions, focus, and recording status;
@@ -406,6 +434,13 @@ reaches a hosted effect takes an input it never reads. Without it, `msg`
 generalizes at the call site and the host decodes the returned bytes at a
 different type.
 
+The `window` sample is classified the same way. Its size, focus, and
+minimization are state samples: the latest value at the cycle boundary.
+`close_requested` is an interval event: true on the one input after a close
+request arrived, only under `Deliver`, with every request in the interval
+coalesced into one and none discarded. Under `Exit` the host answers the
+request itself, so no input carries it.
+
 Continuously changing sources have two valid shapes. Ambient sources such as
 device input are sampled or buffered into `Input`. Demand-driven sources such
 as a socket or database cursor can instead expose a repeated waiting effect
@@ -457,7 +492,7 @@ input — rather than silently absorbed.
 
 A task is an effectful closure handed to `Task.spawn!` from `update!` or from
 another task. The host runs it on its own stack. A waiting effect inside it
-parks that stack; the frame loop resumes and keeps rendering, and a later cycle
+parks that stack; the host loop resumes and keeps rendering, and a later cycle
 resumes the task where it left off. When the closure returns, its value is
 staged and delivered as a message on the next `App.Input`.
 
@@ -527,8 +562,8 @@ to application code, a worker, presentation, or a device by inference.
 |One-time load or allocation before the first frame |`init!` startup authority
 |===
 
-The classification follows semantics, not backend convenience. An operating-
-system function being synchronous does not make it safe to expose as a
+The classification follows semantics, not backend convenience. An
+operating-system function being synchronous does not make it safe to expose as a
 frame-phase effect.
 
 == Phases and enforcement
@@ -562,7 +597,7 @@ violations fail loudly and immediately, in application vocabulary, naming the
 effect, the phase it was reached from, and the phase it belongs in.
 
 A waiting effect saves and clears the phase across its park and restores it on
-resume, because the frame loop runs in between and enters phases of its own. A
+resume, because the host loop runs in between and enters phases of its own. A
 task therefore always observes its own phase, however many cycles it waited.
 
 There is no phase-free escape hatch. A read needed by model logic is input, an
@@ -760,9 +795,9 @@ or concurrency safety, or a measured boundary-performance need.
 
 The host supplies opaque `App.Io` authority to initialization and every
 `update!(model, input, io)` callback. `Input` remains observations and messages;
-rendering receives only its `Draw.Frame`. Pure receiver accessors select a
-service, such as `io.http()` or `io.files()`, and effects use receiver dispatch:
-`io.http().send!(request)`. Helpers and task closures should receive the narrow
+rendering receives only its `Draw.Frame`. Pure accessor methods select a
+service, such as `io.http()` or `io.files()`, and effects are methods on that
+service: `io.http().send!(request)`. Helpers and task closures should receive the narrow
 service they need. Selecting or copying a service neither performs I/O nor
 widens its authority. Captured services remain valid for the application
 lifetime; phase restrictions apply independently of possession.
@@ -845,17 +880,34 @@ and the declaration that would permit it. Reaching outside a declared scope is
 a runtime outcome, because the target — a URL, a path, a peer, a variable name
 — may be runtime data; the effect returns typed `PermissionDenied` before
 admitting work or touching the external system. `PermissionDenied` means only
-this; an operating system's refusal is reported under its own name. A scope
-check applies to every step the host takes on the application's behalf, so a
-followed redirect is checked like the request that caused it.
+that no grant covers the target: outside every declared scope, a resource-free
+stub, a drop that is not current, an argument the operator did not pass. A
+path the host refuses for its shape is a different outcome, `PathInvalid`: a
+parent component that no declaration can cover lexically, a path that is not
+plainly relative where a relative one is required, a symbolic link beneath a
+handle, an existing link where a write would land. The two are distinct
+because their fixes are: a missing grant is fixed by declaring more, a refused
+path by changing the path. An operating system's refusal is reported under
+its own name. A scope check applies to every step the host takes on the
+application's behalf, so a followed redirect is checked like the request that
+caused it.
 
 === Files are handles, not paths
 
 Filesystem authority is a typed directory or file handle, never an ambient
 path. Every relative path resolves beneath its handle's root: absolute paths,
-parent components, and symbolic links beneath the root are refused, whether or
-not they would lead outside it, so the rule is the same on every system. The
-root itself is what was granted, however the filesystem spells it. Read-only
+parent components, and symbolic links beneath the root are refused as
+`PathInvalid`, whether or not they would lead outside it, so the rule is the
+same on every system. The root itself is what was granted, however the
+filesystem spells it.
+
+Whether a directory declaration covers a root is decided lexically, from the
+text of the declaration and the requested path, and never by asking the
+filesystem. An absolute declaration covers absolute paths beneath it, a
+relative one covers relative paths beneath it, and a working-directory
+declaration covers every relative path. A lexical rule is the same on every
+system and can be read from the source; its cost is that one directory
+spelled two ways is two different targets. Read-only
 and writable handles are distinct types, so a write through a read-only grant
 does not type-check, and a writable handle narrows to a read-only one or to a
 subdirectory. Asset stores, audio and map loaders, and on-disk databases open
@@ -925,7 +977,7 @@ names and locations of checks may change, but the verification layers do not:
 * *Pure tests over the application's own core.* `roc test` cannot call
 `update!`, so the platform supplies what makes the decisions inside it
 testable: `App.Input.for_tests` builds a neutral input with per-field
-`with_*` receivers, and every host resource has a resource-free `stub`, so a
+`with_*` methods, and every host resource has a resource-free `stub`, so a
 model full of assets can be written down in an `expect`. Applications are
 expected to keep a pure core — which message to fold in, whether to quit,
 what work to start — and let `update!` perform its decisions.

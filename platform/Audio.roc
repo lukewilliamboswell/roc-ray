@@ -29,7 +29,8 @@
 ## or a new effect after startup, call the loader inside `Task.spawn!` and keep
 ## the resource the task's message carries. `gen_sound!` and `gen_tone!` build
 ## a `Sound` with no file behind it, so they stay legal in `init!`, `update!`,
-## and tasks.
+## and tasks. A generated sound lasts at most `max_generated_ms`; a longer one
+## is refused as `DurationTooLong` rather than cut short.
 ##
 ## Every other effect here changes what the mixer is doing and is legal in
 ## `init!`, `update!`, and tasks, and refused in `render!`. The four queries
@@ -42,7 +43,7 @@ import Assets
 
 Audio := [].{
 
-	## Host-owned short sound effect. Use receiver methods such as `sound.play!()`.
+	## Host-owned short sound effect. Use methods such as `sound.play!()`.
 	##
 	## A sound has no volume, pitch, or pan of its own that outlives a play.
 	## raylib's are sticky per resource, and every play sets all three, so there
@@ -239,18 +240,33 @@ Audio := [].{
 		volume : F32,
 	}
 
-	## Generate a reusable procedural sound. Generation can fail if the fixed host
-	## resource heap is exhausted, so initialization should propagate the returned
-	## error.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit])
-	gen_sound! = |cfg| generated_sound_from_resource(Host.audio_gen_sound!(raw_config(cfg)))
+	## The longest sound `gen_sound!` and `gen_tone!` make: five seconds, in
+	## milliseconds. For anything longer, load a file with `load_music!`.
+	max_generated_ms : I32
+	max_generated_ms = 5000
 
-	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds.
+	## Generate a reusable procedural sound.
+	##
+	## `DurationTooLong` is an `ms` past `max_generated_ms`, refused before the
+	## host does any work rather than shortened. `ResourceLimit` is the host's
+	## fixed sound table being full, and `SoundGenerationFailed` is the audio
+	## device refusing the samples, so initialization should propagate the
+	## returned error.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit])
+	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
+	gen_sound! = |cfg|
+		if cfg.ms > Audio.max_generated_ms {
+			Err(DurationTooLong)
+		} else {
+			generated_sound_from_resource(Host.audio_gen_sound!(raw_config(cfg)))
+		}
+
+	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds,
+	## at most `max_generated_ms`; a longer tone is `DurationTooLong`.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
 	gen_tone! = |cfg|
 		Audio.gen_sound!({
 			waveform: Sine,
@@ -281,7 +297,8 @@ Audio := [].{
 	## `PathInvalid`, `NotFound` and `ReadFailed` mean what they mean for
 	## `Assets.load_texture!`; `SoundLoadFailed` is bytes raylib would not
 	## decode. The format is taken from the extension, and `.wav`, `.ogg`,
-	## `.mp3`, `.qoa` and `.flac` are the ones it reads.
+	## `.mp3` and `.qoa` are the ones it reads; any other extension is
+	## `SoundLoadFailed`.
 	load_sound! : Assets.Store, Str => Try(Sound, [PathInvalid, NotFound, ReadFailed, SoundLoadFailed, ResourceLimit])
 	load_sound! = |store, path| perform_load_sound!(store, path)
 
@@ -293,8 +310,8 @@ Audio := [].{
 	## frame thread and the host keeps those bytes for as long as the stream
 	## exists, releasing them with the final reference to the `Music`.
 	## `MusicLoadFailed` is bytes raylib would not decode; the format is taken
-	## from the extension, and `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm`
-	## and `.mod` are the ones it reads.
+	## from the extension, and `.wav`, `.ogg`, `.mp3`, `.qoa`, `.xm` and
+	## `.mod` are the ones it reads; any other extension is `MusicLoadFailed`.
 	load_music! : Assets.Store, Str => Try(Music, [PathInvalid, NotFound, ReadFailed, MusicLoadFailed, ResourceLimit])
 	load_music! = |store, path| perform_load_music!(store, path)
 
@@ -312,7 +329,7 @@ loaded_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit])
+generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
 generated_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union

@@ -12,8 +12,7 @@
 ## - Rendering (`Render.roc`): camera, arena layers, sprites, effects, HUD, and end states
 ## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-27-a3ce7f1",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App

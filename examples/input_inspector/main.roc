@@ -6,7 +6,7 @@
 ## of what the devices did, and how `update!` can change the clipboard, cursor,
 ## and window or read a pixel from the previous drawing. Every cycle with
 ## events also prints them to the terminal, in the order they happened.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.Draw
 import rr.Text

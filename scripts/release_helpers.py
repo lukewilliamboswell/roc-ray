@@ -61,14 +61,6 @@ def main() -> int:
     preview.add_argument("notes")
     preview.set_defaults(func=cmd_preview_release_notes)
 
-    examples = subcommands.add_parser("update-example-urls")
-    examples.add_argument("--release-version", default="")
-    examples.add_argument("--release-bundles", default="")
-    examples.add_argument("--default-url", default="")
-    examples.add_argument("--examples-dir", default="examples")
-    examples.add_argument("--repo", default="")
-    examples.set_defaults(func=cmd_update_example_urls)
-
     package = subcommands.add_parser("package-examples")
     package.add_argument("--release-version", default="")
     package.add_argument("--release-bundles", default="")
@@ -275,31 +267,6 @@ def resolve_default_bundle_url(
     default_file = artifact_file_for(bundles, "default")
     return release_asset_url(repo, release_version, default_file)
 
-
-def cmd_update_example_urls(args: argparse.Namespace) -> int:
-    default_url = resolve_default_bundle_url(
-        args.default_url, args.release_version, args.release_bundles, args.repo
-    )
-
-    examples_dir = Path(args.examples_dir)
-    examples = sorted(examples_dir.glob("*/main.roc"))
-    if not examples:
-        raise RuntimeError(f"no Roc examples found in {examples_dir}")
-
-    replacement = f'"{default_url}"'
-    compiler = read_pin(examples_dir.resolve().parent / "platform" / "main.roc").nightly
-    for example in examples:
-        original = example.read_text(encoding="utf-8")
-        rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
-        if count != 1:
-            raise RuntimeError(
-                f"expected one recognized platform reference in {example}, found {count}"
-            )
-        rewritten = rewrite_compiler_pin(rewritten, compiler)
-        example.write_text(rewritten, encoding="utf-8")
-
-    print(f"Updated {len(examples)} example(s) to {default_url}")
-    return 0
 
 
 def zip_tree(source: Path, output: Path, prefix: str) -> None:

@@ -4,6 +4,10 @@ Each directory here is a complete app with a `main.roc`. Run every command
 from the directory that contains `examples/`, so the paths the examples use
 for their files resolve.
 
+In a repository checkout, each example uses the platform in the checkout, so
+run `zig build` once first. The examples zip attached to each release points
+them at that release instead, and needs no checkout.
+
 To try an example, run it with `roc`:
 
 ```bash

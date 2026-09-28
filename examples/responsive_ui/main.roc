@@ -5,7 +5,7 @@
 ##
 ## This example shows one shared layout calculation for drawing and pointer hit
 ## testing, resizable-window settings, and monitor information.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Capture

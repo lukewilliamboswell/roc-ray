@@ -69,19 +69,25 @@ procedure in <<maintaining-link-inputs>>.
 === Run examples against your checkout
 
 The `main` branch holds development source, including examples of APIs that
-have not been released yet. Each example's header names a released platform
-bundle, so `roc examples/cave_climb/main.roc`, and `roc check` on it, use
-that release, not your working tree. Run an example through the runner
-instead, from the repository root:
+have not been released yet. So each checked-in example names the platform in
+your checkout by path, `rr: platform "../../platform/main.roc"`, and carries no
+compiler pin: the platform's own header pins the compiler. Build the host once,
+then run or check an example directly, from the repository root:
 
 [source,bash]
 ----
-scripts/run-example.py examples/cave_climb
+zig build
+roc examples/cave_climb/main.roc
+roc check examples/cave_climb/main.roc
 ----
 
-The runner builds the host, then runs a _copy_ of the example whose header
-points at the platform in your checkout, so the checked-in files are never
-rewritten, even when a run is interrupted. Arguments after `--` go to the app.
+Run `zig build` again after changing host code. CI checks every example exactly
+as it is written, and any warning fails. The release's examples zip rewrites
+each header to point at that release's bundle and pins the compiler it was
+built for, so a downloaded example needs no checkout.
+
+`scripts/run-example.py examples/cave_climb` builds the host and runs the
+example in one step. Arguments after `--` go to the app.
 
 * `--skip-platform-build` (before the example) reuses the native libraries
   from an earlier `zig build`.
@@ -89,9 +95,9 @@ rewritten, even when a run is interrupted. Arguments after `--` go to the app.
   release ships, instead of the platform sources.
 
 To check the platform's own Roc code, run `roc check platform/main.roc`.
-`scripts/all_tests.py`, described below, checks and runs every example the
-same way the runner does. Published starters and release example zips keep
-their own pins.
+`scripts/all_tests.py`, described below, checks and runs every example against
+a bundled copy of the platform, as a release ships it. The published starter
+keeps its own pin.
 
 The host reserves switches beginning `--host-` for unattended runs;
 <<reference-switches>> lists them all. The windowed sweep described below

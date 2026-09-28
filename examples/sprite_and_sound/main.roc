@@ -14,7 +14,7 @@
 ## The paths are relative to the directory you run from, so run it from the
 ## directory that contains `examples/`. Both files were made by
 ## `assets/make_assets.py` and are original to this repository.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Assets

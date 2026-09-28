@@ -4,7 +4,7 @@
 ## and press Escape to quit. This example introduces the three app functions:
 ## `init!` creates the starting state, `update!` responds to each `Input`, and
 ## `render!` draws the current state into a `Frame`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color

@@ -3,8 +3,7 @@
 ## how to place points with the same transformation, and how `update!` changes
 ## the mouse cursor after calculating what the pointer is over.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-27-a3ce7f1",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App

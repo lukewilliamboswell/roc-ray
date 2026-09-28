@@ -8,7 +8,7 @@
 ## `with_app_id`, and `io.files().app_data!()` opens the directory the system
 ## keeps for it -- `~/.local/share/dev.roc-ray.sqlite-scores` on Linux -- with
 ## no permission to declare, because it is the app's own.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color

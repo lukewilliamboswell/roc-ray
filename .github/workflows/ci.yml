@@ -222,6 +222,19 @@ jobs:
               raise SystemExit(1)
           PY
 
+      # Every example exactly as it is checked in, the way a contributor runs
+      # it: the working tree's platform by path, and a warning fails. The
+      # suite below rewrites each header to a served bundle, so on its own it
+      # never sees what `roc examples/<name>/main.roc` does; that gap once let
+      # every example pair a stale release bundle with a newer compiler.
+      - name: Check the examples as written
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          for app in examples/*/main.roc; do
+            roc check "$app" || { echo "::error file=$app::roc check failed as written"; exit 1; }
+          done
+
       # all_tests.py bundles the complete platform and serves
       # it on a loopback port, and builds copies of the examples that point at
       # the served URLs. It used to take three steps here to bundle, serve on a

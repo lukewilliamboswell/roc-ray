@@ -2,7 +2,7 @@
 ## to try a path that climbs out of the output directory with `..` (the host
 ## refuses it), and Escape to quit. This example shows screenshot tasks, result
 ## messages, and how captures stay inside the output directory.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Capture

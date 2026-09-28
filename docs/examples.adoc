@@ -16,9 +16,10 @@ an example, as <<run-an-example>> shows.
 
 Each example is a directory with a `main.roc`. Choose the one closest to
 what you want to build and copy its directory. For the released examples,
-download the examples zip described in <<run-an-example>>; the checked-in
-examples on `main` may use APIs that have not been released yet (see
-<<development-checkout>>).
+download the examples zip described in <<run-an-example>>. The examples in
+the repository name the platform in the checkout instead, and may use APIs
+that have not been released yet; <<development-checkout>> shows how to run
+them.
 
 Run every command from the directory that contains `examples/`, so the paths
 the examples use for their files resolve. To try an example, run it with

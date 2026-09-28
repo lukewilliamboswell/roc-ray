@@ -170,14 +170,16 @@ The default and Wayland bundles expose the same API with different native
 link configurations.
 
 The release workflow builds and tests both bundles, publishes this manual and
-the API reference for the release to Pages, and opens a follow-up PR that
-updates the example bundle URLs. Do not manually publish an untested local bundle as
-a release artifact.
+the API reference for the release to Pages. Nothing in the repository changes
+after a release: the checked-in examples name the platform in the checkout, and
+only the examples zip points at the release. Do not manually publish an
+untested local bundle as a release artifact.
 
 Besides the bundles, every GitHub release includes:
 
-* `examples-<version>.zip`: every example, its header pointing at this
-  release's default bundle, so an unzipped copy builds with no checkout;
+* `examples-<version>.zip`: every example, its header rewritten to point at
+  this release's default bundle and to pin the compiler the release was built
+  for, so an unzipped copy builds with no checkout;
 * `roc-ray-manual-<version>.pdf`: this manual as one PDF;
 * `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
   it;

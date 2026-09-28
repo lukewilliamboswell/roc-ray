@@ -47,9 +47,9 @@ Keys are tags such as `KeySpace`, `KeyW`, `KeyLeft`, and `KeyEnter`; the
 
 `key_pressed` and `key_released` mean "at least once since the previous
 input". Several presses of the same key in one interval count as one. When the
-count or the order matters -- a double tap, or text editing where a key press
-comes between two typed characters -- read `devices.events` instead
-(see <<input-events>>).
+count or the order matters, read `devices.events` instead (see
+<<input-events>>). A double tap is one example. Text editing is another,
+where a key press can come between two typed characters.
 
 By default, Escape is the _exit key_: it ends the app before `update!` sees
 the press, so you do not check for it yourself. An app that wants Escape for
@@ -100,9 +100,9 @@ stick = match input.devices.gamepad(One) {
 }
 ----
 
-Buttons use layout-neutral names -- `FaceDown` is the bottom face button,
-whatever its label says -- so `pad.button_pressed(FaceDown)` is "jump" on
-any controller.
+Buttons use layout-neutral names: `FaceDown` is the bottom face button,
+whatever its label says. So `pad.button_pressed(FaceDown)` is "jump" on any
+controller.
 
 Gamepad buttons are state samples only. The host compares this cycle's
 sample with the previous one to compute `button_pressed` and
@@ -180,7 +180,7 @@ and tasks. Use `input.time`, not the wall clock, for animation and movement.
 `elapsed_seconds` is the real time between two cycles, and it varies. A
 cycle is usually a few milliseconds, but the operating system decides: while
 the user drags the window, or while you pause the app in a debugger, no
-cycles run, and the next cycle reports everything that passed -- possibly
+cycles run, and the next cycle reports all the time that passed, possibly
 several seconds. The host reports that value as it is, without limiting
 it, so a naive `position + velocity * dt` can jump a player through a wall.
 

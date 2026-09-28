@@ -11,9 +11,9 @@ endif::[]
 = Declaring what an app can access
 
 Every app can open its window, read input, draw, play audio, and print to its
-terminal without asking. To access anything else -- a directory, a web service,
-another program, an environment variable, the clipboard -- the app says so in
-its startup configuration. That statement is a _declaration_, and it is the
+terminal without asking. To access anything else, such as a directory, a web
+service, another program, an environment variable, or the clipboard, the app
+says so in its startup configuration. That statement is a _declaration_, and it is the
 only permission there is: nobody is prompted, and there are no launch flags.
 
 This chapter starts with what a typical game needs, then lists every
@@ -142,8 +142,8 @@ Declare each facility as narrowly as possible.
 A `mode` is `ReadOnly` or `ReadWrite`. A `ReadWrite` declaration also permits
 reading.
 
-Each facility's unscoped form -- `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`,
-`FilesAny` -- has a name that stands out when someone reviews the code.
+Each facility's unscoped form (`HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`,
+`FilesAny`) has a name that stands out when someone reviews the code.
 
 === How directory declarations match
 
@@ -178,9 +178,9 @@ The target is outside every declaration::
 
 The path's form, or a link along it, is refused::
   An effect that takes a path beneath a handle returns `PathInvalid` for a
-  path that is not plainly relative -- empty, absolute, with a drive letter
-  or a backslash, or with an empty, `.`, or `..` component -- and for one
-  that passes through a symbolic link (on Windows, a reparse point) or writes
+  path that is not plainly relative (empty, absolute, with a drive letter or
+  a backslash, or with an empty, `.`, or `..` component), and for one that
+  passes through a symbolic link (on Windows, a reparse point) or writes
   to one. These are refused on every system, whether or not the path would
   lead outside the handle. The same holds for `open_dir!` and
   `open_dir_read!`: past the declared directory, the path is opened one
@@ -225,8 +225,8 @@ things:
 
 * a careless or compromised dependency inside a trusted app, which can access
   only what the app passes to it;
-* runtime data -- a save name, a dropped path, a network reply -- steering an
-  effect somewhere the app never meant it to go;
+* runtime data, such as a save name, a dropped path, or a network reply,
+  sending an effect somewhere the app never meant it to go;
 * source you have not read closely, which can access only what it visibly
   declares.
 

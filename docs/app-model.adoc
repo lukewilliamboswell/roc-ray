@@ -119,9 +119,9 @@ Model : {
 ----
 
 Only `update!` produces a new model. The host keeps the model between calls,
-but never reads or changes it. Keep long-lived resources you create in `init!` -- textures,
-fonts, sounds, prepared text, file handles -- in the model rather than
-creating them again every cycle.
+but never reads or changes it. Keep long-lived resources you create in
+`init!`, such as textures, fonts, sounds, prepared text, and file handles, in
+the model rather than creating them again every cycle.
 
 == init!: configuration and the first model
 
@@ -243,9 +243,10 @@ stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
 
 `update!` may call host effects directly: play a sound, resize the window,
 print a line, start a recording. Those happen immediately, in the order they
-are written. What `update!` must _not_ do is wait. An effect that can wait --
-reading a file, sending a request, sleeping -- is refused in `update!`. Run it
-in a _task_ instead, and its result arrives in a later input. <<tasks>> shows how.
+are written. What `update!` must _not_ do is wait. An effect that can wait,
+such as reading a file, sending a request, or sleeping, is refused in
+`update!`. Run it in a _task_ instead, and its result arrives in a later
+input. <<tasks>> shows how.
 
 == render!: draw the model
 
@@ -274,10 +275,10 @@ from the model. An animation keeps its clock in the model, advanced in
 One rule covers almost every case:
 
 * Drawing goes in `render!`.
-* Anything that waits -- files, the network, sleeping -- goes in a task, or in
+* Anything that waits (files, the network, sleeping) goes in a task, or in
   `init!` before the app starts.
-* Everything else -- reading input, changing the model, playing a sound,
-  starting a task -- goes in `update!`.
+* Everything else (reading input, changing the model, playing a sound,
+  starting a task) goes in `update!`.
 
 If you break the rule, the app stops at once with a message that names the
 effect you called, the callback you called it from, and where it belongs. For
@@ -297,8 +298,8 @@ it:
 * Clicking the window's close button closes the window. By default the app
   ends at once, and `update!` never sees it happen.
 
-An app that has something to finish first -- saving the game, for example --
-can ask to be notified instead, with `with_close_request(Deliver)`. The window then
+An app that has something to finish first, such as saving the game, can ask
+to be notified instead, with `with_close_request(Deliver)`. The window then
 stays open, and the next input has `input.window.close_requested` set to
 `Bool.True` for one cycle. A request is never lost. The app decides when to
 end by returning `Err(Exit(code))`:
@@ -362,8 +363,8 @@ Ok(List.fold(input.messages, model, apply_message))
 == Keep the decisions pure
 
 `update!` is effectful, so `roc test` cannot call it. Keep the decisions it
-makes -- which message changes what, whether to quit, which tasks to start --
-in pure functions that take the model and input, and let `update!` carry out
+makes in pure functions that take the model and input: which message changes
+what, whether to quit, and which tasks to start. Then let `update!` carry out
 what they decide. Those functions are ordinary Roc and can be tested with `expect`.
 <<testing>> shows how to build inputs and resources for such tests.
 
@@ -411,16 +412,16 @@ runs: the first time a callback breaks one, the app stops with a message
 naming the effect, the callback it was called from, and the fix. Run your app
 early and often, and read the message when it happens.
 
-If you need something synchronously -- a file that must be read before the
-game can start, for example -- do it in `init!`, which is allowed to wait.
+If you need something before the game can start, such as a file that must be
+read first, do it in `init!`, which is allowed to wait.
 
 [#phases]
 == Details: which effects are legal where
 
 This section is a reference; the one-line rule above covers most apps.
 
-The host always knows which callback it is inside -- `init!`, `update!`,
-`render!`, or a task -- and calls this the _phase_. Every effect states the
+The host always knows which callback it is inside: `init!`, `update!`,
+`render!`, or a task. It calls this the _phase_. Every effect states the
 phases it is legal in, in its API documentation, using one of a few rules:
 
 [cols="2,3",options="header"]
@@ -439,9 +440,9 @@ phases it is legal in, in its API documentation, using one of a few rules:
 
 `render!` is deliberately narrow. It must draw exactly the model `update!`
 produced, so that a frame, a screenshot, or a recording is an exact picture
-of what the app decided. An effect that changes host state or reads something
-that differs from run to run -- the clock, a file -- would break that, so it
-is refused in `render!` even when it does not wait. The few queries in the
+of what the app decided. An effect that changes host state, or reads
+something that differs from run to run such as the clock or a file, would
+break that. So it is refused in `render!` even when it does not wait. The few queries in the
 table above are allowed because they cannot change what happens next, and
 reading them allocates nothing.
 

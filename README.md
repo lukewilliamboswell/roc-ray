@@ -90,8 +90,8 @@ render! = |model, frame| {
 `init!` creates the starting state, `update!` uses each host cycle's input to
 compute the next state, and `render!` draws it. Anything that waits, such as
 reading a file or fetching a URL, runs as a task, and its result arrives in a
-later `update!`. Anything the app accesses beyond its own window -- the
-network, a directory, another program -- is declared in its startup settings.
+later `update!`. Anything the app accesses beyond its own window, such as the
+network, a directory, or another program, is declared in its startup settings.
 
 ## Documentation
 

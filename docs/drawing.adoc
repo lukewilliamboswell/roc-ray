@@ -18,8 +18,9 @@ clipping, blending, shaders, and offscreen drawing. It assumes <<app-model>>.
 
 Drawing in RocRay is _immediate_: each frame, `render!` draws the whole scene
 from the model, in order, starting from a cleared window. Nothing drawn is
-remembered between frames, so there are no objects to create, move, or delete
--- to move something, change the model and draw it somewhere else next time.
+remembered between frames, so there are no objects to create, move, or
+delete. To move something, change the model and draw it somewhere else next
+time.
 
 Every drawing effect takes the frame and is legal only in `render!`:
 
@@ -189,9 +190,9 @@ Here `model.walk` starts as `Sprite.animation({ frame_count: 4, fps: 8 })`.
 
 Textures are released automatically when the last reference to them goes
 away; there is no `unload` to call. Creating or changing a texture from
-pixels the app holds -- `Assets.texture_from_bytes!`,
-`Assets.generate_color_texture!`, `Assets.update_texture!` -- is legal in
-`init!`, `update!`, and tasks.
+pixels the app holds is legal in `init!`, `update!`, and tasks. The effects
+that do this are `Assets.texture_from_bytes!`,
+`Assets.generate_color_texture!`, and `Assets.update_texture!`.
 
 === Use sprite sheets and atlases
 
@@ -271,7 +272,7 @@ size = font.measure({ text: "Score", size: 24, spacing: Text.default_spacing })
 Some drawing modes apply to a group of drawing calls: everything drawn inside
 the group is affected, and nothing after it. Each is a method that takes a
 function, runs it with the mode active, and restores the previous state
-however the function ends -- including when it returns an error:
+however the function ends, including when it returns an error:
 
 [cols="1,3",options="header"]
 |===

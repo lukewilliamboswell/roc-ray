@@ -133,8 +133,8 @@ a fixed step for stable physics.
 
 Roc has no garbage collector. Memory is managed by _reference counting_: a
 value is freed the moment nothing refers to it, so there are no collection
-pauses in the middle of a level. When a value has only one reference -- as
-your model does while `update!` runs -- Roc changes it in place instead of
+pauses in the middle of a level. When a value has only one reference, as
+your model does while `update!` runs, Roc changes it in place instead of
 copying it, so updating a large list of entities every cycle does not copy the
 list.
 
@@ -147,8 +147,8 @@ How you run the app matters a lot:
   release.
 
 As a rough guide, on a desktop Linux machine the
-{src}/examples/particles/main.roc[Particles] example -- 4,000 sprites, each
-moved every cycle and drawn in one batch -- spends about 0.07 ms per cycle in
+{src}/examples/particles/main.roc[Particles] example (4,000 sprites, each
+moved every cycle and drawn in one batch) spends about 0.07 ms per cycle in
 `update!` when built with `roc build`, against about 0.5 ms under
 `roc main.roc`. Drawing all 4,000 sprites takes about 0.3 to 0.4 ms of each
 frame. Your numbers will differ, but that is the scale: a 60 frames per second

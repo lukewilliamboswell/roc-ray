@@ -127,9 +127,9 @@ files; for a larger file it returns `TooLarge`. For bigger or binary files, use
 
 The task needs `levels` but not the whole model, so `update!` takes it out of
 the model first and the task body _captures_ just that value. A task cannot
-read or change the model itself. Everything it needs, it captures when it is
-created -- a file handle, an HTTP client, a copy of some model value -- and
-everything it reports back goes in its message.
+read or change the model itself. Everything it needs, such as a file handle,
+an HTTP client, or a copy of some model value, it captures when it is
+created. Everything it reports back goes in its message.
 
 == Give each kind of task its own message
 
@@ -147,8 +147,8 @@ Msg : [
 
 Several tasks can run at once, and their messages arrive in the order the
 tasks _finished_, which need not be the order they were started. When more
-than one task of the same kind can be running -- the user presses "reload"
-twice -- an older reply can arrive after a newer one. Put an id or generation counter
+than one task of the same kind can be running, for example because the user
+pressed "reload" twice, an older reply can arrive after a newer one. Put an id or generation counter
 in the message and ignore replies that do not match the latest;
 {src}/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
 
@@ -156,8 +156,8 @@ in the message and ignore replies that do not match the latest;
 
 A task runs on the same thread as `update!` and `render!`, and other code runs
 only when the task reaches a waiting effect. So a task that computes for a
-long time without waiting -- generating a large map, solving a puzzle --
-delays the frame exactly as the same computation in `update!` would. Tasks let
+long time without waiting, such as generating a large map or solving a
+puzzle, delays the frame exactly as the same computation in `update!` would. Tasks let
 slow input and output, such as file reads and network requests, continue while
 frames are drawn; they do not run your code in parallel. Split a long computation into pieces spread across cycles
 instead.
@@ -174,8 +174,8 @@ waiting.
 == When the app exits
 
 When the app ends, tasks that are still running are cancelled, and their
-messages never arrive. A task that must finish -- writing a save file, for
-example -- needs the app to wait for its message before exiting. With
+messages never arrive. A task that must finish, such as writing a save file,
+needs the app to wait for its message before exiting. With
 `with_close_request(Deliver)`, closing the window becomes a message to
 `update!` rather than an immediate exit, so the app can start the save and
 exit when the save's message arrives. <<app-model-closing>> shows the whole

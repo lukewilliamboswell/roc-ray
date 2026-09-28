@@ -44,8 +44,9 @@ A RocRay app is three functions:
 * `init!` runs once, at startup. It chooses the window's settings, loads what
   the app needs, and creates the starting state, which RocRay calls the
   _model_.
-* `update!` receives the model and what just happened -- keys pressed, the
-  mouse moving, a file that finished loading -- and returns the next model.
+* `update!` receives the model and what just happened: which keys were
+  pressed, how the mouse moved, and which tasks finished. It returns the next
+  model.
 * `render!` draws the model.
 
 The _host_, the native program that runs your app, calls them in a loop. One
@@ -66,9 +67,10 @@ first example. <<glossary>> defines every term the manual uses.
 == What an app can access
 
 Every app can draw, read input, play sound, print to its terminal, and record
-itself. Anything more -- a network service, a directory, another program, an
-environment variable, the clipboard -- must be declared in the app's startup
-settings, so you can see what an app can access by reading its source.
+itself. Anything more, such as a network service, a directory, another
+program, an environment variable, or the clipboard, must be declared in the
+app's startup settings. So you can see what an app can access by reading its
+source.
 <<permissions>> explains how.
 
 == What it looks like

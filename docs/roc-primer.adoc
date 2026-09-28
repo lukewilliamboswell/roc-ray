@@ -125,9 +125,10 @@ include::tutorial/primer.roc[tag=nominal,indent=0]
 
 Inside the module that declares it, `Lives.(count)` builds a `Lives` from a
 number, or takes one apart. You rarely need to declare a nominal type in a
-small app, but you use the platform's all
-the time. `Draw.Frame`, `Audio.Sound`, `App.Config` and `App.Input` are
-nominal types. You cannot build one yourself; the platform hands them to you.
+small app, but you use the platform's all the time. `Draw.Frame`,
+`Audio.Sound`, `App.Config` and `App.Input` are nominal types. You cannot
+build one from its contents; the platform hands you one, such as
+`App.default`, and you change it with its methods.
 See {langref}/types.md#type-aliases[Type aliases] and
 {langref}/types.md#nominal-types[Nominal types].
 
@@ -227,7 +228,7 @@ That is how `init! : App.Init(Model, [])` grows into
 `init!` generates a sound.
 
 RocRay treats one error specially. A callback that returns `Err(Exit(code))`
-ends the app with that exit code. Any other error that reaches the platform
+ends the app with that exit code. Any other error that reaches the host
 also ends the app, with a message naming the callback and the error.
 See {langref}/operators.md#-unwrap-if-ok-early-return-if-err[The ? operator].
 

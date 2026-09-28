@@ -254,7 +254,7 @@ ROC_RAY_ALLOC_STATS=1 examples/pong/main --host-headless --host-headless-frames=
 ----
 
 Each frame prints one line to stderr with the bytes and calls that frame
-allocated and freed, and how much of it belonged to `update`. Unset, the host
+allocated and freed, and how much of it belonged to `update!`. Unset, the host
 does not install the meter at all.
 
 That is how the cost of holding a collection in the model was measured:

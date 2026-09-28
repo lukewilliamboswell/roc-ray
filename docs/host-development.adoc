@@ -90,9 +90,10 @@ outside `exposes`. Keep that single fixture rather than adding one per domain.
 an effectful function, and the phase guard would refuse the effects inside one
 anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
 half, a headless example run for the whole path -- and shape the public wrapper
-so an app can keep its decisions in pure functions (`+apply_message : Model, Msg -> Model+` and friends) that `update!` only performs. Those pure functions are
-what an app's own `expect`s exercise, using `App.Input.for_tests` and the
-resource `stub`s.
+so an app can keep its decisions in pure functions, such as
+`+apply_message : Model, Msg -> Model+`, that `update!` only performs. Those
+pure functions are what an app's own ``expect``s exercise, using
+`App.Input.for_tests` and the resource ``stub``s.
 
 === Pin `msg` with a witness
 
@@ -211,10 +212,10 @@ its declarations from argv and covers scoped refusal, undeclared use, and
 invalid startup configuration. `test/designation` covers drops, driven by a
 `--host-drops` script, and launch arguments.
 
-`App.Io` is supplied to `init!` and as the third `update!` argument. Delegate
-narrow receivers and handles (`Files.Dir`, `Http.Client`, and so on) to helpers
-and tasks.
-Selecting a receiver is pure and allocates no host resource. The private scalar
+`App.Io` is supplied to `init!` and as the third `update!` argument. Pass the
+narrow services and handles it hands out (`Files.Dir`, `Http.Client`, and so
+on) to helpers and tasks. Selecting a service with a method such as
+`io.files()` is pure and allocates no host resource. The private scalar
 identity belongs to one application lifetime and is not a native pointer; a
 test stub or an identity from an earlier lifetime is refused.
 

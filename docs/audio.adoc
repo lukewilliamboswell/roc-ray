@@ -56,7 +56,8 @@ the compiler tells you which are missing.
 `Noise`), a start and end frequency, a duration, an envelope, and a volume. A
 generated sound lasts from 1 millisecond to `Audio.max_generated_ms` (5
 seconds). Asking for any other length is a mistake in the program, so the app
-stops with a message naming the fix; load a file for anything longer. {src}/examples/pong/main.roc[Pong] and
+stops with a message naming the fix; load a file for anything longer.
+{src}/examples/pong/main.roc[Pong] and
 {src}/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
 this way.
 
@@ -76,7 +77,7 @@ Vorbis, MP3, and QOA files; music also reads XM and MOD tracker modules.
 
 Both loaders read the disk, so they wait: they are legal in `init!` and in
 tasks. To start a new track after startup, load it in a task and keep the
-`Music` that the task's message carries.
+`Music` that the task's message contains.
 
 == Playing
 
@@ -91,7 +92,7 @@ if input.devices.key_pressed(KeySpace) {
 ----
 
 `sound.play!()` plays a sound at full volume, normal pitch, and centred. For
-anything else, `sound.playback()` starts a description of one play, and
+anything else, `sound.playback()` creates a description of one play, and
 `with_volume`, `with_pitch`, and `with_pan` adjust it before `.play!()`
 starts it. The settings apply to that play only; the next play starts from
 the defaults again. `Sound` also has `stop!`, `pause!`, and `resume!`.
@@ -101,11 +102,12 @@ it from the beginning; the two plays do not overlap. For effects that should
 overlap, such as rapid gunfire, load or generate the same sound two or three
 times and play them in turn.
 
-Music keeps its settings: `play!`, `stop!`, `pause!`, `resume!`, `seek!`,
-`set_volume!`, `set_pitch!`, `set_pan!`, and `set_looping!`.
+Music is different: its settings stay in effect until you change them. Music
+has `play!`, `stop!`, `pause!`, `resume!`, `seek!`, `set_volume!`,
+`set_pitch!`, `set_pan!`, and `set_looping!`.
 `Audio.set_master_volume!` scales everything.
 
-Four queries only read what the audio device already knows, so they are legal
+Four queries only read values the audio device already has, so they are legal
 in any callback, `render!` included: `Sound.is_playing!`, `Music.is_playing!`,
 `Music.length!`, and `Music.time_played!`.
 

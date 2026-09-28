@@ -16,7 +16,7 @@ because every destination must be declared.
 
 == HTTP requests
 
-Declare the origin the app talks to, then send from a task:
+Declare the origin the app sends requests to, then send from a task:
 
 [source,roc]
 ----
@@ -49,9 +49,10 @@ The client, `io.http()`, offers:
   from where the result is used;
 * `send!(request)`: send a full request and return the response;
 * `send_json!(request, value)`: send a value encoded as JSON;
-* `send_with!(config, request)`: send with a different deadline or size cap.
+* `send_with!(config, request)`: send with a different time limit or size
+  limit.
 
-`get!` and `get_utf8!` need nothing beyond the platform. An app that builds
+`get!` and `get_utf8!` need no package other than the platform. An app that builds
 `Request` values or reads `Response` values itself uses the
 https://github.com/roc-lang/http[`roc-lang/http`] package's types, and declares
 that package in its own header beside the platform.
@@ -60,22 +61,24 @@ that package in its own header beside the platform.
 
 * **Every request has limits.** By default a request must finish within thirty
   seconds, and its response body, measured after decompression, may not exceed
-  8 MiB. A response over the cap fails rather than being truncated.
+  8 MiB. A response over the limit fails rather than being truncated.
   Pass a `Config` to `send_with!` to change either limit, or `0` to disable
   one.
 * **A status code is not an error.** A 404 or a 503 arrives as `Ok(response)`
-  carrying that status; only a failure to complete the exchange is `HttpErr`.
+  with that status. Only a request that gets no complete response is
+  `HttpErr`.
 * **Redirects** are followed up to three times, and each step is checked
   against the declared origins.
 * **HTTPS** verifies servers with the operating system's certificate store.
   Custom certificate authorities and disabling verification are not supported.
-* **URLs** are validated before any work starts. Quoted URL literals are
+* **URLs** are validated before the request is sent. Quoted URL literals are
   checked at compile time; runtime strings go through `Url.parse`, which is
   deliberately stricter than a browser and rejects input rather than repairing
   it.
 
-{src}/examples/http_fetch/main.roc[HTTP Fetch] fetches on a task and tags each
-reply with the fetch it belongs to, so a stale reply is ignored.
+{src}/examples/http_fetch/main.roc[HTTP Fetch] fetches on a task and marks
+each reply with the fetch it belongs to, so a reply to an older fetch is
+ignored.
 
 == UDP datagrams
 
@@ -114,14 +117,14 @@ Here `position_bytes` is the app's own encoder.
 * `send!` queues one datagram and returns at once, reporting a full queue as an
   error rather than waiting.
 * `receive!` waits until at least one datagram arrives, then returns every
-  datagram that had arrived, in order, up to a bounded batch. Start the next
+  datagram that had arrived, in order, up to a fixed maximum per call. Start the next
   receive after its message arrives.
 
 Addresses are IPv4 literals, such as `"127.0.0.1"`; there is no name lookup,
 because resolving a name waits and `bind!` and `send!` never do. UDP itself
 guarantees neither delivery, order, nor uniqueness, and the operating system
-may drop datagrams when its buffer is full. Framing, retransmission, and
-session state are the app's to design.
+may drop datagrams when its buffer is full. The app must design its own
+framing, retransmission, and session state.
 
 Declare `UdpBind(port)` for each port the app binds, `UdpPeer(address, port)`
 for each peer it sends to, or `UdpLoopback` for traffic that stays on this

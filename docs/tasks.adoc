@@ -8,12 +8,12 @@ ifndef::src[]
 endif::[]
 
 [#tasks]
-= Work that waits: tasks
+= Tasks: operations that wait
 
-Some work takes longer than a frame: waiting two seconds before the next
+Some operations take longer than a frame: waiting two seconds before the next
 level starts, reading a level file, fetching a high-score table. If `update!`
-waited for it, the window would freeze. This chapter shows how to run that
-work as a _task_, so the game keeps updating and drawing while it waits, and
+waited for one, the window would freeze. This chapter shows how to run such an
+operation as a _task_, so the game keeps updating and drawing while it waits, and
 how the result comes back. It assumes <<app-model>>.
 
 == A first task: wait, then start the next level
@@ -62,9 +62,9 @@ top:
   being called, so the "Well done!" screen stays up and responsive.
 * The body's last value, `NextLevelReady`, is the task's _message_. When the
   task finishes, the message arrives in `input.messages` on a later cycle.
-* `update!` folds every message that arrived into the model with
-  `List.fold` and `apply_message`, a pure function from the model and one
-  message to the next model. When `NextLevelReady` arrives, the level
+* `update!` applies every message that arrived to the model, one at a time,
+  with `List.fold` and `apply_message`, a pure function that takes the model
+  and one message and returns the next model. When `NextLevelReady` arrives, the level
   advances.
 
 ``Task.spawn!``'s first argument is the current `input`. The task does not read
@@ -77,12 +77,14 @@ app.
 
 == Waiting effects
 
-An effect that may wait on the outside world is a _waiting effect_: file
+An effect that may have to wait for something outside the app is a _waiting
+effect_: file
 reads and writes, HTTP requests, UDP receives, database queries, running a
 program, loading a resource from disk, and `Task.sleep!`. Each one is legal in
 two places:
 
-* in `init!`, where it holds startup until it answers, before the first frame;
+* in `init!`, where it blocks startup until the result is ready, before the
+  first frame;
 * in a task, where it pauses only that task.
 
 Calling one from `update!` or `render!` stops the app with a message naming
@@ -90,7 +92,7 @@ the effect and where it belongs.
 
 == Load a level file
 
-Inside a task, a waiting effect simply returns its answer, so a job with
+Inside a task, a waiting effect simply returns its result, so a task with
 several steps is ordinary top-to-bottom code with `?`:
 
 [source,roc]
@@ -115,23 +117,23 @@ Task.spawn!(input, || LevelLoaded(load_level!(levels, "level-2.txt")))
 Here `model.levels` is a directory handle opened in `init!` (see
 <<files-and-assets>>), and `+parse_level : Str -> Try(Level, LoadError)+` is the
 app's own pure parser. `? |err| ReadFailed(err)` wraps a read error in the
-app's own error type before returning it. The message carries the whole
+app's own error type before returning it. The message contains the whole
 result, errors included, so `apply_message` decides what a failed load
 means, such as showing a message rather than stopping the app.
 
 `read_text!` reads files of up to 64 KiB, which suits level and settings
-files; a larger file answers `TooLarge`. For bigger or binary files, use
+files; for a larger file it returns `TooLarge`. For bigger or binary files, use
 `read_bytes!`, which reads up to 16 MiB into a `List(U8)`.
 
 The task needs `levels` but not the whole model, so `update!` takes it out of
 the model first and the task body _captures_ just that value. A task cannot
 read or change the model itself. Everything it needs, it captures when it is
 created -- a file handle, an HTTP client, a copy of some model value -- and
-everything it has to say, it says in its message.
+everything it reports back goes in its message.
 
-== Give each kind of work its own message
+== Give each kind of task its own message
 
-Put a variant in `Msg` for each kind of work, carrying its result, errors
+Put a variant in `Msg` for each kind of task, holding its result, errors
 included:
 
 [source,roc]
@@ -143,21 +145,21 @@ Msg : [
 ]
 ----
 
-Several tasks can be in flight at once, and their messages arrive in the order
-the tasks _finished_, which need not be the order they were started. When the
-same kind of work can be in flight more than once -- the user presses "reload"
-twice -- a reply can arrive after a newer one. Put an id or generation counter
+Several tasks can run at once, and their messages arrive in the order the
+tasks _finished_, which need not be the order they were started. When more
+than one task of the same kind can be running -- the user presses "reload"
+twice -- an older reply can arrive after a newer one. Put an id or generation counter
 in the message and ignore replies that do not match the latest;
 {src}/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
 
 == Tasks are for waiting, not for computing
 
-A task runs on the same thread as `update!` and `render!`, one piece at a
-time, and only steps aside when it reaches a waiting effect. So a task that
-computes for a long time without waiting -- generating a large map, solving a
-puzzle -- holds up the frame exactly as the same work in `update!` would.
-Tasks let slow input and output overlap with frames; they do not run your code
-in parallel. Split a long computation into pieces spread across cycles
+A task runs on the same thread as `update!` and `render!`, and other code runs
+only when the task reaches a waiting effect. So a task that computes for a
+long time without waiting -- generating a large map, solving a puzzle --
+delays the frame exactly as the same computation in `update!` would. Tasks let
+slow input and output, such as file reads and network requests, continue while
+frames are drawn; they do not run your code in parallel. Split a long computation into pieces spread across cycles
 instead.
 
 == Not everything needs a task
@@ -165,8 +167,9 @@ instead.
 Effects that do not wait are called straight from `update!`. Playing a sound,
 resizing the window, starting a recording, and uploading pixels to a texture
 all happen immediately. So do _queued_ effects, such as printing a line or
-sending a UDP datagram: they hand the bytes to a bounded host queue and return
-at once, reporting a full queue as a result rather than waiting.
+sending a UDP datagram: they put the bytes in a host queue of limited size and
+return at once. If the queue is full, they return that as a result rather than
+waiting.
 
 == When the app exits
 
@@ -181,8 +184,8 @@ pattern.
 == Components with their own messages
 
 A reusable module may not know the app's `Msg` type. `Task.spawn_with!` lets
-its task answer in the module's own message type and lifts the answer into the
-app's:
+its task return the module's own message type, and converts that message into
+the app's `Msg` with a function you pass:
 
 [source,roc]
 ----
@@ -206,7 +209,7 @@ function, `|m| CounterMsg(m)`.
 * **Tasks run one at a time, on the same thread as your callbacks.** Your code
   never needs a lock and never sees a half-updated model.
 * **When the app exits,** running tasks are cancelled, queued ones are dropped,
-  and undelivered messages are released.
+  and messages not yet delivered are discarded.
 * **A task starts promptly.** It may run up to its first waiting effect before
   `Task.spawn!` returns, or just after `update!` returns; either way it has
   reached its first wait before that cycle's `render!`. Do not rely on the

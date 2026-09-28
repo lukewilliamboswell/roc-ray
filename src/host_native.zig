@@ -6263,6 +6263,12 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
         active_roc_host = null;
     }
 
+    // Past the duration cap is refused before a slot is looked at, headless
+    // or not, so a long sound is never quietly made shorter.
+    const too_long = hostedAudioGenTone(.{ .freq = 440, .ms = raylib.MAX_GEN_SOUND_MS + 1 });
+    try std.testing.expectEqual(abi.HostAudio_gen_toneResultTag.Err, too_long.tag);
+    try std.testing.expectEqual(abi.HostAudio_gen_toneErr.sound_generation_failed, too_long.payload_err());
+
     var sounds: [128]*u64 = undefined;
     for (&sounds) |*sound| sound.* = storeSound(.headless).?;
     const refused_tone = hostedAudioGenTone(.{ .freq = 440, .ms = 20 });
@@ -9382,6 +9388,9 @@ fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAud
     enforcePhase("Audio.gen_tone!", during_load);
     const effect = EffectScope.begin("Audio.gen_tone!", 0);
     defer effect.end();
+    // `Audio` refuses this as `DurationTooLong` before it gets here; the host
+    // refuses it too, in every mode, rather than shortening the sound.
+    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);
@@ -9397,6 +9406,7 @@ fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostA
     enforcePhase("Audio.gen_sound!", during_load);
     const effect = EffectScope.begin("Audio.gen_sound!", 0);
     defer effect.end();
+    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);

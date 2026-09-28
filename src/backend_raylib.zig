@@ -2536,7 +2536,11 @@ pub fn getRandomValue(min: c_int, max: c_int) c_int {
 // --- Audio ---------------------------------------------------------------
 
 const AUDIO_SAMPLE_RATE: u32 = 44100;
-const MAX_GEN_SOUND_MS: i32 = 5000;
+/// The longest procedural sound, in milliseconds. `Audio.max_generated_ms`
+/// states the same number, and the platform refuses a longer request with
+/// `DurationTooLong` before it reaches the host; `genSound` refuses one too
+/// rather than shortening it.
+pub const MAX_GEN_SOUND_MS: i32 = 5000;
 /// Scratch buffer for procedural generation (mono 16-bit).
 var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
 
@@ -2561,10 +2565,6 @@ pub fn unloadMusic(music: Music) void {
 }
 
 fn clampF32(value: f32, min: f32, max: f32) f32 {
-    return if (value < min) min else if (value > max) max else value;
-}
-
-fn clampI32(value: i32, min: i32, max: i32) i32 {
     return if (value < min) min else if (value > max) max else value;
 }
 
@@ -2627,11 +2627,26 @@ pub fn loadSoundFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Sound {
     return sound;
 }
 
+/// How many frames a procedural sound of `ms` milliseconds fills, or null for
+/// one longer than the scratch buffer holds. A longer sound is refused, never
+/// shortened: a sound that ends early is a different sound.
+fn genSoundFrames(ms: i32) ?usize {
+    if (ms > MAX_GEN_SOUND_MS) return null;
+    const frames = msToFrames(@max(ms, 1));
+    if (frames == 0 or frames > gen_sound_buf.len) return null;
+    return frames;
+}
+
+test "a procedural sound past the cap is refused, not shortened" {
+    try std.testing.expectEqual(@as(?usize, AUDIO_SAMPLE_RATE * 5), genSoundFrames(MAX_GEN_SOUND_MS));
+    try std.testing.expectEqual(@as(?usize, null), genSoundFrames(MAX_GEN_SOUND_MS + 1));
+    try std.testing.expectEqual(@as(?usize, null), genSoundFrames(std.math.maxInt(i32)));
+    try std.testing.expectEqual(@as(?usize, 44), genSoundFrames(1));
+}
+
 /// Generate a short procedural sound.
 pub fn genSound(args: anytype) ?Sound {
-    const dur_ms = clampI32(args.ms, 1, MAX_GEN_SOUND_MS);
-    const frames = msToFrames(dur_ms);
-    if (frames == 0 or frames > gen_sound_buf.len) return null;
+    const frames = genSoundFrames(args.ms) orelse return null;
 
     const attack = msToFrames(args.attack_ms);
     const decay = msToFrames(args.decay_ms);

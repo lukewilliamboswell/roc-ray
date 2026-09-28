@@ -88,7 +88,9 @@ two places:
 * in a task, where it pauses only that task.
 
 Calling one from `update!` or `render!` stops the app with a message naming
-the effect and where it belongs.
+the effect and where it belongs. The rule exists so that a slow disk or
+network can never freeze the window: a cycle can only be as slow as your own
+code. See <<app-model-why>>.
 
 == Load a level file
 

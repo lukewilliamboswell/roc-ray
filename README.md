@@ -107,7 +107,7 @@ published as a website and a PDF. Its chapters are the AsciiDoc files in
   learning path
 - Guides: [the app model](docs/app-model.adoc), [input](docs/input.adoc),
   [drawing](docs/drawing.adoc), [tasks](docs/tasks.adoc),
-  [declaring what an app can access](docs/permissions.adoc),
+  [permissions](docs/permissions.adoc),
   [files and assets](docs/files-and-assets.adoc), [audio](docs/audio.adoc),
   [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
   [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)

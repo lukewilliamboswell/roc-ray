@@ -181,8 +181,9 @@ and tasks. Use `input.time`, not the wall clock, for animation and movement.
 cycle is usually a few milliseconds, but the operating system decides: while
 the user drags the window, or while you pause the app in a debugger, no
 cycles run, and the next cycle reports all the time that passed, possibly
-several seconds. The host reports that value as it is, without limiting
-it, so a naive `position + velocity * dt` can jump a player through a wall.
+several seconds. The host reports that value as it is, without limiting it,
+because only the app knows how it should handle a long pause. So a simple
+`position + velocity * dt` can move a player straight through a wall.
 
 The simplest protection is to clamp the elapsed time before you use it, so
 one cycle never advances the game by more than a limit you choose. Paddle in
@@ -195,7 +196,10 @@ dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
 Physics and collision work best with a _fixed step_: the game always advances
 by exactly the same small amount, say 1/60 of a second, and runs as many of
-those steps each cycle as fit in the elapsed time. Leftover time is kept in
+those steps each cycle as fit in the elapsed time. Because every step is the
+same size, the result does not depend on how fast the computer is or how
+uneven the cycles are: the same input always moves things the same way, and
+no single step is large enough to carry an object through a wall. Leftover time is kept in
 the model for the next cycle. Each of those advances is a _simulation step_,
 and one host cycle may run zero, one, or several of them:
 

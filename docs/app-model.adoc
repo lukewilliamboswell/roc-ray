@@ -15,6 +15,13 @@ Every RocRay app has the same shape: three functions that the host calls
 at the right moments. This chapter explains what each one receives, what it
 may do, and what it returns. Every later guide builds on it.
 
+The three functions are separate because each has one job. `init!` sets
+things up once. `update!` is the only place where the model changes, so you
+always know where to look for a change. `render!` only draws the model, so
+what you see on screen always matches the app's state. Anything slow runs
+outside `update!` and `render!`, so the window never freezes while the app
+waits. <<app-model-why>> explains each of these rules.
+
 It assumes you have run the smallest app in <<getting-started>>.
 
 == A complete app
@@ -298,8 +305,10 @@ it:
 * Clicking the window's close button closes the window. By default the app
   ends at once, and `update!` never sees it happen.
 
-An app that has something to finish first, such as saving the game, can ask
-to be notified instead, with `with_close_request(Deliver)`. The window then
+Ending at once suits most games. But tasks that are still running when the
+app ends are cancelled, so an app with unsaved work needs a chance to finish
+it first. Such an app, for example one that saves the game, can ask to be
+notified instead, with `with_close_request(Deliver)`. The window then
 stays open, and the next input has `input.window.close_requested` set to
 `Bool.True` for one cycle. A request is never lost. The app decides when to
 end by returning `Err(Exit(code))`:
@@ -368,6 +377,7 @@ what, whether to quit, and which tasks to start. Then let `update!` carry out
 what they decide. Those functions are ordinary Roc and can be tested with `expect`.
 <<testing>> shows how to build inputs and resources for such tests.
 
+[#app-model-why]
 == Why it is shaped this way
 
 If you have written a game in C, you know the classic loop:
@@ -419,6 +429,9 @@ read first, do it in `init!`, which is allowed to wait.
 == Details: which effects are legal where
 
 This section is a reference; the one-line rule above covers most apps.
+The host checks every effect against the current callback so that the rules
+in <<app-model-why>> always hold: nothing waits in `update!` or `render!`,
+and `render!` only draws.
 
 The host always knows which callback it is inside: `init!`, `update!`,
 `render!`, or a task. It calls this the _phase_. Every effect states the

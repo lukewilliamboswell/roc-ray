@@ -13,7 +13,14 @@ endif::[]
 An app can save its own rendered output as PNG screenshots, PNG sequences,
 animated GIFs, or WebM video, and read pixels back. With a hidden window and
 scripted input, an app can produce images or demo videos by itself, with
-nobody at the keyboard. This chapter assumes <<app-model>> and <<tasks>>.
+nobody at the keyboard.
+
+Because the app records its own frames, a recording shows exactly what the
+app drew, with no screen-recording tool involved. With fixed timing, the same
+scripted run produces the same frames every time (see
+<<capture-repeatable>>), which is useful for demos and documentation, and for
+comparing one run with another. This chapter assumes <<app-model>> and
+<<tasks>>.
 
 == The output directory
 
@@ -102,6 +109,7 @@ the frames recorded so far, then `Finished` with the frame count and file size,
 or `Failed` with a reason. When nothing is recording it is `Idle`. A recording
 also finishes when it reaches its frame limit or the app exits.
 
+[#capture-repeatable]
 === Timing and repeatable recordings
 
 Reading each frame back from the graphics card takes time, so a recorded run

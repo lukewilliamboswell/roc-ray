@@ -18,6 +18,12 @@ declared.
 
 == Directory handles, not paths
 
+A handle limits what code can touch. A helper or a task that receives a
+handle can use only the files inside that directory, so a bug, or a strange
+file name that arrives at run time, cannot lead it anywhere else. It also
+makes access easy to follow: to see what a piece of code can read or write,
+look at the handles it receives.
+
 An app never names a file by a bare path such as `"saves/slot1.json"` on its
 own. It first asks `io.files()` for a _directory handle_, then names files
 relative to that handle:
@@ -166,7 +172,10 @@ There is no file-picker dialog.
 
 Textures, sounds, music, fonts, shaders, and maps are loaded from an _asset
 store_: a directory opened from a `ReadDir`. The store can access exactly what
-that handle can access. Where the handle comes from depends on how the app runs:
+that handle can access, so loading an asset can never read outside that
+directory. The code that loads assets is the same during development and
+after packaging; only the handle changes. Where the handle comes from depends
+on how the app runs:
 
 * While you develop, you run the app with `roc` from its source directory.
   Declare the `assets` directory and open it by path, as

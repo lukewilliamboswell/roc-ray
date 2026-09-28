@@ -8,18 +8,26 @@ ifndef::src[]
 endif::[]
 
 [#permissions]
-= Declaring what an app can access
+= Permissions: what your app can access
+
+An app's declarations list everything outside its own window that it can
+use: files and directories, web services, other programs, environment
+variables, and the clipboard. Because the list is in your source code, you,
+and anyone who reviews or runs your app, can see at a glance what it can
+access. Code from a package you depend on cannot quietly read your files or
+contact a server. <<permissions-protects>> says exactly what this protects
+against, and what it does not.
 
 Every app can open its window, read input, draw, play audio, and print to its
 terminal without asking. To access anything else, such as a directory, a web
 service, another program, an environment variable, or the clipboard, the app
-says so in its startup configuration. That statement is a _declaration_, and it is the
-only permission there is: nobody is prompted, and there are no launch flags.
+says so in its startup configuration. That statement is a _declaration_, and
+it is the only permission there is: nobody is prompted, and there are no
+launch flags.
 
 This chapter starts with what a typical game needs, then lists every
 declaration and what happens when an app tries to access something they do
-not cover. It assumes
-<<app-model>>.
+not cover. It assumes <<app-model>>.
 
 == What a typical game needs
 
@@ -217,6 +225,7 @@ A declaration is malformed::
 * an app id that is not 1 to 128 ASCII letters, digits, `.`, `-`, or `_`;
 * more than 64 declarations.
 
+[#permissions-protects]
 == What this protects against
 
 A RocRay app has no way to access anything except through the platform, so

@@ -20,7 +20,8 @@ Drawing in RocRay is _immediate_: each frame, `render!` draws the whole scene
 from the model, in order, starting from a cleared window. Nothing drawn is
 remembered between frames, so there are no objects to create, move, or
 delete. To move something, change the model and draw it somewhere else next
-time.
+time. This keeps the screen in step with the model: what you see is always
+drawn from the current state, never from an object you forgot to update.
 
 Every drawing effect takes the frame and is legal only in `render!`:
 

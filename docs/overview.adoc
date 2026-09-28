@@ -91,11 +91,11 @@ a|image::postcard_studio.webp[An animated postcard composition,link={src}/exampl
 a|image::particles.webp[A moving fountain of particles,link={src}/examples/particles/main.roc]
 *Particles*: thousands of moving images at once
 a|image::capture_ui_demo.webp[A scripted responsive interface demonstration,link={src}/examples/capture_ui_demo/main.roc]
-*Capture UI*: automated controls and GIF recording
+*Capture UI Demo*: automated controls and GIF recording
 a|image::live_plot.webp[Source files appearing in Live Plot,link={src}/examples/live_plot/main.roc]
 *Live Plot*: loading and drawing hundreds of thousands of lines
-a|image::top_down.webp[Top Down gameplay,link={src}/examples/top_down/main.roc]
-*Top Down*: a designed map, characters, music, game states
+a|image::top_down.webp[Spark Run gameplay,link={src}/examples/top_down/main.roc]
+*Spark Run*: a designed map, characters, music, game states
 a|image::cave_climb.webp[Cave Climb gameplay,link={src}/examples/cave_climb/main.roc]
 *Cave Climb*: a designed level, jumping, camera, sound
 |===
@@ -106,9 +106,9 @@ ifndef::backend-html5[]
 * {src}/examples/responsive_ui/main.roc[Responsive Settings]: keyboard, mouse, resizing, display scaling
 * {src}/examples/postcard_studio/main.roc[Postcard Studio]: generative art and saving larger images
 * {src}/examples/particles/main.roc[Particles]: thousands of moving images at once
-* {src}/examples/capture_ui_demo/main.roc[Capture UI]: automated controls and GIF recording
+* {src}/examples/capture_ui_demo/main.roc[Capture UI Demo]: automated controls and GIF recording
 * {src}/examples/live_plot/main.roc[Live Plot]: loading and drawing hundreds of thousands of lines
-* {src}/examples/top_down/main.roc[Top Down]: a designed map, characters, music, game states
+* {src}/examples/top_down/main.roc[Spark Run]: a designed map, characters, music, game states
 * {src}/examples/cave_climb/main.roc[Cave Climb]: a designed level, jumping, camera, sound
 endif::[]
 

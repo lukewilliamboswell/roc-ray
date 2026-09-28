@@ -111,5 +111,5 @@ in any callback, `render!` included: `Sound.is_playing!`, `Music.is_playing!`,
 == Further reading
 
 * The `Audio` page of the {api}[API reference].
-* {src}/examples/top_down/main.roc[Top Down] loads music and sound effects and
+* {src}/examples/top_down/main.roc[Spark Run] loads music and sound effects and
   switches tracks with the game state.

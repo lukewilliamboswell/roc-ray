@@ -367,7 +367,7 @@ tilemap = Tilemap.from_raw(raw)
 
 `tilemap.draw_all!(frame)` draws it. Grid queries and coordinate conversions
 are pure, so `update!` can use them for collision and picking. See
-{src}/examples/top_down/main.roc[Top Down] and
+{src}/examples/top_down/main.roc[Spark Run] and
 {src}/examples/cave_climb/main.roc[Cave Climb].
 
 == Further reading

@@ -30,7 +30,7 @@ Window := [].{
 	## `App.Config.with_close_request(Deliver)`; under the default `Exit` the
 	## host closes the window itself and `update!` never sees the request.
 	## Several requests between two cycles arrive as one, and a request is
-	## never lost: the next input carries it. The exit key is separate -- it
+	## never lost: the next input includes it. The exit key is separate -- it
 	## closes the app directly -- so set `with_exit_key(NoExitKey)` as well if
 	## the app must see every way out.
 	Snapshot : {
@@ -121,7 +121,7 @@ Window := [].{
 	## The list is as long as the operating system's monitor count, and that
 	## count is the bound: the host asks for it, builds exactly that many
 	## entries, and never retains any of them. Monitors come and go while an
-	## app runs, so an answer describes the moment it was taken; ask again
+	## app runs, so a result describes the moment it was taken; ask again
 	## rather than caching one for the life of the process.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -160,7 +160,7 @@ Window := [].{
 		## Read the system clipboard as text.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
-		## backend only answers on the thread that owns the window, and the read is a
+		## backend only responds on the thread that owns the window, and the read is a
 		## pointer copy rather than I/O, so this does not wait.
 		##
 		## Content that is not text, or is larger than the host will copy into a

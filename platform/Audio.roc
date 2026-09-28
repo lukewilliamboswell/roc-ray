@@ -27,7 +27,7 @@
 ## are legal in `init!`, where they block startup, and in tasks, where they
 ## park the task, and are refused in `update!` and `render!`. To start a track
 ## or a new effect after startup, call the loader inside `Task.spawn!` and keep
-## the resource the task's message carries. `gen_sound!` and `gen_tone!` build
+## the resource the task's message contains. `gen_sound!` and `gen_tone!` build
 ## a `Sound` with no file behind it, so they stay legal in `init!`, `update!`,
 ## and tasks. A generated sound lasts from 1 ms to `max_generated_ms`; asking
 ## for any other length stops the app, naming the fix, rather than making a
@@ -93,9 +93,9 @@ Audio := [].{
 		## Resource-free sound value for pure tests.
 		##
 		## The handle never resolves to a host resource, so every host path it
-		## reaches treats it as an invalid one: playing, stopping, pausing, and
-		## resuming it are all no-ops, and `is_playing!` answers `Bool.False`.
-		## Put it in a model to reach the app's pure update logic from an
+		## is passed to treats it as an invalid one: playing, stopping, pausing,
+		## and resuming it are all no-ops, and `is_playing!` returns `Bool.False`.
+		## Put it in a model to test the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
 		stub = Sound.(Resource.Handle.stub)
@@ -216,9 +216,9 @@ Audio := [].{
 		## Resource-free music value for pure tests.
 		##
 		## The handle never resolves to a host resource, so every host path it
-		## reaches treats it as an invalid one: transport and mutation calls are
-		## no-ops, `is_playing!` answers `Bool.False`, and `length!` and
-		## `time_played!` answer zero. Put it in a model to reach the app's pure
+		## is passed to treats it as an invalid one: transport and mutation calls
+		## are no-ops, `is_playing!` returns `Bool.False`, and `length!` and
+		## `time_played!` return zero. Put it in a model to test the app's pure
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music

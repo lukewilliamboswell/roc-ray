@@ -14,7 +14,7 @@
 ## model -- or `Err(Exit(code))` to stop the app.
 ##
 ## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
-## change the model or reach host work of any other kind.
+## change the model or do host work of any other kind.
 ##
 ## Each effect documents its legal phases. Host-state effects are legal in
 ## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
@@ -27,7 +27,7 @@
 ## effect, the phase it was called from, and where it belongs.
 ##
 ## Work that waits belongs on a task.
-## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
+## `Task.spawn!(input, || ...)`, from `update!` or from another task, gives the
 ## host an effectful closure to run on its own stack. When the closure returns,
 ## its value is delivered as a message on `input.messages` in a later cycle, in
 ## the order the tasks finished. A task cannot read or write the model, so its
@@ -120,7 +120,7 @@ App := [].{
 	## input, in the order the window system reported them. Like a key press it
 	## is an interval event rather than a latest value: it is empty on almost
 	## every cycle, and exactly one call to `update!` sees any given drop. At
-	## most 64 paths are delivered per cycle; a single drop carrying more has
+	## most 64 paths are delivered per cycle; a single drop with more has
 	## its extra paths discarded, and `dropped_overflow` says so.
 	Input(msg) := {
 		devices : Devices.Snapshot,
@@ -146,8 +146,8 @@ App := [].{
 
 		## Build an input by stating every sampled field at once.
 		##
-		## This is the from-scratch constructor; `for_tests` is the one to reach
-		## for when only a field or two matters, since it supplies neutral values
+		## This is the from-scratch constructor; `for_tests` is the one to use
+		## when only a field or two matters, since it supplies neutral values
 		## for the rest.
 		##
 		## Pass a structural record written out here. Use `fields` when reading an
@@ -184,9 +184,9 @@ App := [].{
 		## down in a pure test.
 		##
 		## `update!` itself is effectful, and an `expect` cannot call it. Keep
-		## the decisions in pure functions -- which message to fold in, whether
-		## to quit, what work to start -- and test those; `update!` is the thin
-		## shell that performs them.
+		## the decisions in pure functions (how each message changes the model,
+		## whether to quit, which tasks to start) and test those; `update!` is
+		## the thin shell that carries them out.
 		for_tests : {} -> Input(msg)
 		for_tests = |{}|
 			Input.(
@@ -425,13 +425,13 @@ App := [].{
 		##
 		## Use a reverse-DNS style name the app will keep, such as
 		## `"dev.example.pong"` -- 1 to 128 ASCII letters, digits, `.`, `-`, or
-		## `_`. It becomes a directory name, so changing it later moves the app's
-		## saved data out of reach. An app that never touches private storage
+		## `_`. It becomes a directory name, so if you change it later, the app
+		## can no longer find its saved data. An app that never touches private storage
 		## does not need one.
 		with_app_id : Config, Str -> Config
 		with_app_id = |cfg, value| { ..cfg, app_id: value }
 
-		## Declare reach beyond the app's own resources: a network origin, a
+		## Declare access beyond the app's own resources: a network origin, a
 		## directory, a program, an environment variable, the clipboard. The
 		## declaration is the grant; see `Permission`.
 		##
@@ -629,7 +629,7 @@ App := [].{
 		##
 		## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
 		## Call as `io.suggest_window_size!(size)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		## A running app resizes itself with `Window.suggest_size!`, which reaches
+		## A running app resizes itself with `Window.suggest_size!`, which makes
 		## the same host call, and only this spelling can report a refusal.
 		suggest_window_size! : Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported])
 		suggest_window_size! = |io, size| app_suggest_window_size!(io, size)
@@ -812,7 +812,7 @@ expect App.default.with_recording(Capture.default).recording() == Record(Capture
 
 ## A component's model and message, so the recipe `Input.for_tests` documents is
 ## exercised here rather than only described. `counter_step` is the pure core
-## an app keeps behind its effectful `update!`: it folds the messages in and
+## an app keeps behind its effectful `update!`: it applies the messages and
 ## decides what to do, and `update!` performs the decision.
 CounterModel : { ticks : U64, quitting : Bool }
 
@@ -839,7 +839,7 @@ neutral_input : App.Input(CounterMessage)
 neutral_input = App.Input.for_tests({})
 
 ## One dropped file, named once so the drop assertions below read as one idea.
-## An absolute path is what the window system hands over, and `Files` reads it
+## An absolute path is what the window system provides, and `Files` reads it
 ## as given.
 dropped_png : App.Dropped
 dropped_png = { path: "/home/user/pictures/holiday.png", position: { x: 120, y: 64 } }
@@ -908,13 +908,13 @@ expect
 		== [dropped_png]
 
 ## Q decides to shut down. (Escape is the default exit key, which the host
-## answers before `update!` sees it, so an app never checks it by hand.)
+## handles before `update!` sees it, so an app never checks it by hand.)
 expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyQ))) == Quit
 
-## An ordinary input carries on.
+## An ordinary input lets the app continue.
 expect counter_step(fresh_counter, neutral_input) == Continue(fresh_counter)
 
-## Delivered messages are folded in, in the order the input carries them.
+## Delivered messages are applied in the order the input lists them.
 expect counter_step(fresh_counter, neutral_input.with_messages([Tick, Tick, Tick])) == Continue({ ticks: 3, quitting: Bool.False })
 
 ## Private IO implementations.

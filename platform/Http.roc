@@ -17,7 +17,7 @@
 ## import http.Request
 ## ```
 ##
-## `Http.Client.get!` and `Http.Client.get_utf8!` take a URL and hand back decoded data, so
+## `Http.Client.get!` and `Http.Client.get_utf8!` take a URL and return decoded data, so
 ## an app that uses only those needs no package dependency of its own.
 ##
 ## `Http.Client.send!` waits, so it belongs inside `Task.spawn!`:
@@ -48,7 +48,7 @@
 ## Up to three redirects are followed, and the `Response` is the one at the end
 ## of that chain.
 ##
-## Every send carries a deadline and a hard cap on the response body, taken
+## Every send has a deadline and a hard limit on the response body, taken
 ## from `Http.default_config`: thirty seconds, and eight megabytes. Pass a
 ## `Config` to `send_with!` for different ones, and `0` in either field to
 ## disable that limit. A request that sets `TimeoutMilliseconds` itself
@@ -59,7 +59,7 @@
 ## rather than being truncated.
 ##
 ## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
-## carrying that status; only a failure to complete the exchange is `HttpErr`.
+## with that status. Only a request that gets no complete response is `HttpErr`.
 ##
 ## `get!` and `send_json!` infer the JSON type from their call site. Add a type
 ## annotation when the expected decoded or encoded type is ambiguous.
@@ -85,7 +85,7 @@ Http := [].{
 	## `NetworkError` is a connection that could not be made or did not survive
 	## the exchange -- a refused port, a dropped socket, an unreachable host.
 	## `MalformedResponse` is a reply that arrived but was not a well-formed
-	## HTTP response. `Other` carries the host's own description as UTF-8 bytes: a
+	## HTTP response. `Other` holds the host's own description as UTF-8 bytes: a
 	## name that would not resolve, a body over `max_response_bytes`, a
 	## certificate store that could not be loaded, or a method this platform
 	## cannot send.
@@ -161,7 +161,7 @@ Http := [].{
 		## Validate and send an HTTP request under `default_config`.
 		##
 		## The request URI must be an absolute HTTP or HTTPS URL accepted by `Url`.
-		## An invalid URL answers `InvalidUrl` before any host effect occurs.
+		## An invalid URL returns `InvalidUrl` before any host effect occurs.
 		## Fragments are removed, because they are client-side identifiers and are
 		## not sent.
 		##
@@ -210,7 +210,7 @@ Http := [].{
 		## `Url.from_quote`, so a URL written out in the source is checked at compile
 		## time; a string built at runtime goes through `Url.parse`.
 		##
-		## A body that is not valid UTF-8 answers `BadBody(Str)`. That is this
+		## A body that is not valid UTF-8 returns `BadBody(Str)`. That is this
 		## function's own decoding failure, and is not the transport's
 		## `MalformedResponse`: the reply arrived and was a well-formed HTTP
 		## response, it just is not text. The status is not inspected, so an error

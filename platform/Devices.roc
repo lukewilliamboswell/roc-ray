@@ -1,6 +1,6 @@
 ## One cycle of keyboard, text, mouse and gamepad input.
 ##
-## `App.Input` carries the host's observation as `input.devices`. A snapshot is
+## `App.Input` contains the host's observation as `input.devices`. A snapshot is
 ## pure data and grants no device authority.
 ##
 ## Two kinds of information are in it, and each field says which it is. A
@@ -72,7 +72,7 @@ Devices := [].{
 		## packed bits and `text_input` summarize: where the bits coalesce two
 		## taps into one, this holds both; where `text_input` is bounded at
 		## 32, this holds text in order relative to the key edges around it;
-		## a click carries the pointer position it landed at. At most 256
+		## a click includes the pointer position where it happened. At most 256
 		## events per input; past that the rest are discarded and
 		## `events_overflow` is set, while the bits, the wheel sum and
 		## `text_input` keep recording regardless, so the coalesced view is
@@ -137,7 +137,7 @@ Devices := [].{
 		## bytes, so these compose:
 		## `Devices.none.with_key_pressed(KeySpace).with_key_down(KeyLeftShift)`.
 		##
-		## Only a snapshot with the host's packed list lengths can carry these.
+		## Only a snapshot with the host's packed list lengths can hold these.
 		## Start from `Devices.none`, not `Devices.empty`.
 		with_key_down : Snapshot, Keys.Key -> Snapshot
 		with_key_down = |input, key| with_key_state(input, key, held)
@@ -247,8 +247,8 @@ Devices := [].{
 	## One input event, as the window system delivered it.
 	##
 	## `KeyPressed` and `KeyReleased` are physical key edges; auto-repeat is
-	## not an event. `ButtonPressed` and `ButtonReleased` carry the pointer
-	## position the click landed at, in the same logical coordinates as
+	## not an event. `ButtonPressed` and `ButtonReleased` include the pointer
+	## position where the click happened, in the same logical coordinates as
 	## `mouse.position()`. `Wheel` is one scroll event's offsets, which
 	## `mouse.wheel_delta()` sums. `Text` is one typed codepoint, following the
 	## active keyboard layout, which is why it is separate from the key edge
@@ -264,7 +264,7 @@ Devices := [].{
 
 	## A neutral snapshot with the host's own packed list lengths, for tests.
 	##
-	## `empty` and `none` answer every query the same way -- nothing held,
+	## `empty` and `none` return the same result for every query -- nothing held,
 	## nothing typed, pointer at the origin, no gamepad connected. They differ in
 	## what they are made of. `empty`'s packed lists are empty, which is all a
 	## model seed needs and costs nothing. `none`'s are the lengths the host
@@ -487,7 +487,7 @@ mouse_button_code = |button|
 every_mouse_button : List(Mouse.Button)
 every_mouse_button = [Left, Right, Middle, Side, Extra, Forward, Back]
 
-## `none` carries exactly what the host samples, so a `List.set` into it lands.
+## `none` holds exactly what the host samples, so a `List.set` into it lands.
 expect List.len(Devices.none.keys) == key_state_len
 expect List.len(Devices.none.mouse.buttons) == mouse_button_state_len
 expect List.len(Devices.none.gamepads.connected) == gamepad_count
@@ -498,7 +498,7 @@ expect List.len(Devices.none.gamepads.axes) == gamepad_count * gamepad_axis_coun
 ## what pins its length to the host's rather than to a number written twice.
 expect Keys.key_code(KeyKbMenu) == key_state_len - 1
 
-## A neutral snapshot answers every query the way `empty` does.
+## A neutral snapshot returns the same result for every query as `empty` does.
 expect !(Devices.none.key_down(KeyW))
 expect Devices.none.key_up(KeyW)
 expect !(Devices.none.key_pressed(KeyEscape))
@@ -525,7 +525,7 @@ expect Devices.none.with_key_released(KeySpace).key_released(KeySpace)
 expect !(Devices.none.with_key_released(KeySpace).key_down(KeySpace))
 expect Devices.none.with_key_released(KeySpace).key_up(KeySpace)
 
-## One key does not answer for another, at either end of the code range.
+## One key is never reported as another, at either end of the code range.
 expect !(Devices.none.with_key_pressed(KeySpace).key_pressed(KeyEscape))
 expect Devices.none.with_key_pressed(KeyKbMenu).key_pressed(KeyKbMenu)
 expect Devices.none.with_key_pressed(Raw(0)).key_pressed(Raw(0))
@@ -546,7 +546,7 @@ expect List.all(every_mouse_button, |button| Devices.none.with_mouse_button_down
 expect List.all(every_mouse_button, |button| Devices.none.with_mouse_button_released(button).mouse.button_released(button))
 expect List.all(every_mouse_button, |button| !(Devices.none.with_mouse_button_released(button).mouse.button_down(button)))
 
-## And no button answers for a different one.
+## And no button is reported as a different one.
 expect !(Devices.none.with_mouse_button_pressed(Left).mouse.button_pressed(Right))
 expect !(Devices.none.with_mouse_button_pressed(Back).mouse.button_pressed(Forward))
 

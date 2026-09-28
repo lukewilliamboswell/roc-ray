@@ -14,7 +14,7 @@
 ## A database file is named beneath a `Files` directory handle, so it lives
 ## where the app may write -- usually `io.files().app_data!()` -- and nowhere
 ## else. `open_memory!` creates a private in-memory database, which needs no
-## handle. `ATTACH` is disabled on every connection: a database cannot reach a
+## handle. `ATTACH` is disabled on every connection: a database cannot open a
 ## second file.
 ##
 ## At most eight connections and sixty-four statements may be open. Queries
@@ -53,13 +53,13 @@ Sqlite := [].{
 	##
 	## Extended result codes are reduced to the primary code they extend, so a
 	## `UNIQUE` violation is `Constraint` rather than a number an app would have
-	## to know. The accompanying `Str` carries SQLite's message, which is where
+	## to know. The accompanying `Str` holds SQLite's message, which is where
 	## the detail went.
 	##
 	## `Interrupt` is what shutdown looks like from inside a query. Rather than
 	## making the window wait for a long statement to finish, the host
-	## interrupts every connection with work in flight, and each of those calls
-	## answers `SqliteErr(Interrupt, _)`. A task that treats it as a database
+	## interrupts every connection with a statement still running, and each of
+	## those calls returns `SqliteErr(Interrupt, _)`. A task that treats it as a database
 	## failure will report one on the way out; a task that is about to be
 	## cancelled anyway has nothing to report.
 	ErrCode : [
@@ -100,7 +100,7 @@ Sqlite := [].{
 	##
 	## `PathInvalid` is a path that is not plainly relative, or that meets a
 	## symbolic link, as for a `Files` read. `PermissionDenied` is a stub
-	## directory handle, which reaches nothing. `TooManyConnections` means
+	## directory handle, which gives no access. `TooManyConnections` means
 	## eight are already open; releasing a `Db` the app no longer needs frees
 	## a slot.
 	OpenErr : [PermissionDenied, PathInvalid, SqliteErr(ErrCode, Str), TooManyConnections]
@@ -142,14 +142,14 @@ Sqlite := [].{
 	## `ReadWriteCreate` creates the file if it is not there. `ReadOnly` opens
 	## an existing database for reading only, and the host locks that
 	## connection down further: schema-rewriting tricks are disabled and
-	## `ATTACH` cannot reach a second file, so a connection opened to visualize
+	## `ATTACH` cannot open a second file, so a connection opened to visualize
 	## someone else's data cannot be talked into writing.
 	Mode : [ReadWriteCreate, ReadWrite, ReadOnly]
 
 	## Per-connection limits.
 	##
 	## `busy_timeout_ms` is how long a statement waits for another process's
-	## write lock before answering `SqliteErr(Busy, _)`.
+	## write lock before returning `SqliteErr(Busy, _)`.
 	##
 	## `max_result_bytes` caps the text and blob payload of one query. A query
 	## that would exceed it fails with `ResultTooLarge` rather than returning
@@ -443,7 +443,7 @@ Sqlite := [].{
 	##
 	## Takes no bindings and returns no rows, because a script is SQL the app
 	## wrote rather than SQL assembled from input. Anything that needs a
-	## parameter, or answers with data, is a query.
+	## parameter, or returns data, is a query.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
@@ -816,7 +816,7 @@ expect decode_names(['i', 'd', 0], 0, []) == ["id"]
 expect decode_names(['i', 'd', 0, 'n', 0], 0, []) == ["id", "n"]
 
 ## A name with no terminator ends the list rather than being guessed at. The
-## host writes the terminator, so this cannot happen; answering with the names
+## host writes the terminator, so this cannot happen; returning the names
 ## that were whole is what keeps this total.
 expect decode_names(['i', 'd', 0, 'n'], 0, []) == ["id"]
 

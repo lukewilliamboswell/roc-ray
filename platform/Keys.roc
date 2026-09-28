@@ -1,6 +1,6 @@
 ## Keyboard state and the key constants that name it.
 ##
-## Read a key through the snapshot `App.Input` carries --
+## Read a key through the snapshot `App.Input` contains --
 ## `input.devices.key_pressed(KeySpace)` -- rather than through the packed
 ## bytes. `set_source!` and `set_text!` are the other half: they let a run
 ## drive its own keyboard, which is what a scripted demo or a headless test
@@ -455,7 +455,7 @@ Keys := [].{
 
 	## Hand keyboard state to a scripted source, or back to the hardware keyboard.
 	##
-	## What the app reads is unchanged: `input.devices` still carries packed key
+	## What the app reads is unchanged: `input.devices` still holds packed key
 	## state and `Keys.key_pressed` still reports edges, so widget code cannot
 	## tell a scripted key from a struck one. That is the point -- a recorded
 	## demo or a headless test exercises the real input path rather than a
@@ -526,7 +526,7 @@ key_state = |states, key, mask|
 
 ## Decode UTF-8 bytes to the codepoints they encode.
 ##
-## `Str.to_utf8` answers well-formed UTF-8, so every continuation byte a lead
+## `Str.to_utf8` returns well-formed UTF-8, so every continuation byte a lead
 ## byte announces is really there. A byte that cannot start a sequence is
 ## carried through as itself rather than rejected: no `Str` produces one, and a
 ## scripted keystroke is not worth a `Try` for a case that cannot arise.
@@ -561,7 +561,7 @@ expect sequence_width(0xf0) == 4
 
 ## Combine a lead byte with its continuation bytes.
 ##
-## Each continuation byte carries six bits, so the value is a base-64 number
+## Each continuation byte holds six bits, so the value is a base-64 number
 ## whose most significant digit is what the lead byte has left after its
 ## length marker.
 decode_sequence : List(U8), U64, U8, U64 -> U32

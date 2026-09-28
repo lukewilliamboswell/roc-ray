@@ -1,4 +1,5 @@
-## Shows a movable camera over a larger 2D world with a fixed on-screen HUD.
+## Camera World: a movable camera over a larger 2D world with a fixed
+## on-screen HUD.
 ## Move with WASD or the arrow keys, zoom with the mouse wheel, rotate with
 ## Q/E, reset with R, and quit with Escape. This example demonstrates camera
 ## drawing and converting positions between world and screen coordinates.
@@ -21,7 +22,7 @@ Model : {
 	zoom : F32,
 	rotation : F32,
 	mouse : Math.Vec2,
-	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
+	hud : { title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared },
 }
 
 program = { init!, update!, render! }
@@ -40,7 +41,7 @@ world_bottom = 1200.F32
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Camera World").with_frame_pacing(Capped(120)),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({
@@ -48,11 +49,11 @@ init! = App.init(
 			zoom: 1,
 			rotation: 0,
 			mouse: { x: 0, y: 0 },
-			hud: Box.box({
+			hud: {
 				title: Text.from("Camera world", font).size(24).prepare!()?,
 				subtitle: Text.from("world-space draw + screen-space HUD", font).size(18).prepare!()?,
-				help: Text.from("WASD move, wheel zoom, Q/E rotate, R reset", font).size(14).prepare!()?,
-			}),
+				help: Text.from("WASD move, wheel zoom, Q/E rotate, R reset, ESC quit", font).size(14).prepare!()?,
+			},
 		})
 	},
 )
@@ -63,11 +64,11 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 ## Moves the player from the current keyboard state and elapsed time. Passing
 ## only these values keeps the movement rules easy to test separately.
 move_player : Math.Vec2, Devices.Snapshot, F32 -> Math.Vec2
-move_player = |player, input, dt| {
-	left = input.key_down(KeyLeft) or input.key_down(KeyA)
-	right = input.key_down(KeyRight) or input.key_down(KeyD)
-	up = input.key_down(KeyUp) or input.key_down(KeyW)
-	down = input.key_down(KeyDown) or input.key_down(KeyS)
+move_player = |player, devices, dt| {
+	left = devices.key_down(KeyLeft) or devices.key_down(KeyA)
+	right = devices.key_down(KeyRight) or devices.key_down(KeyD)
+	up = devices.key_down(KeyUp) or devices.key_down(KeyW)
+	down = devices.key_down(KeyDown) or devices.key_down(KeyS)
 
 	speed = 360
 	{
@@ -79,20 +80,18 @@ move_player = |player, input, dt| {
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
-	dt = program_input.time.elapsed_seconds
+update! = |model, input, _io| {
+	devices = input.devices
+	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# window, a breakpoint) cannot throw the player across the world.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
-	player = move_player(model.player, input, dt)
-	zoom = Math.clamp(model.zoom + input.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
-	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
+	player = move_player(model.player, devices, dt)
+	zoom = Math.clamp(model.zoom + devices.mouse.wheel * 0.1, 0.5, 2.5)
+	rotation_dir = axis(devices.key_down(KeyQ), devices.key_down(KeyE))
+	rotation = if devices.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
-	}
+	Ok({ ..model, player, zoom, rotation, mouse: devices.mouse.position() })
 }
 
 ## Builds the camera and coordinate conversions from the latest Model. This
@@ -191,7 +190,7 @@ draw_grid_y! = |frame, y, view| {
 
 draw_hud! : Draw.Frame, Model, Math.Vec2 => {}
 draw_hud! = |frame, model, mouse_world| {
-	hud = Box.unbox(model.hud)
+	hud = model.hud
 	frame.rounded_rectangle!({ x: 16, y: 16, width: 340, height: 122, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x0b1219), 215), Color.with_alpha(Color.white, 40), 1) })
 	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white })
 	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8) })

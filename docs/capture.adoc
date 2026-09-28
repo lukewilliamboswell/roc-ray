@@ -112,7 +112,7 @@ real, uneven time between cycles.
 With `FixedStep` timing, while the recording is active every cycle reports
 exactly `1/fps` seconds as its elapsed time (divided by `every_nth` when
 frames are skipped), however long the frame really took. The app advances by
-the same amount every frame, so the recording is smooth. It is also
+the same amount every cycle, so the recording is smooth. It is also
 repeatable: run the same app with the same random seed, the same scripted
 input, and no task results that depend on the outside world, and it records
 the same frames every time. Real input from a person, the wall clock, and

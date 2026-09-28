@@ -10,92 +10,114 @@ endif::[]
 [#overview]
 = What RocRay is
 
-RocRay lets you build native games, visualizations, creative tools, and other
-interactive programs in https://www.roc-lang.org/[Roc]. It is powered by
-https://www.raylib.com/[raylib], and it runs on macOS (Intel and Apple
-silicon), Linux x86-64, and Windows x86-64.
+RocRay lets you write 2D games, visualizations, creative tools, and other
+interactive programs in https://www.roc-lang.org/[Roc]. It draws with
+https://www.raylib.com/[raylib], a popular C library for games, and runs on
+macOS (Intel and Apple silicon), Linux x86-64, and Windows x86-64.
 
-RocRay is a focused app platform, not a game engine. Your app keeps its own
-state and rules. RocRay provides drawing, audio, keyboard, mouse and gamepad
-input, windows, recording, files, networking, and a few other services, and it
-calls your app once per frame. It does not give you a scene graph, an entity
-system, or an editor; build those in Roc, or use a package, if your app needs
-them.
+It suits programs that draw a fresh picture many times a second: arcade and
+puzzle games, simulations, live plots, generative art, and small editors.
+
+RocRay is 2D. It draws shapes, images, and text, and it has 2D cameras,
+shaders, and offscreen drawing. It does not draw 3D models or provide 3D
+cameras or lighting.
+
+RocRay is a focused platform, not a game engine. Your app keeps its own state
+and rules. RocRay provides drawing, sound, keyboard, mouse and gamepad input,
+the window, screen recording, files, and networking. It does not give you a
+scene graph, an entity system, or an editor; build those in Roc, or use a
+package, if your app needs them.
+
+If you already know raylib, <<coming-from-raylib>> shows how its functions and
+habits map onto RocRay.
 
 == What you write
 
 A RocRay app is three functions:
 
-* `init!` runs once. It chooses the window options, loads what the app needs,
-  and creates the starting state, which RocRay calls the _model_.
-* `update!` runs once per frame. It receives the model and what happened since
-  the last frame -- keys pressed, the mouse moving, work that finished -- and
-  returns the next model.
-* `render!` draws the model on the screen.
+* `init!` runs once, at startup. It chooses the window's settings, loads what
+  the app needs, and creates the starting state, which RocRay calls the
+  _model_.
+* `update!` receives the model and what just happened -- keys pressed, the
+  mouse moving, work that finished -- and returns the next model.
+* `render!` draws the model.
 
-Reading a file or waiting for a network reply can take longer than a frame.
-That work runs as a _task_, so the app keeps updating and drawing while it
-waits; when the task finishes, its result arrives in a later `update!`.
+The _host_, the native program that runs your app, calls them in a loop. One
+pass around that loop is a _host cycle_: the host gathers what happened, calls
+`update!` once, and then calls `render!` to draw the result. Each picture
+`render!` draws is a _frame_. Normally every host cycle draws one frame, so a
+game running at 60 frames a second also runs 60 host cycles a second. The two
+differ only when the host skips drawing, for example while the window is
+minimized.
 
-<<app-model>> explains these pieces properly. You do not need to understand
-them to run your first example.
+Reading a file or waiting for a network reply can take longer than one host
+cycle. That work runs as a _task_, so the app keeps updating and drawing while
+it waits. When the task finishes, its result arrives in a later `update!`.
+
+<<app-model>> explains these pieces in full. You do not need them to run your
+first example. <<glossary>> defines every term the manual uses.
 
 == What an app can reach
 
-Every app can draw, read input, play audio, print to its terminal, and record
+Every app can draw, read input, play sound, print to its terminal, and record
 itself. Reaching further -- a network service, a directory, another program,
-an environment variable, the clipboard -- is written into the app's startup
-configuration, so what an app can reach is visible in its source.
+an environment variable, the clipboard -- is declared in the app's startup
+settings, so you can see what an app can reach by reading its source.
 <<permissions>> explains how.
 
 == What it looks like
 
-These apps are in the repository's `examples/` directory. Each one links to its
-complete Roc source.
+Three short examples are the best place to start:
+{src}/examples/hello_world/main.roc[Hello World], a circle that follows the
+mouse; {src}/examples/pong/main.roc[Pong], a complete game in one file; and
+{src}/examples/snake/main.roc[Snake], a grid game you can restart.
+
+These larger apps are also in the repository's `examples/` directory, roughly
+from simplest to most involved. Each links to its complete Roc source.
 
 // The gallery images are WebP, which the PDF converter cannot embed, so the
 // printed manual lists the same apps instead.
 ifdef::backend-html5[]
 [cols="1,1,1",frame=none,grid=none]
 |===
-a|image::cave_climb.webp[Cave Climb gameplay,link={src}/examples/cave_climb/main.roc]
-*Cave Climb*: a designed level, jumping, camera, sound
 a|image::breakout.webp[Breakout gameplay,link={src}/examples/breakout/main.roc]
 *Breakout*: arcade rules, sounds made in code, recording
-a|image::capture_ui_demo.webp[A scripted responsive interface demonstration,link={src}/examples/capture_ui_demo/main.roc]
-*Capture UI*: automated controls and GIF recording
-a|image::top_down.webp[Top Down gameplay,link={src}/examples/top_down/main.roc]
-*Top Down*: a designed map, characters, music, game states
 a|image::generated_assets.webp[Painting in Pixel Workshop,link={src}/examples/generated_assets/main.roc]
 *Pixel Workshop*: drawing pixels and creating sounds in code
-a|image::postcard_studio.webp[An animated postcard composition,link={src}/examples/postcard_studio/main.roc]
-*Postcard Studio*: generative art and saving larger images
 a|image::responsive_ui.webp[Navigating the responsive settings interface,link={src}/examples/responsive_ui/main.roc]
 *Responsive Settings*: keyboard, mouse, resizing, display scaling
-a|image::live_plot.webp[Source files appearing in Live Plot,link={src}/examples/live_plot/main.roc]
-*Live Plot*: loading and drawing hundreds of thousands of lines
+a|image::postcard_studio.webp[An animated postcard composition,link={src}/examples/postcard_studio/main.roc]
+*Postcard Studio*: generative art and saving larger images
 a|image::particles.webp[A moving fountain of particles,link={src}/examples/particles/main.roc]
 *Particles*: thousands of moving images at once
+a|image::capture_ui_demo.webp[A scripted responsive interface demonstration,link={src}/examples/capture_ui_demo/main.roc]
+*Capture UI*: automated controls and GIF recording
+a|image::live_plot.webp[Source files appearing in Live Plot,link={src}/examples/live_plot/main.roc]
+*Live Plot*: loading and drawing hundreds of thousands of lines
+a|image::top_down.webp[Top Down gameplay,link={src}/examples/top_down/main.roc]
+*Top Down*: a designed map, characters, music, game states
+a|image::cave_climb.webp[Cave Climb gameplay,link={src}/examples/cave_climb/main.roc]
+*Cave Climb*: a designed level, jumping, camera, sound
 |===
 endif::[]
 ifndef::backend-html5[]
-* {src}/examples/cave_climb/main.roc[Cave Climb]: a designed level, jumping, camera, sound
 * {src}/examples/breakout/main.roc[Breakout]: arcade rules, sounds made in code, recording
-* {src}/examples/capture_ui_demo/main.roc[Capture UI]: automated controls and GIF recording
-* {src}/examples/top_down/main.roc[Top Down]: a designed map, characters, music, game states
 * {src}/examples/generated_assets/main.roc[Pixel Workshop]: drawing pixels and creating sounds in code
-* {src}/examples/postcard_studio/main.roc[Postcard Studio]: generative art and saving larger images
 * {src}/examples/responsive_ui/main.roc[Responsive Settings]: keyboard, mouse, resizing, display scaling
-* {src}/examples/live_plot/main.roc[Live Plot]: loading and drawing hundreds of thousands of lines
+* {src}/examples/postcard_studio/main.roc[Postcard Studio]: generative art and saving larger images
 * {src}/examples/particles/main.roc[Particles]: thousands of moving images at once
+* {src}/examples/capture_ui_demo/main.roc[Capture UI]: automated controls and GIF recording
+* {src}/examples/live_plot/main.roc[Live Plot]: loading and drawing hundreds of thousands of lines
+* {src}/examples/top_down/main.roc[Top Down]: a designed map, characters, music, game states
+* {src}/examples/cave_climb/main.roc[Cave Climb]: a designed level, jumping, camera, sound
 endif::[]
 
-The capture examples also produce deterministic media directly, such as this
+An app can also record itself to a video file, such as this
 {src}/examples/gallery/capture_plot.webm[WebM plot recording].
 
 == Stability
 
-RocRay follows Roc's new compiler closely, and its APIs may still change as the
-language evolves. Each release names the exact Roc compiler it was built and
-tested with. Bug reports, documentation improvements, approachable APIs, and
-focused capabilities are welcome; see <<contributing>>.
+RocRay follows Roc's newest compiler closely, and its API may still change as
+the language evolves. Each release names the exact Roc compiler it was built
+and tested with. Bug reports, documentation improvements, and focused new
+capabilities are welcome; see <<contributing>>.

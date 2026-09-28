@@ -136,11 +136,11 @@ render! = |model, frame| {
 
 	# The track, then the arc the sleeper has used up so far.
 	frame.circle!({ center, radius: ring_radius, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
-	draw_arc!(frame, center, progress, 0)
+	draw_arc!(frame, center, progress)
 
 	# A short trail of the orbiting comet: the same orbit sampled a few
 	# moments back, fading out behind the head.
-	draw_trail!(frame, center, model.elapsed, 8)
+	draw_trail!(frame, center, model.elapsed)
 	frame.circle!({ center: orbit(center, model.elapsed), radius: 14, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x88c0d0), Color.white, 3) })
 
 	Ok({})
@@ -155,23 +155,22 @@ on_ring = |center, angle| { x: center.x + ring_radius * F32.cos(angle), y: cente
 orbit : { x : F32, y : F32 }, F32 -> { x : F32, y : F32 }
 orbit = |center, seconds| on_ring(center, seconds * 2)
 
-draw_trail! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
-draw_trail! = |frame, center, seconds, remaining|
-	if remaining == 0 {
-		{}
-	} else {
+draw_trail! : Draw.Frame, { x : F32, y : F32 }, F32 => {}
+draw_trail! = |frame, center, seconds| {
+	for remaining in (1.U64..=8).iter_rev() {
 		fade = U64.to_f32(remaining) / 8
 		frame.circle!({ center: orbit(center, seconds - U64.to_f32(remaining) * 0.03), radius: 12 * fade, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x88c0d0), F32.to_u8_wrap(90 * fade))) })
-		draw_trail!(frame, center, seconds, remaining - 1)
 	}
+}
 
 ## The progress arc, stepped by hand out of short segments so it needs nothing
 ## more than `frame.line!`.
-draw_arc! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
-draw_arc! = |frame, center, progress, step|
-	if U64.to_f32(step) / U64.to_f32(ring_segments) >= progress {
-		{}
-	} else {
+draw_arc! : Draw.Frame, { x : F32, y : F32 }, F32 => {}
+draw_arc! = |frame, center, progress| {
+	for step in 0.U64..<ring_segments {
+		if U64.to_f32(step) / U64.to_f32(ring_segments) >= progress {
+			break
+		}
 		a = full_turn * U64.to_f32(step) / U64.to_f32(ring_segments) - quarter_turn
 		b = full_turn * U64.to_f32(step + 1) / U64.to_f32(ring_segments) - quarter_turn
 		frame.line!({
@@ -179,8 +178,8 @@ draw_arc! = |frame, center, progress, step|
 			end: on_ring(center, b),
 			stroke: Draw.stroke(Color.from_hex_rgb(0xa3be8c), 5),
 		})
-		draw_arc!(frame, center, progress, step + 1)
 	}
+}
 
 describe : State -> Str
 describe = |state|

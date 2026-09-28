@@ -278,11 +278,12 @@ draw_center_line! = |frame| {
 # both fall off with it and the ball drags a short comet tail.
 draw_trail! : Draw.Frame, World => {}
 draw_trail! = |frame, world| {
-	for sample in List.map_with_index(world.trail, |pos, index| { pos, fade: 1 - U64.to_f32(index) / U64.to_f32(trail_length) }) {
+	for (index, pos) in world.trail.iter().with_index() {
+		fade = 1 - U64.to_f32(index) / U64.to_f32(trail_length)
 		frame.circle!({
-			center: sample.pos,
-			radius: ball_r * (0.35 + 0.55 * sample.fade),
-			style: Draw.filled(Color.with_alpha(ball_neon, F32.to_u8_wrap(sample.fade * sample.fade * 130))),
+			center: pos,
+			radius: ball_r * (0.35 + 0.55 * fade),
+			style: Draw.filled(Color.with_alpha(ball_neon, F32.to_u8_wrap(fade * fade * 130))),
 		})
 	}
 }

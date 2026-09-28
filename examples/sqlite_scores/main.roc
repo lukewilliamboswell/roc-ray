@@ -329,10 +329,9 @@ render! = |model, frame| {
 		frame.text_at!({ pos: { x: 68, y: 190 }, text: "No runs yet -- press SPACE to record one", size: 18, color: muted })
 	} else {
 		best = List.fold(model.rows, 1, |top, entry| I64.max(top, entry.score))
-		List.for_each!(
-			List.map_with_index(model.rows, |entry, index| { entry, index }),
-			|row| draw_entry!(frame, row.index, row.entry, best, width),
-		)
+		for (index, entry) in model.rows.iter().with_index() {
+			draw_entry!(frame, index, entry, best, width)
+		}
 	}
 
 	draw_status!(frame, model.status, model.elapsed, size.height - 46)

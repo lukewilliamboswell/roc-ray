@@ -2115,30 +2115,28 @@ draw_plot! = |frame, model| {
 ## One band per visible file, alternating, with the lane being parsed lifted out
 ## of the alternation so the eye can find it.
 draw_bands! : Draw.Frame, Model, Math.Rect, Visible => {}
-draw_bands! = |frame, model, area, window|
-	List.for_each!(
-		lane_indices(window),
-		|index| {
-			top = screen_y(model, U64.to_f32(index) * lane_height)
-			bottom = screen_y(model, U64.to_f32(index + 1) * lane_height)
-			working = is_working(model, index)
-			frame.rectangle!({
-				x: area.x,
-				y: top,
-				width: area.width,
-				height: F32.max(bottom - top - 1, 1),
-				style: Draw.filled(
-					if working {
-						Color.from_hex_rgb(0x18202c)
-					} else if index % 2 == 0 {
-						band_even
-					} else {
-						band_odd
-					},
-				),
-			})
-		},
-	)
+draw_bands! = |frame, model, area, window| {
+	for index in lane_indices(window) {
+		top = screen_y(model, U64.to_f32(index) * lane_height)
+		bottom = screen_y(model, U64.to_f32(index + 1) * lane_height)
+		working = is_working(model, index)
+		frame.rectangle!({
+			x: area.x,
+			y: top,
+			width: area.width,
+			height: F32.max(bottom - top - 1, 1),
+			style: Draw.filled(
+				if working {
+					Color.from_hex_rgb(0x18202c)
+				} else if index % 2 == 0 {
+					band_even
+				} else {
+					band_odd
+				},
+			),
+		})
+	}
+}
 
 ## The two reference lines every lane carries.
 ##
@@ -2149,39 +2147,36 @@ draw_bands! = |frame, model, area, window|
 draw_rules! : Draw.Frame, Model, Math.Rect, Visible => {}
 draw_rules! = |frame, model, area, window| {
 	named = window.first
-	List.for_each!(
-		lane_indices(window),
-		|index| {
-			baseline = screen_y(model, lane_baseline(index))
-			eighty = screen_y(model, lane_baseline(index) - column_offset(80))
-			if baseline >= area.y and baseline <= area.y + area.height {
-				frame.line!({
-					start: { x: area.x, y: baseline },
-					end: { x: area.x + area.width, y: baseline },
-					stroke: Draw.stroke(rule_strong, 1),
-				})
+	for index in lane_indices(window) {
+		baseline = screen_y(model, lane_baseline(index))
+		eighty = screen_y(model, lane_baseline(index) - column_offset(80))
+		if baseline >= area.y and baseline <= area.y + area.height {
+			frame.line!({
+				start: { x: area.x, y: baseline },
+				end: { x: area.x + area.width, y: baseline },
+				stroke: Draw.stroke(rule_strong, 1),
+			})
+		} else {
+			{}
+		}
+		if eighty >= area.y + 16 and eighty <= area.y + area.height {
+			frame.line!({
+				start: { x: area.x, y: eighty },
+				end: { x: area.x + area.width, y: eighty },
+				stroke: Draw.stroke(Color.with_alpha(rule_strong, 190), 1),
+			})
+			# Named once rather than on every lane. It is the only y in the
+			# figure that means anything outside it, and the only thing that
+			# says the axis is not linear.
+			if index == named {
+				text_left!(frame, model.small, { x: area.x + 8, y: eighty - 14 }, "80 COLUMNS", 9, 1.6, ink_faint)
 			} else {
 				{}
 			}
-			if eighty >= area.y + 16 and eighty <= area.y + area.height {
-				frame.line!({
-					start: { x: area.x, y: eighty },
-					end: { x: area.x + area.width, y: eighty },
-					stroke: Draw.stroke(Color.with_alpha(rule_strong, 190), 1),
-				})
-				# Named once rather than on every lane. It is the only y in the
-				# figure that means anything outside it, and the only thing that
-				# says the axis is not linear.
-				if index == named {
-					text_left!(frame, model.small, { x: area.x + 8, y: eighty - 14 }, "80 COLUMNS", 9, 1.6, ink_faint)
-				} else {
-					{}
-				}
-			} else {
-				{}
-			}
-		},
-	)
+		} else {
+			{}
+		}
+	}
 }
 
 ## Lanes whose points have been dropped, drawn as the density their summary
@@ -2193,19 +2188,18 @@ draw_rules! = |frame, model, area, window| {
 ## going blank. Scrolling onto one asks for the file again; until it arrives,
 ## this is what is there.
 draw_summaries! : Draw.Frame, Model, Visible => {}
-draw_summaries! = |frame, model, window|
-	List.for_each!(
-		lane_indices(window),
-		|index|
-			if has_run(model.runs, index) {
-				{}
-			} else {
-				match List.get(model.lanes, index) {
-					Err(_) => {}
-					Ok(lane) => draw_density!(frame, lane, index)
-				}
-			},
-	)
+draw_summaries! = |frame, model, window| {
+	for index in lane_indices(window) {
+		if has_run(model.runs, index) {
+			{}
+		} else {
+			match List.get(model.lanes, index) {
+				Err(_) => {}
+				Ok(lane) => draw_density!(frame, lane, index)
+			}
+		}
+	}
+}
 
 draw_density! : Draw.Frame, Lane, U64 => {}
 draw_density! = |frame, lane, index| {
@@ -2213,24 +2207,22 @@ draw_density! = |frame, lane, index| {
 	peak = U64.to_f32(hist_peak(lane.hist))
 	span = max_columns / U64.to_f32(hist_buckets)
 
-	List.for_each!(
-		indexed(lane.hist),
-		|entry|
-			if entry.value == 0 {
-				{}
-			} else {
-				low = column_offset(U64.to_f32(entry.index) * span)
-				high = column_offset(U64.to_f32(entry.index + 1) * span)
-				weight = F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
-					x: 0,
-					y: baseline - high,
-					width: world_width,
-					height: F32.max(high - low, 0.4),
-					style: Draw.filled(Color.with_alpha(lane.tint, alpha_of(18 + weight * 74))),
-				})
-			},
-	)
+	for (bucket, count) in lane.hist.iter().with_index() {
+		if count == 0 {
+			{}
+		} else {
+			low = column_offset(U64.to_f32(bucket) * span)
+			high = column_offset(U64.to_f32(bucket + 1) * span)
+			weight = F32.sqrt(U64.to_f32(count) / peak)
+			frame.rectangle!({
+				x: 0,
+				y: baseline - high,
+				width: world_width,
+				height: F32.max(high - low, 0.4),
+				style: Draw.filled(Color.with_alpha(lane.tint, alpha_of(18 + weight * 74))),
+			})
+		}
+	}
 }
 
 ## Every retained point, in one crossing of the Roc/host boundary -- and then,
@@ -2322,21 +2314,10 @@ screen_y = |model, y| model.camera.world_to_screen({ x: 0, y: y }).y
 
 ## The visible lanes, as a list to walk. With hundreds of lanes this is the only
 ## thing the furniture ever iterates.
-lane_indices : Visible -> List(U64)
-lane_indices = |window|
-	if window.last < window.first {
-		[]
-	} else {
-		count_up(window.first, window.last, [])
-	}
-
-count_up : U64, U64, List(U64) -> List(U64)
-count_up = |at, last, found|
-	if at > last {
-		found
-	} else {
-		count_up(at + 1, last, List.append(found, at))
-	}
+## The visible lanes' indices, for a `for` loop. Empty when `last` is before
+## `first`.
+lane_indices : Visible -> Range(U64)
+lane_indices = |window| window.first..=window.last
 
 is_working : Model, U64 -> Bool
 is_working = |model, index|
@@ -2437,23 +2418,20 @@ draw_graph! = |frame, model, graph| {
 	# by index rather than right-aligned: a run that has only been going two
 	# seconds should look like two seconds of history, not like a full window
 	# that happens to be flat.
-	List.for_each!(
-		indexed(model.rates.samples),
-		|entry| {
-			height = plot_height * U64.to_f32(measure(entry.value)) / peak
-			if height < 0.6 {
-				{}
-			} else {
-				frame.rectangle!({
-					x: bounds.x + U64.to_f32(entry.index) * step,
-					y: plot_top + plot_height - height,
-					width: F32.max(step - 0.8, 0.8),
-					height: height,
-					style: Draw.filled(Color.with_alpha(graph.tint, alpha_of(graph.fade * 190))),
-				})
-			}
-		},
-	)
+	for (index, sample) in model.rates.samples.iter().with_index() {
+		height = plot_height * U64.to_f32(measure(sample)) / peak
+		if height < 0.6 {
+			{}
+		} else {
+			frame.rectangle!({
+				x: bounds.x + U64.to_f32(index) * step,
+				y: plot_top + plot_height - height,
+				width: F32.max(step - 0.8, 0.8),
+				height: height,
+				style: Draw.filled(Color.with_alpha(graph.tint, alpha_of(graph.fade * 190))),
+			})
+		}
+	}
 }
 
 ## The figures under the rule, as a row of label-over-value columns.
@@ -2508,15 +2486,12 @@ draw_figures! = |frame, model, fade| {
 
 	pitch = (model.screen.x - margin * 2) / U64.to_f32(List.len(figures))
 
-	List.for_each!(
-		indexed(figures),
-		|entry| {
-			x = margin + U64.to_f32(entry.index) * pitch
-			text_left!(frame, model.small, { x: x, y: 130 }, entry.value.label, 10, 1.5, fade_to(ink_faint, fade))
-			text_left!(frame, model.font, { x: x, y: 144 }, entry.value.value, 17, Draw.default_spacing, fade_to(ink, fade))
-			text_left!(frame, model.small, { x: x, y: 166 }, entry.value.note, 9, 1.4, fade_to(Color.with_alpha(ink_faint, 190), fade))
-		},
-	)
+	for (index, figure) in figures.iter().with_index() {
+		x = margin + U64.to_f32(index) * pitch
+		text_left!(frame, model.small, { x: x, y: 130 }, figure.label, 10, 1.5, fade_to(ink_faint, fade))
+		text_left!(frame, model.font, { x: x, y: 144 }, figure.value, 17, Draw.default_spacing, fade_to(ink, fade))
+		text_left!(frame, model.small, { x: x, y: 166 }, figure.note, 9, 1.4, fade_to(Color.with_alpha(ink_faint, 190), fade))
+	}
 }
 
 mode_label : XMode -> Str
@@ -2542,26 +2517,24 @@ draw_gutter! = |frame, model| {
 	frame.with_scissor!(
 		Math.rect(0, area.y, hud_left, area.height),
 		|clipped| {
-			List.for_each!(
-				lane_indices(window),
-				|index|
-					match List.get(model.lanes, index) {
-						Err(_) => {}
-						Ok(lane) =>
-							draw_row!(
-								clipped,
-								model,
-								{
-									lane: lane,
-									index: index,
-									top: screen_y(model, U64.to_f32(index) * lane_height),
-									bottom: screen_y(model, U64.to_f32(index + 1) * lane_height),
-									longest: longest,
-									area: area,
-								},
-							)
-						},
-			)
+			for index in lane_indices(window) {
+				match List.get(model.lanes, index) {
+					Err(_) => {}
+					Ok(lane) =>
+						draw_row!(
+							clipped,
+							model,
+							{
+								lane: lane,
+								index: index,
+								top: screen_y(model, U64.to_f32(index) * lane_height),
+								bottom: screen_y(model, U64.to_f32(index + 1) * lane_height),
+								longest: longest,
+								area: area,
+							},
+						)
+					}
+			}
 			Ok({})
 		},
 	)
@@ -2573,16 +2546,18 @@ draw_gutter! = |frame, model| {
 ## bars readable: one 11,000-line file would otherwise flatten every bar on
 ## screen to nothing for the rest of the run.
 widest_lane : Model, Visible -> U64
-widest_lane = |model, window|
-	List.fold(
-		lane_indices(window),
-		1,
-		|most, index|
-			match List.get(model.lanes, index) {
-				Ok(lane) => U64.max(most, lane.lines)
-				Err(_) => most
-			},
-	)
+widest_lane = |model, window| {
+	var $most = 1
+	for index in lane_indices(window) {
+		match List.get(model.lanes, index) {
+			Ok(lane) => {
+				$most = U64.max($most, lane.lines)
+			}
+			Err(_) => {}
+		}
+	}
+	$most
+}
 
 Row : {
 	lane : Lane,
@@ -2711,27 +2686,25 @@ draw_violin! = |frame, lane, top, bottom| {
 	peak = U64.to_f32(hist_peak(lane.hist))
 	span = max_columns / U64.to_f32(hist_buckets)
 
-	List.for_each!(
-		indexed(lane.hist),
-		|entry|
-			if entry.value == 0 {
-				{}
-			} else {
-				# Buckets are even in columns but not in height, because they
-				# are placed by the same square root the points are: this is the
-				# lane's own y axis, forty pixels wide.
-				low = column_offset(U64.to_f32(entry.index) * span) / lane_span
-				high = column_offset(U64.to_f32(entry.index + 1) * span) / lane_span
-				half = 20 * F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
-					x: centre - half,
-					y: origin + height * (1 - high),
-					width: half * 2,
-					height: F32.max(height * (high - low), 1),
-					style: Draw.filled(Color.with_alpha(lane.tint, 110)),
-				})
-			},
-	)
+	for (bucket, count) in lane.hist.iter().with_index() {
+		if count == 0 {
+			{}
+		} else {
+			# Buckets are even in columns but not in height, because they
+			# are placed by the same square root the points are: this is the
+			# lane's own y axis, forty pixels wide.
+			low = column_offset(U64.to_f32(bucket) * span) / lane_span
+			high = column_offset(U64.to_f32(bucket + 1) * span) / lane_span
+			half = 20 * F32.sqrt(U64.to_f32(count) / peak)
+			frame.rectangle!({
+				x: centre - half,
+				y: origin + height * (1 - high),
+				width: half * 2,
+				height: F32.max(height * (high - low), 1),
+				style: Draw.filled(Color.with_alpha(lane.tint, 110)),
+			})
+		}
+	}
 }
 
 # ---------------------------------------------------------------------------
@@ -2789,10 +2762,6 @@ alpha_of = |value|
 
 		Err(_) => 0
 	}
-
-## `List.for_each!` with the index alongside the element.
-indexed : List(a) -> List({ value : a, index : U64 })
-indexed = |items| List.map_with_index(items, |value, index| { value: value, index: index })
 
 ## Keep the end of a path rather than the start of it, because the end is the
 ## part that names the file.
@@ -2973,7 +2942,7 @@ sample_runs : List(Run)
 sample_runs = [{ lane: 0, count: 4 }, { lane: 1, count: 3 }, { lane: 2, count: 2 }]
 
 sample_points : List(Draw.TextureInstance)
-sample_points = List.map(count_up(0, 8, []), |line| plot_dot(line, 10, { baseline: lane_baseline(0), tint: ink, x_scale: line_scale, size: dot_size }))
+sample_points = List.map([0, 1, 2, 3, 4, 5, 6, 7, 8], |line| plot_dot(line, 10, { baseline: lane_baseline(0), tint: ink, x_scale: line_scale, size: dot_size }))
 
 ## Under budget, nothing moves.
 expect trim(sample_points, sample_runs, 9).runs == sample_runs
@@ -3297,7 +3266,7 @@ expect {
 	zoom = fit_zoom(screen)
 	lanes = List.repeat(empty_lane, 500)
 	window = visible_lanes(camera_at(area, zoom, follow_scroll(lanes, area, zoom)), area, lanes)
-	List.len(lane_indices(window)) < 40 and window.last == List.len(lanes) - 1
+	List.len(lane_indices(window).iter().collect()) < 40 and window.last == List.len(lanes) - 1
 }
 
 ## A window never names a lane that does not exist, however far the view has
@@ -3310,9 +3279,9 @@ expect {
 	window.last < List.len(lanes) and window.first <= window.last
 }
 
-expect lane_indices({ first: 2, last: 5 }) == [2, 3, 4, 5]
-expect lane_indices({ first: 4, last: 4 }) == [4]
-expect lane_indices({ first: 5, last: 4 }) == []
+expect lane_indices({ first: 2, last: 5 }).iter().collect() == [2, 3, 4, 5]
+expect lane_indices({ first: 4, last: 4 }).iter().collect() == [4]
+expect lane_indices({ first: 5, last: 4 }).iter().collect() == []
 
 ## Zooming keeps the world point under the pointer under the pointer. That is
 ## the only thing zoom-at-cursor has to get right.

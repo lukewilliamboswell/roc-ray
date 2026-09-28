@@ -203,14 +203,11 @@ render! = |model, frame| {
 
 			# A few repeated strokes suggest moving water without needing an
 			# image asset.
-			List.for_each!(
-				[0.U64, 1.U64, 2.U64, 3.U64, 4.U64, 5.U64, 6.U64, 7.U64],
-				|index| {
-					y = 716 + U64.to_f32(index) * 28
-					x = if index % 2 == 0 100 else 184
-					poster.line!({ start: { x, y }, end: { x: x + 1120, y }, stroke: Draw.stroke(Color.with_alpha(colors.ink, 65), 4) })
-				},
-			)
+			for index in 0.U64..<8 {
+				y = 716 + U64.to_f32(index) * 28
+				x = if index % 2 == 0 100 else 184
+				poster.line!({ start: { x, y }, end: { x: x + 1120, y }, stroke: Draw.stroke(Color.with_alpha(colors.ink, 65), 4) })
+			}
 
 			card.title.draw!(poster, { pos: { x: 84, y: 80 }, color: colors.ink })
 			card.subtitle.draw!(poster, { pos: { x: 88, y: 172 }, color: Color.with_alpha(colors.ink, 210) })

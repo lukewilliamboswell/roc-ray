@@ -137,8 +137,7 @@ camera_world_bounds = |camera| {
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2, Math.Rect => {}
 draw_world! = |frame, player, mouse_world, view| {
 	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x16222b), Color.with_alpha(Color.from_hex_rgb(0x5fa8d3), 90), 3) })
-	draw_grid_x!(frame, world_left, view)
-	draw_grid_y!(frame, world_top, view)
+	draw_grid!(frame, view)
 
 	landmark!(frame, { x: -320, y: -160, width: 360, height: 260 }, Color.from_hex_rgb(0x3b6f8f))
 	landmark!(frame, { x: 280, y: 120, width: 520, height: 340 }, Color.from_hex_rgb(0x4c8f5f))
@@ -164,27 +163,18 @@ landmark! = |frame, rect, color| {
 	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: 10, style: Draw.filled(Color.with_alpha(Color.white, 45)) })
 }
 
-draw_grid_x! : Draw.Frame, F32, Math.Rect => {}
-draw_grid_x! = |frame, x, view| {
-	if x > world_right {
-		{}
-	} else {
+## Grid lines every 80 world units, skipping any the view cannot show.
+draw_grid! : Draw.Frame, Math.Rect => {}
+draw_grid! = |frame, view| {
+	for x in (world_left..=world_right).step_by(80) {
 		if x >= view.x and x <= view.x + view.width {
 			frame.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
 		}
-		draw_grid_x!(frame, x + 80, view)
 	}
-}
-
-draw_grid_y! : Draw.Frame, F32, Math.Rect => {}
-draw_grid_y! = |frame, y, view| {
-	if y > world_bottom {
-		{}
-	} else {
+	for y in (world_top..=world_bottom).step_by(80) {
 		if y >= view.y and y <= view.y + view.height {
 			frame.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
 		}
-		draw_grid_y!(frame, y + 80, view)
 	}
 }
 

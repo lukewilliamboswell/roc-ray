@@ -224,18 +224,17 @@ render! = |model, frame| {
 ## A faint square grid, so a pointer moving over it reads as motion rather than
 ## as a circle floating in the dark.
 draw_grid! : Draw.Frame, Draw.FrameSize => {}
-draw_grid! = |frame, size|
-	List.for_each!(
-		List.map_with_index(List.repeat({}, 32), |_unit, index| U64.to_f32(index) * 40),
-		|offset| {
-			if offset <= size.width {
-				frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
-			}
-			if offset <= size.height {
-				frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
-			}
-		},
-	)
+draw_grid! = |frame, size| {
+	for index in 0.U64..<32 {
+		offset = U64.to_f32(index) * 40
+		if offset <= size.width {
+			frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
+		}
+		if offset <= size.height {
+			frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
+		}
+	}
+}
 
 ## One pointer: a soft glow, a ring, and a crosshair with its name.
 draw_pointer! : Draw.Frame, Draw.Vector2, Color.Rgba, Str, F32 => {}

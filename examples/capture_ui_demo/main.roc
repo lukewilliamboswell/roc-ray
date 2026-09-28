@@ -130,34 +130,34 @@ init! = App.init(
 			title: Text.from("Scripted Input", font).size(24).prepare!()?,
 			increment_label: Text.from("Increment", font).size(18).prepare!()?,
 			toggle_label: Text.from("Toggle", font).size(18).prepare!()?,
-			counter_labels: prepare_counter_labels!(font, 0, [])?,
-			field_labels: prepare_field_labels!(font, 0, [])?,
+			counter_labels: prepare_counter_labels!(font)?,
+			field_labels: prepare_field_labels!(font)?,
 		})
 	},
 )
 
 ## Prepare one label per reachable click count, so `render!` never lays out text.
-prepare_counter_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit])
-prepare_counter_labels! = |font, index, acc|
-	if index > max_clicks {
-		Ok(acc)
-	} else {
-		label = Text.from("clicks: ${U64.to_str(index)}", font).size(18).prepare!()?
-		prepare_counter_labels!(font, index + 1, List.append(acc, label))
+prepare_counter_labels! : Text.Font => Try(List(Text.Prepared), [ResourceLimit])
+prepare_counter_labels! = |font| {
+	var $labels = []
+	for count in 0.U64..=max_clicks {
+		$labels = $labels.append(Text.from("clicks: ${U64.to_str(count)}", font).size(18).prepare!()?)
 	}
+	Ok($labels)
+}
 
 ## Prepare one label per prefix of `field_text`, for the same reason.
 ##
 ## The script types that string in order and backspace only ever removes from
 ## its end, so every state the field can reach is one of these prefixes.
-prepare_field_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit])
-prepare_field_labels! = |font, index, acc|
-	if index > List.len(field_text) {
-		Ok(acc)
-	} else {
-		label = Text.from(field_prefix(index), font).size(20).prepare!()?
-		prepare_field_labels!(font, index + 1, List.append(acc, label))
+prepare_field_labels! : Text.Font => Try(List(Text.Prepared), [ResourceLimit])
+prepare_field_labels! = |font| {
+	var $labels = []
+	for count in 0.U64..=List.len(field_text) {
+		$labels = $labels.append(Text.from(field_prefix(count), font).size(20).prepare!()?)
 	}
+	Ok($labels)
+}
 
 ## The first `count` characters of what the script types.
 field_prefix : U64 -> Str

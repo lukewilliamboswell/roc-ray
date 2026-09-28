@@ -191,7 +191,7 @@
         },
         {
           "name": "moves",
-          "frames": 30,
+          "frames": 60,
           "keys": "3:RIGHT,4:RIGHT,5:DOWN,6:LEFT+UP"
         }
       ]
@@ -286,7 +286,7 @@
         },
         {
           "name": "hops-and-plays",
-          "frames": 40,
+          "frames": 60,
           "keys": "3:SPACE,20:SPACE~"
         }
       ]

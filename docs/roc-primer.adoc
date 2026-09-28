@@ -14,8 +14,8 @@ endif::[]
 = Roc for RocRay
 
 This chapter teaches the parts of Roc that a small RocRay app uses, and no
-more. Read it once before <<first-game>>, and come back to it when a line of
-code puzzles you. Each section links to the matching page of the
+more. Read it once before <<first-game>>, and come back to it when you do not
+understand a line of code. Each section links to the matching page of the
 {langref}/README.md[Roc language reference], which covers the whole language.
 
 Roc is a _functional_ language. A value never changes once it exists. To
@@ -115,7 +115,7 @@ is a `Point`. Your app's `Model` is usually an alias, such as
 
 A _nominal type_ is a new type that is not interchangeable with anything
 else, even a type with the same contents. It is declared with `:=`, or with
-`::` when other modules must not see inside it. It can carry functions of its
+`::` when other modules must not see inside it. It can have functions of its
 own, called _methods_, in a `.{ }` block after it:
 
 [source,roc]
@@ -127,7 +127,7 @@ Inside the module that declares it, `Lives.(count)` builds a `Lives` from a
 number, or takes one apart. You rarely need to declare a nominal type in a
 small app, but you use the platform's all the time. `Draw.Frame`,
 `Audio.Sound`, `App.Config` and `App.Input` are nominal types. You cannot
-build one from its contents; the platform hands you one, such as
+build one from its contents; the platform gives you one, such as
 `App.default`, and you change it with its methods.
 See {langref}/types.md#type-aliases[Type aliases] and
 {langref}/types.md#nominal-types[Nominal types].
@@ -146,7 +146,7 @@ include::tutorial/primer.roc[tag=tags,indent=0]
 The compiler checks that a `match` handles every tag. A branch written `_`
 handles everything the branches above it did not.
 
-A tag can carry values, called its _payload_:
+A tag can hold values, called its _payload_:
 
 [source,roc]
 ----
@@ -196,12 +196,14 @@ include::tutorial/primer.roc[tag=effectful,indent=0]
 ----
 
 Only an effectful function can call another effectful function. So the `!`
-tells you, at a glance, every place where your app touches the world. All
+tells you, at a glance, every place where your app interacts with the world
+outside it. All
 three RocRay callbacks, `init!`, `update!` and `render!`, are effectful, and
 the platform's effectful functions, such as `frame.circle!` and
-`sound.play!`, are the only way your app reaches the screen and the speakers.
+`sound.play!`, are the only way your app can draw on the screen or play
+through the speakers.
 
-Keep your game's rules in pure functions and call them from `update!`. Pure
+Keep your game logic in pure functions and call them from `update!`. Pure
 functions are easy to test, as <<primer-expect>> shows.
 See {langref}/functions.md#effectful-functions[Effectful functions].
 
@@ -228,7 +230,7 @@ That is how `init! : App.Init(Model, [])` grows into
 `init!` generates a sound.
 
 RocRay treats one error specially. A callback that returns `Err(Exit(code))`
-ends the app with that exit code. Any other error that reaches the host
+ends the app with that exit code. Any other error returned to the host
 also ends the app, with a message naming the callback and the error.
 See {langref}/operators.md#-unwrap-if-ok-early-return-if-err[The ? operator].
 
@@ -304,7 +306,7 @@ include::tutorial/primer.roc[tag=expect,indent=0]
 
 `roc test main.roc` runs every `expect` and reports the ones that fail. An
 `expect` cannot call an effectful function, which is one more reason to keep
-your rules pure. <<testing>> shows how to test an app's decisions.
+your game logic pure. <<testing>> shows how to test an app's logic.
 See {langref}/statements.md[Statements].
 
 == What this chapter leaves out

@@ -48,9 +48,9 @@ Work through these in order. Each one adds a little to the one before it.
   the pointer, and nothing else.
 . {src}/examples/move_box/main.roc[Move Box] (`move_box`): a box moved with
   the arrow keys. It introduces moving by speed times elapsed time, and a pure
-  rule tested with `expect`. <<first-game>> grows the same idea into a whole
-  game, one step at a time; Move Box is the finished idea on one page, to copy
-  from.
+  function tested with `expect`. <<first-game>> grows the same idea into a
+  whole game, one step at a time; Move Box shows the finished result on one
+  page, ready to copy.
 . {src}/examples/sprite_and_sound/main.roc[Sprite and Sound]
   (`sprite_and_sound`): a picture and a sound loaded from files. It introduces
   a permission, an asset store, and loaded resources.
@@ -61,7 +61,7 @@ Work through these in order. Each one adds a little to the one before it.
   few modules, with a fixed simulation step and seeded randomness.
 . {src}/examples/task_sleep/main.roc[Task Sleep] (`task_sleep`): one task that
   waits, and the message it sends back. Read it before adding files,
-  networking, or any other work that waits.
+  networking, or any other operation that waits.
 
 Then pick a direction:
 
@@ -83,7 +83,7 @@ Then pick a direction:
 |{src}/examples/hello_world/main.roc[Hello World] +
 `hello_world` |A polished minimal interactive scene |App lifecycle, prepared text, pointer input
 |{src}/examples/move_box/main.roc[Move Box] +
-`move_box` |A box you steer with the arrow keys |Movement by elapsed time, clamping the time step, keeping an object inside the window, testing a pure rule
+`move_box` |A box you steer with the arrow keys |Movement by elapsed time, clamping the time step, keeping an object inside the window, testing a pure function
 |{src}/examples/sprite_and_sound/main.roc[Sprite and Sound] +
 `sprite_and_sound` |A pixel-art blob that hops and plays a sound |Declaring a directory, opening an asset store, loading a PNG texture and a WAV sound
 |{src}/examples/pong/main.roc[Pong] +
@@ -91,7 +91,7 @@ Then pick a direction:
 |{src}/examples/snake/main.roc[Snake] +
 `snake` |A grid-based game with restartable state |Fixed simulation step, keyboard control, seeded randomness in the model
 |{src}/examples/breakout/main.roc[Breakout] +
-`breakout` |A complete game that can record its own demo |Separating game rules from effects, sounds played from game events, a recording mode
+`breakout` |A complete game that can record its own demo |Separating game logic from effects, sounds played from game events, a recording mode
 |{src}/examples/generated_assets/main.roc[Pixel Workshop] +
 `generated_assets` |A tiny paint program with a texture it changes as you paint |Textures and sounds made in code, uploading one changed cell, a pure editor returning edits
 |{src}/examples/responsive_ui/main.roc[Responsive Settings] +
@@ -105,7 +105,7 @@ Then pick a direction:
 |===
 
 [#examples-waiting]
-== Work that waits
+== Tasks that wait
 
 Use these when copying the `+Task.spawn!(input, || ...)+` pattern described in
 <<tasks>>. A task's return value arrives as one `Msg` on a later
@@ -117,15 +117,15 @@ Use these when copying the `+Task.spawn!(input, || ...)+` pattern described in
 |{src}/examples/task_sleep/main.roc[Task Sleep] +
 `task_sleep` |One task, one `Task.sleep!`, one message back -- the shape of every other task on this page -- and printing straight from `update!`
 |{src}/examples/async_read/main.roc[Async Read] +
-`async_read` |Two file reads and a `metadata!` call in flight at once, each with its own `Msg` variant, so none of them needs an id
+`async_read` |Two file reads and a `metadata!` call running at once, each with its own `Msg` variant, so none of them needs an id
 |{src}/examples/capture_screenshot/main.roc[Capture Screenshot] +
 `capture_screenshot` |A screenshot saved in a task, and the output directory refusing a path that climbs out of it
 |{src}/examples/http_fetch/main.roc[HTTP Fetch] +
-`http_fetch` |An HTTP GET in a task, which you can start again mid-flight; each reply carries the id of the fetch it belongs to
+`http_fetch` |An HTTP GET in a task, which you can restart while it is still running; each reply includes the id of the fetch it belongs to
 |{src}/examples/udp_cursor/main.roc[UDP Cursor] +
-`udp_cursor` |Two instances showing each other's pointer: a receiving task started again each time it answers, and sends made straight from `update!`
+`udp_cursor` |Two instances showing each other's pointer: a receiving task that is started again each time it returns, and sends made straight from `update!`
 |{src}/examples/sqlite_scores/main.roc[SQLite Scores] +
-`sqlite_scores` |A high-score board that survives a restart: the write and the re-read share one task, so the model is told what the database holds
+`sqlite_scores` |A high-score board that survives a restart: the write and the re-read share one task, so the model always gets what the database actually contains
 |===
 
 == Larger showcases
@@ -150,7 +150,7 @@ Use these as focused references, not starter projects.
 
 [cols="2,5",options="header"]
 |===
-|Example |Reach for it when you need...
+|Example |Use it when you need...
 |{src}/examples/camera/main.roc[Camera World] +
 `camera` |World and screen coordinates, a following camera, zoom, and rotation
 |{src}/examples/projective_texture/main.roc[Projective Texture] +
@@ -170,20 +170,21 @@ Use these as focused references, not starter projects.
 * Each app names its three functions' parameters the same way:
   `init!` takes `io`, `update!` takes `model, input, io` and reads devices
   through `devices = input.devices`, and `render!` takes `model, frame`.
-* Keep application state in `Model`; fold `App.Input` into it in pure helpers
-  that `update!` calls.
+* Keep application state in `Model`; compute the next model from `App.Input`
+  in pure helper functions that `update!` calls.
 * Load and prepare long-lived resources once in `init!`, then keep them in the
   model instead of recreating them every host cycle.
 * Derive layout and view-only values with pure helpers. Use `frame.size!()`
   for the surface being drawn to instead of copying `input.window.size` into
   the model.
-* Move by elapsed time, and clamp it: a stall can report a second or more.
-* Call host effects directly from `update!` for work that answers immediately;
-  use `+Task.spawn!(input, || ...)+` for work that waits, and fold its return
-  value in when it arrives as a message on a later `input.messages`.
-* Give each kind of work that waits its own `Msg` variant. Add an id only when
-  several of the same work may be in flight at once.
-* Keep rules in pure functions so `roc test` can check them without calling
+* Move by elapsed time, and clamp it: after a pause, one host cycle can report
+  a second or more.
+* Call host effects directly from `update!` when they return immediately; use
+  `+Task.spawn!(input, || ...)+` for anything that waits, and update the model
+  with its result when it arrives as a message on a later `input.messages`.
+* Give each kind of task its own `Msg` variant. Add an id only when several
+  tasks of the same kind may be running at once.
+* Keep game logic in pure functions so `roc test` can check them without calling
   effectful `update!`.
 * Let `App.default` handle Escape. An app that needs Escape for itself sets
   `with_exit_key(NoExitKey)` and says why, as Input Inspector does.
@@ -215,8 +216,8 @@ reports the recording `Finished` or `Failed`.
 
 == Permissions in the examples
 
-An example declares what it reaches beyond its own resources in its startup
-config, as <<permissions>> describes. Nothing is passed on the command line.
+An example declares, in its startup config, anything it accesses beyond its
+own resources, as <<permissions>> describes. Nothing is passed on the command line.
 
 [cols="2,5,3",options="header"]
 |===

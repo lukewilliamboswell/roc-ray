@@ -84,31 +84,37 @@ backspace_frame = 215.U64
 expect backspace_frame > first_type_frame + (List.len(field_text) - 1) * type_every
 expect backspace_frame < recorded_frames
 
+## What to record, and how. `DrawCursor` paints the pointer into each frame,
+## so the recording shows where every scripted click lands.
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("ui_demo.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(recorded_frames)
+		.with_scale(Full)
+		.with_timing(FixedStep)
+		.with_cursor(DrawCursor)
+
+## A hidden window whose captures go into `captures/`.
+startup_config : App.Config
 startup_config = App.default
-	.with_title("RocRay Capture: UI demo")
+	.with_title("RocRay Capture UI Demo")
 	.with_size({ width: 490, height: 380 })
 	.with_frame_pacing(Capped(60))
 	.with_visible(Bool.False)
 	.with_output_dir("captures")
-	.with_recording(
-		Capture.default
-			.with_path("ui_demo.gif")
-			.with_format(Gif)
-			.with_fps(25)
-			.with_max_frames(recorded_frames)
-			.with_scale(Full)
-			.with_timing(FixedStep)
-			.with_cursor(DrawCursor),
-	)
 
+## A configuration can describe a recording but never starts one; `init!`
+## starts it. `PermissionDenied` is in the error list only because
+## `Capture.Writer.start!` can return it; the `io` that `init!` receives always
+## has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init(
 	startup_config,
 	|io| {
-		match startup_config.recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
-		}
+		io.capture().start!(demo_recording)?
 
 		font = Draw.default_font!()
 		Ok({
@@ -165,13 +171,13 @@ expect field_prefix(List.len(field_text)) == "roc-ray!"
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
+update! = |model, input, _io| {
+	devices = input.devices
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
 
 	# Where the pointer is *this* frame: the position scripted on the previous
-	# one, which the model already kept. Reading it back off `input.mouse` would
+	# one, which the model already kept. Reading it back off `devices.mouse` would
 	# work -- the host samples the scripted pointer into the input exactly as it
 	# does a hardware one -- but the app is the thing that scripted it, so it
 	# has no reason to ask the host what it already said.
@@ -182,11 +188,11 @@ update! = |model, program_input, _io| {
 	# Ordinary edge-triggered click handling. The virtual pointer
 	# produces real pressed-this-frame bits, so this needs no special
 	# casing.
-	pressed = input.mouse.button_pressed(Left)
+	pressed = devices.mouse.button_pressed(Left)
 	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
 	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
 
-	held = input.mouse.button_down(Left)
+	held = devices.mouse.button_down(Left)
 	slider =
 		if held and inside_slider(mouse) {
 			clamp_unit((mouse.x - slider_track.x) / slider_track.width)
@@ -203,8 +209,8 @@ update! = |model, program_input, _io| {
 	typed = field_after_input(
 		model.typed,
 		focused,
-		List.len(input.text_input),
-		input.key_pressed(KeyBackspace),
+		List.len(devices.text_input),
+		devices.key_pressed(KeyBackspace),
 	)
 
 	# The scripted devices are installed here, before anything is drawn, and a

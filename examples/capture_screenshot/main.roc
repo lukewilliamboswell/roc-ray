@@ -50,7 +50,7 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
-		.with_title("RocRay Capture: Screenshot")
+		.with_title("RocRay Capture Screenshot")
 		.with_size({ width: 720, height: 420 })
 		.with_output_dir("shots"),
 	|_io|

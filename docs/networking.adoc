@@ -60,7 +60,7 @@ that package in its own header beside the platform.
 
 * **Every request has limits.** By default a request must finish within thirty
   seconds, and its response body, measured after decompression, may not exceed
-  eight megabytes. A response over the cap fails rather than being truncated.
+  8 MiB. A response over the cap fails rather than being truncated.
   Pass a `Config` to `send_with!` to change either limit, or `0` to disable
   one.
 * **A status code is not an error.** A 404 or a 503 arrives as `Ok(response)`

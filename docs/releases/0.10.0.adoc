@@ -35,11 +35,7 @@ program = { init!, update!, render! }
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
-    if input.devices.key_pressed(KeyEscape) {
-        Err(Exit(0))
-    } else {
-        Ok(step(model, input.time.elapsed_seconds, input.devices.key_down(KeyW)))
-    }
+    Ok(step(model, input.time.elapsed_seconds, input.devices.key_down(KeyW)))
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
@@ -50,14 +46,14 @@ render! = |model, frame| {
 }
 ----
 
-* *`update!` is the only place the model changes.* Once per host cycle it receives an `App.Input`, which holds the devices snapshot (keys, mouse, gamepads), timing, window state, dropped files and the messages from finished tasks. It can call host effects directly, such as playing a sound or resizing the window. Returning `Err(Exit(code))` ends the app.
+* *`update!` is the only place the model changes.* Once per host cycle it receives an `App.Input`, which holds the devices snapshot (keys, mouse, gamepads), timing, window state, dropped files and the messages from finished tasks. It can call host effects directly, such as playing a sound or resizing the window. Returning `Err(Exit(code))` ends the app. `App.default` still ends the app when Escape is pressed, so the 0.9 check is no longer needed; `with_exit_key` chooses another key or none.
 * *`render!` only draws.* It receives the updated model and a `Draw.Frame`, and returns `{}`, not a model. Drawing is only allowed here, and state-changing effects are refused here, so a frame always shows the model that `update!` just produced.
 * *Rules can be tested without a window.* Input and host resources have pure constructors, so the decisions inside `update!` can be checked with `expect`:
 +
 [source,roc]
 ----
 expect read_controls(Devices.none.with_key_down(KeyW)).move == -1
-expect read_controls(Devices.none.with_key_pressed(KeyEscape)).quit_pressed
+expect read_controls(Devices.none.with_key_down(KeyS)).move == 1
 ----
 +
 `App.Input.for_tests` builds a whole input the same way, and every host resource (textures, fonts, sounds and so on) has a `stub`, so a model that holds assets can be built inside a test.
@@ -105,7 +101,9 @@ response = io.http().send!(request)?
 
 The available services are `files`, `http`, `udp`, `sqlite`, `commands`, `stdout`, `stderr`, `clipboard`, `env` and `capture`. A service value can be passed to a helper or captured by a task, so each piece of code only receives the access it needs.
 
-*Files are reached through directory handles, never ambient paths.* `io.files()` hands out a `Files.Dir` (writable) or `Files.ReadDir` for the app's private data, config and cache directories (named by `App.default.with_app_id(...)`), the directory beside the executable, the working directory, or a declared directory. A handle is an ordinary value to keep in the model; paths given to it are relative, may not contain `..`, and may not pass through a symbolic link. A file the user drops on the window, or names on the command line, becomes a handle on just that file through `io.files().accept_drop!` or `from_arg!`, with no permission declared. Asset stores open from a `ReadDir` (`Assets.open!(dir, IgnoreManifest)`), sounds, music and TMX maps load from a store like textures do, and SQLite opens a database beneath a `Dir` (`io.sqlite().open!(dir, "scores.db")`) with `ATTACH` disabled.
+The command line is a startup fact. `io.args!()` returns it and is legal only in `init!`: keep what the app needs from it in the model. To choose the window configuration or the declarations from the command line, use `App.init_for_args`, which passes the arguments to a pure function that returns the config.
+
+*Files are reached through directory handles, never ambient paths.* `io.files()` hands out a `Files.Dir` (writable) or `Files.ReadDir` for the app's private data, config and cache directories (named by `+App.default.with_app_id(...)+`), the directory beside the executable, the working directory, or a declared directory. A handle is an ordinary value to keep in the model. Paths given to it are relative, may not contain `..`, and may not pass through a symbolic link; a path that breaks these rules returns `PathInvalid`. A file the user drops on the window, or names on the command line, becomes a handle on just that file through `io.files().accept_drop!` or `from_arg!`, with no permission declared. Asset stores open from a `ReadDir` (`Assets.open!(dir, IgnoreManifest)`), sounds, music and TMX maps load from a store like textures do, and SQLite opens a database beneath a `Dir` (`io.sqlite().open!(dir, "scores.db")`) with `ATTACH` disabled.
 
 *What an app reaches beyond its own resources is declared in its startup config.* The declaration is the grant, and it is scoped as narrowly as each facility allows:
 
@@ -120,7 +118,7 @@ config =
 
 Declarations cover HTTP origins, UDP ports and peers (or `UdpLoopback`), programs, environment variables, directories (read-only or read-write, or the working directory), and clipboard reads and writes. Each facility also has one deliberately conspicuous unscoped form: `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`, `FilesAny`.
 
-* A target outside every declared scope, such as a URL on another origin or a path outside the declared directories, returns `PermissionDenied` without doing anything. An HTTP redirect is checked the same way.
+* A target no declaration covers, such as a URL on another origin or a directory outside the declared ones, returns `PermissionDenied` without doing anything. An HTTP redirect is checked the same way.
 * Using a facility the app never declared at all stops the app, with a message naming the declaration to add.
 * A malformed declaration stops the app before `init!` runs.
 
@@ -130,9 +128,13 @@ The app's own resources need no declaration: drawing, input, window control, aud
 
 *This is not an OS sandbox.* It bounds what Roc code in the app can do, because that code can only act through the platform; it does not contain a malicious native binary.
 
-*If your app loads textures, sounds, fonts or maps from disk, declare the directory they live in*, usually `Directory("assets", ReadOnly)`, or `WorkingDirectory(ReadOnly)` while developing.
+*If your app loads textures, sounds, fonts or maps from disk*, a packaged app reads them from beside its executable with `io.files().beside_executable!()`, which needs no declaration. While developing, declare the source directory they live in, usually `Directory("assets", ReadOnly)`. The manual's "Ship your game" chapter shows one `init!` that does both.
 
-An operating system's own refusal is now reported as `AccessRefused` where a service can meet one (file writes and stats, UDP, subprocesses), so `PermissionDenied` always means a missing declaration.
+Each kind of refusal has its own error:
+
+* `PermissionDenied`: no declaration or grant covers the target. This includes a stub handle, a dropped path not delivered in this cycle, and an argument the app was not launched with.
+* `PathInvalid`: the path's shape is refused: empty, absolute, containing `..`, or passing through a symbolic link.
+* `AccessRefused`: the operating system refused a file write, a `metadata!`, a directory open, a UDP bind or send, or a subprocess. A read the operating system refuses is `ReadFailed`.
 
 == New capabilities
 
@@ -141,12 +143,13 @@ An operating system's own refusal is now reported as `AccessRefused` where a ser
 * *UDP:* `bind!`, `send!` (queued, returns immediately) and `receive!`, which waits inside a task and returns every datagram that arrived, in a batch. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/udp_cursor/main.roc[`udp_cursor`].
 * *SQLite:* a bundled SQLite 3.50.4 with typed database and statement handles, and pure row decoders.
 * *Subprocesses:* `Cmd` requires a timeout and output limits. A nonzero exit code is returned as data, and child processes are killed when the app exits.
-* *Standard output and error:* `io.stdout().line!(...)` can be called from `update!`. Writes go into a bounded host buffer and are flushed on another thread, so printing never stalls a frame. A full buffer is reported as a result, not a silent drop.
+* *Standard output and error:* `+io.stdout().line!(...)+` can be called from `update!`. Writes go into a bounded host buffer and are flushed on another thread, so printing never stalls a frame. A full buffer is reported as a result, not a silent drop.
 * *Time and randomness:* `Time.now!` returns a UTC `Time.Timestamp`. `io.entropy!()` returns real OS entropy, which can seed a pure `Random` generator stored in the model. After seeding, an entire run can be replayed from that one number.
-* *Screenshots and recordings:* apps can capture themselves as PNG screenshots, PNG sequences, animated GIFs or VP8/WebM video. Fixed-step timing produces byte-identical recordings across runs. A hidden window renders on the GPU with nothing shown on screen, so an app can run as a batch job. Scripted mouse and keyboard input (`Mouse.set_source!`, `Keys.set_source!`, `Keys.set_text!`) goes through the same path as real input, so recorded UI demos use the app's normal code. `Capture.screenshot_texture!` exports an off-screen render target at any size, and `Capture.pixel_at!` and `read_region!` read pixels back.
+* *Screenshots and recordings:* apps can capture themselves as PNG screenshots, PNG sequences, animated GIFs or VP8/WebM video. Fixed-step timing produces byte-identical recordings across runs. A hidden window renders on the GPU with nothing shown on screen, so an app can run as a batch job. Scripted mouse and keyboard input (`Mouse.set_source!`, `Keys.set_source!`, `Keys.set_text!`) goes through the same path as real input, so recorded UI demos use the app's normal code. `io.capture().screenshot_texture!` exports an off-screen render target at any size, and `Capture.pixel_at!` and `Capture.read_region!` read pixels back.
 * *Window:* minimum size, a configurable exit key, clipboard access, display scale, monitor list, and drag-and-drop (`input.dropped`). Window sizing and placement use `suggest_*` names, because the window manager may ignore the request.
-* *Text and fonts:* `Text.Font` includes its metrics, so `font.measure(...)` is a pure function that layout code and packages can call. `Text.from(str, font).size(n).prepare!()` lays out text once for repeated drawing. `App.Config.with_default_font` loads one font for the whole app at startup.
-* *Asset stores:* `Assets.open!(dir, IgnoreManifest)` opens the directory a `Files.ReadDir` names and refuses paths that escape it. An optional manifest can check the store's contents against expected hashes.
+* *Close requests:* clicking the window's close button ends the app, as before. With `App.default.with_close_request(Deliver)`, the window stays open and `update!` sees `input.window.close_requested`, so the app can save its work and then exit. A request is never lost. `--host-close=CYCLE` scripts one in tests.
+* *Text and fonts:* `Text.Font` includes its metrics, so `+font.measure(...)+` is a pure function that layout code and packages can call. `Text.from(str, font).size(n).prepare!()` lays out text once for repeated drawing. `App.Config.with_default_font` loads one font file for the whole app at startup; like any file the app reads, its path must be covered by a declaration.
+* *Asset stores:* `Assets.open!(dir, IgnoreManifest)` opens the directory a `Files.ReadDir` names and refuses paths that escape it. With `RequireManifest`, opening a store checks that its manifest declares the expected asset set, versions and content hash; the asset files themselves are not hashed.
 * *Batched drawing:* `frame.texture_instances!` draws thousands of sprites in one call. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/particles/main.roc[`particles`].
 
 == Input events are no longer lost between frames
@@ -178,12 +181,12 @@ app [Model, program] { rr: platform "<bundle URL below>" }
 program = { init!, update!, render! }
 ----
 
-*Split `render!`.* Move everything that reads input, advances state or calls a non-drawing effect into `update!`. Change `render!` to `render! : Model, Draw.Frame => Try({}, [Exit(I64)])` and return `Ok({})`. The rest of the migration is mostly renames:
+*Split `render!`.* Move everything that reads input, advances state or calls a non-drawing effect into `update!`. Change `render!` to `+render! : Model, Draw.Frame => Try({}, [Exit(I64)])+` and return `Ok({})`. The rest of the migration is mostly renames:
 
 [cols="1,1",options="header"]
 |===
 |0.9 |0.10
-|`init!`'s `run!` receives `Host` |`App.init(config, \|io\| ...)`, and `run!` receives `App.Io`
+|``init!``'s `run!` receives `Host` |`+App.init(config, \|io\| ...)+`, and `run!` receives `App.Io`
 |`host.key_pressed(k)`, `host.key_down(k)` |`input.devices.key_pressed(k)`, `input.devices.key_down(k)`
 |`host.mouse`, `host.gamepads` |`input.devices.mouse`, `input.devices.gamepads`
 |`host.frame_time` |`input.time.elapsed_seconds`
@@ -195,12 +198,12 @@ program = { init!, update!, render! }
 |`Assets.load_texture!(path)` |`store = Assets.open!(dir, IgnoreManifest)`, then `Assets.load_texture!(store, path)`
 |`Audio.load_sound!(path)` |`Audio.load_sound!(store, path)`
 |`Color.Color` |`Color.Rgba`
-|`frame.text!({ ..., font, align })` |`frame.text_at!({ pos, text, size, color })`, or `Text.from(str, font).size(n).draw!(frame, { pos, color, align: (Top, Center) })`
+|`+frame.text!({ ..., font, align })+` |`frame.text_at!({ pos, text, size, color })`, or `Text.from(str, font).size(n).draw!(frame, { pos, color, align: (Top, Center) })`
 |===
 
 *Load files in `init!` or a task.* Loading textures, sounds, music, shaders and TMX maps from disk now waits, so it is only allowed in `init!` (which holds startup until it finishes) or in a task. Creating resources from bytes you already have (`*_from_bytes!`, `gen_*`, generated textures) still works in `update!`.
 
-*Declare what your app reaches* with `.with_permission(...)` on its config if it reads assets or files from disk, uses the network, runs programs, reads environment variables, or uses the clipboard. A target outside the declarations returns `PermissionDenied`, and your error handling may need to cover that case.
+*Declare what your app reaches* with `+.with_permission(...)+` on its config if it reads assets or files from disk, uses the network, runs programs, reads environment variables, or uses the clipboard. A target outside the declarations returns `PermissionDenied`, and your error handling may need to cover that case.
 
 *Remove `..` from return-position tag unions.* The supported compiler treats tag unions in return position as open automatically, and reports an explicit `..` there as a redundant-open-union warning, which fails `roc check`. Write `Try(Model, [Exit(I64)])` instead of `Try(Model, [Exit(I64), ..])`.
 

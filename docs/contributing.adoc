@@ -65,31 +65,50 @@ stub, and import libraries) from the immutable release that
 never compiles them. When you change a linker input, follow the producer
 procedure in <<maintaining-link-inputs>>.
 
-Run an example against the local platform:
+[#development-checkout]
+=== Run examples against your checkout
+
+The `main` branch holds development source, including examples of APIs that
+have not been released yet. Each example's header names a released platform
+bundle, so `roc examples/cave_climb/main.roc` -- and `roc check` on it -- uses
+that release, not your working tree. Run an example through the runner
+instead, from the repository root:
 
 [source,bash]
 ----
 scripts/run-example.py examples/cave_climb
 ----
 
-The runner builds the host and runs a _copy_ of the example pointed at the
-platform sources, so the checked-in files are never rewritten. Pass
-`--skip-platform-build` (before the example) to reuse native libraries from an
-earlier `zig build`, and `--platform-mode=bundle` to run against a bundled
-platform instead of its sources.
+The runner builds the host, then runs a _copy_ of the example whose header
+points at the platform in your checkout, so the checked-in files are never
+rewritten, even when a run is interrupted. Arguments after `--` go to the app.
 
-The host reserves a few `--host-` switches for unattended runs. `--host-frames=N`
-ends a real windowed run after N cycles, `--host-hidden` opens that window
-hidden, and `--host-keys=3:S,4:LEFT+X` / `--host-text=5:hi` script the keyboard
-and typed text on the cycles they name (a key is a character, one of a few names
-such as `LEFT` or `SPACE`, or a raw key code; a `~` suffix, as in `3:ESCAPE~`,
-taps the key inside that cycle -- pressed and released in one input, never
-held -- which is what a hardware key that went down and up between two polls
-looks like. `~` because it is inert unquoted in cmd, PowerShell, bash and zsh
-alike; `^` is cmd's escape character and vanished on Windows). They are what
-the windowed sweep below drives the examples with;
-`--host-headless` and `--host-headless-frames=N` select the stub backend
-instead, which draws nothing. <<reference-switches>> lists them all.
+* `--skip-platform-build` (before the example) reuses the native libraries
+  from an earlier `zig build`.
+* `--platform-mode=bundle` runs against a bundled platform, the shape a
+  release ships, instead of the platform sources.
+
+To check the platform's own Roc code, run `roc check platform/main.roc`.
+`scripts/all_tests.py`, described below, checks and runs every example the
+same way the runner does. Published starters and release example zips keep
+their own pins.
+
+The host reserves switches beginning `--host-` for unattended runs;
+<<reference-switches>> lists them all. The windowed sweep described below
+drives the examples with these:
+
+* `--host-frames=N` ends a real windowed run after N cycles, and
+  `--host-hidden` opens that window hidden.
+* `--host-keys=3:S,4:LEFT+X` and `--host-text=5:hi` script the keyboard and
+  typed text on the cycles they name. A key is a character, a name such as
+  `LEFT` or `SPACE`, or a raw key code. A `~` suffix, as in `3:ESCAPE~`, taps
+  the key within the cycle: pressed and released in one input, which is how a
+  key that went down and up between two polls looks. The suffix is `~`
+  because it is inert unquoted in cmd, PowerShell, bash, and zsh alike.
+* `--host-drops=2:/tmp/a.png` and `--host-close=5` script a file drop and a
+  close request.
+* `--host-headless` and `--host-headless-frames=N` select the stub backend
+  instead, which draws nothing.
 
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
@@ -336,10 +355,10 @@ structured.
 === API documentation
 
 The complete API reference lives at `www/<version>/`. Public values, pure
-receivers, and effects are documented in one site. `roc docs` attaches a
-nominal's receivers to its defining module: for example, `Text.Font` aliases
-`Font`, so its measurement receivers are documented on the `Font` page.
-Document each receiver where it is declared.
+methods, and effects are documented in one site. `roc docs` attaches a nominal
+type's methods to the module that declares it: for example, `Text.Font` aliases
+`Font`, so its measurement methods are documented on the `Font` page.
+Document each method where its type is declared.
 
 The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
 opened with `+```roc+`. It does not take markdown headings, bullet lists,
@@ -356,7 +375,7 @@ scripts/build_docs.py --version 0.10.0     # writes www/0.10.0
 ----
 
 `--check` fails on a module missing a page, a broken relative link, missing
-representative pure receivers, an effect whose documentation does not state its
+representative pure methods, an effect whose documentation does not state its
 phases, or prose that would render as something else. The release workflow
 runs `--check` before building and the versioned form when publishing.
 

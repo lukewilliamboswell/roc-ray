@@ -1,0 +1,2 @@
+Hello from a file! The async_read example reads this text on a task, while the
+window keeps drawing, and shows how many bytes arrived.

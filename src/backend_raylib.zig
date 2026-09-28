@@ -2537,9 +2537,9 @@ pub fn getRandomValue(min: c_int, max: c_int) c_int {
 
 const AUDIO_SAMPLE_RATE: u32 = 44100;
 /// The longest procedural sound, in milliseconds. `Audio.max_generated_ms`
-/// states the same number, and the platform refuses a longer request with
-/// `DurationTooLong` before it reaches the host; `genSound` refuses one too
-/// rather than shortening it.
+/// states the same number, and the platform stops an app that asks for a
+/// length outside 1 ms to this before it reaches the host; `genSound` refuses
+/// one too rather than changing its length.
 pub const MAX_GEN_SOUND_MS: i32 = 5000;
 /// Scratch buffer for procedural generation (mono 16-bit).
 var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
@@ -2628,11 +2628,11 @@ pub fn loadSoundFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Sound {
 }
 
 /// How many frames a procedural sound of `ms` milliseconds fills, or null for
-/// one longer than the scratch buffer holds. A longer sound is refused, never
-/// shortened: a sound that ends early is a different sound.
+/// a length outside 1 ms to the cap. Such a sound is refused, never shortened
+/// or lengthened: a sound of another length is a different sound.
 fn genSoundFrames(ms: i32) ?usize {
-    if (ms > MAX_GEN_SOUND_MS) return null;
-    const frames = msToFrames(@max(ms, 1));
+    if (ms < 1 or ms > MAX_GEN_SOUND_MS) return null;
+    const frames = msToFrames(ms);
     if (frames == 0 or frames > gen_sound_buf.len) return null;
     return frames;
 }
@@ -2642,6 +2642,8 @@ test "a procedural sound past the cap is refused, not shortened" {
     try std.testing.expectEqual(@as(?usize, null), genSoundFrames(MAX_GEN_SOUND_MS + 1));
     try std.testing.expectEqual(@as(?usize, null), genSoundFrames(std.math.maxInt(i32)));
     try std.testing.expectEqual(@as(?usize, 44), genSoundFrames(1));
+    try std.testing.expectEqual(@as(?usize, null), genSoundFrames(0));
+    try std.testing.expectEqual(@as(?usize, null), genSoundFrames(-5));
 }
 
 /// Generate a short procedural sound.

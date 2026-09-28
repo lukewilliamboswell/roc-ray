@@ -54,8 +54,9 @@ the compiler tells you which are missing.
 
 `gen_sound!` takes a waveform (`Sine`, `Square`, `Triangle`, `Saw`, or
 `Noise`), a start and end frequency, a duration, an envelope, and a volume. A
-generated sound lasts between 1 millisecond and 5 seconds; a longer duration
-is cut to 5 seconds. {src}/examples/pong/main.roc[Pong] and
+generated sound lasts from 1 millisecond to `Audio.max_generated_ms` (5
+seconds). Asking for any other length is a mistake in the program, so the app
+stops with a message naming the fix; load a file for anything longer. {src}/examples/pong/main.roc[Pong] and
 {src}/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
 this way.
 

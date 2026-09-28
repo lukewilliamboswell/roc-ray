@@ -128,6 +128,7 @@ describe_read = |reason|
 	match reason {
 		NotFound => "not found"
 		PermissionDenied => "file access was not granted"
+		PathInvalid => "the path was refused"
 		ReadFailed => "could not be read"
 		Busy => "the host was busy"
 		Unavailable => "reads are unavailable"

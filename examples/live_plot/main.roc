@@ -769,6 +769,7 @@ describe_list_error = |reason|
 		NotFound => "not found"
 		NotADirectory => "not a directory"
 		PermissionDenied => "outside the declared directories"
+		PathInvalid => "path refused"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "listings unavailable"
@@ -780,6 +781,7 @@ describe_read_error = |reason|
 	match reason {
 		NotFound => "not found"
 		PermissionDenied => "outside the declared directories"
+		PathInvalid => "path refused"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "reads unavailable"

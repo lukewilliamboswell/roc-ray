@@ -29,8 +29,9 @@
 ## or a new effect after startup, call the loader inside `Task.spawn!` and keep
 ## the resource the task's message carries. `gen_sound!` and `gen_tone!` build
 ## a `Sound` with no file behind it, so they stay legal in `init!`, `update!`,
-## and tasks. A generated sound lasts at most `max_generated_ms`; a longer one
-## is refused as `DurationTooLong` rather than cut short.
+## and tasks. A generated sound lasts from 1 ms to `max_generated_ms`; asking
+## for any other length stops the app, naming the fix, rather than making a
+## different sound.
 ##
 ## Every other effect here changes what the mixer is doing and is legal in
 ## `init!`, `update!`, and tasks, and refused in `render!`. The four queries
@@ -247,26 +248,28 @@ Audio := [].{
 
 	## Generate a reusable procedural sound.
 	##
-	## `DurationTooLong` is an `ms` past `max_generated_ms`, refused before the
-	## host does any work rather than shortened. `ResourceLimit` is the host's
+	## `ms` must be from 1 to `max_generated_ms`. Any other length is a
+	## programming mistake, not a runtime condition, so it stops the app with a
+	## message naming the fix rather than making a shorter sound; for anything
+	## longer, load a file. `ResourceLimit` is the host's
 	## fixed sound table being full, and `SoundGenerationFailed` is the audio
 	## device refusing the samples, so initialization should propagate the
 	## returned error.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
+	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit])
 	gen_sound! = |cfg|
-		if cfg.ms > Audio.max_generated_ms {
-			Err(DurationTooLong)
+		if cfg.ms < 1 or cfg.ms > Audio.max_generated_ms {
+			crash "Audio.gen_sound! and Audio.gen_tone! take ms from 1 to Audio.max_generated_ms (5000): generate a shorter sound, or load a longer one with Audio.load_sound! or Audio.load_music!"
 		} else {
 			generated_sound_from_resource(Host.audio_gen_sound!(raw_config(cfg)))
 		}
 
 	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds,
-	## at most `max_generated_ms`; a longer tone is `DurationTooLong`.
+	## from 1 to `max_generated_ms`, as for `gen_sound!`.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
+	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit])
 	gen_tone! = |cfg|
 		Audio.gen_sound!({
 			waveform: Sine,
@@ -329,7 +332,7 @@ loaded_sound_from_resource = |result|
 		Err(ResourceLimit) => Err(ResourceLimit)
 	}
 
-generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, DurationTooLong])
+generated_sound_from_resource : Try(Resource.Sound, Host.AudioGenerateSoundError) -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit])
 generated_sound_from_resource = |result|
 	match result {
 		# closed error union to open error union

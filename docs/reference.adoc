@@ -125,7 +125,7 @@ frees its place for another.
 |`list!` directory listing |8192 entries or 1 MiB of names |`TooLarge`
 |Sound or music file read by `Audio` |64 MiB |The load fails
 |Any other asset file |128 MiB |The load fails
-|`Audio.gen_sound!` and `gen_tone!` length |5 seconds |A longer `ms` is shortened to 5 seconds
+|`Audio.gen_sound!` and `gen_tone!` length |1 ms to 5 seconds (`Audio.max_generated_ms`) |Any other `ms` stops the app, naming the fix
 |Standard output and standard error queues |256 KiB each |`TooLarge` for one payload bigger than the queue, `BufferFull` for a full queue
 |HTTP request deadline and response body |30 seconds, 8 MiB by default |The request fails; configurable with `send_with!`
 |HTTP redirects followed |3 |The request fails

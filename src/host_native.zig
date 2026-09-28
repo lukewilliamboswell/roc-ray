@@ -9452,9 +9452,9 @@ fn hostedAudioGenTone(args: abi.HostAudio_gen_toneArgs) callconv(.c) abi.HostAud
     enforcePhase("Audio.gen_tone!", during_load);
     const effect = EffectScope.begin("Audio.gen_tone!", 0);
     defer effect.end();
-    // `Audio` refuses this as `DurationTooLong` before it gets here; the host
-    // refuses it too, in every mode, rather than shortening the sound.
-    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
+    // `Audio` stops the app before a length outside 1 ms to the cap gets here;
+    // the host refuses one too, in every mode, rather than changing its length.
+    if (args.ms < 1 or args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);
@@ -9470,7 +9470,7 @@ fn hostedAudioGenSound(args: abi.HostAudio_gen_soundArgs) callconv(.c) abi.HostA
     enforcePhase("Audio.gen_sound!", during_load);
     const effect = EffectScope.begin("Audio.gen_sound!", 0);
     defer effect.end();
-    if (args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
+    if (args.ms < 1 or args.ms > raylib.MAX_GEN_SOUND_MS) return abiTryErr(Result, Error.sound_generation_failed);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, sound);

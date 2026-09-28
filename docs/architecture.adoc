@@ -223,7 +223,7 @@ sequenceDiagram
         Host->>Host: give tasks a turn, collect finished messages
         Host->>App: update!(model, App.Input with those messages, App.Io)
         App->>Host: direct effects, in program order
-        App->>Task: Task.spawn!(input, closure); it may start at once
+        App->>Task: Task.spawn!(input, closure), which may start at once
         App-->>Host: next model, or Err(Exit(code))
         Host->>Host: give tasks a turn: every new task has reached its first wait
         opt Presentation is scheduled
@@ -233,7 +233,7 @@ sequenceDiagram
     end
 
     loop While a task is live, between callbacks
-        Task->>Host: waiting effect parks the task; the host loop continues
+        Task->>Host: waiting effect parks the task, and the host loop continues
         Note over Host,App: the closure's return value is a message on a later App.Input
     end
 ....

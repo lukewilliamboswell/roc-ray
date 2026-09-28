@@ -11,14 +11,17 @@ endif::[]
 = Drawing
 
 `render!` draws the model through a `Draw.Frame`. This chapter covers shapes,
-colours, text, textures, and the scoped drawing modes -- cameras, clipping,
-blending, shaders, and offscreen targets. It assumes <<app-model>>.
+colours, images, and text first, then the tools for larger scenes: cameras,
+clipping, blending, shaders, and offscreen drawing. It assumes <<app-model>>.
 
 == The frame
 
-Drawing is immediate: each frame, `render!` draws the whole scene from the
-model, in order, and nothing is retained between frames. Every drawing effect
-takes the frame, and is legal only in `render!`:
+Drawing in RocRay is _immediate_: each frame, `render!` draws the whole scene
+from the model, in order, starting from a cleared window. Nothing drawn is
+remembered between frames, so there are no objects to create, move, or delete
+-- to move something, change the model and draw it somewhere else next time.
+
+Every drawing effect takes the frame and is legal only in `render!`:
 
 [source,roc]
 ----
@@ -30,34 +33,218 @@ render! = |model, frame| {
 }
 ----
 
-Pass the frame to your own drawing helpers as an argument. Do not keep it in
-the model: it is only valid while `render!` runs.
+Later calls draw on top of earlier ones. Pass the frame to your own drawing
+helpers as an argument. Do not keep it in the model: it is only valid while
+`render!` runs.
 
-Most shapes have both a receiver form and a free-function form, such as
-`frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`. The available shapes
-include `rectangle!`, `rounded_rectangle!`, `circle!`, `line!`, `triangle!`,
-`convex_polygon!`, and gradient fills.
+Each shape is a method on the frame, such as `frame.circle!(cfg)`, and also a
+plain function, `Draw.circle!(frame, cfg)`. The shapes include `rectangle!`,
+`rounded_rectangle!`, `circle!`, `line!`, `triangle!`, `convex_polygon!`, and
+the gradient fills `rectangle_gradient_v!`, `rectangle_gradient_h!`, and
+`circle_gradient!`. A shape's `style` is `Draw.filled(color)`,
+`Draw.outlined(color, thickness)`, or `Draw.filled_and_outlined(fill, outline,
+thickness)`.
 
-Coordinates are logical window units: x grows to the right, y grows downward,
-and they match mouse positions. `frame.size!()` answers the size of the
-surface being drawn to.
+Coordinates are in logical window units: x grows to the right, y grows
+downward, `{ x: 0, y: 0 }` is the top-left corner, and they match mouse
+positions. On a high-DPI display one logical unit may cover several physical
+pixels; RocRay scales for you (see <<input-window>>). `frame.size!()` answers
+the size of the surface being drawn to.
 
 == Colours
 
-A colour is a plain `Color.Rgba` value with 8-bit channels. Use the named
-constants, read a hex value, or make one translucent:
+A colour is a plain `Color.Rgba` value with 8-bit red, green, blue, and alpha
+(opacity) channels. Use the named constants such as `Color.white` and
+`Color.red`, read a hex value, or make one translucent:
 
 [source,roc]
 ----
 accent = Color.from_hex_rgb(0x2f80ed)
-glow = Color.with_alpha(accent, 100)
+glow = Color.with_alpha(accent, 100) # 0 is invisible, 255 is opaque
 ----
+
+[#drawing-first-sprite]
+== Load your first sprite
+
+A _texture_ is an image loaded onto the graphics card, ready to draw. A
+_sprite_ is a texture, or part of one, drawn somewhere on screen. This recipe
+loads a PNG and draws it.
+
+Put your images in an `assets` directory next to your `main.roc`:
+
+[source,text]
+----
+my-game/
+    main.roc
+    assets/
+        player.png
+----
+
+Then declare that directory, open it as an _asset store_, and load the image
+in `init!`:
+
+[source,roc]
+----
+app [Model, program] { rr: platform "..." }
+
+import rr.App
+import rr.Assets
+import rr.Color
+import rr.Draw
+
+Model : {
+    player : Draw.Texture,
+}
+
+Msg : []
+
+program = { init!, update!, render! }
+
+init! : App.Init(Model, _)
+init! = App.init(
+    App.default
+        .with_title("My Game")
+        .with_permission(Directory("assets", ReadOnly)),
+    |io| {
+        dir = io.files().open_dir_read!("assets")?
+        store = Assets.open!(dir, IgnoreManifest)?
+        player = Assets.load_texture!(store, "player.png")?
+        Ok({ player: player })
+    },
+)
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |model, _input, _io| Ok(model)
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |model, frame| {
+    frame.clear!(Color.from_hex_rgb(0x1d2b53))
+    frame.texture!(Draw.texture_at(model.player, { x: 368, y: 268 }))
+    Ok({})
+}
+----
+
+Step by step:
+
+. `with_permission(Directory("assets", ReadOnly))` declares that the app may
+  read the `assets` directory. A RocRay app reaches no files it has not
+  declared; <<permissions>> explains why.
+. `io.files().open_dir_read!("assets")` opens that directory. The path is
+  relative, so it is found in the _working directory_: the directory you run
+  the app from.
+. `Assets.open!` turns the directory into an asset store, and
+  `Assets.load_texture!` loads one image from it. Both read the disk, so they
+  belong in `init!` (or a task).
+. `Draw.texture_at(texture, position)` describes drawing the whole texture
+  with its top-left corner at that position, and `frame.texture!` draws it.
+
+`App.Init(Model, _)` lets the compiler work out the list of errors `init!` can
+return, which is long here: every way that opening a directory, opening a
+store, or loading an image can fail. If any of them happens, the app stops
+with a message naming `init!` and the error, such as `NotFound`.
+
+Run the app from the project directory, so that `assets` is found:
+
+[source,sh]
+----
+cd my-game
+roc main.roc
+----
+
+The same holds for a built app: `roc build main.roc` writes an executable
+named `main` into the current directory, and `./main` run from `my-game`
+finds `assets` the same way.
+
+When you ship a built game, you usually want its assets to travel with the
+executable rather than depend on where the player starts it. For that, place
+`assets` next to the executable and open it with
+`io.files().beside_executable!()`, which needs no declaration:
+
+[source,roc]
+----
+bundle = io.files().beside_executable!()?
+store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
+----
+
+This does not work under `roc main.roc`: `roc` builds the executable into its
+own cache directory and runs it from there, so nothing you put beside
+`main.roc` is beside the executable. Use the working-directory declaration
+while you develop, and switch when you package the game. <<files-and-assets>>
+covers both, and <<permissions>> covers `WorkingDirectory(ReadOnly)`, a
+broader declaration that covers every path under the working directory.
+
+`load_texture!` reads PNG (recommended), JPEG, BMP, GIF (the first frame),
+and QOI images, and chooses the decoder by the file's extension.
+
+== Textures and sprites
+
+Once a texture is in the model, draw it as often as you like. `Draw.texture_at`
+covers the simple case. `Draw.texture_draw(texture)` gives a full
+configuration record whose fields choose the part of the texture to draw
+(`source`), where and how big to draw it (`dest`), the point it rotates about
+(`origin`), a `rotation` in degrees, and a colour `tint`.
+
+The `Sprite` module wraps that in a friendlier shape, and adds helpers for
+_sprite sheets_: one image holding many frames of animation in a grid.
+`Sprite.sheet_frame` picks one cell of the grid, and `Sprite.Animation` tracks
+which cell to show:
+
+[source,roc]
+----
+# In update!: advance the animation clock.
+walk = Sprite.step(model.walk, input.time.elapsed_seconds)
+
+# In render!: draw the current frame of row 0, four times its size.
+source = Sprite.animation_source(model.walk, { frame_size: { x: 16, y: 16 }, row: 0 })
+Sprite.from_texture(model.sheet).source(source).pos({ x: 40, y: 40 }).scale(4).draw!(frame)
+----
+
+Here `model.walk` starts as `Sprite.animation({ frame_count: 4, fps: 8 })`.
+
+Textures are released automatically when the last reference to them goes
+away; there is no `unload` to call. Creating or changing a texture from
+pixels the app holds -- `Assets.texture_from_bytes!`,
+`Assets.generate_color_texture!`, `Assets.update_texture!` -- is legal in
+`init!`, `update!`, and tasks.
+
+=== Use sprite sheets and atlases
+
+An app can hold at most 128 textures at once; loading one more answers
+`ResourceLimit`. That is plenty when related images share one file: put a
+character's animation frames in one sprite sheet, and a level's tiles or a
+game's small images in one _atlas_ (a single image packing many), then draw
+parts of it with `source`. One texture is also cheaper to draw from than many.
+
+The other resource tables are bounded the same way: 128 sounds, 16 music
+tracks, 32 fonts, 32 render textures, 32 shaders, and 256 prepared texts.
+
+=== Drawing many sprites at once
+
+Each `texture!` call crosses from Roc to the host, and that crossing, not the
+drawing itself, is what limits how many sprites a frame can afford.
+`frame.texture_instances!(texture, instances)` draws a whole list of instances
+of one texture in a single call:
+
+[source,roc]
+----
+frame.texture_instances!(model.spark, model.particles)
+----
+
+Each `Draw.TextureInstance` is a record with `source`, `dest`, `origin`,
+`rotation`, and `tint`, the same fields as a single draw. See
+{src}/examples/particles/main.roc[Particles] for thousands of sprites a frame.
 
 == Text
 
-For a quick label, `frame.text_at!` draws with the built-in font. For text you
-draw every frame, prepare it once and keep the result in the model; a
-prepared text is laid out once and drawn without allocating:
+For a quick label, `frame.text_at!` draws with the built-in font:
+
+[source,roc]
+----
+frame.text_at!({ pos: { x: 10, y: 10 }, text: "Hi", size: 20, color: Color.white })
+----
+
+For text you draw every frame, _prepare_ it once and keep the result in the
+model. A prepared text is laid out once and drawn without allocating:
 
 [source,roc]
 ----
@@ -75,10 +262,12 @@ alignment when it changes every frame.
 === Fonts
 
 `Draw.default_font!()` returns the backend's built-in font.
-`App.default.with_default_font({ path, size })` loads one font for the whole
-app at startup, returned by `io.default_font!()` in `init!`.
-`Draw.font_from_bytes!` builds a font from bytes the app already holds, and
-`Draw.load_store_font!` loads one from an asset store (see <<files-and-assets>>).
+`App.default.with_default_font({ path, size })` loads one font file for the
+whole app at startup, returned by `io.default_font!()` in `init!`; the path
+must be covered by a file declaration, such as `Directory("assets",
+ReadOnly)`. `Draw.font_from_bytes!` builds a font from bytes the app already
+holds, and `Draw.load_store_font!` loads a TTF or OTF file from an asset
+store.
 
 A `Text.Font` carries its metrics with it, so measuring text is a pure
 function that layout code can call anywhere, including in tests:
@@ -88,80 +277,71 @@ function that layout code can call anywhere, including in tests:
 size = font.measure({ text: "Score", size: 24, spacing: Text.default_spacing })
 ----
 
-== Textures and sprites
-
-A texture is an image on the GPU. Load textures in `init!` (see
-<<files-and-assets>>) or generate them from pixels, keep them in the model, and
-draw them:
-
-[source,roc]
-----
-frame.texture!(Draw.texture_at(model.logo, { x: 32, y: 32 }))
-----
-
-`Draw.texture_draw` gives a configuration with an explicit source rectangle,
-destination, origin, rotation, and tint. The `Sprite` module adds pure helpers
-for spritesheet frames and simple animation, so animation state can advance in
-`update!` and be drawn in `render!`.
-
-Textures are released automatically when the last reference to them goes
-away; there is no `unload` to call. Creating or changing a texture from
-pixels the app holds -- `Assets.texture_from_bytes!`,
-`Assets.generate_color_texture!`, `Assets.update_texture!` -- is legal in
-`init!`, `update!`, and tasks.
-
-=== Drawing many sprites at once
-
-Each `texture!` call crosses from Roc to the host, and that crossing, not the
-drawing itself, is what limits how many sprites a frame can afford.
-`frame.texture_instances!(texture, instances)` draws a whole list of instances
-of one texture in a single call:
-
-[source,roc]
-----
-frame.texture_instances!(model.spark, model.particles)
-----
-
-See {src}/examples/particles/main.roc[Particles] for thousands of sprites a
-frame.
-
 == Scoped drawing
 
-Some drawing modes apply to a group of drawing calls. Each is a function that
-takes a callback, runs it with the mode active, and restores the previous
-state however the callback ends -- including when it returns an error:
+Some drawing modes apply to a group of drawing calls: everything drawn inside
+the group is affected, and nothing after it. Each is a method that takes a
+function, runs it with the mode active, and restores the previous state
+however the function ends -- including when it returns an error:
 
 [cols="1,3",options="header"]
 |===
-|Scope |Effect on the callback's drawing
-|`frame.with_camera!(camera, callback)` |Draws in world space through a 2D camera
-|`frame.with_scissor!(rect, callback)` |Clips drawing to a screen rectangle
-|`frame.with_blend_mode!(mode, callback)` |Uses one of raylib's built-in blend equations
-|`frame.with_shader!(shader, callback)` |Applies a shader
-|`frame.with_render_texture!(target, callback)` |Draws into an offscreen texture instead of the window
+|Scope |Effect on the drawing inside it
+|`frame.with_camera!(camera, draw)` |Draws through a 2D _camera_: a view of a larger world that can scroll, zoom, and rotate
+|`frame.with_scissor!(rect, draw)` |Clips drawing to a rectangle of the screen, like a window within the window
+|`frame.with_blend_mode!(mode, draw)` |Changes how new colours combine with what is already drawn
+|`frame.with_shader!(shader, draw)` |Runs a _shader_, a small program on the graphics card that changes how each pixel is coloured
+|`frame.with_render_texture!(target, draw)` |Draws into an offscreen texture instead of the window
 |===
 
-Scopes nest. They return `Try`, with `ScopeLimit` when nesting goes deeper than
-the host allows:
+A _blend mode_ decides what happens where a new colour lands on an old one.
+The default, `Draw.alpha_blend`, lays translucent colours over what is below.
+`Draw.additive_blend` adds the colours together, which makes overlapping
+glows and sparks brighter, and `Draw.multiplied_blend` darkens, like a
+shadow. `Draw.add_colors_blend`, `Draw.subtract_colors_blend`, and
+`Draw.premultiplied_alpha_blend` cover rarer cases.
+
+Scopes nest, up to 64 deep for each kind. Each returns a `Try`, and can fail
+with `ScopeLimit` when nesting goes deeper than that. Because `?` passes the
+error on, the `render!` that uses a scope with `?` lists `ScopeLimit` among its
+errors:
 
 [source,roc]
 ----
-camera = Camera.centered(model.player, Math.vec2(800, 600))
-frame.with_camera!(camera, |world| {
-    world.circle!({ center: model.player, radius: 12, style: Draw.filled(Color.white) })
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
+render! = |model, frame| {
+    frame.clear!(Color.black)
+    camera = Camera.centered(model.player, Math.vec2(800, 600))
+    frame.with_camera!(
+        camera,
+        |world| {
+            world.circle!({ center: model.player, radius: 12, style: Draw.filled(Color.white) })
+            Ok({})
+        },
+    )?
     Ok({})
-})?
+}
 ----
 
-Cameras are pure values; `Camera` converts between world and screen
-coordinates, so `update!` can use the same camera for hit testing.
+`Camera.centered(target, screen_size)` makes a camera that keeps `target` in
+the middle of a screen of that size. If a scope ever does fail, `render!`
+returns the error and the app stops with a message naming it. A shader or a
+render-texture scope can also fail with `ScopeUnavailable`, for a resource
+that is no longer usable; list it too when you use those.
+
+Cameras are pure values. `camera.world_to_screen(p)` and
+`camera.screen_to_world(p)` convert points, so `update!` can use the same
+camera to find what the mouse is over.
 
 === Offscreen targets and shaders
 
-`Draw.RenderTexture.load!` creates an offscreen target, and
-`Draw.Shader.from_source!` compiles a shader from source text; both are legal
-in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a shader from
-an asset store and waits, so it belongs in `init!` or a task. Shader uniforms
+A _render texture_ is a texture you draw into instead of the window: draw a
+scene into it once, then draw the result, scaled or through a shader, as part
+of the frame. `Draw.RenderTexture.load!({ width, height })` creates one, and
+`Draw.Shader.from_source!` compiles a shader from GLSL source text; both are
+legal in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a
+shader from an asset store and waits, so it belongs in `init!` or a task.
+Shader uniforms -- the values an app passes in, such as a time or a colour --
 are typed handles resolved once and kept, so a setter of the wrong type does
 not compile.
 
@@ -173,8 +353,9 @@ offscreen target larger than the window.
 == Tilemaps
 
 The `Tilemap` module draws maps made in the https://www.mapeditor.org/[Tiled]
-editor. Load the `.tmx` file (see <<files-and-assets>>), bind each tileset to a
-loaded texture, and keep the built map in the model:
+editor. Load the `.tmx` file with `Tilemap.load_tmx!` (see
+<<files-and-assets>>), bind each tileset to a loaded texture, and keep the
+built map in the model:
 
 [source,roc]
 ----

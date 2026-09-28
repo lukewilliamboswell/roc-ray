@@ -22,7 +22,7 @@ cannot be mixed up:
 * A `Sound` is decoded into memory. Use it for short effects: a jump, a coin,
   a hit.
 * A `Music` track streams from its encoded file a piece at a time. Use it for
-  long tracks; the platform keeps it playing automatically every cycle.
+  long tracks; the host keeps it playing automatically every cycle.
 
 Like every host resource, both are released automatically when the last
 reference goes away. Load or generate them in `init!` and keep them in the

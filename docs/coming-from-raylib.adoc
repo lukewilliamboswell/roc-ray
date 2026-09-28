@@ -18,7 +18,7 @@ assumes <<app-model>>.
 
 == What is different
 
-The shape of a raylib program is a loop you write. In RocRay the platform owns
+The shape of a raylib program is a loop you write. In RocRay the host owns
 the loop, and you supply `init!`, `update!`, and `render!`; <<app-model>>
 explains why. Three consequences come up constantly:
 
@@ -45,8 +45,8 @@ or directories it declares (see <<files-and-assets>>).
 3+h|Window and loop
 |`InitWindow(800, 450, "Title")` |`App.default.with_size({ width: 800, height: 450 }).with_title("Title")` |Startup config
 |`SetTargetFPS(60)` |`with_frame_pacing(Capped(60))`, or `Window.set_target_fps!(60)` later |Startup config; `update!`
-|`WindowShouldClose()` loop |The platform calls `update!` and `render!` once per cycle |--
-|`CloseWindow()` |Return `Err(Exit(0))` from `update!` |`update!`
+|`WindowShouldClose()` loop |The host calls `update!` and `render!` once per host cycle |--
+|`CloseWindow()` |Return `Err(Exit(0))` from `update!`; see <<app-model-closing>> |`update!`
 |`SetExitKey(KEY_NULL)` |`with_exit_key(NoExitKey)` |Startup config
 |`GetFrameTime()` |`input.time.elapsed_seconds` |`update!`
 |`GetTime()` |Add up `elapsed_seconds` in your model |`update!`
@@ -65,7 +65,7 @@ or directories it declares (see <<files-and-assets>>).
 |`HideCursor()`, `DisableCursor()` |`Mouse.set_cursor_mode!(Hidden)`, `Mouse.set_cursor_mode!(Locked)` |`init!`, `update!`
 
 3+h|Drawing
-|`BeginDrawing()`, `EndDrawing()` |`render!`: the platform opens and closes the frame around it |--
+|`BeginDrawing()`, `EndDrawing()` |`render!`: the host opens and closes the frame around it |--
 |`ClearBackground(RAYWHITE)` |`frame.clear!(Color.ray_white)` |`render!`
 |`DrawRectangle(x, y, w, h, RED)` |`frame.rectangle!({ x, y, width, height, style: Draw.filled(Color.red) })` |`render!`
 |`+DrawRectangleLines(...)+` |The same, with `style: Draw.outlined(Color.red, 1)` |`render!`
@@ -95,12 +95,12 @@ or directories it declares (see <<files-and-assets>>).
 |`LoadRenderTexture(w, h)`, `+BeginTextureMode(...)+` |`Draw.RenderTexture.load!({ width, height })`, then `frame.with_render_texture!` |`init!`; `render!`
 
 3+h|Audio
-|`InitAudioDevice()` |Nothing: the platform opens the audio device |--
+|`InitAudioDevice()` |Nothing: the host opens the audio device |--
 |`LoadSound("jump.wav")` |`Audio.load_sound!(store, "jump.wav")` |`init!` or a task
 |`PlaySound(sound)` |`sound.play!()` |`update!`
 |`+SetSoundVolume(...)+` then `+PlaySound(...)+` |`sound.playback().with_volume(0.5).play!()` |`update!`
 |`+LoadMusicStream(...)+`, `+PlayMusicStream(...)+` |`Audio.load_music!(store, "theme.ogg")`, then `music.play!()` |`init!` or a task; `update!`
-|`UpdateMusicStream(music)` |Nothing: the platform streams music every cycle |--
+|`UpdateMusicStream(music)` |Nothing: the host streams music every cycle |--
 
 3+h|Collision, randomness, files
 |`CheckCollisionRecs(a, b)` |`Math.overlaps(a, b)`, or `a.overlaps(b)` |Anywhere: it is pure

@@ -93,25 +93,27 @@ A hidden window still needs a display server; on Linux without one, run under
 
 [source,sh]
 ----
-./my-app --host-hidden --host-frames=30 --host-keys=3:S,4:LEFT+X --host-text=5:hi
+./my-app --host-headless --host-headless-frames=30 --host-keys=3:S,4:LEFT+X --host-text=5:hi
 ----
 
 A key is a character, a name such as `LEFT` or `SPACE`, or a raw key code. By
 default a scripted key is held on the cycles listed. A `~` suffix, as in
-`3:ESCAPE~`, taps the key inside that cycle instead: it is pressed and
+`3:SPACE~`, taps the key inside that cycle instead: it is pressed and
 released in one input and never held, which is what a quick tap between two
 cycles looks like. (`~` is used because it needs no quoting in cmd,
 PowerShell, bash, or zsh.)
 
-Scripted keys and text apply to windowed and hidden runs. A headless run
-ignores them; an app can still drive its own input there with
+Scripted keys and text work the same in headless, hidden, and windowed runs.
+A scripted press of the exit key ends the app, as a real one does, so
+`3:ESCAPE~` tests that Escape quits. An app can also drive its own input with
 `Keys.set_source!` (see <<capture>>).
 
 === Scripted close requests
 
 `+--host-close=CYCLE+` acts as if the user clicked the window's close button on
-that cycle. It works in headless and hidden runs, so a test can check that an
-app using `with_close_request(Deliver)` saves and exits as it should (see
+that cycle, and `+--host-close=30,90+` on each cycle listed. It works in
+headless and hidden runs, so a test can check that an app using
+`with_close_request(Deliver)` saves and exits as it should (see
 <<app-model-closing>>):
 
 [source,sh]

@@ -183,7 +183,7 @@ methods. A _method_ is a function called with a dot on a value, like
 |`with_output_dir(path)` |Where captures are written; see <<capture>>
 |`with_recording(recording)` |A recording to describe at startup; see <<capture>>
 |`with_app_id(id)` |The app's name for its private storage; see <<files-and-assets>>
-|`with_permission(p)`, `with_permissions(list)` |What the app reaches beyond its own resources; see <<permissions>>
+|`with_permission(p)`, `with_permissions(list)` |What the app can access beyond its own resources; see <<permissions>>
 |===
 
 A configuration that depends on the command line uses `App.init_for_args`

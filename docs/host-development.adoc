@@ -54,7 +54,7 @@ until the result is ready, which is the blocking behaviour startup wants.
 Work the event loop cannot take runs on zio's blocking pool instead, through
 `rt.spawnBlocking` with a `std.Io.Threaded` inside the worker: a file write,
 because creating directories through the runtime's file backend fails on
-Windows, and anything reached through a descriptor the frame thread opened and
+Windows, and anything accessed through a descriptor the frame thread opened and
 closes, such as an asset store's directory handle. The pool parks the caller
 the same way the event loop would, and the worker must see only host-owned
 bytes, never a Roc value.
@@ -87,7 +87,7 @@ headers. Do not add a domain-specific `*Host.roc` or `*ABI.roc` module.
 `scripts/test_app_transport_privacy.py` prove the consolidated module remains
 outside `exposes`. Keep that single fixture rather than adding one per domain.
 
-`roc test` cannot reach a new effect through `update!`: an `expect` cannot call
+`roc test` cannot call a new effect through `update!`: an `expect` cannot call
 an effectful function, and the phase guard would refuse the effects inside one
 anyway. Cover it from both sides instead: a Zig test in `src/` for the host
 half, and a headless example run for the whole path. Shape the public wrapper
@@ -174,7 +174,7 @@ and its tests are silently missing from the run. The suite reports the same
 number of passes it did before, with a broken assertion sitting in the file.
 `src/http_effect.zig` is the worked example.
 
-A Debug host archive carries the whole of `std.crypto` for the HTTP client's
+A Debug host archive contains the whole of `std.crypto` for the HTTP client's
 TLS and bundles past roc's default 100 MB transitive-dependency budget, so
 bundling one by hand needs `--max-transitive-mb=512`, which the scripts already
 pass.

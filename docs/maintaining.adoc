@@ -174,7 +174,7 @@ the API reference for the release to Pages, and opens a follow-up PR that
 updates the example bundle URLs. Do not manually publish an untested local bundle as
 a release artifact.
 
-Besides the bundles, every GitHub release carries:
+Besides the bundles, every GitHub release includes:
 
 * `examples-<version>.zip`: every example, its header pointing at this
   release's default bundle, so an unzipped copy builds with no checkout;
@@ -213,7 +213,7 @@ release workflow's `publish-docs` job: this manual at the site's root, built by
 `scripts/build_docs.py` generates under `api/`.
 `scripts/release_helpers.py assemble-pages` lays the site out, redirects the
 old `manual/` address to the root, and gives it a 404 page that sends readers
-of an earlier version to the releases page. Each release carries its own copy
+of an earlier version to the releases page. Each release has its own copy
 of both as attached assets, so nothing generated is committed and old versions
 never accumulate on the site.
 The `docs` workflow builds the manual as HTML and PDF on every pull request and

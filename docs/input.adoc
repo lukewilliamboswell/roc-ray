@@ -199,9 +199,11 @@ by exactly the same small amount, say 1/60 of a second, and runs as many of
 those steps each cycle as fit in the elapsed time. Because every step is the
 same size, the result does not depend on how fast the computer is or how
 uneven the cycles are: the same input always moves things the same way, and
-no single step is large enough to carry an object through a wall. Leftover time is kept in
-the model for the next cycle. Each of those advances is a _simulation step_,
-and one host cycle may run zero, one, or several of them:
+no single step is large enough to carry an object through a wall.
+
+Leftover time is kept in the model for the next cycle. Each of those advances
+is a _simulation step_, and one host cycle may run zero, one, or several of
+them:
 
 [source,roc]
 ----

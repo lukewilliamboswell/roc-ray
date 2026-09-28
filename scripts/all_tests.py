@@ -121,24 +121,39 @@ ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'speed')}"]
 BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 
+# The longest any one command may run: a whole build of the largest example on
+# a slow hosted runner is well under this. Without a bound, a hung probe held a
+# CI job until its two-hour limit and never said which command hung.
+COMMAND_TIMEOUT_SECONDS = float(os.environ.get("ROC_RAY_TEST_TIMEOUT", 20 * 60))
+
+
 def run_cmd(
     cmd: list[str], desc: str, verbose: bool = False, env: dict | None = None, cwd: Path | None = None
 ) -> bool:
-    """Run a command and return True if successful."""
+    """Run a command and return True if it succeeded within the time limit."""
     if verbose:
         print(f"  Running: {' '.join(cmd)}" + (f" (in {cwd})" if cwd else ""))
 
     merged_env = {**os.environ, **(env or {})}
 
     # On Windows, use shell=True so subprocess can find executables in PATH
-    result = subprocess.run(
-        cmd,
-        capture_output=not verbose,
-        text=True,
-        env=merged_env,
-        cwd=cwd,
-        shell=IS_WINDOWS,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=not verbose,
+            text=True,
+            env=merged_env,
+            cwd=cwd,
+            shell=IS_WINDOWS,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as timeout:
+        print(f"\n{desc}: timed out after {COMMAND_TIMEOUT_SECONDS:.0f}s: {' '.join(cmd)}")
+        for stream, sink in ((timeout.stdout, sys.stdout), (timeout.stderr, sys.stderr)):
+            if stream:
+                text = stream.decode(errors="replace") if isinstance(stream, bytes) else stream
+                print(text, file=sink)
+        return False
 
     if result.returncode != 0:
         if not verbose:
@@ -493,6 +508,7 @@ def run_graphical_observatory_probe(
         stderr=None if verbose else subprocess.PIPE,
         text=True,
         check=False,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
     if graphical_run.returncode != 0:
         if not verbose:
@@ -738,6 +754,7 @@ def run_observatory_probe(
         stderr=None if verbose else subprocess.PIPE,
         text=True,
         check=False,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
     if recorded_run.returncode != 0:
         if not verbose:
@@ -765,6 +782,7 @@ def run_observatory_probe(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
     if unwritable.returncode == 0 or init_sentinel.exists():
         print("FAILED")
@@ -786,6 +804,7 @@ def run_observatory_probe(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
     if refusal.returncode == 0 or capture.read_bytes() != capture_before_refusal:
         print("FAILED")
@@ -1546,6 +1565,7 @@ def run_model_allocation_check(
         text=True,
         cwd=root,
         shell=IS_WINDOWS,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
     ok = result.returncode == 0
     print("ok" if ok else "FAILED")

@@ -370,11 +370,13 @@ jobs:
             "${SWEEP[@]}"
           fi
 
+  # Published quickstart is left out on purpose: it checks the release GitHub
+  # marks latest, which no pull request can change. Gating on it blocked the
+  # merge that a release has to follow, so it reports without blocking.
   required:
     name: CI required
     if: always()
     needs:
-      - public-quickstart
       - graphical-smoke
       - build-and-test
     runs-on: ubuntu-24.04
@@ -382,4 +384,4 @@ jobs:
       - name: Require all CI jobs
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: test "$RESULTS" = "success success success"
+        run: test "$RESULTS" = "success success"

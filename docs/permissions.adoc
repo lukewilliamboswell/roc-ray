@@ -225,6 +225,21 @@ A declaration is malformed::
 * an app id that is not 1 to 128 ASCII letters, digits, `.`, `-`, or `_`;
 * more than 64 declarations.
 
+[#permissions-and-capabilities]
+== Declarations and capabilities
+
+A declaration is not what your code uses to access something. It decides what
+the host will give your app, and what the host gives is a _capability_: a
+value such as a `Files.Dir` handle or a `Sqlite.Db` that code cannot make for
+itself. `Directory("assets", ReadOnly)` lets `open_dir_read!("assets")` return
+a `Files.ReadDir`. From then on, only code you pass that handle to can read
+those files.
+
+The two work together. The declarations show, in one place, everything the
+app can access at all. The capabilities limit each part of your program to what
+you pass it: a helper that receives only a `Files.ReadDir` for your levels
+cannot write your saves or open a web connection.
+
 [#permissions-protects]
 == What this protects against
 

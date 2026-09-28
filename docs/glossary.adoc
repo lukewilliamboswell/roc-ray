@@ -30,6 +30,13 @@ The single file a RocRay release publishes the platform as, downloaded by URL
 from an app's header. A release publishes a default bundle for every supported
 system and a Wayland bundle for Linux. See <<install>>.
 
+[[glossary-capability]]Capability::
+A value that lets code use a host facility, such as `App.Io`, a `Draw.Frame`,
+a `Files.Dir` handle, or a `Sqlite.Db`. Code cannot make one itself; it has to
+be given one. So a function you pass only a `Files.ReadDir` can read that
+directory and nothing else. Declarations decide which capabilities the host
+will hand out. See <<permissions-and-capabilities>>.
+
 [[glossary-close-request]]Close request::
 The user asking the window to close, with its close button or the system's
 quit command. By default the app ends at once. With

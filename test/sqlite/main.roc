@@ -69,23 +69,22 @@ check! = |io| {
 			Err(_) => return Checked(0)
 		}
 
-	match Sqlite.exec_script!(db, schema) {
+	match db.exec_script!(schema) {
 		Ok({}) => {}
 		Err(_) => return Checked(0)
 	}
 
 	inserted =
-		Sqlite.execute!({
-			db,
-			query: "INSERT INTO kinds VALUES (:i, :r, :s, :b, :n)",
-			bindings: [
+		db.execute!(
+			"INSERT INTO kinds VALUES (:i, :r, :s, :b, :n)",
+			[
 				{ name: ":i", value: Integer(-4242) },
 				{ name: ":r", value: Real(1.5) },
 				{ name: ":s", value: String(probe_text) },
 				{ name: ":b", value: Bytes(probe_blob) },
 				{ name: ":n", value: Null },
 			],
-		})
+		)
 
 	outcome =
 		match inserted {
@@ -98,11 +97,7 @@ check! = |io| {
 	rowid = score(outcome.last_insert_rowid == 1, 2)
 
 	row =
-		match Sqlite.query_exactly_one!({
-			db,
-			query: "SELECT i, r, s, b, n FROM kinds",
-			bindings: [],
-		}) {
+		match db.query_exactly_one!("SELECT i, r, s, b, n FROM kinds", []) {
 			Ok(found) => found
 			Err(_) => return Checked(changed + rowid)
 		}
@@ -122,7 +117,7 @@ check! = |io| {
 	# A prepared statement run twice must answer for its own bindings each time
 	# rather than reusing the previous run's.
 	reused =
-		match Sqlite.prepare!(db, "SELECT :n + 1 AS answer") {
+		match db.prepare!("SELECT :n + 1 AS answer") {
 			Err(_) => 0
 			Ok(stmt) => {
 				first = stmt.query_exactly_one!([{ name: ":n", value: Integer(1) }])
@@ -154,7 +149,7 @@ error_paths! : Sqlite.Db => U64
 error_paths! = |db| {
 	# A SELECT handed to execute! has nowhere to put its rows.
 	wrong_call =
-		match Sqlite.execute!({ db, query: "SELECT 1", bindings: [] }) {
+		match db.execute!("SELECT 1", []) {
 			Err(RowsReturnedUseQueryInstead) => Bool.True
 			_ => Bool.False
 		}
@@ -162,11 +157,7 @@ error_paths! = |db| {
 	# A UNIQUE violation is Constraint even though SQLite reports the extended
 	# code 2067, which is what the primary-code reduction is for.
 	insert_name! = |name|
-		Sqlite.execute!({
-			db,
-			query: "INSERT INTO unique_names VALUES (:name)",
-			bindings: [{ name: ":name", value: String(name) }],
-		})
+		db.execute!("INSERT INTO unique_names VALUES (:name)", [{ name: ":name", value: String(name) }])
 
 	constrained =
 		match (insert_name!("only"), insert_name!("only")) {
@@ -175,33 +166,34 @@ error_paths! = |db| {
 		}
 
 	syntax =
-		match Sqlite.query!({ db, query: "SELEKT nope", bindings: [] }) {
+		match db.query!("SELEKT nope", []) {
 			Err(SqliteErr(Error, _)) => Bool.True
 			_ => Bool.False
 		}
 
 	no_rows =
-		match Sqlite.query_exactly_one!({ db, query: "SELECT 1 WHERE 0", bindings: [] }) {
+		match db.query_exactly_one!("SELECT 1 WHERE 0", []) {
 			Err(NoRowsReturned) => Bool.True
 			_ => Bool.False
 		}
 
 	too_many =
-		match Sqlite.query_exactly_one!({ db, query: "SELECT 1 UNION ALL SELECT 2", bindings: [] }) {
+		match db.query_exactly_one!("SELECT 1 UNION ALL SELECT 2", []) {
 			Err(TooManyRowsReturned) => Bool.True
 			_ => Bool.False
 		}
 
 	# A released handle answers Misuse rather than reaching host memory.
+	stub = Sqlite.Db.stub
 	stubbed =
-		match Sqlite.query!({ db: Sqlite.Db.stub, query: "SELECT 1", bindings: [] }) {
+		match stub.query!("SELECT 1", []) {
 			Err(SqliteErr(Misuse, _)) => Bool.True
 			_ => Bool.False
 		}
 
 	# A query string holding two statements is refused, not half run.
 	multiple =
-		match Sqlite.query!({ db, query: "SELECT 1; SELECT 2", bindings: [] }) {
+		match db.query!("SELECT 1; SELECT 2", []) {
 			Err(MultipleStatements) => Bool.True
 			_ => Bool.False
 		}
@@ -209,7 +201,7 @@ error_paths! = |db| {
 	# `ATTACH` is disabled on every connection, so a database cannot reach a
 	# second file.
 	attached =
-		match Sqlite.execute!({ db, query: "ATTACH DATABASE 'other.db' AS other", bindings: [] }) {
+		match db.execute!("ATTACH DATABASE 'other.db' AS other", []) {
 			Err(SqliteErr(_, _)) => Bool.True
 			_ => Bool.False
 		}

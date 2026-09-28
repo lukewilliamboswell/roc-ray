@@ -3110,8 +3110,8 @@ fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_closeResult {
 
 fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_prepareResult {
     const Result = abi.HostSqlite_prepareResult;
-    enforcePhase("Sqlite.prepare!", during_wait);
-    var effect = EffectScope.begin("Sqlite.prepare!", sql_arg.asSlice().len);
+    enforcePhase("Sqlite.Db.prepare!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Db.prepare!", sql_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
@@ -3156,8 +3156,8 @@ fn hostedSqliteRunOnce(
     sql_arg: abi.RocStr,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
 ) callconv(.c) abi.HostSqlite_run_onceResult {
-    enforcePhase("Sqlite.query!", during_wait);
-    var effect = EffectScope.begin("Sqlite.query!", sql_arg.asSlice().len);
+    enforcePhase("Sqlite.Db.query!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Db.query!", sql_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);
@@ -3175,8 +3175,8 @@ fn hostedSqliteRunOnce(
 
 fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostSqlite_exec_scriptResult {
     const Result = abi.HostSqlite_exec_scriptResult;
-    enforcePhase("Sqlite.exec_script!", during_wait);
-    var effect = EffectScope.begin("Sqlite.exec_script!", sql_arg.asSlice().len);
+    enforcePhase("Sqlite.Db.exec_script!", during_wait);
+    var effect = EffectScope.begin("Sqlite.Db.exec_script!", sql_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer releaseResourceBox(roc_host, db_arg);

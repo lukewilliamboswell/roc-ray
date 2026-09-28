@@ -822,7 +822,7 @@ pub fn close(
     return toRocStatus(StatusOutcome, roc_host, &result);
 }
 
-/// `Sqlite.prepare!`: compile one statement for reuse.
+/// `Db.prepare!`: compile one statement for reuse.
 pub fn prepare(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
@@ -926,7 +926,7 @@ pub fn runStmt(
     return toRocQuery(Record, roc_host, &result);
 }
 
-/// `Sqlite.execute!` / `Sqlite.query!`: compile, run and finalize in one call.
+/// `Db.execute!` / `Db.query!`: compile, run and finalize in one call.
 pub fn runOnce(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
@@ -965,7 +965,7 @@ pub fn runOnce(
     return toRocQuery(Record, roc_host, &result);
 }
 
-/// `Sqlite.exec_script!`: run every statement in a script.
+/// `Db.exec_script!`: run every statement in a script.
 pub fn execScript(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,

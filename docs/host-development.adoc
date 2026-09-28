@@ -182,8 +182,7 @@ pass.
 == Declared permissions in the host
 
 What an app can access beyond its own resources is declared in its startup
-`Config`
-with `Permission`; there is no launch flag. The host validates the
+`Config` with `Permission`; there is no launch flag. The host validates the
 declarations into `src/permissions.zig` after the config callback and before
 `init!`, and every `caps*` wrapper in `src/host_native.zig` asks that policy
 before any native work:

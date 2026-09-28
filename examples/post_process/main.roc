@@ -11,7 +11,6 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
-import rr.Permission
 
 ## State kept between updates: the offscreen drawing target, shader, prepared
 ## labels, and prepared time setting, plus the elapsed animation time.
@@ -32,15 +31,19 @@ Model : {
 
 program = { init!, update!, render! }
 
+## The directory the shader is loaded from, relative to the directory you run
+## the example from. The config declares it and `init!` opens it, so both read
+## this one constant.
+assets_dir = "examples/post_process/assets"
+
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }).with_permission(Directory("examples/post_process/assets", ReadOnly)),
+	App.default.with_title("RocRay Post Process").with_size({ width: 800, height: 600 }).with_permission(Directory(assets_dir, ReadOnly)),
 	|io| {
-
-		## This source-tree example opens the asset directory it declared,
-		## relative to the repository root it runs from. A packaged app opens
-		## `io.files().beside_executable!()`, which needs no declaration.
-		assets = Assets.open!(io.files().open_dir_read!("examples/post_process/assets")?, IgnoreManifest)?
+		# This source-tree example opens the asset directory it declared. A
+		# packaged app opens `io.files().beside_executable!()`, which needs no
+		# declaration.
+		assets = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
 		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
@@ -59,12 +62,8 @@ init! = App.init(
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io|
-	if program_input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
-	}
+update! = |model, input, _io|
+	Ok({ ..model, seconds: U64.to_f32(input.time.simulation_nanos) / 1_000_000_000 })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
 render! = |model, frame| {

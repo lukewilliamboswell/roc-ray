@@ -57,7 +57,7 @@ last line, and the names defined inside it are not visible outside:
 include::tutorial/primer.roc[tag=block,indent=0]
 ----
 
-A line starting with `#` is a comment; `##` starts a documentation comment.
+A line starting with `+#+` is a comment; `+##+` starts a documentation comment.
 See {langref}/expressions.md[Expressions].
 
 == Records

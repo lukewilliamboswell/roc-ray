@@ -91,6 +91,16 @@ def main() -> int:
     docs.add_argument("--output-dir", default=".release")
     docs.set_defaults(func=cmd_package_docs)
 
+    pages = subcommands.add_parser(
+        "assemble-pages",
+        help="lay out the Pages site: the manual at the root and the API reference under api/",
+    )
+    pages.add_argument("--manual", required=True, help="the built manual site (build_manual.py's site/)")
+    pages.add_argument("--api", required=True, help="one version's API reference (build_docs.py's <root>/<version>/)")
+    pages.add_argument("--repo", default="")
+    pages.add_argument("--output", required=True)
+    pages.set_defaults(func=cmd_assemble_pages)
+
     args = parser.parse_args()
     try:
         return args.func(args)
@@ -196,14 +206,13 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     lines.extend(["", "## Docs", ""])
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
-        lines.append(f"- [View the API reference for {release_version}]({docs_url})")
+        lines.append(f"- [The documentation online]({docs_url}), for the current release")
     manual_pdf = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.pdf")
     manual_zip = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.zip")
     api_zip = release_asset_url(repo, release_version, f"roc-ray-api-docs-{release_version}.zip")
     lines.extend([
-        f"- [The manual as a PDF]({manual_pdf})",
-        f"- [The manual as a static site]({manual_zip}); unzip and open `index.html`",
-        f"- [The API reference as a static site]({api_zip}); unzip and open `index.html`",
+        f"- This release's own copy: [the manual as a PDF]({manual_pdf}), and as zipped static sites,",
+        f"  [the manual]({manual_zip}) and [the API reference]({api_zip}); unzip and open `index.html`",
     ])
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
@@ -302,6 +311,68 @@ def zip_tree(source: Path, output: Path, prefix: str) -> None:
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in files:
             archive.write(path, f"{prefix}/{path.relative_to(source).as_posix()}")
+
+
+PAGES_NOT_FOUND = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found · RocRay</title>
+<style>
+body {{ font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; color: #1f231e; background: #fafaf7; }}
+@media (prefers-color-scheme: dark) {{ body {{ color: #e6e8e3; background: #1b1d1a; }} a {{ color: #8fb8e8; }} }}
+</style>
+</head>
+<body>
+<h1>Page not found</h1>
+<p>This site shows the documentation for the current RocRay release only:
+the <a href="{root}">manual</a> and the <a href="{root}api/">API reference</a>.</p>
+<p>The documentation for an earlier release is attached to that release on the
+<a href="https://github.com/{repo}/releases">releases page</a>, as a PDF and as
+zipped static sites.</p>
+</body>
+</html>
+"""
+
+MANUAL_REDIRECT = """<!doctype html>
+<meta charset="utf-8">
+<title>RocRay manual</title>
+<meta http-equiv="refresh" content="0; url=../">
+<link rel="canonical" href="../">
+<p>The manual has moved to <a href="../">the site's front page</a>.</p>
+"""
+
+
+def cmd_assemble_pages(args: argparse.Namespace) -> int:
+    """Lay out the Pages site for the current release only.
+
+    The manual is the front page and the API reference is under `api/`.
+    Earlier releases' documentation lives in the assets attached to each
+    release, so the site never accumulates old versions. `manual/` redirects
+    to the front page for links made when the manual lived there, and
+    `404.html` says where an old version's pages went.
+    """
+    manual = Path(args.manual)
+    api = Path(args.api)
+    output = Path(args.output)
+    for source, what in ((manual, "manual"), (api, "API reference")):
+        if not (source / "index.html").is_file():
+            raise RuntimeError(f"no {what} index.html under {source}")
+    if output.exists():
+        shutil.rmtree(output)
+    shutil.copytree(manual, output)
+    if (output / "api").exists():
+        raise RuntimeError("the manual already has an api/ directory")
+    shutil.copytree(api, output / "api")
+    (output / "manual").mkdir()
+    (output / "manual" / "index.html").write_text(MANUAL_REDIRECT, encoding="utf-8")
+    repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "lukewilliamboswell/roc-ray")
+    owner, _, name = repo.partition("/")
+    root = f"https://{owner}.github.io/{name}/"
+    (output / "404.html").write_text(PAGES_NOT_FOUND.format(root=root, repo=repo), encoding="utf-8")
+    print(output)
+    return 0
 
 
 def cmd_package_docs(args: argparse.Namespace) -> int:

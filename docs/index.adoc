@@ -17,7 +17,7 @@
 :repo: https://github.com/lukewilliamboswell/roc-ray
 :src: {repo}/blob/main
 :tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
 :langref: https://github.com/roc-lang/roc/blob/main/docs/langref
 
 [.lead]

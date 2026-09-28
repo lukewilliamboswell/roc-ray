@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build and validate RocRay's complete platform API documentation.
 
-All public types, methods, and effects are documented under www/<version>/.
+All public types, methods, and effects are documented under .docs-api/<version>/.
 `--check` builds into a temporary directory without changing published docs.
 """
 
@@ -444,7 +444,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roc", default="roc", help="Roc compiler binary")
     parser.add_argument(
-        "--docs-root", default="www", help="versioned docs root (default: www)"
+        "--docs-root", default=".docs-api", help="versioned docs root (default: .docs-api)"
     )
     parser.add_argument("--version", help="release version, e.g. 0.10.0")
     parser.add_argument(

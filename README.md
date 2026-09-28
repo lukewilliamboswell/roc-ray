@@ -87,7 +87,7 @@ program -- is declared in its startup settings.
 
 ## Documentation
 
-The [RocRay manual](https://lukewilliamboswell.github.io/roc-ray/manual/) is
+The [RocRay manual](https://lukewilliamboswell.github.io/roc-ray/) is
 published as a website and a PDF. Its chapters are the AsciiDoc files in
 [`docs/`](docs/), which you can also read here:
 
@@ -104,7 +104,7 @@ published as a website and a PDF. Its chapters are the AsciiDoc files in
   [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
   [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)
 - [Glossary](docs/glossary.adoc)
-- [API reference](https://lukewilliamboswell.github.io/roc-ray/)
+- [API reference](https://lukewilliamboswell.github.io/roc-ray/api/)
 - [Architecture](docs/architecture.adoc)
 - [Contributing](docs/contributing.adoc)
 - [Release notes](docs/releases/) and the

@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-ray
 :src: {repo}/blob/main
 :tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
 endif::[]
 
 [#contributing]
@@ -138,7 +138,6 @@ git config core.hooksPath .githooks
 |`docs/` |This manual, in AsciiDoc, and its theme
 |`docs/releases/` |Release notes, one file per release
 |`dependencies/` |Reviewed recipes and records for the platform's linker inputs
-|`www/` |Versioned generated API documentation
 |===
 
 == Everyday checks
@@ -354,8 +353,11 @@ structured.
 
 === API documentation
 
-The complete API reference lives at `www/<version>/`. Public values, pure
-methods, and effects are documented in one site. `roc docs` attaches a nominal
+`scripts/build_docs.py` generates the complete API reference from the module
+documentation in `platform/`. Public values, pure methods, and effects are
+documented in one site. Nothing generated is committed: the release workflow
+publishes the current release's reference to Pages under `api/` and attaches a
+copy to the release. `roc docs` attaches a nominal
 type's methods to the module that declares it: for example, `Text.Font` aliases
 `Font`, so its measurement methods are documented on the `Font` page.
 Document each method where its type is declared.
@@ -371,7 +373,7 @@ Build and validate the reference locally:
 [source,bash]
 ----
 scripts/build_docs.py --check              # temp dir, touches nothing
-scripts/build_docs.py --version 0.10.0     # writes www/0.10.0
+scripts/build_docs.py --version 0.10.0     # writes .docs-api/0.10.0
 ----
 
 `--check` fails on a module missing a page, a broken relative link, missing

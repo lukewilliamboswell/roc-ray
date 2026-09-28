@@ -300,7 +300,7 @@ jobs:
         uses: roc-lang/release-package/actions/make-release-notes@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
-          docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
+          docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL" --notes-dir docs/releases
           github_token: ${{ github.token }}
 
@@ -342,7 +342,7 @@ jobs:
           github_token: ${{ github.token }}
 
   publish-docs:
-    name: Publish versioned docs
+    name: Publish the docs
     needs:
       - build
       - publish-release
@@ -379,47 +379,31 @@ jobs:
             --release-bundles .release/release-bundles.json \
             --examples-dir examples
 
-      - name: Snapshot existing docs
-        uses: roc-lang/release-package/actions/docs-snapshot@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-
-      # Build the complete platform API documentation.
-      - name: Generate docs
-        run: python3 scripts/build_docs.py --version "${{ needs.build.outputs.docs_version }}"
-
-      - name: Update docs index
-        uses: roc-lang/release-package/actions/docs-index@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-          docs_version: ${{ needs.build.outputs.docs_version }}
-
-      - name: Validate docs
-        uses: roc-lang/release-package/actions/docs-validate@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-          docs_version: ${{ needs.build.outputs.docs_version }}
-
       - name: Open release follow-up PR
         uses: roc-lang/release-package/actions/create-followup-pr@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
-          paths: www examples
+          paths: examples
           branch_prefix: release-followup
           base_branch: ${{ github.ref_name }}
           commit_message: Update release references for ${{ needs.build.outputs.release_version }}
           pr_title: Update release references for ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
 
-      # After the follow-up PR, so the built manual is published beside the API
-      # reference without being committed to www/.
-      - name: Build the manual
+      # Pages shows the current release only: the manual at the root and the
+      # API reference under api/. Each release carries its own copy of both as
+      # attached assets (package-docs), so nothing old accumulates here.
+      - name: Build the site
         run: |
+          python3 scripts/build_docs.py --docs-root .docs-api --version "${{ needs.build.outputs.docs_version }}"
           python3 scripts/build_manual.py --pdf \
             --docs-version "${{ needs.build.outputs.release_version }}" \
             --output .docs-out
-          rm -rf www/manual
-          cp -R .docs-out/site www/manual
+          python3 scripts/release_helpers.py assemble-pages \
+            --manual .docs-out/site \
+            --api ".docs-api/${{ needs.build.outputs.docs_version }}" \
+            --repo "${{ github.repository }}" \
+            --output .pages
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -427,7 +411,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: www
+          path: .pages
 
       - name: Deploy Pages
         id: deployment

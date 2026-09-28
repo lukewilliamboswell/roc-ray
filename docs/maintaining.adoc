@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-ray
 :src: {repo}/blob/main
 :tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
 endif::[]
 
 [#maintaining]
@@ -169,9 +169,9 @@ bundle. There is no separate vocabulary release or package pin to update.
 The default and Wayland bundles expose the same API with different native
 link configurations.
 
-The release workflow builds and tests both bundles, publishes the versioned API
-reference and this manual, and opens a follow-up PR that updates example bundle
-URLs and the API docs index. Do not manually publish an untested local bundle as
+The release workflow builds and tests both bundles, publishes this manual and
+the API reference for the release to Pages, and opens a follow-up PR that
+updates the example bundle URLs. Do not manually publish an untested local bundle as
 a release artifact.
 
 Besides the bundles, every GitHub release carries:
@@ -185,8 +185,8 @@ Besides the bundles, every GitHub release carries:
 
 `scripts/release_helpers.py package-examples` and `package-docs` build them,
 and the workflow's build job dry-runs both on every pull request. Pages serves
-the latest manual and every version of the API reference; the release assets
-keep each release's own copy.
+only the current release's documentation; the release assets keep each
+release's own copy.
 
 === Release notes
 
@@ -207,10 +207,15 @@ python3 scripts/release_helpers.py preview-release-notes docs/releases/<version>
 [#maintaining-docs]
 === Publishing the documentation
 
-GitHub Pages serves the project site from the release workflow's
-`publish-docs` job. It publishes `www/`, which holds the versioned API
-reference that `scripts/build_docs.py` generates, with this manual beside it
-under `manual/`, built for the release by `scripts/build_manual.py --pdf`.
+GitHub Pages serves the documentation for the current release only, from the
+release workflow's `publish-docs` job: this manual at the site's root, built by
+`scripts/build_manual.py --pdf`, and the API reference that
+`scripts/build_docs.py` generates under `api/`.
+`scripts/release_helpers.py assemble-pages` lays the site out, redirects the
+old `manual/` address to the root, and gives it a 404 page that sends readers
+of an earlier version to the releases page. Each release carries its own copy
+of both as attached assets, so nothing generated is committed and old versions
+never accumulate on the site.
 The `docs` workflow builds the manual as HTML and PDF on every pull request and
 push to `main` and uploads it as a workflow artifact, so a change can be
 reviewed before it is released.

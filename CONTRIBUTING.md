@@ -15,7 +15,7 @@ Thank you for helping. The contributor guide is part of the RocRay manual:
   resource limits, targets, or application lifecycle
 
 The whole manual is published at
-<https://lukewilliamboswell.github.io/roc-ray/manual/>.
+<https://lukewilliamboswell.github.io/roc-ray/>.
 
 Open an issue before a broad API change or a substantial new subsystem so its
 shape can be discussed first. Before opening a pull request, run:

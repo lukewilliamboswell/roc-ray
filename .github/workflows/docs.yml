@@ -2,9 +2,8 @@ name: docs
 
 # Builds the RocRay manual (docs/*.adoc) as a website and a PDF and uploads
 # both for review. The Pages site itself is published by the release workflow,
-# which places the manual for the released version beside the versioned API
-# reference in www/; publishing from main here would replace that site with
-# documentation for unreleased APIs.
+# which shows the released version's manual and API reference; publishing from
+# main here would replace that site with documentation for unreleased APIs.
 on:
   pull_request:
   push:

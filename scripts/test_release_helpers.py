@@ -254,6 +254,34 @@ class LatestPlatformReleaseTests(unittest.TestCase):
         self.assertIsNone(helpers.latest_platform_release([{"tag_name": "types-0.9.0"}]))
 
 
+class AssemblePagesTests(unittest.TestCase):
+    def test_manual_at_root_api_beneath_and_old_links_answered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "manual").mkdir()
+            (root / "manual" / "index.html").write_text("manual", encoding="utf-8")
+            (root / "api" / "App").mkdir(parents=True)
+            (root / "api" / "index.html").write_text("api", encoding="utf-8")
+            (root / "api" / "App" / "index.html").write_text("app", encoding="utf-8")
+            (root / "site").mkdir()
+            (root / "site" / "0.9.0").mkdir()
+            args = argparse.Namespace(manual=str(root / "manual"), api=str(root / "api"), repo="owner/repo", output=str(root / "site"))
+            helpers.cmd_assemble_pages(args)
+            site = root / "site"
+            self.assertEqual((site / "index.html").read_text(encoding="utf-8"), "manual")
+            self.assertEqual((site / "api" / "App" / "index.html").read_text(encoding="utf-8"), "app")
+            self.assertIn('url=../"', (site / "manual" / "index.html").read_text(encoding="utf-8"))
+            self.assertIn("https://github.com/owner/repo/releases", (site / "404.html").read_text(encoding="utf-8"))
+            self.assertFalse((site / "0.9.0").exists())
+
+    def test_missing_input_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args = argparse.Namespace(manual=str(root / "none"), api=str(root / "none"), repo="o/r", output=str(root / "site"))
+            with self.assertRaises(RuntimeError):
+                helpers.cmd_assemble_pages(args)
+
+
 class ZipTreeTests(unittest.TestCase):
     def test_files_sit_under_one_prefix_in_a_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

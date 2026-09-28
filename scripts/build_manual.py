@@ -3,7 +3,7 @@
 
 The manual is the AsciiDoc book under `docs/`. It is separate from the
 generated API reference, which `scripts/build_docs.py` builds from the
-platform's module documentation into `www/<version>/`.
+platform's module documentation into `.docs-api/<version>/`.
 
     scripts/build_manual.py                       # HTML into .docs-out/site
     scripts/build_manual.py --pdf                 # and the standalone PDF

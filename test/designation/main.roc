@@ -15,7 +15,7 @@ import rr.Task
 ## - a string that is not one of its arguments is refused.
 ##
 ## Exits 0 when every check passes, 3 when one fails, 4 on timeout.
-Model : { held : Str, dropped : [Waiting, Read(Str)], named : [Waiting, Read(Str)], refusals : Bool }
+Model : { named_arg : Str, held : Str, dropped : [Waiting, Read(Str)], named : [Waiting, Read(Str)], refusals : Bool }
 
 Msg : [DroppedRead(Try(Str, Files.ReadTextError)), NamedRead(Try(Str, Files.ReadTextError))]
 
@@ -24,7 +24,9 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [NoArgument])
 init! = App.init(
 	App.default,
-	|_io| Ok({ held: "", dropped: Waiting, named: Waiting, refusals: Bool.True }),
+	# `args!` is a startup fact, legal only in `init!`, so the argument is
+	# read here and designated from `update!`.
+	|io| Ok({ named_arg: List.last(io.args!()) ?? "", held: "", dropped: Waiting, named: Waiting, refusals: Bool.True }),
 )
 
 refused : Try(a, [PermissionDenied]) -> Bool
@@ -51,9 +53,7 @@ update! = |model, input, io| {
 		}
 	}
 	if input.time.cycle_count == 0 {
-		args = io.args!()
-		named = List.last(args) ?? ""
-		match files.from_arg!(named) {
+		match files.from_arg!(model.named_arg) {
 			Ok(item) => Task.spawn!(input, || NamedRead(item.read_text!()))
 			Err(PermissionDenied) => {
 				$refusals = Bool.False

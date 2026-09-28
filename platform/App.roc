@@ -498,10 +498,17 @@ App := [].{
 		env : Io -> Environment
 		env = |Io.(authority)| Environment.(authority)
 
-		## Exit the application with the given exit code.
+		## Stop the application with the given exit code at the end of the
+		## current host cycle.
 		##
-		## The exit happens after startup completes, so `init!` finishes and the
-		## host shuts down in the ordinary way. Legal only in `init!`.
+		## The call returns, the cycle finishes -- including its `render!` --
+		## and then the host shuts down in the ordinary way: live tasks are
+		## cancelled, and a message nobody has received yet is never delivered.
+		## Called from `init!`, the app still runs one host cycle first.
+		##
+		## `update!` usually stops by returning `Err(Exit(code))`; this is the
+		## spelling for `init!` and for a task. Legal in `init!`, `update!`, and
+		## tasks; refused in `render!`.
 		exit! : Io, I32 => {}
 		exit! = |io, code| app_exit!(io, code)
 
@@ -511,8 +518,9 @@ App := [].{
 		## in order. The host removes its reserved `--host-*` switches before this
 		## list reaches the app. The value is stable for the process lifetime.
 		##
-		## Legal only in `init!`. `App.init_for_args` is the other way to read
-		## argv, before the window exists.
+		## Legal only in `init!`: keep what `update!` needs from it in the model.
+		## `App.init_for_args` is the other way to read argv, before the window
+		## exists.
 		args! : Io => List(Str)
 		args! = |io| app_args!(io)
 

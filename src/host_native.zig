@@ -626,8 +626,8 @@ const Phase = enum {
 const PhaseSet = std.EnumSet(Phase);
 
 /// Startup-only operations: process arguments, environment, startup font,
-/// startup exit, and random seeds. Other Io receivers retain the phase sets
-/// of their corresponding host effects.
+/// and random seeds. `App.Io.exit!` changes host state and is `during_update`;
+/// other Io methods keep the phase sets of their corresponding host effects.
 const during_startup = PhaseSet.initOne(.startup);
 
 /// Drawing, and anything that changes how the draws after it are interpreted.
@@ -8315,7 +8315,7 @@ var exit_requested: ?i64 = null;
 var active_app_args: []const [*:0]u8 = &.{};
 
 fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
-    enforcePhase("App.Io.args!", during_load);
+    enforcePhase("App.Io.args!", during_startup);
     const effect = EffectScope.begin("App.Io.args!", 0);
     defer effect.end();
 

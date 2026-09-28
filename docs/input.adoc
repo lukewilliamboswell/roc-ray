@@ -10,9 +10,9 @@ endif::[]
 [#input]
 = Input, time, and the window
 
-Each cycle, `update!` receives an `App.Input` describing what the platform
-observed since the previous cycle. This chapter covers the keyboard, mouse,
-gamepads, typed text, time, the window, and dropped files. It assumes
+Each host cycle, `update!` receives an `App.Input` describing what the
+platform observed since the previous cycle. This chapter covers the keyboard,
+mouse, gamepads, typed text, time, the window, and dropped files. It assumes
 <<app-model>>.
 
 == Two kinds of information
@@ -42,23 +42,28 @@ running = devices.key_down(KeyLeftShift) # held right now
 released = devices.key_released(KeyW)    # came up this cycle
 ----
 
+Keys are tags such as `KeySpace`, `KeyW`, `KeyLeft`, and `KeyEnter`; the
+`Keys` page of the {api}[API reference] lists them all.
+
 `key_pressed` and `key_released` mean "at least once since the previous
 input". Several presses of the same key in one interval collapse into one
 answer. When the count or the order matters -- a double tap, text editing where
 a keystroke lands between two characters -- read `devices.events` instead
 (see <<input-events>>).
 
-By default, Escape closes the window. Change that with
-`App.default.with_exit_key(...)`; `NoExitKey` leaves closing to the window's
-close button and your own `update!`.
+By default, Escape closes the window and ends the app, so you do not need to
+check for it yourself. An app that wants Escape for something else, such as a
+pause menu, turns that off with `App.default.with_exit_key(NoExitKey)`. The
+window's close button still ends the app; see <<input-window>> to handle it
+yourself.
 
 === Typed text
 
 `devices.text_input` holds the Unicode codepoints typed since the previous
-input, in the order typed and according to the user's keyboard layout. It is
-distinct from which physical keys are down. Up to 32 codepoints are delivered
-per input; if more were typed, the rest are discarded and
-`devices.text_input_overflow` is set.
+input, in the order typed and according to the user's keyboard layout. Use it
+for a name entry box or a chat line, rather than working out characters from
+key presses. Up to 32 codepoints are delivered per input; if more were typed,
+the rest are discarded and `devices.text_input_overflow` is set.
 
 == The mouse
 
@@ -72,29 +77,40 @@ scroll = mouse.wheel_delta()         # every notch this interval, summed
 ----
 
 Positions use the same logical coordinates as drawing: x grows to the right
-and y grows downward. `mouse.delta()` is the movement since the previous input.
+and y grows downward, starting from the window's top-left corner.
+`mouse.delta()` is the movement since the previous input.
 
-Change the cursor's shape with `Mouse.set_cursor!` and its mode (for example,
-hidden) with `Mouse.set_cursor_mode!`. Both are legal in `init!`, `update!`,
-and tasks.
+Change the cursor's shape with `Mouse.set_cursor!` and its mode with
+`Mouse.set_cursor_mode!(Hidden)` or `Mouse.set_cursor_mode!(Locked)`. Both are
+legal in `init!`, `update!`, and tasks.
 
 == Gamepads
 
-The platform samples up to four gamepads once per cycle. Resolve one from the
-snapshot and query it straight away:
+The platform samples up to four gamepads once per cycle. They are named
+`One`, `Two`, `Three`, and `Four`, following the operating system's numbering;
+a single controller is almost always `One`. Ask the snapshot for one; it
+answers `Connected(pad)` with a view you can query, or `Disconnected`:
 
 [source,roc]
 ----
-match input.devices.gamepad(pad_id) {
+stick = match input.devices.gamepad(One) {
     Connected(pad) => pad.left_stick()
     Disconnected => { x: 0, y: 0 }
 }
 ----
 
-Gamepad buttons have no event callback, so their pressed and released answers
-come from comparing two consecutive samples: a button pressed and released
-between two cycles is not seen. Hold a button for at least one cycle to be
-sure it registers. Gamepads never appear in `devices.events`.
+Buttons use layout-neutral names -- `FaceDown` is the bottom face button,
+whatever its label says -- so `pad.button_pressed(FaceDown)` is "jump" on
+any controller.
+
+Gamepad buttons are state samples only. The platform compares this cycle's
+sample with the previous one to answer `button_pressed` and
+`button_released`, so a press _and_ release that both happen between two
+samples is not seen. At 60 cycles a second, that is a tap shorter than about
+17 milliseconds, which is rare for a deliberate press but real for fast
+button-mashing or when the frame rate drops. Treat a held button, not a single
+edge, as the input for anything that must never be missed. Gamepads never
+appear in `devices.events`.
 
 [#input-events]
 == The ordered event record
@@ -120,24 +136,98 @@ Each click carries the pointer position where it landed. The list holds up to
 `devices.events_overflow` is set. The coalesced answers (`key_pressed`, the
 wheel sum, `text_input`) keep recording even when the list is full.
 
+[#input-time]
 == Time
 
 `input.time` describes this cycle:
 
-* `elapsed_seconds` is the simulation duration of this cycle. Multiply speeds
-  by it for movement that does not depend on the frame rate.
+* `elapsed_seconds` is how much time passed since the previous cycle, in
+  seconds. The first cycle reports `0`.
 * `cycle_count` counts cycles from zero.
+
+Move things by speed times elapsed time, and they move at the same speed
+whatever the frame rate. With plain records:
 
 [source,roc]
 ----
-next = model.position.add(model.velocity.scale(input.time.elapsed_seconds))
+dt = input.time.elapsed_seconds
+position = {
+    x: model.position.x + model.velocity.x * dt,
+    y: model.position.y + model.velocity.y * dt,
+}
 ----
 
-`Time.now!` reads the wall clock as a UTC `Time.Timestamp`. It does not wait,
-and it is legal in `init!`, `update!`, and tasks. Use `input.time`, not the
-wall clock, for animation and physics, so a recorded run can replay them
-exactly.
+The `Math` module has the same arithmetic ready-made. Make a vector with
+`Math.vec2(x, y)` and store it as a `Math.Vec2`; its methods `add`, `sub`,
+`scale`, `length`, and `normalize` then read as one line:
 
+[source,roc]
+----
+# With position : Math.Vec2 and velocity : Math.Vec2 in the model:
+position = model.position.add(model.velocity.scale(dt))
+----
+
+`Time.now!()` reads the wall clock as a UTC `Time.Timestamp`, for things like
+naming a save file. It does not wait, and it is legal in `init!`, `update!`,
+and tasks. Use `input.time`, not the wall clock, for animation and movement.
+
+=== Frame timing
+
+`elapsed_seconds` is the real time between two cycles, and it varies. A
+cycle is usually a few milliseconds, but the operating system decides: while
+the user drags the window, or while you pause the app in a debugger, no
+cycles run, and the next cycle reports everything that passed -- possibly
+several seconds. The platform reports that value as it is, without limiting
+it, so a naive `position + velocity * dt` can jump a player through a wall.
+
+The simplest protection is to clamp the elapsed time before you use it, so
+one cycle never advances the game by more than a tenth of a second:
+
+[source,roc]
+----
+dt = Math.clamp(input.time.elapsed_seconds, 0, 0.1)
+----
+
+Physics and collision work best with a _fixed step_: the game always advances
+by exactly the same small amount, say 1/60 of a second, and runs as many of
+those steps each cycle as the elapsed time pays for. Leftover time is kept in
+the model for the next cycle. Each of those advances is a _simulation step_,
+and one host cycle may run zero, one, or several of them:
+
+[source,roc]
+----
+step_seconds : F32
+step_seconds = 1 / 60
+
+## Run as many whole steps as the banked time pays for, and bank the rest.
+run_steps : World, F32 -> (World, F32)
+run_steps = |world, banked| {
+    if banked < step_seconds {
+        (world, banked)
+    } else {
+        run_steps(simulate(world), banked - step_seconds)
+    }
+}
+
+# In update!:
+dt = Math.clamp(input.time.elapsed_seconds, 0, 0.1)
+(world, accumulator) = run_steps(model.world, model.accumulator + dt)
+Ok({ ..model, world: world, accumulator: accumulator })
+----
+
+Here `World` is the part of your model the rules act on, and `simulate` is
+your own pure function that advances it by one step.
+{src}/examples/snake/Game.roc[Snake] moves its snake this way. <<architecture>>
+explains the difference between a host cycle and a simulation step.
+
+Some runs report a fixed `elapsed_seconds` rather than a measured one. A
+headless run (see <<testing>>) reports exactly 1/60 of a second every cycle,
+and a recording with `FixedStep` timing reports exactly one recording frame's
+worth (see <<capture>>). Those are the runs you can repeat and get the same
+result, provided the input, the random seed, and any task results are the same
+too.
+
+[#input-randomness]
 === Randomness
 
 Keep a `Random.State` in the model and draw from it with pure generators, so a
@@ -147,16 +237,42 @@ must reproduce:
 
 [source,roc]
 ----
-generation = Random.step(model.rng, Random.bounded_i32(0, 799))
-Ok({ ..model, rng: generation.state, x: generation.value })
+# In init!:
+rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 ----
 
+Each draw returns a value and the next state. Keep the state, or the next
+draw repeats the last one:
+
+[source,roc]
+----
+x = Random.step(model.rng, Random.f32(0, 800))
+Ok({ ..model, rng: x.state, star: { x: x.value, y: 0 } })
+----
+
+`Random.f32(low, high)` gives an `F32`, ready to use as a position. The integer
+generators, such as `Random.bounded_i32(0, 9)`, give integers; convert one
+before mixing it with positions, for example `I32.to_f32(column.value) * 60`.
+
+[#input-window]
 == The window
 
-`input.window` reports the window's size, whether it is focused, and whether
-it is minimized. The size is in logical units that match mouse coordinates and
-drawing; on a high-DPI display the framebuffer has more pixels than that, and
-`Window.scale!()` returns the factor between the two.
+`input.window` reports:
+
+* `size`, the window's `{ width, height }`;
+* `focused`, whether it has keyboard focus;
+* `minimized`, whether it is minimized. A minimized window still runs cycles,
+  so an app that should pause while minimized checks this.
+* `close_requested`, whether the user asked to close it this cycle. It is only
+  ever set when the app asked for close requests with
+  `with_close_request(Deliver)`; see <<app-model-closing>>, which shows how to
+  save before the app ends.
+
+The size is in _logical units_: the same units as mouse coordinates and
+drawing. On a high-DPI display, such as a Retina screen, the window has more
+physical pixels than logical units, so that things are not drawn tiny.
+`Window.scale!()` returns the factor between the two, for example 2. Most apps
+never need it.
 
 Window effects are legal in `init!`, `update!`, and tasks:
 
@@ -165,8 +281,28 @@ Window effects are legal in `init!`, `update!`, and tasks:
   manager for new geometry. They are named `suggest` because the window
   manager may alter or ignore the request; the next input's `window` field is
   authoritative.
-* `Window.set_target_fps!` changes frame pacing.
+* `Window.set_target_fps!` changes the frame-rate cap; see below.
 * `Window.monitors!()` lists the connected monitors.
+
+[#input-frame-pacing]
+=== Frame pacing
+
+_Frame pacing_ decides how often cycles run. Choose it at startup with
+`with_frame_pacing`:
+
+* `Capped(fps)` runs at most `fps` cycles a second. `App.default` uses
+  `Capped(240)`. A value of zero or less means `Uncapped`.
+* `VSync` waits for the display's refresh, usually 60 times a second, which
+  avoids tearing.
+* `Uncapped` runs as fast as the machine allows.
+
+`Window.set_target_fps!(fps)` changes the cap while the app runs, for example
+to slow down while minimized. It sets the same cap as `Capped`, and a value of
+zero or less removes it. It does not turn VSync on or off: if the app started
+with `VSync`, the display still limits the rate, and the app runs at whichever
+of the two is slower.
+
+Whatever the pacing, read `elapsed_seconds` rather than assuming a rate.
 
 == Dropped files
 
@@ -184,6 +320,6 @@ into a handle in the same `update!` that received it; see
   snapshot live.
 * {src}/examples/responsive_ui/main.roc[Responsive Settings] handles resizing,
   display scaling, and monitor placement.
-* The `Devices`, `Keys`, `Mouse`, `Gamepad`, `Window`, and `Time` pages of the
-  {api}[API reference].
+* The `Devices`, `Keys`, `Mouse`, `Gamepad`, `Window`, `Time`, `Math`, and
+  `Random` pages of the {api}[API reference].
 * The input guarantees are stated precisely in <<architecture>>.

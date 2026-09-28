@@ -19,9 +19,10 @@ the asset stores described in <<files-and-assets>>.
 There are two kinds of audio resource, and they are distinct types so they
 cannot be mixed up:
 
-* A `Sound` is decoded into memory. Use it for short effects.
-* A `Music` track streams its encoded bytes. Use it for long tracks; the
-  platform advances it automatically every frame.
+* A `Sound` is decoded into memory. Use it for short effects: a jump, a coin,
+  a hit.
+* A `Music` track streams from its encoded file a piece at a time. Use it for
+  long tracks; the platform keeps it playing automatically every cycle.
 
 Like every host resource, both are released automatically when the last
 reference goes away. Load or generate them in `init!` and keep them in the
@@ -31,18 +32,30 @@ model.
 
 `Audio.gen_tone!` and `Audio.gen_sound!` build a `Sound` with no file behind
 it, so they need no asset store and are legal in `init!`, `update!`, and
-tasks:
+tasks. The quickest way to hear something:
 
 [source,roc]
 ----
+init! : App.Init(Model, [SoundGenerationFailed, ResourceLimit])
 init! = App.init(
     App.default,
-    |_io| Ok({ blip: Audio.gen_tone!({ freq: 440, ms: 120 })? }),
+    |_io| {
+        blip = Audio.gen_tone!({ freq: 440, ms: 120 })?
+        Ok({ blip: blip })
+    },
 )
 ----
 
-`gen_sound!` takes a waveform, a start and end frequency, a duration, an
-envelope, and a volume. {src}/examples/pong/main.roc[Pong] and
+`gen_tone!` can fail with `SoundGenerationFailed` or `ResourceLimit` (the
+sound table is full), and `?` passes either error on. That is why both appear
+in `init!`'s error list, the second type argument of `App.Init`. When you add
+a call with `?` that can fail in another way, add its errors to that list;
+the compiler tells you which are missing.
+
+`gen_sound!` takes a waveform (`Sine`, `Square`, `Triangle`, `Saw`, or
+`Noise`), a start and end frequency, a duration, an envelope, and a volume. A
+generated sound lasts between 1 millisecond and 5 seconds; a longer duration
+is cut to 5 seconds. {src}/examples/pong/main.roc[Pong] and
 {src}/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
 this way.
 
@@ -54,9 +67,15 @@ jump = Audio.load_sound!(store, "jump.wav")?
 theme = Audio.load_music!(store, "theme.ogg")?
 ----
 
-Both read the disk, so they wait: they are legal in `init!` and in tasks. To
-start a new track after startup, load it in a task and keep the `Music` that
-the task's message carries.
+Here `store` is an asset store opened in `init!`; <<drawing-first-sprite>>
+shows how to set one up for your own project.
+
+The format is taken from the file's extension. Sounds and music read WAV, OGG
+Vorbis, MP3, and QOA files; music also reads XM and MOD tracker modules.
+
+Both loaders read the disk, so they wait: they are legal in `init!` and in
+tasks. To start a new track after startup, load it in a task and keep the
+`Music` that the task's message carries.
 
 == Playing
 
@@ -70,10 +89,16 @@ if input.devices.key_pressed(KeySpace) {
 }
 ----
 
-A sound has no volume, pitch, or pan that outlives one play. `sound.play!()`
-plays it with the defaults; `sound.playback()` starts a description that sets
-volume, pitch, and pan for this play only, finished with `.play!()`.
-`Sound` also has `stop!`, `pause!`, and `resume!`.
+`sound.play!()` plays a sound at full volume, normal pitch, and centred. For
+anything else, `sound.playback()` starts a description of one play, and
+`with_volume`, `with_pitch`, and `with_pan` adjust it before `.play!()`
+starts it. The settings apply to that play only; the next play starts from
+the defaults again. `Sound` also has `stop!`, `pause!`, and `resume!`.
+
+A `Sound` is one voice. Playing it again while it is still playing restarts
+it from the beginning; the two plays do not overlap. For effects that should
+overlap, such as rapid gunfire, load or generate the same sound two or three
+times and play them in turn.
 
 Music keeps its settings: `play!`, `stop!`, `pause!`, `resume!`, `seek!`,
 `set_volume!`, `set_pitch!`, `set_pan!`, and `set_looping!`.

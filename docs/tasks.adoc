@@ -10,43 +10,67 @@ endif::[]
 [#tasks]
 = Work that waits: tasks
 
-Reading a file, fetching a URL, or querying a database can take longer than a
-frame. If `update!` waited for the answer, the window would freeze. This
-chapter shows how to run that work as a _task_, so the app keeps updating and
-drawing while it waits, and how its result comes back. It assumes
-<<app-model>>.
+Some work takes longer than a frame: waiting two seconds before the next
+level starts, reading a level file, fetching a high-score table. If `update!`
+waited for it, the window would freeze. This chapter shows how to run that
+work as a _task_, so the game keeps updating and drawing while it waits, and
+how the result comes back. It assumes <<app-model>>.
 
-== Start a task, receive a message
+== A first task: wait, then start the next level
 
-A task is a function with no arguments, handed to `Task.spawn!`. The platform
-runs it; when it returns, its return value arrives as a _message_ on
-`input.messages` in a later cycle:
+When the player clears a level, this game shows "Well done!" for two seconds
+and then moves on. The waiting happens in a task:
 
 [source,roc]
 ----
-Msg : [Woke]
+Model : { level : U64, state : [Playing, Cleared] }
 
+Msg : [NextLevelReady]
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
-    if input.devices.key_pressed(KeyEnter) {
+    next = List.fold(input.messages, model, apply_message)
+    if next.state == Playing and input.devices.key_pressed(KeyEnter) {
+        # The level is cleared: show "Well done!" for two seconds, then move on.
         Task.spawn!(
             input,
             || {
-                Task.sleep!(300)
-                Woke
+                Task.sleep!(2000)
+                NextLevelReady
             },
         )
+        Ok({ ..next, state: Cleared })
+    } else {
+        Ok(next)
     }
-    Ok(List.fold(input.messages, model, apply_message))
 }
+
+apply_message : Model, Msg -> Model
+apply_message = |model, msg|
+    match msg {
+        NextLevelReady => { ..model, level: model.level + 1, state: Playing }
+    }
 ----
 
-Inside the task, `Task.sleep!(300)` waits for 300 milliseconds. Only the task
-pauses; the frame loop keeps running, and `update!` and `render!` keep being
-called. When the task returns `Woke`, that value appears in `input.messages`
-on a later cycle, and `apply_message` folds it into the model.
+Here pressing Enter stands in for clearing the level. Reading it from the
+top:
 
-`Task.spawn!` takes the current `input` as its first argument. It is not read:
-it lets the compiler check that the task returns your app's `Msg` type.
+* `Task.spawn!` starts a task. Its second argument is a function with no
+  arguments, written `+|| { ... }+`: the task's body.
+* Inside the body, `Task.sleep!(2000)` waits two thousand milliseconds. Only
+  the task waits; the game keeps running, and `update!` and `render!` keep
+  being called, so the "Well done!" screen stays up and responsive.
+* The body's last value, `NextLevelReady`, is the task's _message_. When the
+  task finishes, the message arrives in `input.messages` on a later cycle.
+* `update!` folds every message that arrived into the model with
+  `List.fold` and `apply_message`, a pure function from the model and one
+  message to the next model. When `NextLevelReady` arrives, the level
+  advances.
+
+`Task.spawn!`'s first argument is the current `input`. The task does not read
+it. It is there so the compiler can check that the task returns your app's
+`Msg` type: the input's type, `App.Input(Msg)`, names that type, and the body
+must return a value of it. Pass the `input` your `update!` received.
 
 {src}/examples/task_sleep/main.roc[Task Sleep] is this pattern as a complete
 app.
@@ -64,23 +88,46 @@ two places:
 Calling one from `update!` or `render!` stops the app with a message naming
 the effect and where it belongs.
 
+== Load a level file
+
 Inside a task, a waiting effect simply returns its answer, so a job with
 several steps is ordinary top-to-bottom code with `?`:
 
 [source,roc]
 ----
-load_level! = |saves| {
-    text = saves.read_text!("level.json")?
+Msg : [LevelLoaded(Try(Level, LoadError))]
+
+Level : List(Str)
+
+LoadError : [ReadFailed(Files.ReadTextError), EmptyLevel]
+
+load_level! : Files.ReadDir, Str => Try(Level, LoadError)
+load_level! = |levels, name| {
+    text = levels.read_text!(name) ? |err| ReadFailed(err)
     parse_level(text)
 }
 
 # In update!:
-Task.spawn!(input, || LevelLoaded(load_level!(saves)))
+levels = model.levels
+Task.spawn!(input, || LevelLoaded(load_level!(levels, "level-2.txt")))
 ----
 
-Here `saves` is a directory handle (see <<files-and-assets>>) and
-`parse_level` is the app's own pure parser. The job does not need to be split
-across several messages.
+Here `model.levels` is a directory handle opened in `init!` (see
+<<files-and-assets>>), and `+parse_level : Str -> Try(Level, LoadError)+` is the
+app's own pure parser. `? |err| ReadFailed(err)` wraps a read error in the
+app's own error type before returning it. The message carries the whole
+result, errors included, so `apply_message` decides what a failed load
+means -- perhaps showing a message rather than crashing.
+
+`read_text!` reads files of up to 64 KiB, which suits level and settings
+files; a larger file answers `TooLarge`. For bigger or binary files, use
+`read_bytes!`, which reads up to 16 MiB into a `List(U8)`.
+
+The task needs `levels` but not the whole model, so `update!` takes it out of
+the model first and the task body _captures_ just that value. A task cannot
+read or change the model itself. Everything it needs, it captures when it is
+created -- a file handle, an HTTP client, a copy of some model value -- and
+everything it has to say, it says in its message.
 
 == Give each kind of work its own message
 
@@ -90,8 +137,9 @@ included:
 [source,roc]
 ----
 Msg : [
-    SmallReadFinished(Try(Str, Files.ReadTextError)),
-    BytesReadFinished(Try(List(U8), Files.ReadBytesError)),
+    NextLevelReady,
+    LevelLoaded(Try(Level, LoadError)),
+    ScoresLoaded(Try(List(U8), Files.ReadBytesError)),
 ]
 ----
 
@@ -102,28 +150,33 @@ twice -- a reply can arrive after a newer one. Put an id or generation counter
 in the message and ignore replies that do not match the latest;
 {src}/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
 
-A task cannot read or change the model. Everything it needs, it captures when
-it is created -- a file handle, an HTTP client, a copy of some model value --
-and everything it has to say, it says in its message.
+== Tasks are for waiting, not for computing
 
-== What the platform guarantees
+A task runs on the same thread as `update!` and `render!`, one piece at a
+time, and only steps aside when it reaches a waiting effect. So a task that
+computes for a long time without waiting -- generating a large map, solving a
+puzzle -- holds up the frame exactly as the same work in `update!` would.
+Tasks let slow input and output overlap with frames; they do not run your code
+in parallel. Split a long computation into pieces spread across cycles
+instead.
 
-* **Each task delivers exactly one message.** A finished task's message is
-  never dropped while the app is running.
-* **Spawning never fails.** Up to 32 tasks run at once. Extra spawns wait in a
-  queue and start in order as slots free up.
-* **Tasks run one at a time, on the same thread as your callbacks.** Your code
-  never needs a lock and never sees a half-updated model.
-* **When the app exits,** running tasks are cancelled, queued ones are dropped,
-  and undelivered messages are released.
+== Not everything needs a task
 
-The cost of that simplicity: a task that computes for a long time without
-waiting holds up the frame, exactly as the same work in `update!` would. Tasks
-let slow I/O overlap with frames; they do not add parallel computation.
+Effects that do not wait are called straight from `update!`. Playing a sound,
+resizing the window, starting a recording, and uploading pixels to a texture
+all happen immediately. So do _queued_ effects, such as printing a line or
+sending a UDP datagram: they hand the bytes to a bounded host queue and return
+at once, reporting a full queue as a result rather than waiting.
 
-`Task.spawn!` is legal in `update!` and in other tasks. It is refused in
-`init!`, which never sees the input a message would arrive on, and in
-`render!`.
+== When the app exits
+
+When the app ends, tasks that are still running are cancelled, and their
+messages never arrive. A task that must finish -- writing a save file, for
+example -- needs the app to wait for its message before exiting. With
+`with_close_request(Deliver)`, closing the window becomes a message to
+`update!` rather than an immediate exit, so the app can start the save and
+exit when the save's message arrives. <<app-model-closing>> shows the whole
+pattern.
 
 == Components with their own messages
 
@@ -142,15 +195,27 @@ Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
 ----
 
 A bare tag name is not a function in Roc, so the wrapper is written as a
-lambda.
+function, `|m| CounterMsg(m)`.
 
-== Not everything needs a task
+== Details: what the platform guarantees
 
-Effects that do not wait are called straight from `update!`. Playing a sound,
-resizing the window, starting a recording, and uploading pixels to a texture
-all happen immediately. So do _queued_ effects, such as printing a line or
-sending a UDP datagram: they hand the bytes to a bounded host queue and return
-at once, reporting a full queue as a result rather than waiting.
+* **Each task delivers exactly one message.** A finished task's message is
+  never dropped while the app is running.
+* **Spawning never fails.** Up to 32 tasks run at once. Extra spawns wait in a
+  queue and start in order as slots free up.
+* **Tasks run one at a time, on the same thread as your callbacks.** Your code
+  never needs a lock and never sees a half-updated model.
+* **When the app exits,** running tasks are cancelled, queued ones are dropped,
+  and undelivered messages are released.
+* **A task starts promptly.** It may run up to its first waiting effect before
+  `Task.spawn!` returns, or just after `update!` returns; either way it has
+  reached its first wait before that cycle's `render!`. Do not rely on the
+  order between a task's first steps and the rest of the `update!` that
+  started it.
+
+`Task.spawn!` is legal in `update!` and in other tasks. It is refused in
+`init!`, which never sees the input a message would arrive on, and in
+`render!`.
 
 == Further reading
 

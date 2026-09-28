@@ -18,24 +18,32 @@ covers both. It assumes <<app-model>>.
 
 `roc test` runs the `expect` blocks in your source, but an `expect` cannot call
 an effectful function such as `update!`. Keep the decisions `update!` makes in
-pure functions, and test those:
+pure functions, and test those. Here `decide` answers whether this input
+should quit the game:
 
 [source,roc]
 ----
 decide : Model, App.Input(Msg) -> [Quit, Continue]
+decide = |_model, input| if input.devices.key_pressed(KeyQ) Quit else Continue
 
-expect
-    input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
+expect {
+    model = { blip: Audio.Sound.stub, quitting: Bool.False }
+    input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyQ))
     decide(model, input) == Quit
+}
 ----
+
+An `expect` with more than one line wraps them in braces, `+expect { ... }+`;
+the last line is the condition that must be true. `update!` then calls
+`decide` and performs what it says.
 
 `App.Input.for_tests({})` is a neutral input: nothing pressed, an ordinary
 focused 800 by 600 window, the clock at its first cycle, no messages, and
-nothing recording. Its `with_*` receivers change one thing each:
+nothing recording. Its `with_*` methods change one thing each:
 
 * `with_devices(snapshot)`: start from `Devices.none` and add keys and mouse
   state with `with_key_down`, `with_key_pressed`, `with_key_released`, and the
-  `with_mouse_*` receivers, typed text with `with_text_input([72, 105])`, and
+  `with_mouse_*` methods, typed text with `with_text_input([72, 105])`, and
   the ordered event record with `with_events`;
 * `with_time(cycle)`, `with_window(snapshot)`, `with_capture(status)`;
 * `with_messages(list)` and `with_message(msg)`, to deliver task results;
@@ -53,16 +61,19 @@ test run may not.
 == Run the app unattended
 
 A built RocRay app accepts a few switches of its own, all beginning with
-`--host-`. The host removes them before the app sees its arguments.
+`+--host-+`. The host removes them before the app sees its arguments. Pass them
+after `+--+` when running through `roc`, as in
+`+roc main.roc -- --host-headless+`.
 
 [source,sh]
 ----
 ./my-app --host-headless --host-headless-frames=120
 ----
 
-`--host-headless` runs without a window, GPU, or audio device: every cycle,
-task, and effect behaves as usual, but nothing is drawn. It is a test of the
-app's behaviour, not of its pixels. `--host-headless-frames=N` stops after N
+`+--host-headless+` runs without a window, GPU, or audio device: every cycle,
+task, and effect behaves as usual, but nothing is drawn, and every cycle
+reports exactly 1/60 of a second as its elapsed time. It is a test of the
+app's behaviour, not of its pixels. `+--host-headless-frames=N+` stops after N
 cycles (note the `=`).
 
 To exercise the real renderer without anyone watching, run a real window
@@ -78,7 +89,7 @@ A hidden window still needs a display server; on Linux without one, run under
 
 === Scripted keys and text
 
-`--host-keys` and `--host-text` script the keyboard on the cycles they name:
+`+--host-keys+` and `+--host-text+` script the keyboard on the cycles they name:
 
 [source,sh]
 ----
@@ -89,14 +100,38 @@ A key is a character, a name such as `LEFT` or `SPACE`, or a raw key code. By
 default a scripted key is held on the cycles listed. A `~` suffix, as in
 `3:ESCAPE~`, taps the key inside that cycle instead: it is pressed and
 released in one input and never held, which is what a quick tap between two
-frames looks like. (`~` is used because it needs no quoting in cmd,
+cycles looks like. (`~` is used because it needs no quoting in cmd,
 PowerShell, bash, or zsh.)
 
-=== Watching tasks
+Scripted keys and text apply to windowed and hidden runs. A headless run
+ignores them; an app can still drive its own input there with
+`Keys.set_source!` (see <<capture>>).
 
-Set `ROC_RAY_TRACE_TASKS` to have the host print a line for each task as it is
-spawned, queued, parked, resumed, finished, and delivered, so a run can check
-scheduling behaviour and not only the final state.
+=== Scripted close requests
+
+`+--host-close=CYCLE+` acts as if the user clicked the window's close button on
+that cycle. It works in headless and hidden runs, so a test can check that an
+app using `with_close_request(Deliver)` saves and exits as it should (see
+<<app-model-closing>>):
+
+[source,sh]
+----
+./my-app --host-headless --host-headless-frames=600 --host-close=30
+----
+
+== Details: watching tasks
+
+Set the environment variable `ROC_RAY_TRACE_TASKS` to have the host print a
+line for each task as it is spawned, queued, parked, resumed, finished, and
+delivered:
+
+[source,sh]
+----
+ROC_RAY_TRACE_TASKS=1 ./my-app --host-headless --host-headless-frames=120
+----
+
+A test script can then check how work was scheduled, and not only the final
+state.
 
 == Further reading
 

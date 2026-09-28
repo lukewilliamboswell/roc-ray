@@ -11,9 +11,12 @@ endif::[]
 = Example gallery
 
 The repository's `examples/` directory holds complete apps and focused
-recipes. Each one is a directory with a `main.roc`. Choose the one closest to
+recipes. This chapter helps you choose which to read. It assumes you have run
+an example, as <<run-an-example>> shows.
+
+Each example is a directory with a `main.roc`. Choose the one closest to
 what you want to build and copy its directory. For the released examples,
-download the starter zip described in <<getting-started>>; the checked-in
+download the examples zip described in <<run-an-example>>; the checked-in
 examples on `main` may use APIs that have not been released yet (see
 <<development-checkout>>).
 
@@ -104,7 +107,7 @@ Then pick a direction:
 [#examples-waiting]
 == Work that waits
 
-Use these when copying the `Task.spawn!(input, || ...)` pattern described in
+Use these when copying the `+Task.spawn!(input, || ...)+` pattern described in
 <<tasks>>. A task's return value arrives as one `Msg` on a later
 `input.messages`.
 
@@ -170,15 +173,15 @@ Use these as focused references, not starter projects.
 * Keep application state in `Model`; fold `App.Input` into it in pure helpers
   that `update!` calls.
 * Load and prepare long-lived resources once in `init!`, then keep them in the
-  model instead of recreating them each frame.
+  model instead of recreating them every host cycle.
 * Derive layout and view-only values with pure helpers. Use `frame.size!()`
   for the surface being drawn to instead of copying `input.window.size` into
   the model.
 * Move by elapsed time, and clamp it: a stall can report a second or more.
 * Call host effects directly from `update!` for work that answers immediately;
-  use `Task.spawn!(input, || ...)` for work that waits, and fold its return
+  use `+Task.spawn!(input, || ...)+` for work that waits, and fold its return
   value in when it arrives as a message on a later `input.messages`.
-* Give each kind of deferred work its own `Msg` variant. Add an id only when
+* Give each kind of work that waits its own `Msg` variant. Add an id only when
   several of the same work may be in flight at once.
 * Keep rules in pure functions so `roc test` can check them without calling
   effectful `update!`.

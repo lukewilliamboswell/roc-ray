@@ -62,7 +62,7 @@ World : {
 	},
 
 	## Simulation randomness lives in the model, so a serve is drawn on the
-	## frame that needs it and a run replays exactly from its seed.
+	## host cycle that needs it and a run replays exactly from its seed.
 	rng : Random.State,
 }
 
@@ -79,7 +79,7 @@ Controls : {
 	new_match_pressed : Bool,
 }
 
-# --- Constants (screen is 800x600; speeds in pixels/second) ---
+# --- Constants (screen is 800x600 logical units; speeds in units/second) ---
 screen_w = 800.F32
 
 screen_h = 600.F32
@@ -98,7 +98,7 @@ ai_speed = 270.F32
 
 init_vx = 260.F32
 
-# vy gained per pixel of offset between ball and paddle centre on a hit
+# vy gained per unit of offset between ball and paddle centre on a hit
 bounce_factor = 6.F32
 
 # First player to this many points wins.
@@ -156,7 +156,7 @@ init! = App.init(
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
-			hint: Text.from("W / S  move    SPACE  new match    ESC  quit", font).size(18).prepare!()?,
+			hint: Text.from("W / S  move    SPACE  new match    ESCAPE  quit", font).size(18).prepare!()?,
 			digits: $digits,
 			win_lines: [
 				Text.from("YOU WIN", font).size(44).prepare!()?,
@@ -268,7 +268,7 @@ render! = |model, frame| {
 # competing with the paddles for attention.
 draw_center_line! : Draw.Frame => {}
 draw_center_line! = |frame| {
-	# `0..<15` is the numbers 0 to 14: one dash every 40 pixels down the court.
+	# `0..<15` is the numbers 0 to 14: one dash every 40 units down the court.
 	for index in 0.U64..<15 {
 		frame.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: 12 + U64.to_f32(index) * 40, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
 	}
@@ -334,7 +334,7 @@ draw_scores! = |frame, assets, world| {
 is_over : World -> Bool
 is_over = |world| world.left.score >= win_score or world.right.score >= win_score
 
-# A random vertical serve speed in px/second, so each serve leaves at a
+# A random vertical serve speed in units/second, so each serve leaves at a
 # different angle instead of the same predictable line.
 # Drawing from the model's own generator rather than an effect keeps the serve
 # immediate: the ball leaves on the cycle that scored, not the one after.
@@ -377,9 +377,9 @@ new_match = |world| {
 	}
 }
 
-# The trail is sampled by distance, not by frame: at 240 frames a second a
-# per-frame trail would sit entirely inside the ball, and at 30 it would be a
-# dashed line. Recording only once the ball has moved `trail_spacing` pixels
+# The trail is sampled by distance, not by cycle: at 240 cycles a second a
+# per-cycle trail would sit entirely inside the ball, and at 30 it would be a
+# dashed line. Recording only once the ball has moved `trail_spacing` units
 # gives the same comet at any frame rate.
 push_trail : List(Math.Vec2), Math.Vec2 -> List(Math.Vec2)
 push_trail = |trail, pos|
@@ -402,7 +402,7 @@ decay_flash = |flash, dt| { ..flash, intensity: F32.max(flash.intensity - dt * f
 
 # --- Active play ---
 ## Play is a function of the sampled input and how much time to advance by, so
-## the caller passes both rather than a whole frame the stepper would only take
+## the caller passes both rather than a whole input the stepper would only take
 ## one field from.
 step_playing : World, Controls, F32 -> (World, List(GameEvent))
 step_playing = |world, controls, dt| {
@@ -465,7 +465,7 @@ step_playing = |world, controls, dt| {
 	scored = out_left or out_right
 	paddled = hit_left or hit_right
 
-	# Presentation, derived from the events this frame already computed: a point
+	# Presentation, derived from the events this cycle already computed: a point
 	# flashes hard in the scorer's colour, a hit gently, and otherwise the
 	# previous flash decays.
 	flash_intensity =
@@ -494,7 +494,7 @@ step_playing = |world, controls, dt| {
 		flash: { intensity: flash_intensity, color: flash_color },
 	}
 
-	# Gameplay events for this frame, in the order the boundary handles them.
+	# Gameplay events for this cycle, in the order the boundary handles them.
 	(
 		next,
 		List.concat(

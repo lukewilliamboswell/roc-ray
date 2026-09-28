@@ -54,10 +54,10 @@ recorded demo exercises the app's ordinary code.
 |`--host-headless-frames=N` |Run headless and stop after N cycles
 |`--host-frames=N` |Stop a real windowed run after N cycles
 |`--host-hidden` |Open the real window hidden; still needs a display server
-|`--host-keys=SCRIPT` |Hold keys on the cycles named, such as `3:S,4:LEFT+X,10:32`; a `~` suffix taps the key within the cycle, such as `3:ESCAPE~`
+|`--host-keys=SCRIPT` |Hold keys on the cycles named, such as `3:S,4:LEFT+X,10:32`; a `~` suffix taps the key within the cycle, such as `3:SPACE~`. A scripted press of the exit key ends the app
 |`--host-text=SCRIPT` |Deliver typed text on the cycles named, such as `2:ab,3:c`
 |`--host-drops=SCRIPT` |Drop files on the window on the cycles named, such as `2:/tmp/a.png,2:/tmp/b.png`; each arrives in `input.dropped`
-|`--host-close=CYCLE` |Request that the window close on that cycle, as clicking its close button does
+|`+--host-close=CYCLE[,CYCLE...]+` |Request that the window close on each cycle named, such as `30` or `30,90`, as clicking its close button does
 |`--host-debug-allocator` |In a Debug build, use Zig's stack-tracing allocator to diagnose leaks
 |`--host-stats-record` |Record an Observatory capture; see <<observatory>>
 |`--host-stats-output=PATH` |Choose the capture's path, and record
@@ -73,7 +73,7 @@ recorded demo exercises the app's ordinary code.
 |===
 |Variable |Effect
 |`ROC_RAY_TRACE_TASKS` |Print a trace line for each task as it is spawned, queued, parked, resumed, finished, and delivered
-|`ROC_RAY_ALLOC_STATS` |Print one line per frame to standard error with the bytes and calls that frame allocated and freed, and how much belonged to `update!`
+|`ROC_RAY_ALLOC_STATS` |Print one line per host cycle to standard error with the bytes and calls that cycle allocated and freed, and how much belonged to `update!`
 |===
 
 == Limits

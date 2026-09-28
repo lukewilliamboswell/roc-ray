@@ -15,6 +15,10 @@ The words this manual uses with a specific meaning, in alphabetical order.
 For Roc's own terms, such as _record_, _tag union_, and _method_, see
 <<roc-primer>>.
 
+[[glossary-asset-store]]Asset store::
+A directory, opened with `Assets.open!`, that an app loads textures, sounds,
+music, fonts, shaders, and maps from by name. See <<files-and-assets>>.
+
 [[glossary-blend-mode]]Blend mode::
 How a new drawing combines with what is already on the screen. Normal
 drawing covers what is below it, in proportion to its transparency; additive
@@ -25,6 +29,13 @@ for a group of drawing calls with `frame.with_blend_mode!`. See <<drawing>>.
 The single file a RocRay release publishes the platform as, downloaded by URL
 from an app's header. A release publishes a default bundle for every supported
 system and a Wayland bundle for Linux. See <<install>>.
+
+[[glossary-close-request]]Close request::
+The user asking the window to close, with its close button or the system's
+quit command. By default the app ends at once. With
+`with_close_request(Deliver)`, the request reaches `update!` as
+`input.window.close_requested`, and the app decides when to end. See
+<<app-model-closing>>.
 
 [[glossary-declaration]]Declaration, permission::
 A `Permission` value an app adds to its startup settings to reach something
@@ -43,10 +54,16 @@ A call from your app into the host that does something: draws, plays a sound,
 changes the window, reads a file. Effects are effectful functions, whose names
 end in `!`. Each one is legal only in certain phases.
 
+[[glossary-exit-key]]Exit key::
+The key that ends the app at once, before `update!` sees the press: Escape,
+unless the app chooses another or none with `with_exit_key`. It is not a close
+request. See <<app-model-closing>>.
+
 [[glossary-frame]]Frame::
 One picture drawn by `render!` and shown on the screen. Also the `Draw.Frame`
 value `render!` receives, through which all drawing happens. Normally each
-host cycle draws one frame. "Frames per second" counts these.
+host cycle draws one frame. "Frames per second" counts these. <<architecture>>
+calls it a _presentation frame_.
 
 [[glossary-framebuffer]]Framebuffer::
 The grid of pixels the window's picture is drawn into. On a high-DPI display
@@ -54,10 +71,15 @@ it has more pixels than the window has logical units.
 
 [[glossary-handle]]Handle::
 A value that stands for something the host holds for your app, such as a
-texture, a sound, a font, or a directory. Only the platform can create one,
+texture, a sound, a font, or a directory. Only the host can create one,
 so holding a handle is what grants access to its resource. Keep handles in the
 model; the host releases a resource when the last handle to it goes away. See
 <<files-and-assets>>.
+
+[[glossary-headless]]Headless run::
+A run started with `+--host-headless+`: no window, graphics, or sound, and
+exactly 1/60 of a second per host cycle. `init!`, `update!`, and tasks run as
+usual, but nothing is drawn. See <<testing>>.
 
 [[glossary-host]]Host::
 The native program, inside the bundle, that runs your app. It opens the
@@ -75,12 +97,18 @@ The `App.Input` value `update!` receives: everything the host observed for one
 host cycle, including the keyboard and mouse, the window's size, the elapsed
 time, and the messages of tasks that finished. See <<input>>.
 
+[[glossary-interval-event]]Interval event, state sample::
+The two kinds of fact in an `App.Input`. A _state sample_ is the latest value
+when the host cycle began, such as whether a key is held. An _interval event_
+is something that happened since the previous input, such as a key press. See
+<<input>>.
+
 [[glossary-logical-units]]Logical units, high DPI::
 Positions and sizes in RocRay are in logical units, which match mouse
 coordinates and are the same on every display. A high-DPI display, such as a
 Retina screen, packs more pixels into each logical unit, so a window 800 units
 wide can have a framebuffer 1600 pixels wide. `Window.scale!()` reports the
-ratio. See <<input>>.
+ratio on each axis. See <<input-window>>.
 
 [[glossary-message]]Message::
 The value a task returns when it finishes. It arrives in a later host cycle,
@@ -103,6 +131,11 @@ The part of a Roc program that you do not write, which supplies everything
 that touches the outside world. RocRay is a platform; your app is the Roc code
 that runs on it.
 
+[[glossary-queued-effect]]Queued effect::
+An effect that hands its bytes to a bounded host queue and returns at once,
+such as printing a line or sending a UDP datagram. It reports a full queue as
+a result instead of waiting. See <<tasks>>.
+
 [[glossary-render-texture]]Render texture::
 A texture you can draw into, instead of the window. Draw a scene into one,
 then draw the result on screen, scaled, tinted, or through a shader. See
@@ -116,7 +149,7 @@ pixel, used for effects such as blur or colour grading. See <<drawing>>.
 One advance of your game's world by a fixed amount of time, run as many times
 as your `update!` chooses. A game that needs exact, repeatable results runs
 fixed simulation steps inside each host cycle rather than one variable-length
-step. It is your app's idea, not something the platform calls.
+step. It is your app's idea, not something the host calls.
 
 [[glossary-task]]Task::
 Work that may have to wait, such as reading a file or fetching a web page,

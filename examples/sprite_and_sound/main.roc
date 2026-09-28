@@ -69,8 +69,8 @@ step_hop : F32, Bool, F32 -> F32
 step_hop = |hop, space_pressed, dt|
 	if space_pressed 1 else F32.max(hop - dt / hop_seconds, 0)
 
-## How high the blob is above its resting place, in pixels, at a point in its
-## hop: up and back down along half a sine wave.
+## How high the blob is above its resting place, in logical units, at a point
+## in its hop: up and back down along half a sine wave.
 hop_height : F32 -> F32
 hop_height = |hop| 120 * F32.sin(hop * F32.pi)
 
@@ -114,7 +114,7 @@ render! = |model, frame| {
 		tint: Color.white,
 	})
 
-	frame.text_at!({ pos: { x: 24, y: 24 }, text: "SPACE  hop and play boing.wav      ESC  quit", size: 20, color: Color.from_hex_rgb(0xa8b4cc) })
+	frame.text_at!({ pos: { x: 24, y: 24 }, text: "Space  hop and play boing.wav      Escape  quit", size: 20, color: Color.from_hex_rgb(0xa8b4cc) })
 	Ok({})
 }
 

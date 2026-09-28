@@ -117,7 +117,7 @@ Here `model.levels` is a directory handle opened in `init!` (see
 app's own pure parser. `? |err| ReadFailed(err)` wraps a read error in the
 app's own error type before returning it. The message carries the whole
 result, errors included, so `apply_message` decides what a failed load
-means -- perhaps showing a message rather than crashing.
+means, such as showing a message rather than stopping the app.
 
 `read_text!` reads files of up to 64 KiB, which suits level and settings
 files; a larger file answers `TooLarge`. For bigger or binary files, use

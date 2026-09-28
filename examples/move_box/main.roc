@@ -1,9 +1,9 @@
 ## Move a box around the window with the arrow keys. Escape quits.
 ##
 ## This example sits between `hello_world` and `pong`, and adds one idea: move
-## things by *speed times time*. `update!` is told how many seconds passed since
-## the previous cycle, so the box covers the same distance each second however
-## fast or slow the computer draws. The rules live in pure functions that the
+## things by *speed times time*. `update!` is told how many seconds passed
+## since the previous host cycle, so the box covers the same distance each
+## second however fast or slow the computer draws. The rules live in pure functions that the
 ## `expect`s at the bottom test without opening a window.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
@@ -13,14 +13,14 @@ import rr.Devices
 import rr.Draw
 import rr.Math
 
-## Everything the app remembers between cycles: where the box's top-left
-## corner is, in pixels from the top-left of the window.
+## Everything the app remembers between host cycles: where the box's top-left
+## corner is, in logical units from the top-left of the window.
 Model : { box : Math.Vec2 }
 
-## The box is a square this many pixels wide.
+## The box is a square this many logical units wide.
 box_size = 60.F32
 
-## How far the box moves in one second while a key is held, in pixels.
+## How far the box moves in one second while a key is held, in logical units.
 speed = 300.F32
 
 program = { init!, update!, render! }
@@ -72,7 +72,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101828))
 	frame.rectangle!({ x: model.box.x, y: model.box.y, width: box_size, height: box_size, style: Draw.filled(Color.from_hex_rgb(0x2f80ed)) })
-	frame.text_at!({ pos: { x: 20, y: 20 }, text: "Arrow keys move the box  -  ESC quits", size: 20, color: Color.from_hex_rgb(0xa8b4cc) })
+	frame.text_at!({ pos: { x: 20, y: 20 }, text: "Arrow keys move the box  -  Escape quits", size: 20, color: Color.from_hex_rgb(0xa8b4cc) })
 	Ok({})
 }
 

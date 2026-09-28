@@ -39,7 +39,7 @@ directory, as `step1.roc` to `step6.roc`. Their headers point at the
 repository's own copy of the platform rather than at a release.
 
 [#first-game-step1]
-== Step 1: A paddle that moves
+== Step 1: a paddle that moves
 
 [source,roc]
 ----
@@ -53,7 +53,7 @@ Positions are in the window's _logical units_. The default window is 800 units
 wide and 600 tall. `x` grows to the right and `y` grows downward, so `(0, 0)`
 is the top-left corner and `paddle_y = 560` is near the bottom.
 
-The platform calls `update!` once per _host cycle_, typically 60 or more times
+The host calls `update!` once per _host cycle_, typically 60 or more times
 a second. Each call reads the arrow keys: `input.devices.key_down(KeyLeft)` is
 true while the left arrow key is held. `direction` becomes `-1`, `1`, or `0`.
 
@@ -68,7 +68,7 @@ Run it and hold an arrow key. The paddle moves, and it keeps going straight
 off the edge of the window. Step 2 fixes that.
 
 [#first-game-step2]
-== Step 2: Keep it on the screen
+== Step 2: keep it on the screen
 
 [source,roc]
 ----
@@ -88,11 +88,11 @@ is a small fraction of a second, but when the computer stalls, or you drag the
 window, one cycle can report half a second or more. A game that moves by that
 much in one go makes things jump: a fast ball can pass straight through the
 paddle without ever touching it. With the clamp, the game slows down briefly
-instead. <<input>> shows a fixed-step alternative for games that must advance
-exactly the same way every time.
+instead. <<input-frame-timing>> shows a fixed-step alternative for games that
+must advance exactly the same way every time.
 
 [#first-game-step3]
-== Step 3: A ball that bounces
+== Step 3: a ball that bounces
 
 [source,roc]
 ----
@@ -118,7 +118,7 @@ Nothing stops the ball at the bottom yet. When it falls below the window,
 covers earlier drawing, so draw from back to front.
 
 [#first-game-step4]
-== Step 4: Hit the ball and keep score
+== Step 4: hit the ball and keep score
 
 [source,roc]
 ----
@@ -143,7 +143,7 @@ of `_event` tells the compiler that on purpose.
 with `+${...}+`, and `model.score.to_str()` turns the score into text.
 
 [#first-game-step5]
-== Step 5: Add sound
+== Step 5: add sound
 
 [source,roc]
 ----
@@ -166,7 +166,7 @@ at once, like this one. An effect that has to wait, such as reading a file,
 belongs in a _task_ instead; <<tasks>> explains why.
 
 [#first-game-step6]
-== Step 6: Lives, game over, and tests
+== Step 6: lives, game over, and tests
 
 [source,roc]
 ----
@@ -215,8 +215,8 @@ covers headless runs and scripted key presses.
 
 Some ideas for changing Paddle:
 
-* Make the ball start in a random direction. <<input>> shows how to use
-  randomness.
+* Make the ball start in a random direction. <<input-randomness>> shows how
+  to use randomness.
 * Add a row of bricks for the ball to break. The
   {src}/examples/breakout/main.roc[Breakout] example does this.
 * Draw the paddle with rounded corners using `frame.rounded_rectangle!`. See

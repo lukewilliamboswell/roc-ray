@@ -37,7 +37,7 @@ Game := [].{
 		}
 }
 
-## Applies a requested legal turn before the next fixed movement step.
+## Applies a requested legal turn before the next simulation step.
 apply_controls : Game.World, Game.Controls -> Game.World
 apply_controls = |world, controls|
 	match controls.requested_direction {
@@ -64,7 +64,7 @@ step_snake = |world| {
 	}
 }
 
-## Runs every fixed snake step currently paid for by the accumulator.
+## Runs every fixed simulation step currently paid for by the accumulator.
 advance_fixed_steps : Game.World, List(Game.Event) -> (Game.World, List(Game.Event))
 advance_fixed_steps = |world, events| {
 	if world.accumulator < step_time {

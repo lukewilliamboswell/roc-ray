@@ -11,7 +11,7 @@ endif::[]
 = Input, time, and the window
 
 Each host cycle, `update!` receives an `App.Input` describing what the
-platform observed since the previous cycle. This chapter covers the keyboard,
+host observed since the previous cycle. This chapter covers the keyboard,
 mouse, gamepads, typed text, time, the window, and dropped files. It assumes
 <<app-model>>.
 
@@ -51,11 +51,11 @@ answer. When the count or the order matters -- a double tap, text editing where
 a keystroke lands between two characters -- read `devices.events` instead
 (see <<input-events>>).
 
-By default, Escape closes the window and ends the app, so you do not need to
-check for it yourself. An app that wants Escape for something else, such as a
-pause menu, turns that off with `App.default.with_exit_key(NoExitKey)`. The
-window's close button still ends the app; see <<input-window>> to handle it
-yourself.
+By default, Escape is the _exit key_: it ends the app before `update!` sees
+the press, so you do not check for it yourself. An app that wants Escape for
+something else, such as a pause menu, turns that off with
+`App.default.with_exit_key(NoExitKey)`. The window's close button still ends
+the app; <<app-model-closing>> shows how to handle it yourself.
 
 === Typed text
 
@@ -86,7 +86,7 @@ legal in `init!`, `update!`, and tasks.
 
 == Gamepads
 
-The platform samples up to four gamepads once per cycle. They are named
+The host samples up to four gamepads once per cycle. They are named
 `One`, `Two`, `Three`, and `Four`, following the operating system's numbering;
 a single controller is almost always `One`. Ask the snapshot for one; it
 answers `Connected(pad)` with a view you can query, or `Disconnected`:
@@ -103,7 +103,7 @@ Buttons use layout-neutral names -- `FaceDown` is the bottom face button,
 whatever its label says -- so `pad.button_pressed(FaceDown)` is "jump" on
 any controller.
 
-Gamepad buttons are state samples only. The platform compares this cycle's
+Gamepad buttons are state samples only. The host compares this cycle's
 sample with the previous one to answer `button_pressed` and
 `button_released`, so a press _and_ release that both happen between two
 samples is not seen. At 60 cycles a second, that is a tap shorter than about
@@ -171,21 +171,23 @@ position = model.position.add(model.velocity.scale(dt))
 naming a save file. It does not wait, and it is legal in `init!`, `update!`,
 and tasks. Use `input.time`, not the wall clock, for animation and movement.
 
-=== Frame timing
+[#input-frame-timing]
+=== Uneven cycle times
 
 `elapsed_seconds` is the real time between two cycles, and it varies. A
 cycle is usually a few milliseconds, but the operating system decides: while
 the user drags the window, or while you pause the app in a debugger, no
 cycles run, and the next cycle reports everything that passed -- possibly
-several seconds. The platform reports that value as it is, without limiting
+several seconds. The host reports that value as it is, without limiting
 it, so a naive `position + velocity * dt` can jump a player through a wall.
 
 The simplest protection is to clamp the elapsed time before you use it, so
-one cycle never advances the game by more than a tenth of a second:
+one cycle never advances the game by more than a limit you choose. Paddle in
+<<first-game>> uses a twentieth of a second, and most examples use a quarter:
 
 [source,roc]
 ----
-dt = Math.clamp(input.time.elapsed_seconds, 0, 0.1)
+dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 ----
 
 Physics and collision work best with a _fixed step_: the game always advances
@@ -210,7 +212,7 @@ run_steps = |world, banked| {
 }
 
 # In update!:
-dt = Math.clamp(input.time.elapsed_seconds, 0, 0.1)
+dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 (world, accumulator) = run_steps(model.world, model.accumulator + dt)
 Ok({ ..model, world: world, accumulator: accumulator })
 ----
@@ -271,8 +273,8 @@ before mixing it with positions, for example `I32.to_f32(column.value) * 60`.
 The size is in _logical units_: the same units as mouse coordinates and
 drawing. On a high-DPI display, such as a Retina screen, the window has more
 physical pixels than logical units, so that things are not drawn tiny.
-`Window.scale!()` returns the factor between the two, for example 2. Most apps
-never need it.
+`Window.scale!()` returns the factor between the two on each axis, for example
+`{ x: 2, y: 2 }`. Most apps never need it.
 
 Window effects are legal in `init!`, `update!`, and tasks:
 
@@ -308,7 +310,7 @@ Whatever the pacing, read `elapsed_seconds` rather than assuming a rate.
 
 When the user drops files on the window, `input.dropped` lists them for that
 cycle, each with its path and the pointer position where it landed, and
-`input.dropped_overflow` is set if more arrived than the platform keeps.
+`input.dropped_overflow` is set if more arrived than the host keeps.
 
 A dropped path is an observation, not access. To read the file, turn the path
 into a handle in the same `update!` that received it; see

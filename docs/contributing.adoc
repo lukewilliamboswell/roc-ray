@@ -400,6 +400,10 @@ every pull request and uploads the result.
 Write each chapter for one audience, and introduce a concept before relying on
 it. The getting-started chapters assume nothing beyond an installed compiler;
 guides may assume <<app-model>>; contributor chapters may assume everything.
+Open each chapter by saying what it covers and what it assumes. Use the terms
+in <<glossary>> with the meanings given there, write headings in sentence
+case, and start the heading of a reference section a first reading can skip
+with `Details:`.
 Link to the source with the `+{src}+` and `+{tree}+` attributes, to the API
 reference with `+{api}+`, and between chapters with `+<<id>>+` cross references to
 the explicit ids on each chapter. Use `[source,roc]` blocks for Roc, which the

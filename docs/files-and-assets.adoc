@@ -166,32 +166,34 @@ There is no file-picker dialog.
 
 Textures, sounds, music, fonts, shaders, and maps are loaded from an _asset
 store_: a directory opened from a `ReadDir`. The store reaches exactly what
-that handle reaches, so an `assets` directory beside the executable needs no
-declaration, and any other directory needs one:
+that handle reaches. Where the handle comes from depends on how the app runs:
 
+* While you develop, you run the app with `roc` from its source directory.
+  Declare the `assets` directory and open it by path, as
+  <<drawing-first-sprite>> shows:
++
 [source,roc]
 ----
-init! = App.init(
-    App.default,
-    |io| {
-        exe_dir = io.files().beside_executable!()?
-        store = Assets.open!(exe_dir.subdir("assets")?, IgnoreManifest)?
-        Ok({ logo: Assets.load_texture!(store, "logo.png")?, store })
-    },
-)
-----
-
-While you develop, you run the app with `roc`, which builds the executable
-somewhere else, so the assets are not beside it. Declare the source directory
-and open it by path instead. The repository's examples do this:
-
-[source,roc]
-----
-App.default.with_permission(Directory("examples/top_down/assets", ReadOnly))
+App.default.with_permission(Directory("assets", ReadOnly))
 
 # In init!:
-store = Assets.open!(io.files().open_dir_read!("examples/top_down/assets")?, IgnoreManifest)?
+store = Assets.open!(io.files().open_dir_read!("assets")?, IgnoreManifest)?
 ----
+* Once you package the game, its `assets` directory sits beside the
+  executable, which needs no declaration:
++
+[source,roc]
+----
+exe_dir = io.files().beside_executable!()?
+store = Assets.open!(exe_dir.subdir("assets")?, IgnoreManifest)?
+----
+
+`roc main.roc` builds the executable in the compiler's cache, so nothing is
+beside it during development. <<shipping>> shows one `init!` that uses the
+source directory while you develop and the directory beside the executable
+once the game is packaged. The repository's examples run from the repository
+root, so they declare their own directory, such as
+`Directory("examples/top_down/assets", ReadOnly)`.
 
 Load from a store with:
 
@@ -205,9 +207,6 @@ Load from a store with:
 |`Draw.load_store_font!(store, font)` |A font
 |`Draw.Shader.from_store!(store, shader)` |A shader
 |===
-
-<<shipping>> shows one `init!` that uses the source directory while you
-develop and the directory beside the executable once the game is packaged.
 
 Opening a store and loading from it wait, so they belong in `init!` or a
 task. Load long-lived resources once in `init!` and keep them in the model. To
@@ -227,7 +226,7 @@ to it, which frees its place for another. <<reference>> lists every limit.
 `IgnoreManifest` to open a directory of loose files, which is what almost
 every app wants.
 
-=== Advanced: asset manifests
+=== Details: asset manifests
 
 `RequireManifest(expectation)` fails the open unless a `roc-assets.manifest`
 file in the store declares the expected asset set, schema version, content

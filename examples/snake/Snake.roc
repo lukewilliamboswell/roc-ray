@@ -24,7 +24,7 @@ Snake := { cells : List(Board.Cell), direction : Direction, pending_direction : 
 		{ ..snake, pending_direction }
 	}
 
-	## Computes the cell the snake will enter on its next fixed step.
+	## Computes the cell the snake will enter on its next simulation step.
 	next_head : Snake -> Board.Cell
 	next_head = |snake| {
 		move = direction_delta(snake.pending_direction)

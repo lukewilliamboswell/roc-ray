@@ -68,11 +68,11 @@ play_event! = |assets, event|
 Msg : []
 
 ## Advances pure rules and plays their events. Escape needs no code here:
-## `App.default` closes the window when it is pressed.
+## `App.default` ends the app when it is pressed.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	controls = read_controls(input.devices)
-	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# Seconds since the previous host cycle, clamped so a stall (dragging the
 	# window, a breakpoint) cannot move the snake many cells in one jump.
 	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 	(world, events) = Game.update(model.world, controls, dt)

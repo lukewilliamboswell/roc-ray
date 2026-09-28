@@ -11,7 +11,7 @@ endif::[]
 [#app-model]
 = The app model: init!, update!, and render!
 
-Every RocRay app has the same shape: three functions that the platform calls
+Every RocRay app has the same shape: three functions that the host calls
 at the right moments. This chapter explains what each one receives, what it
 may do, and what it returns. Every later guide builds on it.
 
@@ -24,7 +24,7 @@ clicks. The rest of this chapter takes it apart.
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "..." }
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
 
 import rr.App
 import rr.Color
@@ -68,10 +68,10 @@ render! = |model, frame| {
 }
 ----
 
-Replace `+"..."+` with the platform URL from <<getting-started>>. Press Escape
-or close the window to quit.
+Replace `BUNDLE-URL` and `COMPILER` as <<smallest-app>> describes. Press
+Escape or close the window to quit.
 
-The app's header, `app [Model, program]`, exposes two things to the platform:
+The app's header, `app [Model, program]`, hands two things to the platform:
 the type of its state, `Model`, and `program`, a
 {langref}/records.md[record] of its three callbacks. `Msg` is the type of
 the messages its background work sends back; this app starts none, so it is
@@ -84,9 +84,9 @@ beyond computing a value, such as drawing or opening a window. Its type uses
 
 == The loop
 
-The platform calls the three callbacks in a loop:
+The host calls the three callbacks in a loop:
 
-.The order in which the platform calls an app
+.The order in which the host calls an app
 [mermaid,alt="Flowchart: init! builds the first model, then update! and render! alternate; update! returning Err(Exit(code)) ends the app."]
 ....
 flowchart LR
@@ -97,7 +97,7 @@ flowchart LR
 ....
 
 `init!` runs once. After that, each time around the loop is one _host cycle_:
-the platform gathers everything that happened since the previous cycle into
+the host gathers everything that happened since the previous cycle into
 one _input_, calls `update!` exactly once with it, and then normally calls
 `render!` with the model `update!` returned. Each call to `render!` produces
 one _frame_: one image in the window. A headless or minimized run may skip
@@ -118,8 +118,8 @@ Model : {
 }
 ----
 
-Only `update!` produces a new model, and nothing else in the platform reads or
-changes it. Keep long-lived resources you create in `init!` -- textures,
+Only `update!` produces a new model. The host keeps the model between calls,
+but never reads or changes it. Keep long-lived resources you create in `init!` -- textures,
 fonts, sounds, prepared text, file handles -- in the model rather than
 creating them again every cycle.
 
@@ -155,7 +155,7 @@ naming `init!` and the error.
 === The startup configuration
 
 `App.default` is an 800 by 600 window titled "RocRay", capped at 240 frames per
-second, that closes when Escape is pressed. Change it with its `with_*`
+second, that quits when Escape is pressed. Change it with its `with_*`
 methods. A _method_ is a function called with a dot on a value, like
 `App.default.with_title("Clicker")`; see
 {langref}/static-dispatch.md[Static dispatch].
@@ -169,7 +169,7 @@ methods. A _method_ is a function called with a dot on a value, like
 |`with_resizable(bool)`, `with_fullscreen(bool)` |Window behaviour
 |`with_visible(bool)` |Whether the window is shown; a hidden window still renders, which is useful for recording to a file
 |`with_frame_pacing(pacing)` |How often cycles run: `VSync`, `Capped(fps)`, or `Uncapped`; see <<input-frame-pacing>>
-|`with_exit_key(key)` |The key that closes the window: `ExitKey(key)`, or `NoExitKey` for none
+|`with_exit_key(key)` |The key that ends the app at once: `ExitKey(key)`, or `NoExitKey` for none (see <<app-model-closing>>)
 |`with_close_request(mode)` |What closing the window does: `Exit` ends the app (the default); `Deliver` reports the request to `update!` instead (see <<app-model-closing>>)
 |`with_cursor_mode(mode)` |The initial cursor mode
 |`with_default_font({ path, size })` |A font file loaded once at startup for the whole app. Reading it needs a file declaration covering the path, such as `Directory("assets", ReadOnly)`; see <<permissions>>
@@ -228,7 +228,7 @@ that `init!` had. It returns `Ok` with the next model, or `Err(Exit(code))` to
 stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
 `model` with some fields replaced; see {langref}/records.md[Records].
 
-`App.Input` is everything the platform observed for this cycle:
+`App.Input` is everything the host observed for this cycle:
 
 [cols="1,3",options="header"]
 |===
@@ -291,10 +291,10 @@ read into a task. <<phases>> lists the rule for every kind of effect.
 An app ends when `update!` returns `Err(Exit(code))`. The user can also end
 it:
 
-* Pressing the exit key closes the window. `App.default` uses Escape; change
-  it with `with_exit_key(ExitKey(key))`, or turn it off with
-  `with_exit_key(NoExitKey)` when the app needs Escape for itself, such as to
-  open a pause menu.
+* Pressing the _exit key_ ends the app at once, before `update!` sees the
+  press. `App.default` uses Escape; change it with `with_exit_key(ExitKey(key))`,
+  or turn it off with `with_exit_key(NoExitKey)` when the app needs Escape for
+  itself, such as to open a pause menu.
 * Clicking the window's close button closes the window. By default the app
   ends at once, and `update!` never sees it happen.
 
@@ -328,8 +328,14 @@ update! = |model, input, _io| {
 Here `model.saves` is a writable directory handle opened in `init!` (see
 <<files-and-assets>>), and `encode_save` is the app's own pure function that
 turns the model into text. <<tasks>> explains `Task.spawn!`. An app that must
-not lose a save could show an error and keep running on `Saved(Err(_))`
+not lose a save can show an error and keep running on `Saved(Err(_))`
 instead of exiting.
+
+The exit key is not a close request. It ends the app directly, with or
+without `Deliver`, and so does a press of it scripted in a test (see
+<<testing>>). With `App.default`, Escape still quits without saving. An app
+that must save on every way out also sets `with_exit_key(NoExitKey)` and
+handles the key it wants in `update!`.
 
 When the app exits, tasks still running are cancelled. That is why the save
 waits for its message before exiting, rather than exiting straight away.
@@ -414,7 +420,7 @@ game can start, for example -- do it in `init!`, which is allowed to wait.
 
 This section is a reference; the one-line rule above covers most apps.
 
-The platform always knows which callback it is inside -- `init!`, `update!`,
+The host always knows which callback it is inside -- `init!`, `update!`,
 `render!`, or a task -- and calls this the _phase_. Every effect states the
 phases it is legal in, in its API documentation, using one of a few rules:
 

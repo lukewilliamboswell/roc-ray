@@ -1,8 +1,8 @@
-## Watch a comet keep moving while a 1.2-second Task waits. When the task
-## finishes, the window shows which cycle its message arrived on and stays open
-## until you press Escape. This example introduces Tasks as work that may wait
-## without pausing drawing, and Messages as the values completed tasks deliver
-## to a later Input.
+## Watch a comet keep moving while a 1.2-second task waits. When the task
+## finishes, the window shows which host cycle its message arrived on and stays
+## open until you press Escape. This example introduces tasks, work that may
+## wait without pausing drawing, and messages, the values finished tasks
+## deliver in a later `Input`.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
@@ -12,9 +12,9 @@ import rr.Draw
 import rr.Text
 import rr.Trace
 
-## State retained between updates: whether the Task is still waiting, the
-## current cycle and animation time, and prepared text. The Model records the
-## cycle the Task's Message arrived on, so `render!` can show it.
+## State kept between host cycles: whether the task is still waiting, the
+## current cycle and animation time, and prepared text. The model records the
+## cycle the task's message arrived on, so `render!` can show it.
 Model : {
 	state : State,
 	cycle : U64,
@@ -43,7 +43,7 @@ init! = App.init(
 			cycle: 0,
 			elapsed: 0,
 			title: Text.from("Sleeping on a task while the frame keeps moving", font).size(22).prepare!()?,
-			hint: Text.from("ESC quits", font).size(14).prepare!()?,
+			hint: Text.from("Escape quits", font).size(14).prepare!()?,
 		})
 	},
 )

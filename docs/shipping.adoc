@@ -37,9 +37,9 @@ to install and no library to ship beside it. It uses only what every desktop
 system already has:
 
 * the system's C library;
-* on Linux, X11 (or the Wayland libraries, with the Wayland bundle), the
-  OpenGL driver, and PulseAudio or ALSA for sound, all loaded when the app
-  starts;
+* on Linux, the X11 client libraries (or the Wayland libraries, with the
+  Wayland bundle), an OpenGL 3.3 driver, and PulseAudio, PipeWire, or ALSA
+  for sound, all loaded when the app starts (see <<system-requirements>>);
 * on macOS and Windows, the system's own graphics and audio frameworks.
 
 == Where the assets go
@@ -62,7 +62,7 @@ directory, and a desktop shortcut all find the same `assets`.
 While you develop, the assets are in your source directory, and `roc main.roc`
 builds the executable in the compiler's cache, so there is nothing beside it.
 There the app opens the source directory by path instead, which needs a
-`Directory` declaration (see <<permissions>>).
+`Directory("assets", ReadOnly)` declaration, as in <<drawing-first-sprite>>.
 
 === One `init!` for both
 
@@ -73,7 +73,7 @@ declares nothing it does not use:
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "<platform bundle URL from the release>" }
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
 
 import rr.App
 import rr.Assets

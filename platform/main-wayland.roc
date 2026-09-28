@@ -6,9 +6,11 @@
 ## authority and folds one `App.Input` into the next model;
 ## `render!` may then draw that model through a `Draw.Frame`.
 ##
-## Select external services with receivers such as `io.files()` and `io.http()`.
-## External effects return `PermissionDenied` unless the launcher grants
-## `--host-caps-allow-all`. Phase rules and resource bounds still apply.
+## Select services with methods such as `io.files()` and `io.http()`. Reach
+## beyond the app's own resources -- network origins, directories, programs,
+## environment variables, the clipboard -- is declared in the startup config
+## with `Permission`, and the declaration is the grant. Phase rules and
+## resource bounds still apply.
 ##
 ## Host-state effects are legal in `init!`, `update!`, and tasks. Drawing is
 ## legal only in `render!`. Waiting effects are legal in `init!`, where they
@@ -18,7 +20,8 @@
 ## Start with `App`, then use `Draw`, `Devices`, `Assets`, `Audio`, and `Task`
 ## as needed. Complete examples are available in the repository.
 ##
-## This app opens a window, draws a circle, and exits on Escape:
+## This app opens a window and draws a circle. `App.default` ends it when
+## Escape is pressed, so it needs no quit logic of its own:
 ##
 ## ```roc
 ## app [Model, program] { rr: platform "../../platform/main.roc" }
@@ -36,15 +39,10 @@
 ## init! : App.Init(Model, [])
 ## init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
 ##
-## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64), ..])
-## update! = |model, input, _io|
-##     if input.devices.key_pressed(KeyEscape) {
-##         Err(Exit(0))
-##     } else {
-##         Ok({ frames: model.frames + 1 })
-##     }
+## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+## update! = |model, _input, _io| Ok({ frames: model.frames + 1 })
 ##
-## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+## render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 ## render! = |_model, frame| {
 ##     frame.clear!(Color.black)
 ##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
@@ -63,7 +61,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace]
+	exposes [Font, Texture, App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd, Trace, Permission]
 	packages {
 		roc: "nightly-2026-09-27-a3ce7f1",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -141,6 +139,9 @@ platform ""
 		"roc_draw_text_raw": Host.draw_text!,
 		"roc_draw_triangle_lines_raw": Host.draw_triangle_lines!,
 		"roc_draw_triangle_raw": Host.draw_triangle!,
+		"roc_app_report_error": Host.app_report_error!,
+		"roc_files_open_root": Host.files_open_root!,
+		"roc_files_designate": Host.files_designate!,
 		"roc_files_read_text": Host.files_read_text!,
 		"roc_files_read_bytes": Host.files_read_bytes!,
 		"roc_files_list": Host.files_list!,
@@ -218,7 +219,7 @@ platform ""
 	}
 	targets: {
 		inputs_dir: "targets/",
-		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, "libc.so", "crtn.o"] },
+		x64v1glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, "libc.so", "crtn.o"] },
 	}
 
 import Draw
@@ -255,6 +256,7 @@ import Stdout
 import Stderr
 import Sqlite
 import Cmd
+import Permission
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the
@@ -351,7 +353,7 @@ init_for_host! = |authority|
 	match (program.init!.run!)(App.Io.for_host(authority)) {
 		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("init!", Str.inspect(other))
 	}
 
 ## Advance the model by one cycle.
@@ -376,7 +378,7 @@ update_for_host! = |boxed_model, { devices, window, time, task_results, capture,
 	match (program.update!)(model, input, App.Io.for_host(authority)) {
 		Ok(next) => Ok(Box.box(next))
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("update!", Str.inspect(other))
 	}
 }
 
@@ -425,8 +427,18 @@ render_for_host! = |boxed_model| {
 	match (program.render!)(model, frame) {
 		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
+		Err(other) => stopped!("render!", Str.inspect(other))
 	}
+}
+
+## Stop the app over an error a callback returned, other than `Exit`, saying
+## which callback and what the error was. Without this an app whose `init!`
+## fails -- a store that would not open, a missing file -- closed with no word
+## about why.
+stopped! : Str, Str => Try(a, I64)
+stopped! = |callback, error| {
+	Host.app_report_error!(callback, error)
+	Err(-1)
 }
 
 ## Drop the final boxed model at host shutdown.

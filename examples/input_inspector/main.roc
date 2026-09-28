@@ -1,12 +1,12 @@
 ## Display live keyboard, mouse, gamepad, text, window, and capture input.
 ##
-## The window lists its controls; Q quits because Escape is displayed as an
-## ordinary key. This example shows how each `Input` gives `update!` the latest
-## device state and the ordered record of what the devices did, and how
-## `update!` can change the clipboard, cursor, and window or read a pixel from
-## the previous drawing. Every cycle with events prints them to stdout in
-## delivery order, which is what the windowed sweep asserts on.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+## The window lists its controls. Q quits, because this app shows Escape as an
+## ordinary key instead of letting it close the window. This example shows how
+## each `Input` gives `update!` the latest device state and the ordered record
+## of what the devices did, and how `update!` can change the clipboard, cursor,
+## and window or read a pixel from the previous drawing. Every cycle with
+## events also prints them to the terminal, in the order they happened.
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.Draw
 import rr.Text
@@ -15,30 +15,28 @@ import rr.Devices
 import rr.Window
 import rr.Keys
 import rr.Mouse
-import rr.Gamepad
 import rr.App
 import rr.Capture
-import rr.Stdout
 
 ## State kept between updates: accumulated typed text, clipboard feedback, the
 ## latest device snapshot, and the last colour read beneath the pointer. The
 ## font is retained for drawing each new snapshot.
 Model : {
 	font : Text.Font,
-	chips : Box(ChipLabels),
+	chips : ChipLabels,
 
 	## Text typed since the last clear, and what the clipboard last did with it.
 	typed : Str,
 	clipboard_status : Str,
 
-	## The frame this view describes. An input inspector's whole job is to show
+	## The cycle this view describes. An input inspector's whole job is to show
 	## the snapshot, so here the snapshot genuinely is the model.
 	##
 	## `init!` cannot supply one: `App.Io` is authority, and nothing has
 	## been sampled before the first cycle. `Devices.empty` is that "nothing" as a
-	## value -- every list empty, the pointer at the origin, and every receiver
+	## value -- every list empty, the pointer at the origin, and every method
 	## answering `False` rather than crashing.
-	input : Devices.Snapshot,
+	devices : Devices.Snapshot,
 
 	## The colour the eyedropper last found under the pointer.
 	picked : Picked,
@@ -90,12 +88,13 @@ init! = App.init(
 	# Without this raylib closes the window on Escape, so the Esc indicator
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
+		.with_frame_pacing(Capped(120))
+		.with_permissions([ClipboardRead, ClipboardWrite]),
 	|_io| {
 		font = Draw.default_font!()
 		Ok({
 			font,
-			chips: Box.box({
+			chips: {
 				w: Text.from("W", font).size(17).prepare!()?,
 				a: Text.from("A", font).size(17).prepare!()?,
 				s: Text.from("S", font).size(17).prepare!()?,
@@ -111,10 +110,10 @@ init! = App.init(
 				space: Text.from("Space", font).size(17).prepare!()?,
 				mouse_down: Text.from("Mouse down", font).size(17).prepare!()?,
 				mouse_up: Text.from("Mouse up", font).size(17).prepare!()?,
-			}),
+			},
 			typed: "",
 			clipboard_status: "clipboard idle",
-			input: Devices.empty,
+			devices: Devices.empty,
 			picked: Err(Unavailable),
 			events_line: "events: none yet",
 		})
@@ -152,74 +151,74 @@ ascii_typed = |codepoints|
 ## window's own thread -- so its result feeds the frame that asked for it and
 ## nothing has to be carried across a cycle boundary.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, io| {
-	input = program_input.devices
+update! = |model, input, io| {
+	devices = input.devices
 
-	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
-	typed_this_frame = if ctrl_held "" else ascii_typed(input.text_input)
+	ctrl_held = devices.key_down(KeyLeftControl) or devices.key_down(KeyRightControl)
+	typed_this_frame = if ctrl_held "" else ascii_typed(devices.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
 	# One chain, so two shortcuts pressed together still resolve in this order.
-	clipboard = if ctrl_held and input.key_pressed(KeyC) {
+	clipboard = if ctrl_held and devices.key_pressed(KeyC) {
 		status = match io.clipboard().set_text!(buffered) {
 			Ok({}) => "copied to clipboard"
 			Err(PermissionDenied) => "clipboard access was not granted"
 		}
 		{ typed: buffered, clipboard_status: status }
-	} else if ctrl_held and input.key_pressed(KeyV) {
+	} else if ctrl_held and devices.key_pressed(KeyV) {
 		# The read returns its answer, so the pasted text lands on this frame.
 		apply_paste({ typed: buffered, clipboard_status: model.clipboard_status }, io.clipboard().read_text!())
-	} else if ctrl_held and input.key_pressed(KeyX) {
+	} else if ctrl_held and devices.key_pressed(KeyX) {
 		{ typed: "", clipboard_status: "cleared" }
-	} else if ctrl_held and input.key_pressed(KeyE) {
+	} else if ctrl_held and devices.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
 		Keys.set_exit_key!(ExitKey(KeyEscape))
 		{ typed: buffered, clipboard_status: "Esc now exits again" }
-	} else if ctrl_held and input.key_pressed(KeyM) {
+	} else if ctrl_held and devices.key_pressed(KeyM) {
 		Window.suggest_min_size!({ width: 640, height: 480 })
 		{ typed: buffered, clipboard_status: "window minimum suggested as 640x480" }
 	} else {
 		{ typed: buffered, clipboard_status: model.clipboard_status }
 	}
 
-	if input.key_pressed(KeyH) {
+	if devices.key_pressed(KeyH) {
 		Mouse.set_cursor_mode!(Hidden)
 	}
-	if input.key_pressed(KeyJ) {
+	if devices.key_pressed(KeyJ) {
 		Mouse.set_cursor_mode!(Visible)
 	}
-	if input.key_pressed(KeyK) {
+	if devices.key_pressed(KeyK) {
 		Mouse.set_cursor_mode!(Locked)
 	}
-	if input.key_pressed(KeyL) {
+	if devices.key_pressed(KeyL) {
 		Mouse.set_cursor_mode!(Visible)
 	}
-	Mouse.set_cursor!(if input.mouse.button_down(Left) Crosshair else Arrow)
+	Mouse.set_cursor!(if devices.mouse.button_down(Left) Crosshair else Arrow)
 
 	# The eyedropper. One point of the frame the player is looking at, read
 	# here rather than in `render!`, where reading the pixels this frame has
 	# not finished drawing would be both a stall and a lie. A point costs no
 	# allocation, which a one-pixel region would not manage, and the pointer
 	# outside the window is `RegionOutOfBounds` rather than a nearby colour.
-	pointer = input.mouse.position()
+	pointer = devices.mouse.position()
 	picked = Capture.pixel_at!(Screen, { x: F32.to_i32_wrap(pointer.x), y: F32.to_i32_wrap(pointer.y) })
 
 	# The record, as opposed to the bits the chips show: every edge, click,
 	# notch and character in the order it happened. A cycle with nothing in
 	# it keeps the previous line on screen and prints nothing.
 	events_line =
-		if List.is_empty(input.events) {
+		if List.is_empty(devices.events) {
 			model.events_line
 		} else {
-			line = describe_events(input.events, input.events_overflow)
+			line = describe_events(devices.events, devices.events_overflow)
 			_ = io.stdout().line!(line)
 			line
 		}
 
-	if input.key_pressed(KeyQ) {
+	if devices.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
-		Ok({ font: model.font, chips: model.chips, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked, events_line: events_line })
+		Ok({ font: model.font, chips: model.chips, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, devices: devices, picked: picked, events_line: events_line })
 	}
 }
 
@@ -373,36 +372,36 @@ line! = |frame, font, cfg|
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
-	input = model.input
+	devices = model.devices
 	font = model.font
-	chips = Box.unbox(model.chips)
+	chips = model.chips
 
-	w_down = input.key_down(KeyW)
-	a_down = input.key_down(KeyA)
-	s_down = input.key_down(KeyS)
-	d_down = input.key_down(KeyD)
-	up_down = input.key_down(KeyUp)
-	left_down = input.key_down(KeyLeft)
-	down_down = input.key_down(KeyDown)
-	right_down = input.key_down(KeyRight)
-	one_down = input.key_down(Key1)
-	shift_down = input.key_down(KeyLeftShift) or input.key_down(KeyRightShift)
-	ctrl_down = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
-	escape_pressed = input.key_pressed(KeyEscape)
-	space_released = input.key_released(KeySpace)
-	mouse_left_pressed = input.mouse.button_pressed(Left)
-	mouse_left_released = input.mouse.button_released(Left)
-	mouse_position = input.mouse.position()
-	mouse_delta = input.mouse.delta()
-	wheel_delta = input.mouse.wheel_delta()
-	gamepad_input = match input.gamepad(One) {
+	w_down = devices.key_down(KeyW)
+	a_down = devices.key_down(KeyA)
+	s_down = devices.key_down(KeyS)
+	d_down = devices.key_down(KeyD)
+	up_down = devices.key_down(KeyUp)
+	left_down = devices.key_down(KeyLeft)
+	down_down = devices.key_down(KeyDown)
+	right_down = devices.key_down(KeyRight)
+	one_down = devices.key_down(Key1)
+	shift_down = devices.key_down(KeyLeftShift) or devices.key_down(KeyRightShift)
+	ctrl_down = devices.key_down(KeyLeftControl) or devices.key_down(KeyRightControl)
+	escape_pressed = devices.key_pressed(KeyEscape)
+	space_released = devices.key_released(KeySpace)
+	mouse_left_pressed = devices.mouse.button_pressed(Left)
+	mouse_left_released = devices.mouse.button_released(Left)
+	mouse_position = devices.mouse.position()
+	mouse_delta = devices.mouse.delta()
+	wheel_delta = devices.mouse.wheel_delta()
+	gamepad_input = match devices.gamepad(One) {
 		Connected(pad) => { connected: Bool.True, left_stick: pad.left_stick(), action_pressed: pad.button_pressed(FaceDown) }
 		Disconnected => { connected: Bool.False, left_stick: { x: 0, y: 0 }, action_pressed: Bool.False }
 	}
 	gamepad_connected = gamepad_input.connected
 	left_stick = gamepad_input.left_stick
 	gamepad_action_pressed = gamepad_input.action_pressed
-	text_entered = List.len(input.text_input) > 0
+	text_entered = List.len(devices.text_input) > 0
 	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1

@@ -27,7 +27,7 @@
 ## `update!` and `render!`. Create long-lived resources in `init!` and retain
 ## them in the model.
 ##
-## Most shapes support equivalent receiver and free-function forms, such as
+## Most shapes support equivalent method and free-function forms, such as
 ## `frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`.
 ##
 ## `Draw.text!` draws at an already-resolved top-left origin without a layout
@@ -206,7 +206,7 @@ Draw := [].{
 	## `render!`.
 	##
 	## Holding one is what makes a draw call expressible, so drawing cannot
-	## reach `init!` or `update!`. Roc does not enforce affine use or encode a
+	## happen in `init!` or `update!`. Roc does not enforce affine use or encode a
 	## frame epoch, so do not retain a `Frame` in the model: pass the
 	## callback's own frame down through helpers.
 	Frame :: Host.DrawFrame.{
@@ -225,7 +225,7 @@ Draw := [].{
 		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
 		## centre points directly, and a render target's dimensions are already `F32`
 		## on `Texture`. `Window.Snapshot.size` stays `I32` because it is also the
-		## thing `Window.suggest_size` sets.
+		## thing `Window.suggest_size!` asks for.
 		##
 		## Reach for this when laying something out against the surface -- a HUD in a
 		## corner, a title centred across the top. Layout decisions that `update!`
@@ -426,7 +426,7 @@ Draw := [].{
 	}
 
 	## A finite, convex planar projection with a bounded homography. Construct it
-	## with `ProjectiveQuad.from_corners`; the opaque representation carries the
+	## with `ProjectiveQuad.from_corners`; the opaque representation holds the
 	## homogeneous weights needed for exact perspective-correct interpolation.
 	ProjectiveQuad :: {
 		top_left : Math.Vec2,
@@ -668,7 +668,7 @@ Draw := [].{
 		##
 		## The handle never resolves to a host resource, so entering a scope with
 		## it is refused the way a released shader is, and setting a uniform
-		## derived from it does nothing. Put it in a model to reach the app's
+		## derived from it does nothing. Put it in a model to test the app's
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
@@ -690,7 +690,7 @@ Draw := [].{
 		fragment_source : Str,
 	}
 
-	## Which font file format `FontBytes` carries. The bytes are decoded by
+	## Which font file format `FontBytes` holds. The bytes are decoded by
 	## format rather than by sniffing them, so a mislabelled file fails to load
 	## instead of loading as something else.
 	FontFormat := [Ttf, Otf]
@@ -777,7 +777,7 @@ Draw := [].{
 		##
 		## Legal in `render!` only.
 		##
-		## This is the one to reach for. `set_texture!` is the same call named
+		## This is the one to use. `set_texture!` is the same call named
 		## for the ordinary case, and exists only because binding a plain
 		## texture is what most shaders want and `set!` does not say so.
 		set! : TextureUniform, Texture => {}
@@ -1339,7 +1339,7 @@ expect match Draw.ProjectiveQuad.from_corners({
 	_ => False
 }
 
-## The resource-free stubs are pure values an app puts in a model to reach its
+## The resource-free stubs are pure values an app puts in a model to test its
 ## own `update!` from an `expect`. What they must never do is pass for a loaded
 ## resource, so what is checked here is that they are inert.
 ##

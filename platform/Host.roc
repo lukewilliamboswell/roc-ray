@@ -277,12 +277,44 @@ Host := [].{
 	## Legal in `render!` only.
 	shader_set_texture! : ShaderTexture => {}
 
+	## Permission declarations, as the host validates them at startup.
+
+	## Whether a declared directory may be written.
+	DirectoryMode : [ReadOnly, ReadWrite]
+
+	## A declared directory and its mode.
+	DirectoryDeclaration : { path : Str, mode : DirectoryMode }
+
+	## A declared UDP peer: a dotted-quad IPv4 address and a port.
+	UdpPeerDeclaration : { address : Str, port : U16 }
+
+	## One `Permission`, with an `HttpOrigin` reduced to its origin string.
+	PermissionDeclaration : [
+		HttpOrigin(Str),
+		HttpAny,
+		UdpBind(U16),
+		UdpPeer(UdpPeerDeclaration),
+		UdpLoopback,
+		UdpAny,
+		Command(Str),
+		CommandAny,
+		EnvVar(Str),
+		EnvAny,
+		ClipboardRead,
+		ClipboardWrite,
+		WorkingDirectory(DirectoryMode),
+		Directory(DirectoryDeclaration),
+		FilesAny(DirectoryMode),
+	]
+
 	## Store resource interface
+	## One file named beneath an asset store.
+	StoreAsset : { store : Resource.Store, path : Str }
 
 	## Parameters for opening a confined asset store.
 	StoreOpen : {
-		location_kind : U8,
 		root : Str,
+		path : Str,
 		manifest_required : Bool,
 		asset_set : Str,
 		schema : U32,
@@ -292,7 +324,7 @@ Host := [].{
 	}
 
 	## Failures while opening and validating an asset store.
-	StoreOpenError : [PermissionDenied, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
+	StoreOpenError : [PermissionDenied, PathInvalid, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -372,10 +404,10 @@ Host := [].{
 	AudioGenerateSoundError : [ResourceLimit, SoundGenerationFailed]
 
 	## Failures while loading a sound.
-	AudioLoadSoundError : [PermissionDenied, ResourceLimit, SoundLoadFailed]
+	AudioLoadSoundError : [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed]
 
 	## Failures while loading a music stream.
-	AudioLoadMusicError : [PermissionDenied, MusicLoadFailed, ResourceLimit]
+	AudioLoadMusicError : [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit]
 
 	## Parameters for a generated sound envelope.
 	AudioGenSound : {
@@ -398,13 +430,13 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	audio_gen_sound! : AudioGenSound => Try(Resource.Sound, AudioGenerateSoundError)
 
-	## Load a sound from a file.
+	## Load a sound from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_sound! : Resource.Authority, Str => Try(Resource.Sound, AudioLoadSoundError)
+	audio_load_sound! : StoreAsset => Try(Resource.Sound, AudioLoadSoundError)
 
-	## Load a music stream from a file.
+	## Load a music stream from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	audio_load_music! : Resource.Authority, Str => Try(Resource.Music, AudioLoadMusicError)
+	audio_load_music! : StoreAsset => Try(Resource.Music, AudioLoadMusicError)
 
 	## Play a sound.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -491,14 +523,42 @@ Host := [].{
 	audio_set_master_volume! : F32 => {}
 
 	## Files interface
+	## A root a directory handle may start from. `Declared` names a directory
+	## the app's permissions must cover; the rest are the app's own.
+	FilesRoot : [BesideExecutable, WorkingDirectory, Declared(Str), AppData, AppConfig, AppCache]
+
+	## Failures while resolving a root. `PermissionDenied` is a root no
+	## declaration covers; `PathInvalid` is a declared path whose shape no
+	## `Directory` or `WorkingDirectory` declaration can cover, such as one
+	## with a `..` component.
+	FilesOpenError : [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable]
+
+	## Resolve a root to the canonical absolute path a handle carries, creating
+	## it when it is writable and the app's own, or declared writable.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
+	files_open_root! : Resource.Authority, FilesRoot, Bool => Try(Str, FilesOpenError)
+
+	## A path the user designated: dropped on the window this cycle, or named
+	## as an application argument.
+	FilesDesignation : [Drop(Str), Arg(Str)]
+
+	## A designated path resolved to an absolute one, split into the directory
+	## that holds it and its own name.
+	FilesDesignated : { path : Str, parent : Str, name : Str }
+
+	## Turn a designated path into the handle's parts, or refuse a path that was
+	## not designated. Does no I/O.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	files_designate! : Resource.Authority, FilesDesignation => Try(FilesDesignated, [PermissionDenied])
+
 	## Failures while reading a file as validated UTF-8.
-	FilesReadTextError : [PermissionDenied, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
+	FilesReadTextError : [PermissionDenied, PathInvalid, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while reading a file as bytes.
-	FilesReadBytesError : [PermissionDenied, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while listing one directory.
-	FilesListError : [PermissionDenied, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesListError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## One `stat`. Modification time uses the normalized `Time.Timestamp` parts.
 	FilesMetadata : {
@@ -509,37 +569,37 @@ Host := [].{
 	}
 
 	## Failures while stating one path.
-	FilesMetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
+	FilesMetadataError : [AccessRefused, NotFound, PathInvalid, PermissionDenied, ReadFailed, Unavailable]
 
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_text! : Resource.Authority, Str => Try(Str, FilesReadTextError)
+	files_read_text! : Resource.Authority, Str, Str => Try(Str, FilesReadTextError)
 
-	## Stat one path, following symbolic links.
+	## Stat one path beneath a root, without following a link.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_metadata! : Resource.Authority, Str => Try(FilesMetadata, FilesMetadataError)
+	files_metadata! : Resource.Authority, Str, Str => Try(FilesMetadata, FilesMetadataError)
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Resource.Authority, Str => Try(List(U8), FilesReadBytesError)
+	files_read_bytes! : Resource.Authority, Str, Str => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_list! : Resource.Authority, Str => Try(List(U8), FilesListError)
+	files_list! : Resource.Authority, Str, Str => Try(List(U8), FilesListError)
 
 	## Failures while replacing a whole file.
 	##
 	## A write fails for reasons a read cannot, so it has a union of its own
 	## rather than sharing one with `files_read_bytes!`.
-	FilesWriteError : [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
+	FilesWriteError : [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed]
 
 	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_text! : Resource.Authority, Str, Str => Try({}, FilesWriteError)
+	files_write_text! : Resource.Authority, Str, Str, Str => Try({}, FilesWriteError)
 
 	## Replace a file with bytes; the same failures as a text write.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_write_bytes! : Resource.Authority, Str, List(U8) => Try({}, FilesWriteError)
+	files_write_bytes! : Resource.Authority, Str, Str, List(U8) => Try({}, FilesWriteError)
 
 	## Http interface
 	## One ordered HTTP header.
@@ -619,6 +679,7 @@ Host := [].{
 	## `Timeout` carries the output captured before the deadline expired, which
 	## is why it is the one variant with a payload.
 	CmdRunError : [
+		AccessRefused,
 		Busy,
 		CommandNotFound,
 		PermissionDenied,
@@ -669,7 +730,7 @@ Host := [].{
 	}
 
 	## Failures while opening and binding a socket.
-	UdpBindError : [AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable]
+	UdpBindError : [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable]
 
 	## One outgoing datagram. `ip` is a dotted-quad IPv4 literal.
 	UdpSendArgs : {
@@ -711,7 +772,7 @@ Host := [].{
 	## `NoRoute` is what `Udp` exposes as `Unreachable`; it is spelled
 	## differently here because `roc glue` lowers a tag to a Zig enum member
 	## and `unreachable` is a Zig keyword.
-	UdpSendError : [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
+	UdpSendError : [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock]
 
 	## Send one datagram.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -736,6 +797,12 @@ Host := [].{
 	## Read an environment variable.
 	## Legal only in `init!`.
 	app_read_env! : Resource.Authority, Str => Try(Str, [PermissionDenied, NotFound])
+
+	## Report the error a callback returned, other than `Exit`, before the host
+	## stops: the callback's name and the error as `Str.inspect` renders it.
+	## Platform plumbing for the adapters in `main.roc`, not an app effect, so
+	## legal in every phase.
+	app_report_error! : Str, Str => {}
 
 	## Random interface
 	## Draw from operating-system entropy.
@@ -913,8 +980,9 @@ Host := [].{
 		max_row : U64,
 	}
 
+	## Load a TMX map, and the tilesets it references, from an asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	tilemap_load_tmx! : Resource.Authority, Str => Try(TilemapMap, [PermissionDenied, NotFound, ParseFailed, ReadFailed, Unsupported])
+	tilemap_load_tmx! : StoreAsset => Try(TilemapMap, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
 
 	## Legal in `render!` only.
 	tilemap_draw! : TilemapRenderRequest => {}
@@ -950,7 +1018,7 @@ Host := [].{
 	SqliteFailure : { code : I64, message : Str }
 
 	## Failures while opening a connection.
-	SqliteOpenError : [PermissionDenied, SqliteErr(SqliteFailure), TooManyConnections]
+	SqliteOpenError : [PermissionDenied, PathInvalid, SqliteErr(SqliteFailure), TooManyConnections]
 
 	## Failures with nothing to report but the failure itself.
 	SqliteStatusError : [SqliteErr(SqliteFailure)]
@@ -980,7 +1048,7 @@ Host := [].{
 	## Open or create a database. `mode` is `0` read/write/create, `1`
 	## read/write, `2` read-only.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	sqlite_open! : Resource.Authority, Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
+	sqlite_open! : Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Db, SqliteOpenError)
 
 	## Close early; final handle release remains the fallback.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.

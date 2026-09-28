@@ -44,7 +44,7 @@ HEX160 = re.compile(r"[0-9a-f]{40}")
 MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_MEMBERS = 256
-DEFAULT_PROFILES = ("x64mac", "arm64mac", "x64glibc-x11", "x64win")
+DEFAULT_PROFILES = ("x64mac", "arm64mac", "x64v1glibc-x11", "x64win")
 
 
 class LinkInputError(ValueError):
@@ -243,7 +243,7 @@ def install_selected(lock: dict, profiles, destination: Path, cache: Path, targe
                      root: Path) -> None:
     roc_targets = [release.PROFILES[profile] for profile in profiles]
     if len(set(roc_targets)) != len(roc_targets):
-        # X11 and Wayland both install into targets/x64glibc; one tree may hold
+        # X11 and Wayland both install into targets/x64v1glibc; one tree may hold
         # only one of them, or one would silently overwrite the other.
         raise LinkInputError("profiles sharing a Roc target cannot be installed together")
     with tempfile.TemporaryDirectory(prefix="roc-ray-link-inputs-") as temporary:

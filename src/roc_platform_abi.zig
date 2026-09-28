@@ -2057,21 +2057,22 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_8f4b2816fd84fce2
-pub const __AnonStruct_8f4b2816fd84fce2 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_3a568cb37b91deaf
+pub const __AnonStruct_3a568cb37b91deaf = if (@sizeOf(usize) == 4) extern struct {
     asset_set: RocStr,
     content_hash: RocStr,
+    path: RocStr,
     root: RocStr,
     content_version: u32,
     schema: u32,
     content_hash_mode: u8,
-    location_kind: u8,
     manifest_required: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.asset_set.decref(roc_host);
         value.content_hash.decref(roc_host);
+        value.path.decref(roc_host);
         value.root.decref(roc_host);
     }
 
@@ -2080,22 +2081,24 @@ pub const __AnonStruct_8f4b2816fd84fce2 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.asset_set.incref(amount);
         value.content_hash.incref(amount);
+        value.path.incref(amount);
         value.root.incref(amount);
     }
 } else extern struct {
     asset_set: RocStr,
     content_hash: RocStr,
+    path: RocStr,
     root: RocStr,
     content_version: u32,
     schema: u32,
     content_hash_mode: u8,
-    location_kind: u8,
     manifest_required: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.asset_set.decref(roc_host);
         value.content_hash.decref(roc_host);
+        value.path.decref(roc_host);
         value.root.decref(roc_host);
     }
 
@@ -2104,18 +2107,19 @@ pub const __AnonStruct_8f4b2816fd84fce2 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.asset_set.incref(amount);
         value.content_hash.incref(amount);
+        value.path.incref(amount);
         value.root.incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_8f4b2816fd84fce2) != 88) @compileError("__AnonStruct_8f4b2816fd84fce2 size mismatch");
-        if (@alignOf(__AnonStruct_8f4b2816fd84fce2) != 8) @compileError("__AnonStruct_8f4b2816fd84fce2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_3a568cb37b91deaf) != 112) @compileError("__AnonStruct_3a568cb37b91deaf size mismatch");
+        if (@alignOf(__AnonStruct_3a568cb37b91deaf) != 8) @compileError("__AnonStruct_3a568cb37b91deaf alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_8f4b2816fd84fce2) != 48) @compileError("__AnonStruct_8f4b2816fd84fce2 size mismatch");
-        if (@alignOf(__AnonStruct_8f4b2816fd84fce2) != 4) @compileError("__AnonStruct_8f4b2816fd84fce2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_3a568cb37b91deaf) != 60) @compileError("__AnonStruct_3a568cb37b91deaf size mismatch");
+        if (@alignOf(__AnonStruct_3a568cb37b91deaf) != 4) @compileError("__AnonStruct_3a568cb37b91deaf alignment mismatch");
     }
 }
 
@@ -2268,6 +2272,58 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_37b6eb678c2c2ca2) != 36) @compileError("__AnonStruct_37b6eb678c2c2ca2 size mismatch");
         if (@alignOf(__AnonStruct_37b6eb678c2c2ca2) != 4) @compileError("__AnonStruct_37b6eb678c2c2ca2 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_c497f4ed41e47ac1
+pub const __AnonStruct_c497f4ed41e47ac1 = if (@sizeOf(usize) == 4) extern struct {
+    name: RocStr,
+    parent: RocStr,
+    path: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.parent.decref(roc_host);
+        value.path.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.parent.incref(amount);
+        value.path.incref(amount);
+    }
+} else extern struct {
+    name: RocStr,
+    parent: RocStr,
+    path: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.parent.decref(roc_host);
+        value.path.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.parent.incref(amount);
+        value.path.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_c497f4ed41e47ac1) != 72) @compileError("__AnonStruct_c497f4ed41e47ac1 size mismatch");
+        if (@alignOf(__AnonStruct_c497f4ed41e47ac1) != 8) @compileError("__AnonStruct_c497f4ed41e47ac1 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_c497f4ed41e47ac1) != 36) @compileError("__AnonStruct_c497f4ed41e47ac1 size mismatch");
+        if (@alignOf(__AnonStruct_c497f4ed41e47ac1) != 4) @compileError("__AnonStruct_c497f4ed41e47ac1 alignment mismatch");
     }
 }
 
@@ -5559,11 +5615,13 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_a868748fcc059834
-pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_4f0c1c4bc3c3ab28
+pub const __AnonStruct_4f0c1c4bc3c3ab28 = if (@sizeOf(usize) == 4) extern struct {
     record_max_frames: u64,
+    app_id: RocStr,
     default_font_path: RocStr,
     output_dir: RocStr,
+    permissions: RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory),
     record_path: RocStr,
     title: RocStr,
     default_font_size: i32,
@@ -5578,6 +5636,7 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     target_fps: i32,
     width: i32,
     cursor_visible: bool,
+    deliver_close_request: bool,
     fullscreen: bool,
     record_cursor: u8,
     record_enabled: bool,
@@ -5590,8 +5649,10 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.app_id.decref(roc_host);
         value.default_font_path.decref(roc_host);
         value.output_dir.decref(roc_host);
+        decrefListOfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(value.permissions, roc_host);
         value.record_path.decref(roc_host);
         value.title.decref(roc_host);
     }
@@ -5599,15 +5660,19 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.app_id.incref(amount);
         value.default_font_path.incref(amount);
         value.output_dir.incref(amount);
+        value.permissions.incref(amount);
         value.record_path.incref(amount);
         value.title.incref(amount);
     }
 } else extern struct {
     record_max_frames: u64,
+    app_id: RocStr,
     default_font_path: RocStr,
     output_dir: RocStr,
+    permissions: RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory),
     record_path: RocStr,
     title: RocStr,
     default_font_size: i32,
@@ -5622,6 +5687,7 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     target_fps: i32,
     width: i32,
     cursor_visible: bool,
+    deliver_close_request: bool,
     fullscreen: bool,
     record_cursor: u8,
     record_enabled: bool,
@@ -5634,8 +5700,10 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.app_id.decref(roc_host);
         value.default_font_path.decref(roc_host);
         value.output_dir.decref(roc_host);
+        decrefListOfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(value.permissions, roc_host);
         value.record_path.decref(roc_host);
         value.title.decref(roc_host);
     }
@@ -5643,8 +5711,10 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.app_id.incref(amount);
         value.default_font_path.incref(amount);
         value.output_dir.incref(amount);
+        value.permissions.incref(amount);
         value.record_path.incref(amount);
         value.title.incref(amount);
     }
@@ -5652,23 +5722,111 @@ pub const __AnonStruct_a868748fcc059834 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_a868748fcc059834) != 160) @compileError("__AnonStruct_a868748fcc059834 size mismatch");
-        if (@alignOf(__AnonStruct_a868748fcc059834) != 8) @compileError("__AnonStruct_a868748fcc059834 alignment mismatch");
+        if (@sizeOf(__AnonStruct_4f0c1c4bc3c3ab28) != 208) @compileError("__AnonStruct_4f0c1c4bc3c3ab28 size mismatch");
+        if (@alignOf(__AnonStruct_4f0c1c4bc3c3ab28) != 8) @compileError("__AnonStruct_4f0c1c4bc3c3ab28 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_a868748fcc059834) != 112) @compileError("__AnonStruct_a868748fcc059834 size mismatch");
-        if (@alignOf(__AnonStruct_a868748fcc059834) != 8) @compileError("__AnonStruct_a868748fcc059834 alignment mismatch");
+        if (@sizeOf(__AnonStruct_4f0c1c4bc3c3ab28) != 136) @compileError("__AnonStruct_4f0c1c4bc3c3ab28 size mismatch");
+        if (@alignOf(__AnonStruct_4f0c1c4bc3c3ab28) != 8) @compileError("__AnonStruct_4f0c1c4bc3c3ab28 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_11f285e8dfedfde1
-pub const __AnonStruct_11f285e8dfedfde1 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_3299be1b424acd7a
+pub const __AnonStruct_3299be1b424acd7a = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    mode: ReadOnlyOrReadWrite,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.mode.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.mode.incref(amount);
+    }
+} else extern struct {
+    path: RocStr,
+    mode: ReadOnlyOrReadWrite,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.mode.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.mode.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_3299be1b424acd7a) != 32) @compileError("__AnonStruct_3299be1b424acd7a size mismatch");
+        if (@alignOf(__AnonStruct_3299be1b424acd7a) != 8) @compileError("__AnonStruct_3299be1b424acd7a alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_3299be1b424acd7a) != 16) @compileError("__AnonStruct_3299be1b424acd7a size mismatch");
+        if (@alignOf(__AnonStruct_3299be1b424acd7a) != 4) @compileError("__AnonStruct_3299be1b424acd7a alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_90b065c31c582eeb
+pub const __AnonStruct_90b065c31c582eeb = if (@sizeOf(usize) == 4) extern struct {
+    address: RocStr,
+    port: u16,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.address.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.address.incref(amount);
+    }
+} else extern struct {
+    address: RocStr,
+    port: u16,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.address.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.address.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_90b065c31c582eeb) != 32) @compileError("__AnonStruct_90b065c31c582eeb size mismatch");
+        if (@alignOf(__AnonStruct_90b065c31c582eeb) != 8) @compileError("__AnonStruct_90b065c31c582eeb alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_90b065c31c582eeb) != 16) @compileError("__AnonStruct_90b065c31c582eeb size mismatch");
+        if (@alignOf(__AnonStruct_90b065c31c582eeb) != 4) @compileError("__AnonStruct_90b065c31c582eeb alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_789266b361159fc9
+pub const __AnonStruct_789266b361159fc9 = if (@sizeOf(usize) == 4) extern struct {
     capture: __AnonStruct_681b090756070ab0,
     time: __AnonStruct_db5a281b648e1efe,
     devices: __AnonStruct_1339741edbb01404,
     dropped: RocList(__AnonStruct_66bf628355bb7f8e),
     task_results: RocList(__AnonStruct_35c41f749bc927bb),
-    window: __AnonStruct_225d69ea1bc0e508,
+    window: __AnonStruct_d905f039c8a75547,
     dropped_overflow: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -5697,7 +5855,7 @@ pub const __AnonStruct_11f285e8dfedfde1 = if (@sizeOf(usize) == 4) extern struct
     devices: __AnonStruct_1339741edbb01404,
     dropped: RocList(__AnonStruct_66bf628355bb7f8e),
     task_results: RocList(__AnonStruct_35c41f749bc927bb),
-    window: __AnonStruct_225d69ea1bc0e508,
+    window: __AnonStruct_d905f039c8a75547,
     dropped_overflow: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -5724,12 +5882,12 @@ pub const __AnonStruct_11f285e8dfedfde1 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_11f285e8dfedfde1) != 336) @compileError("__AnonStruct_11f285e8dfedfde1 size mismatch");
-        if (@alignOf(__AnonStruct_11f285e8dfedfde1) != 8) @compileError("__AnonStruct_11f285e8dfedfde1 alignment mismatch");
+        if (@sizeOf(__AnonStruct_789266b361159fc9) != 336) @compileError("__AnonStruct_789266b361159fc9 size mismatch");
+        if (@alignOf(__AnonStruct_789266b361159fc9) != 8) @compileError("__AnonStruct_789266b361159fc9 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_11f285e8dfedfde1) != 224) @compileError("__AnonStruct_11f285e8dfedfde1 size mismatch");
-        if (@alignOf(__AnonStruct_11f285e8dfedfde1) != 8) @compileError("__AnonStruct_11f285e8dfedfde1 alignment mismatch");
+        if (@sizeOf(__AnonStruct_789266b361159fc9) != 224) @compileError("__AnonStruct_789266b361159fc9 size mismatch");
+        if (@alignOf(__AnonStruct_789266b361159fc9) != 8) @compileError("__AnonStruct_789266b361159fc9 alignment mismatch");
     }
 }
 
@@ -6151,9 +6309,10 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_225d69ea1bc0e508
-pub const __AnonStruct_225d69ea1bc0e508 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_d905f039c8a75547
+pub const __AnonStruct_d905f039c8a75547 = if (@sizeOf(usize) == 4) extern struct {
     size: __AnonStruct_bc8fa73ca49a5ac0,
+    close_requested: bool,
     focused: bool,
     minimized: bool,
     /// Recursively decrement Roc-owned fields.
@@ -6169,6 +6328,7 @@ pub const __AnonStruct_225d69ea1bc0e508 = if (@sizeOf(usize) == 4) extern struct
     }
 } else extern struct {
     size: __AnonStruct_bc8fa73ca49a5ac0,
+    close_requested: bool,
     focused: bool,
     minimized: bool,
     /// Recursively decrement Roc-owned fields.
@@ -6186,12 +6346,12 @@ pub const __AnonStruct_225d69ea1bc0e508 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_225d69ea1bc0e508) != 12) @compileError("__AnonStruct_225d69ea1bc0e508 size mismatch");
-        if (@alignOf(__AnonStruct_225d69ea1bc0e508) != 4) @compileError("__AnonStruct_225d69ea1bc0e508 alignment mismatch");
+        if (@sizeOf(__AnonStruct_d905f039c8a75547) != 12) @compileError("__AnonStruct_d905f039c8a75547 size mismatch");
+        if (@alignOf(__AnonStruct_d905f039c8a75547) != 4) @compileError("__AnonStruct_d905f039c8a75547 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_225d69ea1bc0e508) != 12) @compileError("__AnonStruct_225d69ea1bc0e508 size mismatch");
-        if (@alignOf(__AnonStruct_225d69ea1bc0e508) != 4) @compileError("__AnonStruct_225d69ea1bc0e508 alignment mismatch");
+        if (@sizeOf(__AnonStruct_d905f039c8a75547) != 12) @compileError("__AnonStruct_d905f039c8a75547 size mismatch");
+        if (@alignOf(__AnonStruct_d905f039c8a75547) != 4) @compileError("__AnonStruct_d905f039c8a75547 alignment mismatch");
     }
 }
 
@@ -7390,7 +7550,7 @@ pub const HostStore_openResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostStore_openResultPayload = extern union {
-    err: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch,
+    err: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch,
     ok: *u64,
 };
 
@@ -7398,8 +7558,8 @@ pub const HostStore_openResultPayload = extern union {
 pub const HostStore_openResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(4),
     tag: HostStore_openResultTag,
-    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
-        const ptr: *const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
+        const ptr: *const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7418,7 +7578,7 @@ pub const HostStore_openResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostStore_openResultPayload,
     tag: HostStore_openResultTag,
-    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
+    pub fn payload_err(self: *const @This()) AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7448,16 +7608,16 @@ comptime {
     }
 }
 
-/// Tag union: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch
-pub const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = enum(u8) {
+/// Tag union: AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch
+pub const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch = enum(u8) {
     asset_set_mismatch = 0,
     content_hash_mismatch = 1,
     content_version_mismatch = 2,
     invalid_expected_content_hash = 3,
-    invalid_root_path = 4,
-    manifest_malformed = 5,
-    manifest_missing = 6,
-    manifest_unreadable = 7,
+    manifest_malformed = 4,
+    manifest_missing = 5,
+    manifest_unreadable = 6,
+    path_invalid = 7,
     permission_denied = 8,
     resource_limit = 9,
     root_not_directory = 10,
@@ -7479,12 +7639,12 @@ pub const AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalid
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
-        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
+        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
+        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
-        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
+        if (@sizeOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch size mismatch");
+        if (@alignOf(AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch) != 1) @compileError("AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch alignment mismatch");
     }
 }
 
@@ -7590,7 +7750,7 @@ pub const HostAudio_load_soundResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostAudio_load_soundResultPayload = extern union {
-    err: PermissionDeniedOrResourceLimitOrSoundLoadFailed,
+    err: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed,
     ok: *u64,
 };
 
@@ -7598,8 +7758,8 @@ pub const HostAudio_load_soundResultPayload = extern union {
 pub const HostAudio_load_soundResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(4),
     tag: HostAudio_load_soundResultTag,
-    pub fn payload_err(self: *const @This()) PermissionDeniedOrResourceLimitOrSoundLoadFailed {
-        const ptr: *const PermissionDeniedOrResourceLimitOrSoundLoadFailed = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed {
+        const ptr: *const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7618,7 +7778,7 @@ pub const HostAudio_load_soundResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostAudio_load_soundResultPayload,
     tag: HostAudio_load_soundResultTag,
-    pub fn payload_err(self: *const @This()) PermissionDeniedOrResourceLimitOrSoundLoadFailed {
+    pub fn payload_err(self: *const @This()) NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7648,11 +7808,13 @@ comptime {
     }
 }
 
-/// Tag union: PermissionDeniedOrResourceLimitOrSoundLoadFailed
-pub const PermissionDeniedOrResourceLimitOrSoundLoadFailed = enum(u8) {
-    permission_denied = 0,
-    resource_limit = 1,
-    sound_load_failed = 2,
+/// Tag union: NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed
+pub const NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed = enum(u8) {
+    not_found = 0,
+    path_invalid = 1,
+    read_failed = 2,
+    resource_limit = 3,
+    sound_load_failed = 4,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -7668,12 +7830,12 @@ pub const PermissionDeniedOrResourceLimitOrSoundLoadFailed = enum(u8) {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(PermissionDeniedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("PermissionDeniedOrResourceLimitOrSoundLoadFailed size mismatch");
-        if (@alignOf(PermissionDeniedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("PermissionDeniedOrResourceLimitOrSoundLoadFailed alignment mismatch");
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(PermissionDeniedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("PermissionDeniedOrResourceLimitOrSoundLoadFailed size mismatch");
-        if (@alignOf(PermissionDeniedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("PermissionDeniedOrResourceLimitOrSoundLoadFailed alignment mismatch");
+        if (@sizeOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed size mismatch");
+        if (@alignOf(NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed) != 1) @compileError("NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed alignment mismatch");
     }
 }
 
@@ -7685,7 +7847,7 @@ pub const HostAudio_load_musicResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostAudio_load_musicResultPayload = extern union {
-    err: MusicLoadFailedOrPermissionDeniedOrResourceLimit,
+    err: MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit,
     ok: *u64,
 };
 
@@ -7693,8 +7855,8 @@ pub const HostAudio_load_musicResultPayload = extern union {
 pub const HostAudio_load_musicResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(4),
     tag: HostAudio_load_musicResultTag,
-    pub fn payload_err(self: *const @This()) MusicLoadFailedOrPermissionDeniedOrResourceLimit {
-        const ptr: *const MusicLoadFailedOrPermissionDeniedOrResourceLimit = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit {
+        const ptr: *const MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7713,7 +7875,7 @@ pub const HostAudio_load_musicResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostAudio_load_musicResultPayload,
     tag: HostAudio_load_musicResultTag,
-    pub fn payload_err(self: *const @This()) MusicLoadFailedOrPermissionDeniedOrResourceLimit {
+    pub fn payload_err(self: *const @This()) MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -7743,11 +7905,13 @@ comptime {
     }
 }
 
-/// Tag union: MusicLoadFailedOrPermissionDeniedOrResourceLimit
-pub const MusicLoadFailedOrPermissionDeniedOrResourceLimit = enum(u8) {
+/// Tag union: MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit
+pub const MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit = enum(u8) {
     music_load_failed = 0,
-    permission_denied = 1,
-    resource_limit = 2,
+    not_found = 1,
+    path_invalid = 2,
+    read_failed = 3,
+    resource_limit = 4,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -7763,12 +7927,303 @@ pub const MusicLoadFailedOrPermissionDeniedOrResourceLimit = enum(u8) {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(MusicLoadFailedOrPermissionDeniedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrPermissionDeniedOrResourceLimit size mismatch");
-        if (@alignOf(MusicLoadFailedOrPermissionDeniedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrPermissionDeniedOrResourceLimit alignment mismatch");
+        if (@sizeOf(MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit size mismatch");
+        if (@alignOf(MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(MusicLoadFailedOrPermissionDeniedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrPermissionDeniedOrResourceLimit size mismatch");
-        if (@alignOf(MusicLoadFailedOrPermissionDeniedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrPermissionDeniedOrResourceLimit alignment mismatch");
+        if (@sizeOf(MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit size mismatch");
+        if (@alignOf(MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit) != 1) @compileError("MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit alignment mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostFiles_open_rootResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostFiles_open_rootResultPayload = extern union {
+    err: AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable,
+    ok: RocStr,
+};
+
+/// Tag union: Try
+pub const HostFiles_open_rootResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostFiles_open_rootResultTag,
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable {
+        const ptr: *const AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_open_rootResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_open_rootResult(self, amount);
+    }
+} else extern struct {
+    payload: HostFiles_open_rootResultPayload,
+    tag: HostFiles_open_rootResultTag,
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_open_rootResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_open_rootResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostFiles_open_rootResult) != 32) @compileError("HostFiles_open_rootResult size mismatch");
+        if (@alignOf(HostFiles_open_rootResult) != 8) @compileError("HostFiles_open_rootResult alignment mismatch");
+        if (@offsetOf(HostFiles_open_rootResult, "tag") != 24) @compileError("HostFiles_open_rootResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostFiles_open_rootResult) != 16) @compileError("HostFiles_open_rootResult size mismatch");
+        if (@alignOf(HostFiles_open_rootResult) != 4) @compileError("HostFiles_open_rootResult alignment mismatch");
+        if (@offsetOf(HostFiles_open_rootResult, "tag") != 12) @compileError("HostFiles_open_rootResult tag offset mismatch");
+    }
+}
+
+/// Tag union: AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable
+pub const AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable = enum(u8) {
+    access_refused = 0,
+    not_adirectory = 1,
+    not_found = 2,
+    open_failed = 3,
+    path_invalid = 4,
+    permission_denied = 5,
+    unavailable = 6,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable) != 1) @compileError("AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable) != 1) @compileError("AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable) != 1) @compileError("AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable) != 1) @compileError("AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable alignment mismatch");
+    }
+}
+
+/// Tag discriminant for AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory.
+pub const AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryTag = enum(u8) {
+    AppCache = 0,
+    AppConfig = 1,
+    AppData = 2,
+    BesideExecutable = 3,
+    Declared = 4,
+    WorkingDirectory = 5,
+};
+
+/// Payload union for AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory.
+pub const AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryPayload = extern union {
+    app_cache: [0]u8,
+    app_config: [0]u8,
+    app_data: [0]u8,
+    beside_executable: [0]u8,
+    declared: RocStr,
+    working_directory: [0]u8,
+};
+
+/// Tag union: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory
+pub const AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryTag,
+    pub fn payload_declared(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(self, amount);
+    }
+} else extern struct {
+    payload: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryPayload,
+    tag: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryTag,
+    pub fn payload_declared(self: *const @This()) RocStr {
+        return self.payload.declared;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) != 32) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory size mismatch");
+        if (@alignOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) != 8) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory alignment mismatch");
+        if (@offsetOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, "tag") != 24) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) != 16) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory size mismatch");
+        if (@alignOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) != 4) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory alignment mismatch");
+        if (@offsetOf(AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, "tag") != 12) @compileError("AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const HostFiles_designateResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostFiles_designateResultPayload = extern union {
+    err: [0]u8,
+    ok: __AnonStruct_c497f4ed41e47ac1,
+};
+
+/// Tag union: Try
+pub const HostFiles_designateResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [36]u8 align(4),
+    tag: HostFiles_designateResultTag,
+    pub fn payload_ok(self: *const @This()) __AnonStruct_c497f4ed41e47ac1 {
+        const ptr: *const __AnonStruct_c497f4ed41e47ac1 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_designateResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_designateResult(self, amount);
+    }
+} else extern struct {
+    payload: HostFiles_designateResultPayload,
+    tag: HostFiles_designateResultTag,
+    pub fn payload_ok(self: *const @This()) __AnonStruct_c497f4ed41e47ac1 {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostFiles_designateResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostFiles_designateResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostFiles_designateResult) != 80) @compileError("HostFiles_designateResult size mismatch");
+        if (@alignOf(HostFiles_designateResult) != 8) @compileError("HostFiles_designateResult alignment mismatch");
+        if (@offsetOf(HostFiles_designateResult, "tag") != 72) @compileError("HostFiles_designateResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostFiles_designateResult) != 40) @compileError("HostFiles_designateResult size mismatch");
+        if (@alignOf(HostFiles_designateResult) != 4) @compileError("HostFiles_designateResult alignment mismatch");
+        if (@offsetOf(HostFiles_designateResult, "tag") != 36) @compileError("HostFiles_designateResult tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for ArgOrDrop.
+pub const ArgOrDropTag = enum(u8) {
+    Arg = 0,
+    Drop = 1,
+};
+
+/// Payload union for ArgOrDrop.
+pub const ArgOrDropPayload = extern union {
+    arg: RocStr,
+    drop: RocStr,
+};
+
+/// Tag union: ArgOrDrop
+pub const ArgOrDrop = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: ArgOrDropTag,
+    pub fn payload_arg(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_drop(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefArgOrDrop(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfArgOrDrop(self, amount);
+    }
+} else extern struct {
+    payload: ArgOrDropPayload,
+    tag: ArgOrDropTag,
+    pub fn payload_arg(self: *const @This()) RocStr {
+        return self.payload.arg;
+    }
+    pub fn payload_drop(self: *const @This()) RocStr {
+        return self.payload.drop;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefArgOrDrop(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfArgOrDrop(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ArgOrDrop) != 32) @compileError("ArgOrDrop size mismatch");
+        if (@alignOf(ArgOrDrop) != 8) @compileError("ArgOrDrop alignment mismatch");
+        if (@offsetOf(ArgOrDrop, "tag") != 24) @compileError("ArgOrDrop tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ArgOrDrop) != 16) @compileError("ArgOrDrop size mismatch");
+        if (@alignOf(ArgOrDrop) != 4) @compileError("ArgOrDrop alignment mismatch");
+        if (@offsetOf(ArgOrDrop, "tag") != 12) @compileError("ArgOrDrop tag offset mismatch");
     }
 }
 
@@ -7780,7 +8235,7 @@ pub const HostFiles_read_textResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_read_textResultPayload = extern union {
-    err: BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
+    err: BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
     ok: RocStr,
 };
 
@@ -7788,8 +8243,8 @@ pub const HostFiles_read_textResultPayload = extern union {
 pub const HostFiles_read_textResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostFiles_read_textResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
-        const ptr: *const BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+        const ptr: *const BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) RocStr {
@@ -7808,7 +8263,7 @@ pub const HostFiles_read_textResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_read_textResultPayload,
     tag: HostFiles_read_textResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocStr {
@@ -7838,15 +8293,16 @@ comptime {
     }
 }
 
-/// Tag union: BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
-pub const BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
+/// Tag union: BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
+pub const BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
     busy = 0,
     not_found = 1,
     not_utf8 = 2,
-    permission_denied = 3,
-    read_failed = 4,
-    too_large = 5,
-    unavailable = 6,
+    path_invalid = 3,
+    permission_denied = 4,
+    read_failed = 5,
+    too_large = 6,
+    unavailable = 7,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -7862,12 +8318,12 @@ pub const BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnava
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
 }
 
@@ -7879,7 +8335,7 @@ pub const HostFiles_metadataResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_metadataResultPayload = extern union {
-    err: NotFoundOrPermissionDeniedOrReadFailedOrUnavailable,
+    err: AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable,
     ok: __AnonStruct_a1f5c33e74b3920b,
 };
 
@@ -7887,8 +8343,8 @@ pub const HostFiles_metadataResultPayload = extern union {
 pub const HostFiles_metadataResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [24]u8 align(8),
     tag: HostFiles_metadataResultTag,
-    pub fn payload_err(self: *const @This()) NotFoundOrPermissionDeniedOrReadFailedOrUnavailable {
-        const ptr: *const NotFoundOrPermissionDeniedOrReadFailedOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable {
+        const ptr: *const AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_a1f5c33e74b3920b {
@@ -7907,7 +8363,7 @@ pub const HostFiles_metadataResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_metadataResultPayload,
     tag: HostFiles_metadataResultTag,
-    pub fn payload_err(self: *const @This()) NotFoundOrPermissionDeniedOrReadFailedOrUnavailable {
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_a1f5c33e74b3920b {
@@ -7937,12 +8393,14 @@ comptime {
     }
 }
 
-/// Tag union: NotFoundOrPermissionDeniedOrReadFailedOrUnavailable
-pub const NotFoundOrPermissionDeniedOrReadFailedOrUnavailable = enum(u8) {
-    not_found = 0,
-    permission_denied = 1,
-    read_failed = 2,
-    unavailable = 3,
+/// Tag union: AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable
+pub const AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable = enum(u8) {
+    access_refused = 0,
+    not_found = 1,
+    path_invalid = 2,
+    permission_denied = 3,
+    read_failed = 4,
+    unavailable = 5,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -7958,12 +8416,12 @@ pub const NotFoundOrPermissionDeniedOrReadFailedOrUnavailable = enum(u8) {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(NotFoundOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("NotFoundOrPermissionDeniedOrReadFailedOrUnavailable size mismatch");
-        if (@alignOf(NotFoundOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("NotFoundOrPermissionDeniedOrReadFailedOrUnavailable alignment mismatch");
+        if (@sizeOf(AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(NotFoundOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("NotFoundOrPermissionDeniedOrReadFailedOrUnavailable size mismatch");
-        if (@alignOf(NotFoundOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("NotFoundOrPermissionDeniedOrReadFailedOrUnavailable alignment mismatch");
+        if (@sizeOf(AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable) != 1) @compileError("AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable alignment mismatch");
     }
 }
 
@@ -7975,7 +8433,7 @@ pub const HostFiles_read_bytesResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_read_bytesResultPayload = extern union {
-    err: BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
+    err: BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
     ok: RocListWith(u8, false),
 };
 
@@ -7983,8 +8441,8 @@ pub const HostFiles_read_bytesResultPayload = extern union {
 pub const HostFiles_read_bytesResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostFiles_read_bytesResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
-        const ptr: *const BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+        const ptr: *const BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8003,7 +8461,7 @@ pub const HostFiles_read_bytesResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_read_bytesResultPayload,
     tag: HostFiles_read_bytesResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8033,14 +8491,15 @@ comptime {
     }
 }
 
-/// Tag union: BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
-pub const BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
+/// Tag union: BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
+pub const BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
     busy = 0,
     not_found = 1,
-    permission_denied = 2,
-    read_failed = 3,
-    too_large = 4,
-    unavailable = 5,
+    path_invalid = 2,
+    permission_denied = 3,
+    read_failed = 4,
+    too_large = 5,
+    unavailable = 6,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8056,12 +8515,12 @@ pub const BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
 }
 
@@ -8073,7 +8532,7 @@ pub const HostFiles_listResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_listResultPayload = extern union {
-    err: BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
+    err: BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
     ok: RocListWith(u8, false),
 };
 
@@ -8081,8 +8540,8 @@ pub const HostFiles_listResultPayload = extern union {
 pub const HostFiles_listResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostFiles_listResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
-        const ptr: *const BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+        const ptr: *const BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8101,7 +8560,7 @@ pub const HostFiles_listResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_listResultPayload,
     tag: HostFiles_listResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+    pub fn payload_err(self: *const @This()) BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8131,15 +8590,16 @@ comptime {
     }
 }
 
-/// Tag union: BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
-pub const BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
+/// Tag union: BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
+pub const BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
     busy = 0,
     not_adirectory = 1,
     not_found = 2,
-    permission_denied = 3,
-    read_failed = 4,
-    too_large = 5,
-    unavailable = 6,
+    path_invalid = 3,
+    permission_denied = 4,
+    read_failed = 5,
+    too_large = 6,
+    unavailable = 7,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8155,12 +8615,12 @@ pub const BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeO
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
 }
 
@@ -8172,7 +8632,7 @@ pub const HostFiles_write_textResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_write_textResultPayload = extern union {
-    err: NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed,
+    err: AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed,
     ok: [0]u8,
 };
 
@@ -8180,8 +8640,8 @@ pub const HostFiles_write_textResultPayload = extern union {
 pub const HostFiles_write_textResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [1]u8 align(1),
     tag: HostFiles_write_textResultTag,
-    pub fn payload_err(self: *const @This()) NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed {
-        const ptr: *const NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed {
+        const ptr: *const AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
@@ -8196,7 +8656,7 @@ pub const HostFiles_write_textResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_write_textResultPayload,
     tag: HostFiles_write_textResultTag,
-    pub fn payload_err(self: *const @This()) NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed {
+    pub fn payload_err(self: *const @This()) AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed {
         return self.payload.err;
     }
     /// Recursively decrement Roc-owned payloads.
@@ -8223,13 +8683,15 @@ comptime {
     }
 }
 
-/// Tag union: NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed
-pub const NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed = enum(u8) {
-    no_space = 0,
-    not_found = 1,
-    permission_denied = 2,
-    unavailable = 3,
-    write_failed = 4,
+/// Tag union: AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed
+pub const AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed = enum(u8) {
+    access_refused = 0,
+    no_space = 1,
+    not_found = 2,
+    path_invalid = 3,
+    permission_denied = 4,
+    unavailable = 5,
+    write_failed = 6,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8245,12 +8707,12 @@ pub const NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed = enum(u
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed size mismatch");
-        if (@alignOf(NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed alignment mismatch");
+        if (@sizeOf(AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed size mismatch");
+        if (@alignOf(AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed size mismatch");
-        if (@alignOf(NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed alignment mismatch");
+        if (@sizeOf(AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed size mismatch");
+        if (@alignOf(AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed) != 1) @compileError("AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed alignment mismatch");
     }
 }
 
@@ -8393,7 +8855,7 @@ pub const HostCmd_runResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostCmd_runResultPayload = extern union {
-    err: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable,
+    err: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable,
     ok: __AnonStruct_45d496287297bf7f,
 };
 
@@ -8401,8 +8863,8 @@ pub const HostCmd_runResultPayload = extern union {
 pub const HostCmd_runResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [40]u8 align(8),
     tag: HostCmd_runResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable {
-        const ptr: *const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable {
+        const ptr: *const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_45d496287297bf7f {
@@ -8421,7 +8883,7 @@ pub const HostCmd_runResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostCmd_runResultPayload,
     tag: HostCmd_runResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable {
+    pub fn payload_err(self: *const @This()) AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_45d496287297bf7f {
@@ -8451,20 +8913,22 @@ comptime {
     }
 }
 
-/// Tag discriminant for BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable.
-pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag = enum(u8) {
-    Busy = 0,
-    CommandNotFound = 1,
-    PermissionDenied = 2,
-    SpawnFailed = 3,
-    StderrLimitExceeded = 4,
-    StdoutLimitExceeded = 5,
-    Timeout = 6,
-    Unavailable = 7,
+/// Tag discriminant for AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable.
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag = enum(u8) {
+    AccessRefused = 0,
+    Busy = 1,
+    CommandNotFound = 2,
+    PermissionDenied = 3,
+    SpawnFailed = 4,
+    StderrLimitExceeded = 5,
+    StdoutLimitExceeded = 6,
+    Timeout = 7,
+    Unavailable = 8,
 };
 
-/// Payload union for BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable.
-pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload = extern union {
+/// Payload union for AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable.
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload = extern union {
+    access_refused: [0]u8,
     busy: [0]u8,
     command_not_found: [0]u8,
     permission_denied: [0]u8,
@@ -8475,50 +8939,50 @@ pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExcee
     unavailable: [0]u8,
 };
 
-/// Tag union: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable
-pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable = if (@sizeOf(usize) == 4) extern struct {
+/// Tag union: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable = if (@sizeOf(usize) == 4) extern struct {
     payload: [32]u8 align(8),
-    tag: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag,
+    tag: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag,
     pub fn payload_timeout(self: *const @This()) __AnonStruct_45d496287297bf7f {
         const ptr: *const __AnonStruct_45d496287297bf7f = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, roc_host);
+        decrefAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, amount);
+        increfAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, amount);
     }
 } else extern struct {
-    payload: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload,
-    tag: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag,
+    payload: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload,
+    tag: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag,
     pub fn payload_timeout(self: *const @This()) __AnonStruct_45d496287297bf7f {
         return self.payload.timeout;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, roc_host);
+        decrefAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, amount);
+        increfAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 64) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable size mismatch");
-        if (@alignOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 8) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable alignment mismatch");
-        if (@offsetOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, "tag") != 56) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable tag offset mismatch");
+        if (@sizeOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 64) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 8) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable alignment mismatch");
+        if (@offsetOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, "tag") != 56) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 40) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable size mismatch");
-        if (@alignOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 8) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable alignment mismatch");
-        if (@offsetOf(BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, "tag") != 32) @compileError("BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable tag offset mismatch");
+        if (@sizeOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 40) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) != 8) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable alignment mismatch");
+        if (@offsetOf(AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, "tag") != 32) @compileError("AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable tag offset mismatch");
     }
 }
 
@@ -8619,7 +9083,7 @@ pub const HostUdp_bindResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostUdp_bindResultPayload = extern union {
-    err: AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable,
+    err: AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable,
     ok: __AnonStruct_ec1e23856e0d8ecf,
 };
 
@@ -8627,8 +9091,8 @@ pub const HostUdp_bindResultPayload = extern union {
 pub const HostUdp_bindResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostUdp_bindResultTag,
-    pub fn payload_err(self: *const @This()) AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable {
-        const ptr: *const AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable {
+        const ptr: *const AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_ec1e23856e0d8ecf {
@@ -8647,7 +9111,7 @@ pub const HostUdp_bindResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostUdp_bindResultPayload,
     tag: HostUdp_bindResultTag,
-    pub fn payload_err(self: *const @This()) AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable {
+    pub fn payload_err(self: *const @This()) AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_ec1e23856e0d8ecf {
@@ -8677,14 +9141,15 @@ comptime {
     }
 }
 
-/// Tag union: AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable
-pub const AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable = enum(u8) {
-    address_in_use = 0,
-    address_unavailable = 1,
-    invalid_address = 2,
-    permission_denied = 3,
-    resource_limit = 4,
-    unavailable = 5,
+/// Tag union: AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable
+pub const AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable = enum(u8) {
+    access_refused = 0,
+    address_in_use = 1,
+    address_unavailable = 2,
+    invalid_address = 3,
+    permission_denied = 4,
+    resource_limit = 5,
+    unavailable = 6,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8700,12 +9165,12 @@ pub const AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrRe
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable size mismatch");
-        if (@alignOf(AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable alignment mismatch");
+        if (@sizeOf(AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable size mismatch");
-        if (@alignOf(AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable alignment mismatch");
+        if (@sizeOf(AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable size mismatch");
+        if (@alignOf(AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable) != 1) @compileError("AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable alignment mismatch");
     }
 }
 
@@ -8717,7 +9182,7 @@ pub const HostUdp_sendResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostUdp_sendResultPayload = extern union {
-    err: InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock,
+    err: AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock,
     ok: [0]u8,
 };
 
@@ -8725,8 +9190,8 @@ pub const HostUdp_sendResultPayload = extern union {
 pub const HostUdp_sendResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [1]u8 align(1),
     tag: HostUdp_sendResultTag,
-    pub fn payload_err(self: *const @This()) InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock {
-        const ptr: *const InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock {
+        const ptr: *const AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
@@ -8741,7 +9206,7 @@ pub const HostUdp_sendResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostUdp_sendResultPayload,
     tag: HostUdp_sendResultTag,
-    pub fn payload_err(self: *const @This()) InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock {
+    pub fn payload_err(self: *const @This()) AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock {
         return self.payload.err;
     }
     /// Recursively decrement Roc-owned payloads.
@@ -8768,15 +9233,16 @@ comptime {
     }
 }
 
-/// Tag union: InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock
-pub const InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock = enum(u8) {
-    invalid_address = 0,
-    no_route = 1,
-    permission_denied = 2,
-    send_failed = 3,
-    too_large = 4,
-    unavailable = 5,
-    would_block = 6,
+/// Tag union: AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock
+pub const AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock = enum(u8) {
+    access_refused = 0,
+    invalid_address = 1,
+    no_route = 2,
+    permission_denied = 3,
+    send_failed = 4,
+    too_large = 5,
+    unavailable = 6,
+    would_block = 7,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8792,12 +9258,12 @@ pub const InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnava
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock size mismatch");
-        if (@alignOf(InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock alignment mismatch");
+        if (@sizeOf(AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock size mismatch");
+        if (@alignOf(AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock size mismatch");
-        if (@alignOf(InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock alignment mismatch");
+        if (@sizeOf(AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock size mismatch");
+        if (@alignOf(AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock) != 1) @compileError("AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock alignment mismatch");
     }
 }
 
@@ -9151,7 +9617,7 @@ pub const HostTilemap_load_tmxResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostTilemap_load_tmxResultPayload = extern union {
-    err: NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported,
+    err: NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported,
     ok: __AnonStruct_831cf812524287ed,
 };
 
@@ -9159,8 +9625,8 @@ pub const HostTilemap_load_tmxResultPayload = extern union {
 pub const HostTilemap_load_tmxResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [128]u8 align(8),
     tag: HostTilemap_load_tmxResultTag,
-    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported {
-        const ptr: *const NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported {
+        const ptr: *const NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_831cf812524287ed {
@@ -9179,7 +9645,7 @@ pub const HostTilemap_load_tmxResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostTilemap_load_tmxResultPayload,
     tag: HostTilemap_load_tmxResultTag,
-    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported {
+    pub fn payload_err(self: *const @This()) NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_831cf812524287ed {
@@ -9209,11 +9675,11 @@ comptime {
     }
 }
 
-/// Tag union: NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported
-pub const NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported = enum(u8) {
+/// Tag union: NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported
+pub const NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported = enum(u8) {
     not_found = 0,
     parse_failed = 1,
-    permission_denied = 2,
+    path_invalid = 2,
     read_failed = 3,
     unsupported = 4,
     /// Recursively decrement Roc-owned payloads.
@@ -9231,12 +9697,12 @@ pub const NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported = enu
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported size mismatch");
-        if (@alignOf(NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported alignment mismatch");
+        if (@sizeOf(NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported size mismatch");
+        if (@alignOf(NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported size mismatch");
-        if (@alignOf(NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported alignment mismatch");
+        if (@sizeOf(NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported size mismatch");
+        if (@alignOf(NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported) != 1) @compileError("NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported alignment mismatch");
     }
 }
 
@@ -9248,7 +9714,7 @@ pub const HostSqlite_openResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostSqlite_openResultPayload = extern union {
-    err: PermissionDeniedOrSqliteErrOrTooManyConnections,
+    err: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections,
     ok: *u64,
 };
 
@@ -9256,8 +9722,8 @@ pub const HostSqlite_openResultPayload = extern union {
 pub const HostSqlite_openResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [32]u8 align(8),
     tag: HostSqlite_openResultTag,
-    pub fn payload_err(self: *const @This()) PermissionDeniedOrSqliteErrOrTooManyConnections {
-        const ptr: *const PermissionDeniedOrSqliteErrOrTooManyConnections = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections {
+        const ptr: *const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -9276,7 +9742,7 @@ pub const HostSqlite_openResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostSqlite_openResultPayload,
     tag: HostSqlite_openResultTag,
-    pub fn payload_err(self: *const @This()) PermissionDeniedOrSqliteErrOrTooManyConnections {
+    pub fn payload_err(self: *const @This()) PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) *u64 {
@@ -9306,64 +9772,66 @@ comptime {
     }
 }
 
-/// Tag discriminant for PermissionDeniedOrSqliteErrOrTooManyConnections.
-pub const PermissionDeniedOrSqliteErrOrTooManyConnectionsTag = enum(u8) {
-    PermissionDenied = 0,
-    SqliteErr = 1,
-    TooManyConnections = 2,
+/// Tag discriminant for PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections.
+pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsTag = enum(u8) {
+    PathInvalid = 0,
+    PermissionDenied = 1,
+    SqliteErr = 2,
+    TooManyConnections = 3,
 };
 
-/// Payload union for PermissionDeniedOrSqliteErrOrTooManyConnections.
-pub const PermissionDeniedOrSqliteErrOrTooManyConnectionsPayload = extern union {
+/// Payload union for PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections.
+pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsPayload = extern union {
+    path_invalid: [0]u8,
     permission_denied: [0]u8,
     sqlite_err: __AnonStruct_22cf486058afc711,
     too_many_connections: [0]u8,
 };
 
-/// Tag union: PermissionDeniedOrSqliteErrOrTooManyConnections
-pub const PermissionDeniedOrSqliteErrOrTooManyConnections = if (@sizeOf(usize) == 4) extern struct {
+/// Tag union: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections
+pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections = if (@sizeOf(usize) == 4) extern struct {
     payload: [24]u8 align(8),
-    tag: PermissionDeniedOrSqliteErrOrTooManyConnectionsTag,
+    tag: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsTag,
     pub fn payload_sqlite_err(self: *const @This()) __AnonStruct_22cf486058afc711 {
         const ptr: *const __AnonStruct_22cf486058afc711 = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefPermissionDeniedOrSqliteErrOrTooManyConnections(self, roc_host);
+        decrefPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfPermissionDeniedOrSqliteErrOrTooManyConnections(self, amount);
+        increfPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(self, amount);
     }
 } else extern struct {
-    payload: PermissionDeniedOrSqliteErrOrTooManyConnectionsPayload,
-    tag: PermissionDeniedOrSqliteErrOrTooManyConnectionsTag,
+    payload: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsPayload,
+    tag: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsTag,
     pub fn payload_sqlite_err(self: *const @This()) __AnonStruct_22cf486058afc711 {
         return self.payload.sqlite_err;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefPermissionDeniedOrSqliteErrOrTooManyConnections(self, roc_host);
+        decrefPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfPermissionDeniedOrSqliteErrOrTooManyConnections(self, amount);
+        increfPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(PermissionDeniedOrSqliteErrOrTooManyConnections) != 40) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections size mismatch");
-        if (@alignOf(PermissionDeniedOrSqliteErrOrTooManyConnections) != 8) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections alignment mismatch");
-        if (@offsetOf(PermissionDeniedOrSqliteErrOrTooManyConnections, "tag") != 32) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections tag offset mismatch");
+        if (@sizeOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections) != 40) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections size mismatch");
+        if (@alignOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections) != 8) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections alignment mismatch");
+        if (@offsetOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections, "tag") != 32) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(PermissionDeniedOrSqliteErrOrTooManyConnections) != 32) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections size mismatch");
-        if (@alignOf(PermissionDeniedOrSqliteErrOrTooManyConnections) != 8) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections alignment mismatch");
-        if (@offsetOf(PermissionDeniedOrSqliteErrOrTooManyConnections, "tag") != 24) @compileError("PermissionDeniedOrSqliteErrOrTooManyConnections tag offset mismatch");
+        if (@sizeOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections) != 32) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections size mismatch");
+        if (@alignOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections) != 8) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections alignment mismatch");
+        if (@offsetOf(PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections, "tag") != 24) @compileError("PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections tag offset mismatch");
     }
 }
 
@@ -10309,6 +10777,168 @@ comptime {
     }
 }
 
+/// Tag discriminant for ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory.
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryTag = enum(u8) {
+    ClipboardRead = 0,
+    ClipboardWrite = 1,
+    Command = 2,
+    CommandAny = 3,
+    Directory = 4,
+    EnvAny = 5,
+    EnvVar = 6,
+    FilesAny = 7,
+    HttpAny = 8,
+    HttpOrigin = 9,
+    UdpAny = 10,
+    UdpBind = 11,
+    UdpLoopback = 12,
+    UdpPeer = 13,
+    WorkingDirectory = 14,
+};
+
+/// Payload union for ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory.
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryPayload = extern union {
+    clipboard_read: [0]u8,
+    clipboard_write: [0]u8,
+    command: RocStr,
+    command_any: [0]u8,
+    directory: __AnonStruct_3299be1b424acd7a,
+    env_any: [0]u8,
+    env_var: RocStr,
+    files_any: ReadOnlyOrReadWrite,
+    http_any: [0]u8,
+    http_origin: RocStr,
+    udp_any: [0]u8,
+    udp_bind: u16,
+    udp_loopback: [0]u8,
+    udp_peer: __AnonStruct_90b065c31c582eeb,
+    working_directory: ReadOnlyOrReadWrite,
+};
+
+/// Tag union: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory = if (@sizeOf(usize) == 4) extern struct {
+    payload: [16]u8 align(4),
+    tag: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryTag,
+    pub fn payload_command(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_directory(self: *const @This()) __AnonStruct_3299be1b424acd7a {
+        const ptr: *const __AnonStruct_3299be1b424acd7a = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_env_var(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_files_any(self: *const @This()) ReadOnlyOrReadWrite {
+        const ptr: *const ReadOnlyOrReadWrite = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_http_origin(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_udp_bind(self: *const @This()) u16 {
+        const ptr: *const u16 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_udp_peer(self: *const @This()) __AnonStruct_90b065c31c582eeb {
+        const ptr: *const __AnonStruct_90b065c31c582eeb = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_working_directory(self: *const @This()) ReadOnlyOrReadWrite {
+        const ptr: *const ReadOnlyOrReadWrite = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(self, amount);
+    }
+} else extern struct {
+    payload: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryPayload,
+    tag: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryTag,
+    pub fn payload_command(self: *const @This()) RocStr {
+        return self.payload.command;
+    }
+    pub fn payload_directory(self: *const @This()) __AnonStruct_3299be1b424acd7a {
+        return self.payload.directory;
+    }
+    pub fn payload_env_var(self: *const @This()) RocStr {
+        return self.payload.env_var;
+    }
+    pub fn payload_files_any(self: *const @This()) ReadOnlyOrReadWrite {
+        return self.payload.files_any;
+    }
+    pub fn payload_http_origin(self: *const @This()) RocStr {
+        return self.payload.http_origin;
+    }
+    pub fn payload_udp_bind(self: *const @This()) u16 {
+        return self.payload.udp_bind;
+    }
+    pub fn payload_udp_peer(self: *const @This()) __AnonStruct_90b065c31c582eeb {
+        return self.payload.udp_peer;
+    }
+    pub fn payload_working_directory(self: *const @This()) ReadOnlyOrReadWrite {
+        return self.payload.working_directory;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory) != 40) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory size mismatch");
+        if (@alignOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory) != 8) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory alignment mismatch");
+        if (@offsetOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory, "tag") != 32) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory) != 20) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory size mismatch");
+        if (@alignOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory) != 4) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory alignment mismatch");
+        if (@offsetOf(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory, "tag") != 16) @compileError("ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory tag offset mismatch");
+    }
+}
+
+/// Tag union: ReadOnlyOrReadWrite
+pub const ReadOnlyOrReadWrite = enum(u8) {
+    read_only = 0,
+    read_write = 1,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(ReadOnlyOrReadWrite) != 1) @compileError("ReadOnlyOrReadWrite size mismatch");
+        if (@alignOf(ReadOnlyOrReadWrite) != 1) @compileError("ReadOnlyOrReadWrite alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(ReadOnlyOrReadWrite) != 1) @compileError("ReadOnlyOrReadWrite size mismatch");
+        if (@alignOf(ReadOnlyOrReadWrite) != 1) @compileError("ReadOnlyOrReadWrite alignment mismatch");
+    }
+}
+
 /// Tag discriminant for Try.
 pub const Init_for_hostResultTag = enum(u8) {
     Err = 0,
@@ -10592,11 +11222,11 @@ comptime {
 }
 
 /// Arguments for Host.store_open!
-/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Refcounted fields are owned by the hosted function.
 pub const HostStore_openArgs = extern struct {
     arg0: u64,
-    arg1: __AnonStruct_8f4b2816fd84fce2,
+    arg1: __AnonStruct_3a568cb37b91deaf,
 };
 
 /// Arguments for Host.texture_load_store!
@@ -11024,20 +11654,100 @@ comptime {
 }
 
 /// Arguments for Host.audio_load_sound!
-/// Roc signature: Resource.Authority, Str => Try(Resource.Handle([SoundResource]), [PermissionDenied, ResourceLimit, SoundLoadFailed])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
 /// Refcounted fields are owned by the hosted function.
-pub const HostAudio_load_soundArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
+pub const HostAudio_load_soundArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
 };
 
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_load_soundArgs) != 32) @compileError("HostAudio_load_soundArgs size mismatch");
+        if (@alignOf(HostAudio_load_soundArgs) != 8) @compileError("HostAudio_load_soundArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_load_soundArgs) != 16) @compileError("HostAudio_load_soundArgs size mismatch");
+        if (@alignOf(HostAudio_load_soundArgs) != 4) @compileError("HostAudio_load_soundArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.audio_load_music!
-/// Roc signature: Resource.Authority, Str => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, PermissionDenied, ResourceLimit])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
 /// Refcounted fields are owned by the hosted function.
-pub const HostAudio_load_musicArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
+pub const HostAudio_load_musicArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
 };
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_load_musicArgs) != 32) @compileError("HostAudio_load_musicArgs size mismatch");
+        if (@alignOf(HostAudio_load_musicArgs) != 8) @compileError("HostAudio_load_musicArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_load_musicArgs) != 16) @compileError("HostAudio_load_musicArgs size mismatch");
+        if (@alignOf(HostAudio_load_musicArgs) != 4) @compileError("HostAudio_load_musicArgs alignment mismatch");
+    }
+}
 
 /// Arguments for Host.audio_play_sound!
 /// Roc signature: Resource.Handle([SoundResource]) => {}
@@ -12581,54 +13291,85 @@ comptime {
     }
 }
 
+/// Arguments for Host.app_report_error!
+/// Roc signature: Str, Str => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostApp_report_errorArgs = extern struct {
+    arg0: RocStr,
+    arg1: RocStr,
+};
+
+/// Arguments for Host.files_open_root!
+/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_open_rootArgs = extern struct {
+    arg0: u64,
+    arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory,
+    arg2: bool,
+};
+
+/// Arguments for Host.files_designate!
+/// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_designateArgs = extern struct {
+    arg0: u64,
+    arg1: ArgOrDrop,
+};
+
 /// Arguments for Host.files_read_text!
-/// Roc signature: Resource.Authority, Str => Try(Str, [Busy, NotFound, NotUtf8, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostFiles_read_textArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str => Try(List(U8), [Busy, NotFound, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_read_bytesArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.files_list!
-/// Roc signature: Resource.Authority, Str => Try(List(U8), [Busy, NotADirectory, NotFound, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_listArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.files_metadata!
-/// Roc signature: Resource.Authority, Str => Try({ kind : U8, modified_nanosecond : U32, modified_seconds : I64, size_bytes : U64 }, [NotFound, PermissionDenied, ReadFailed, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_metadataArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.files_write_text!
-/// Roc signature: Resource.Authority, Str, Str => Try({}, [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_write_textArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
     arg2: RocStr,
 };
 
+/// Arguments for Host.files_read_bytes!
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_read_bytesArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+    arg2: RocStr,
+};
+
+/// Arguments for Host.files_list!
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotADirectory, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_listArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+    arg2: RocStr,
+};
+
+/// Arguments for Host.files_metadata!
+/// Roc signature: Resource.Authority, Str, Str => Try({ kind : U8, modified_nanosecond : U32, modified_seconds : I64, size_bytes : U64 }, [AccessRefused, NotFound, PathInvalid, PermissionDenied, ReadFailed, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_metadataArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+    arg2: RocStr,
+};
+
+/// Arguments for Host.files_write_text!
+/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_write_textArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+    arg2: RocStr,
+    arg3: RocStr,
+};
+
 /// Arguments for Host.files_write_bytes!
-/// Roc signature: Resource.Authority, Str, List(U8) => Try({}, [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed])
+/// Roc signature: Resource.Authority, Str, Str, List(U8) => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
 /// Refcounted fields are owned by the hosted function.
 pub const HostFiles_write_bytesArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
-    arg2: RocListWith(u8, false),
+    arg2: RocStr,
+    arg3: RocListWith(u8, false),
 };
 
 /// Arguments for Host.capture_set_virtual_mouse!
@@ -13099,12 +13840,52 @@ pub const HostTask_spawnArgs = extern struct {
 };
 
 /// Arguments for Host.tilemap_load_tmx!
-/// Roc signature: Resource.Authority, Str => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PermissionDenied, ReadFailed, Unsupported])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
 /// Refcounted fields are owned by the hosted function.
-pub const HostTilemap_load_tmxArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
+pub const HostTilemap_load_tmxArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
 };
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTilemap_load_tmxArgs) != 32) @compileError("HostTilemap_load_tmxArgs size mismatch");
+        if (@alignOf(HostTilemap_load_tmxArgs) != 8) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTilemap_load_tmxArgs) != 16) @compileError("HostTilemap_load_tmxArgs size mismatch");
+        if (@alignOf(HostTilemap_load_tmxArgs) != 4) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
+    }
+}
 
 /// Arguments for Host.tilemap_draw!
 /// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
@@ -13808,7 +14589,7 @@ pub const HostStdio_write_bytesArgs = extern struct {
 };
 
 /// Arguments for Host.udp_bind!
-/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
+/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostUdp_bindArgs = extern struct {
     arg0: u64,
@@ -13816,7 +14597,7 @@ pub const HostUdp_bindArgs = extern struct {
 };
 
 /// Arguments for Host.udp_send!
-/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
+/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
 /// Refcounted fields are owned by the hosted function.
 pub const HostUdp_sendArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
@@ -13918,14 +14699,15 @@ comptime {
 }
 
 /// Arguments for Host.sqlite_open!
-/// Roc signature: Resource.Authority, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
+/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
 /// Refcounted fields are owned by the hosted function.
 pub const HostSqlite_openArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
-    arg2: u8,
-    arg3: u64,
+    arg2: RocStr,
+    arg3: u8,
     arg4: u64,
+    arg5: u64,
 };
 
 /// Arguments for Host.sqlite_close!
@@ -13969,7 +14751,7 @@ pub const HostSqlite_exec_scriptArgs = extern struct {
 };
 
 /// Arguments for Host.cmd_run!
-/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
+/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostCmd_runArgs = extern struct {
     arg0: u64,
@@ -14017,8 +14799,8 @@ pub const HostTrace_sample_f64Args = extern struct {
 
 // Platform Type Aliases
 
-pub const HostStore_openArg1 = __AnonStruct_8f4b2816fd84fce2;
-pub const HostStore_openErr = AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrInvalidRootPathOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch;
+pub const HostStore_openArg1 = __AnonStruct_3a568cb37b91deaf;
+pub const HostStore_openErr = AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch;
 pub const HostTexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
 pub const HostTexture_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed;
 pub const HostTexture_load_storeOk = Texture;
@@ -14047,8 +14829,10 @@ pub const HostAudio_gen_soundResult = HostAudio_gen_toneResult;
 pub const HostAudio_gen_soundResultPayload = HostAudio_gen_toneResultPayload;
 pub const HostAudio_gen_soundResultTag = HostAudio_gen_toneResultTag;
 pub const HostAudio_gen_soundErr = ResourceLimitOrSoundGenerationFailed;
-pub const HostAudio_load_soundErr = PermissionDeniedOrResourceLimitOrSoundLoadFailed;
-pub const HostAudio_load_musicErr = MusicLoadFailedOrPermissionDeniedOrResourceLimit;
+pub const HostAudio_load_soundArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostAudio_load_soundErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed;
+pub const HostAudio_load_musicArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostAudio_load_musicErr = MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit;
 pub const HostDraw_begin_scissorArg0 = __AnonStruct_5d393593a1f032cb;
 pub const HostDraw_begin_scissorErr = ScopeLimitOrScopeUnavailable;
 pub const HostDraw_circle_gradientArg0 = __AnonStruct_f8a458371716c148;
@@ -14088,16 +14872,18 @@ pub const HostDraw_rounded_rectangleArg0 = __AnonStruct_2b98c437f1796b13;
 pub const HostDraw_textArg0 = __AnonStruct_a794ed9ee3bc5d8d;
 pub const HostDraw_triangle_linesArg0 = __AnonStruct_563f890a3b4ea7a0;
 pub const HostDraw_triangleArg0 = __AnonStruct_d48cb861dff2afaa;
-pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
-pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
-pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
-pub const HostFiles_metadataErr = NotFoundOrPermissionDeniedOrReadFailedOrUnavailable;
+pub const HostFiles_open_rootErr = AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable;
+pub const HostFiles_designateOk = __AnonStruct_c497f4ed41e47ac1;
+pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
+pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
+pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
+pub const HostFiles_metadataErr = AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable;
 pub const HostFiles_metadataOk = __AnonStruct_a1f5c33e74b3920b;
-pub const HostFiles_write_textErr = NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed;
+pub const HostFiles_write_textErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
 pub const HostFiles_write_bytesResult = HostFiles_write_textResult;
 pub const HostFiles_write_bytesResultPayload = HostFiles_write_textResultPayload;
 pub const HostFiles_write_bytesResultTag = HostFiles_write_textResultTag;
-pub const HostFiles_write_bytesErr = NoSpaceOrNotFoundOrPermissionDeniedOrUnavailableOrWriteFailed;
+pub const HostFiles_write_bytesErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
 pub const HostCapture_set_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
 pub const HostCapture_set_virtual_keysArg0 = __AnonStruct_c3425bb1e3730c6e;
 pub const HostCapture_start_recordingArg1 = __AnonStruct_96bd4e483c462501;
@@ -14121,7 +14907,8 @@ pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostWindow_scale_dpi = __AnonStruct_2818a50bdccefb1e;
 pub const HostWindow_monitors = __AnonStruct_dae0ce24e748c0cf;
 pub const HostWindow_suggest_positionArg0 = __AnonStruct_3560e04f2553d83d;
-pub const HostTilemap_load_tmxErr = NotFoundOrParseFailedOrPermissionDeniedOrReadFailedOrUnsupported;
+pub const HostTilemap_load_tmxArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostTilemap_load_tmxErr = NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported;
 pub const HostTilemap_load_tmxOk = __AnonStruct_831cf812524287ed;
 pub const HostTilemap_load_tmxOkLayers = __AnonStruct_1299823ae1663c65;
 pub const HostTilemap_load_tmxOkObjects = __AnonStruct_109c1082e72f7bad;
@@ -14188,19 +14975,19 @@ pub const HostStdio_write_bytesResultPayload = HostStdio_write_textResultPayload
 pub const HostStdio_write_bytesResultTag = HostStdio_write_textResultTag;
 pub const HostStdio_write_bytesErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
 pub const HostUdp_bindArg1 = __AnonStruct_63b1422749dba501;
-pub const HostUdp_bindErr = AddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable;
+pub const HostUdp_bindErr = AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable;
 pub const HostUdp_bindOk = __AnonStruct_ec1e23856e0d8ecf;
 pub const HostUdp_sendArg0 = __AnonStruct_686570ce13fde405;
-pub const HostUdp_sendErr = InvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock;
+pub const HostUdp_sendErr = AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock;
 pub const HostUdp_receiveArg0 = __AnonStruct_3d573c3bcb10a375;
 pub const HostUdp_receiveErr = AlreadyReceivingOrReceiveFailedOrTimeoutOrUnavailable;
 pub const HostUdp_receiveOk = __AnonStruct_1772298ecb801858;
 pub const HostUdp_receiveOkSlices = __AnonStruct_4dd3180405b3f44f;
-pub const HostSqlite_openErr = PermissionDeniedOrSqliteErrOrTooManyConnections;
-pub const HostSqlite_openErrPayload = PermissionDeniedOrSqliteErrOrTooManyConnectionsPayload;
-pub const HostSqlite_openErrTag = PermissionDeniedOrSqliteErrOrTooManyConnectionsTag;
+pub const HostSqlite_openErr = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections;
+pub const HostSqlite_openErrPayload = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsPayload;
+pub const HostSqlite_openErrTag = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsTag;
 pub const HostSqlite_openErrSqliteErr = __AnonStruct_22cf486058afc711;
-pub const PermissionDeniedOrSqliteErrOrTooManyConnectionsSqliteErr = __AnonStruct_22cf486058afc711;
+pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsSqliteErr = __AnonStruct_22cf486058afc711;
 pub const HostSqlite_closeErr = __AnonStruct_22cf486058afc711;
 pub const SqliteErr = __AnonStruct_22cf486058afc711;
 pub const SqliteErrSqliteErr = __AnonStruct_22cf486058afc711;
@@ -14233,14 +15020,25 @@ pub const HostSqlite_exec_scriptResultTag = HostSqlite_closeResultTag;
 pub const HostSqlite_exec_scriptErr = __AnonStruct_22cf486058afc711;
 pub const HostCmd_runArg1 = __AnonStruct_3fe396bc5ba0c31c;
 pub const HostCmd_runArg1Envs = __AnonStruct_82a96c5d55d63488;
-pub const HostCmd_runErr = BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable;
-pub const HostCmd_runErrPayload = BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload;
-pub const HostCmd_runErrTag = BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag;
+pub const HostCmd_runErr = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable;
+pub const HostCmd_runErrPayload = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload;
+pub const HostCmd_runErrTag = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag;
 pub const HostCmd_runErrTimeout = __AnonStruct_45d496287297bf7f;
 pub const HostCmd_runOk = __AnonStruct_45d496287297bf7f;
-pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTimeout = __AnonStruct_45d496287297bf7f;
-pub const App_config_for_host = __AnonStruct_a868748fcc059834;
-pub const Update_for_hostArg1 = __AnonStruct_11f285e8dfedfde1;
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTimeout = __AnonStruct_45d496287297bf7f;
+pub const App_config_for_host = __AnonStruct_4f0c1c4bc3c3ab28;
+pub const App_config_for_hostPermissions = ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory;
+pub const App_config_for_hostPermissionsPayload = ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryPayload;
+pub const App_config_for_hostPermissionsTag = ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryTag;
+pub const App_config_for_hostPermissionsDirectory = __AnonStruct_3299be1b424acd7a;
+pub const App_config_for_hostPermissionsFilesAny = ReadOnlyOrReadWrite;
+pub const App_config_for_hostPermissionsUdpPeer = __AnonStruct_90b065c31c582eeb;
+pub const App_config_for_hostPermissionsWorkingDirectory = ReadOnlyOrReadWrite;
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryDirectory = __AnonStruct_3299be1b424acd7a;
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryFilesAny = ReadOnlyOrReadWrite;
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryUdpPeer = __AnonStruct_90b065c31c582eeb;
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryWorkingDirectory = ReadOnlyOrReadWrite;
+pub const Update_for_hostArg1 = __AnonStruct_789266b361159fc9;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
 pub const Update_for_hostArg1Time = __AnonStruct_db5a281b648e1efe;
 pub const Update_for_hostArg1Devices = __AnonStruct_1339741edbb01404;
@@ -14249,7 +15047,7 @@ pub const Update_for_hostArg1DevicesGamepads = __AnonStruct_1c8617e96852f779;
 pub const Update_for_hostArg1Dropped = __AnonStruct_66bf628355bb7f8e;
 pub const Update_for_hostArg1DroppedPosition = __AnonStruct_2818a50bdccefb1e;
 pub const Update_for_hostArg1TaskResults = __AnonStruct_35c41f749bc927bb;
-pub const Update_for_hostArg1Window = __AnonStruct_225d69ea1bc0e508;
+pub const Update_for_hostArg1Window = __AnonStruct_d905f039c8a75547;
 pub const Update_for_hostArg1WindowSize = __AnonStruct_bc8fa73ca49a5ac0;
 
 // Generated Refcount Helpers
@@ -14806,8 +15604,8 @@ pub const HostStore_openResultRelease = struct {
     }
 };
 
-pub const __AnonStruct_8f4b2816fd84fce2Release = struct {
-    pub fn release(value: __AnonStruct_8f4b2816fd84fce2, roc_host: *RocHost) void {
+pub const __AnonStruct_3a568cb37b91deafRelease = struct {
+    pub fn release(value: __AnonStruct_3a568cb37b91deaf, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -14910,6 +15708,124 @@ fn increfHostAudio_load_musicResult(value: HostAudio_load_musicResult, amount: i
 
 pub const HostAudio_load_musicResultRelease = struct {
     pub fn release(value: HostAudio_load_musicResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostFiles_open_rootResult(value: HostFiles_open_rootResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostFiles_open_rootResult(value: HostFiles_open_rootResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostFiles_open_rootResultRelease = struct {
+    pub fn release(value: HostFiles_open_rootResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(value: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .AppCache => {},
+        .AppConfig => {},
+        .AppData => {},
+        .BesideExecutable => {},
+        .Declared => {
+            value.payload_declared().decref(roc_host);
+        },
+        .WorkingDirectory => {},
+    }
+}
+
+fn increfAppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory(value: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, amount: isize) void {
+    switch (value.tag) {
+        .AppCache => {},
+        .AppConfig => {},
+        .AppData => {},
+        .BesideExecutable => {},
+        .Declared => {
+            value.payload_declared().incref(amount);
+        },
+        .WorkingDirectory => {},
+    }
+}
+
+pub const AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryRelease = struct {
+    pub fn release(value: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostFiles_designateResult(value: HostFiles_designateResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostFiles_designateResult(value: HostFiles_designateResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().incref(amount);
+        },
+    }
+}
+
+pub const HostFiles_designateResultRelease = struct {
+    pub fn release(value: HostFiles_designateResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_c497f4ed41e47ac1Release = struct {
+    pub fn release(value: __AnonStruct_c497f4ed41e47ac1, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefArgOrDrop(value: ArgOrDrop, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Arg => {
+            value.payload_arg().decref(roc_host);
+        },
+        .Drop => {
+            value.payload_drop().decref(roc_host);
+        },
+    }
+}
+
+fn increfArgOrDrop(value: ArgOrDrop, amount: isize) void {
+    switch (value.tag) {
+        .Arg => {
+            value.payload_arg().incref(amount);
+        },
+        .Drop => {
+            value.payload_drop().incref(amount);
+        },
+    }
+}
+
+pub const ArgOrDropRelease = struct {
+    pub fn release(value: ArgOrDrop, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -15160,8 +16076,9 @@ pub const HostCmd_runResultRelease = struct {
     }
 };
 
-fn decrefBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(value: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, roc_host: *RocHost) void {
+fn decrefAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(value: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, roc_host: *RocHost) void {
     switch (value.tag) {
+        .AccessRefused => {},
         .Busy => {},
         .CommandNotFound => {},
         .PermissionDenied => {},
@@ -15175,8 +16092,9 @@ fn decrefBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceed
     }
 }
 
-fn increfBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(value: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, amount: isize) void {
+fn increfAccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable(value: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, amount: isize) void {
     switch (value.tag) {
+        .AccessRefused => {},
         .Busy => {},
         .CommandNotFound => {},
         .PermissionDenied => {},
@@ -15190,8 +16108,8 @@ fn increfBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceed
     }
 }
 
-pub const BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableRelease = struct {
-    pub fn release(value: BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, roc_host: *RocHost) void {
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableRelease = struct {
+    pub fn release(value: AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -15532,8 +16450,9 @@ pub const HostSqlite_openResultRelease = struct {
     }
 };
 
-fn decrefPermissionDeniedOrSqliteErrOrTooManyConnections(value: PermissionDeniedOrSqliteErrOrTooManyConnections, roc_host: *RocHost) void {
+fn decrefPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(value: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections, roc_host: *RocHost) void {
     switch (value.tag) {
+        .PathInvalid => {},
         .PermissionDenied => {},
         .SqliteErr => {
             value.payload_sqlite_err().decref(roc_host);
@@ -15542,8 +16461,9 @@ fn decrefPermissionDeniedOrSqliteErrOrTooManyConnections(value: PermissionDenied
     }
 }
 
-fn increfPermissionDeniedOrSqliteErrOrTooManyConnections(value: PermissionDeniedOrSqliteErrOrTooManyConnections, amount: isize) void {
+fn increfPathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections(value: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections, amount: isize) void {
     switch (value.tag) {
+        .PathInvalid => {},
         .PermissionDenied => {},
         .SqliteErr => {
             value.payload_sqlite_err().incref(amount);
@@ -15552,8 +16472,8 @@ fn increfPermissionDeniedOrSqliteErrOrTooManyConnections(value: PermissionDenied
     }
 }
 
-pub const PermissionDeniedOrSqliteErrOrTooManyConnectionsRelease = struct {
-    pub fn release(value: PermissionDeniedOrSqliteErrOrTooManyConnections, roc_host: *RocHost) void {
+pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsRelease = struct {
+    pub fn release(value: PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16098,8 +17018,94 @@ pub const __AnonStruct_7ea2de5aa3c18166Release = struct {
     }
 };
 
-pub const __AnonStruct_a868748fcc059834Release = struct {
-    pub fn release(value: __AnonStruct_a868748fcc059834, roc_host: *RocHost) void {
+pub const __AnonStruct_4f0c1c4bc3c3ab28Release = struct {
+    pub fn release(value: __AnonStruct_4f0c1c4bc3c3ab28, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(value: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .ClipboardRead => {},
+        .ClipboardWrite => {},
+        .Command => {
+            value.payload_command().decref(roc_host);
+        },
+        .CommandAny => {},
+        .Directory => {
+            value.payload_directory().decref(roc_host);
+        },
+        .EnvAny => {},
+        .EnvVar => {
+            value.payload_env_var().decref(roc_host);
+        },
+        .FilesAny => {
+            value.payload_files_any().decref(roc_host);
+        },
+        .HttpAny => {},
+        .HttpOrigin => {
+            value.payload_http_origin().decref(roc_host);
+        },
+        .UdpAny => {},
+        .UdpBind => {},
+        .UdpLoopback => {},
+        .UdpPeer => {
+            value.payload_udp_peer().decref(roc_host);
+        },
+        .WorkingDirectory => {
+            value.payload_working_directory().decref(roc_host);
+        },
+    }
+}
+
+fn increfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(value: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory, amount: isize) void {
+    switch (value.tag) {
+        .ClipboardRead => {},
+        .ClipboardWrite => {},
+        .Command => {
+            value.payload_command().incref(amount);
+        },
+        .CommandAny => {},
+        .Directory => {
+            value.payload_directory().incref(amount);
+        },
+        .EnvAny => {},
+        .EnvVar => {
+            value.payload_env_var().incref(amount);
+        },
+        .FilesAny => {
+            value.payload_files_any().incref(amount);
+        },
+        .HttpAny => {},
+        .HttpOrigin => {
+            value.payload_http_origin().incref(amount);
+        },
+        .UdpAny => {},
+        .UdpBind => {},
+        .UdpLoopback => {},
+        .UdpPeer => {
+            value.payload_udp_peer().incref(amount);
+        },
+        .WorkingDirectory => {
+            value.payload_working_directory().incref(amount);
+        },
+    }
+}
+
+pub const ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryRelease = struct {
+    pub fn release(value: ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_3299be1b424acd7aRelease = struct {
+    pub fn release(value: __AnonStruct_3299be1b424acd7a, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_90b065c31c582eebRelease = struct {
+    pub fn release(value: __AnonStruct_90b065c31c582eeb, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16152,8 +17158,8 @@ pub const Update_for_hostResultRelease = struct {
     }
 };
 
-pub const __AnonStruct_11f285e8dfedfde1Release = struct {
-    pub fn release(value: __AnonStruct_11f285e8dfedfde1, roc_host: *RocHost) void {
+pub const __AnonStruct_789266b361159fc9Release = struct {
+    pub fn release(value: __AnonStruct_789266b361159fc9, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16206,8 +17212,8 @@ pub const __AnonStruct_db5a281b648e1efeRelease = struct {
     }
 };
 
-pub const __AnonStruct_225d69ea1bc0e508Release = struct {
-    pub fn release(value: __AnonStruct_225d69ea1bc0e508, roc_host: *RocHost) void {
+pub const __AnonStruct_d905f039c8a75547Release = struct {
+    pub fn release(value: __AnonStruct_d905f039c8a75547, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16308,6 +17314,14 @@ pub fn decrefListOf__AnonStruct_90c9f98ccd96f8ce(value: RocList(__AnonStruct_90c
     value.deinitWith(__AnonStruct_90c9f98ccd96f8ceRelease, roc_host);
 }
 
+/// Release one owned reference to a `RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory)`.
+///
+/// The allocation's final reference is claimed atomically before any element
+/// is read, so concurrent owners cannot skip or duplicate element teardown.
+pub fn decrefListOfClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory(value: RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory), roc_host: *RocHost) void {
+    value.deinitWith(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryRelease, roc_host);
+}
+
 /// Release one owned reference to a `RocList(__AnonStruct_66bf628355bb7f8e)`.
 ///
 /// The allocation's final reference is claimed atomically before any element
@@ -16362,11 +17376,16 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_70e8e55530300f02) return __AnonStruct_70e8e55530300f02Release;
     if (T == __AnonStruct_8a37692f15a59a1d) return __AnonStruct_8a37692f15a59a1dRelease;
     if (T == HostStore_openResult) return HostStore_openResultRelease;
-    if (T == __AnonStruct_8f4b2816fd84fce2) return __AnonStruct_8f4b2816fd84fce2Release;
+    if (T == __AnonStruct_3a568cb37b91deaf) return __AnonStruct_3a568cb37b91deafRelease;
     if (T == RocErasedCallable) return RocErasedCallableRelease;
     if (T == HostAudio_gen_toneResult) return HostAudio_gen_toneResultRelease;
     if (T == HostAudio_load_soundResult) return HostAudio_load_soundResultRelease;
     if (T == HostAudio_load_musicResult) return HostAudio_load_musicResultRelease;
+    if (T == HostFiles_open_rootResult) return HostFiles_open_rootResultRelease;
+    if (T == AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory) return AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectoryRelease;
+    if (T == HostFiles_designateResult) return HostFiles_designateResultRelease;
+    if (T == __AnonStruct_c497f4ed41e47ac1) return __AnonStruct_c497f4ed41e47ac1Release;
+    if (T == ArgOrDrop) return ArgOrDropRelease;
     if (T == HostFiles_read_textResult) return HostFiles_read_textResultRelease;
     if (T == HostFiles_read_bytesResult) return HostFiles_read_bytesResultRelease;
     if (T == HostFiles_listResult) return HostFiles_listResultRelease;
@@ -16377,7 +17396,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_82a96c5d55d63488) return __AnonStruct_82a96c5d55d63488Release;
     if (T == __AnonStruct_85380e02323174c5) return __AnonStruct_85380e02323174c5Release;
     if (T == HostCmd_runResult) return HostCmd_runResultRelease;
-    if (T == BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) return BusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableRelease;
+    if (T == AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable) return AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableRelease;
     if (T == __AnonStruct_45d496287297bf7f) return __AnonStruct_45d496287297bf7fRelease;
     if (T == __AnonStruct_3fe396bc5ba0c31c) return __AnonStruct_3fe396bc5ba0c31cRelease;
     if (T == RocList(RocStr)) return RocListRelease(RocList(RocStr), RocStrRelease);
@@ -16411,7 +17430,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == RocList(__AnonStruct_9f9f7e660a5e922b)) return RocListRelease(RocList(__AnonStruct_9f9f7e660a5e922b), __AnonStruct_9f9f7e660a5e922bRelease);
     if (T == __AnonStruct_9f9f7e660a5e922b) return __AnonStruct_9f9f7e660a5e922bRelease;
     if (T == HostSqlite_openResult) return HostSqlite_openResultRelease;
-    if (T == PermissionDeniedOrSqliteErrOrTooManyConnections) return PermissionDeniedOrSqliteErrOrTooManyConnectionsRelease;
+    if (T == PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections) return PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsRelease;
     if (T == __AnonStruct_22cf486058afc711) return __AnonStruct_22cf486058afc711Release;
     if (T == HostSqlite_closeResult) return HostSqlite_closeResultRelease;
     if (T == HostSqlite_prepareResult) return HostSqlite_prepareResultRelease;
@@ -16439,8 +17458,12 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_29524f9bb2f9574c) return __AnonStruct_29524f9bb2f9574cRelease;
     if (T == HostCapture_read_regionResult) return HostCapture_read_regionResultRelease;
     if (T == __AnonStruct_7ea2de5aa3c18166) return __AnonStruct_7ea2de5aa3c18166Release;
-    if (T == __AnonStruct_a868748fcc059834) return __AnonStruct_a868748fcc059834Release;
-    if (T == __AnonStruct_11f285e8dfedfde1) return __AnonStruct_11f285e8dfedfde1Release;
+    if (T == __AnonStruct_4f0c1c4bc3c3ab28) return __AnonStruct_4f0c1c4bc3c3ab28Release;
+    if (T == RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory)) return RocListRelease(RocList(ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory), ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryRelease);
+    if (T == ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory) return ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryRelease;
+    if (T == __AnonStruct_3299be1b424acd7a) return __AnonStruct_3299be1b424acd7aRelease;
+    if (T == __AnonStruct_90b065c31c582eeb) return __AnonStruct_90b065c31c582eebRelease;
+    if (T == __AnonStruct_789266b361159fc9) return __AnonStruct_789266b361159fc9Release;
     if (T == __AnonStruct_1339741edbb01404) return __AnonStruct_1339741edbb01404Release;
     if (T == RocListWith(__AnonStruct_59fc16acdd7d0c98, false)) return RocListSpineRelease(RocListWith(__AnonStruct_59fc16acdd7d0c98, false));
     if (T == __AnonStruct_1c8617e96852f779) return __AnonStruct_1c8617e96852f779Release;
@@ -16470,12 +17493,12 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // Refcounted arguments are owned by the hosted function.
 
 /// Hosted symbol for Host.store_open!
-/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, location_kind : U8, manifest_required : Bool, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, InvalidRootPath, ManifestMalformed, ManifestMissing, ManifestUnreadable, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_store_open_raw(arg0: u64, arg1: __AnonStruct_8f4b2816fd84fce2) callconv(.c) HostStore_openResult;
+pub extern fn roc_store_open_raw(arg0: u64, arg1: __AnonStruct_3a568cb37b91deaf) callconv(.c) HostStore_openResult;
 
 /// Hosted symbol for Host.texture_load_store!
 /// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
@@ -16542,20 +17565,20 @@ pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) 
 pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) HostAudio_gen_toneResult;
 
 /// Hosted symbol for Host.audio_load_sound!
-/// Roc signature: Resource.Authority, Str => Try(Resource.Handle([SoundResource]), [PermissionDenied, ResourceLimit, SoundLoadFailed])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     arg1.decref(roc_host);
+///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_load_sound_raw(arg0: u64, arg1: RocStr) callconv(.c) HostAudio_load_soundResult;
+pub extern fn roc_audio_load_sound_raw(arg0: HostAudio_load_soundArgs) callconv(.c) HostAudio_load_soundResult;
 
 /// Hosted symbol for Host.audio_load_music!
-/// Roc signature: Resource.Authority, Str => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, PermissionDenied, ResourceLimit])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     arg1.decref(roc_host);
+///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_load_music_raw(arg0: u64, arg1: RocStr) callconv(.c) HostAudio_load_musicResult;
+pub extern fn roc_audio_load_music_raw(arg0: HostAudio_load_musicArgs) callconv(.c) HostAudio_load_musicResult;
 
 /// Hosted symbol for Host.audio_play_sound!
 /// Roc signature: Resource.Handle([SoundResource]) => {}
@@ -16855,52 +17878,82 @@ pub extern fn roc_draw_triangle_lines_raw(arg0: HostDraw_triangle_linesArgs) cal
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba } => {}
 pub extern fn roc_draw_triangle_raw(arg0: HostDraw_triangleArgs) callconv(.c) void;
 
-/// Hosted symbol for Host.files_read_text!
-/// Roc signature: Resource.Authority, Str => Try(Str, [Busy, NotFound, NotUtf8, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Hosted symbol for Host.app_report_error!
+/// Roc signature: Str, Str => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+///     arg1.decref(roc_host);
+pub extern fn roc_app_report_error(arg0: RocStr, arg1: RocStr) callconv(.c) void;
+
+/// Hosted symbol for Host.files_open_root!
+/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_read_text(arg0: u64, arg1: RocStr) callconv(.c) HostFiles_read_textResult;
+pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, arg2: bool) callconv(.c) HostFiles_open_rootResult;
+
+/// Hosted symbol for Host.files_designate!
+/// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_designate(arg0: u64, arg1: ArgOrDrop) callconv(.c) HostFiles_designateResult;
+
+/// Hosted symbol for Host.files_read_text!
+/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_read_text(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_textResult;
 
 /// Hosted symbol for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str => Try(List(U8), [Busy, NotFound, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr) callconv(.c) HostFiles_read_bytesResult;
+pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_bytesResult;
 
 /// Hosted symbol for Host.files_list!
-/// Roc signature: Resource.Authority, Str => Try(List(U8), [Busy, NotADirectory, NotFound, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotADirectory, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_list(arg0: u64, arg1: RocStr) callconv(.c) HostFiles_listResult;
+pub extern fn roc_files_list(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_listResult;
 
 /// Hosted symbol for Host.files_metadata!
-/// Roc signature: Resource.Authority, Str => Try({ kind : U8, modified_nanosecond : U32, modified_seconds : I64, size_bytes : U64 }, [NotFound, PermissionDenied, ReadFailed, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str => Try({ kind : U8, modified_nanosecond : U32, modified_seconds : I64, size_bytes : U64 }, [AccessRefused, NotFound, PathInvalid, PermissionDenied, ReadFailed, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
-pub extern fn roc_files_metadata(arg0: u64, arg1: RocStr) callconv(.c) HostFiles_metadataResult;
+///     arg2.decref(roc_host);
+pub extern fn roc_files_metadata(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_metadataResult;
 
 /// Hosted symbol for Host.files_write_text!
-/// Roc signature: Resource.Authority, Str, Str => Try({}, [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed])
+/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 ///     arg2.decref(roc_host);
-pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_write_textResult;
+///     arg3.decref(roc_host);
+pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocStr) callconv(.c) HostFiles_write_textResult;
 
 /// Hosted symbol for Host.files_write_bytes!
-/// Roc signature: Resource.Authority, Str, List(U8) => Try({}, [NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed])
+/// Roc signature: Resource.Authority, Str, Str, List(U8) => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 ///     arg2.decref(roc_host);
-pub extern fn roc_files_write_bytes(arg0: u64, arg1: RocStr, arg2: RocListWith(u8, false)) callconv(.c) HostFiles_write_textResult;
+///     arg3.decref(roc_host);
+pub extern fn roc_files_write_bytes(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocListWith(u8, false)) callconv(.c) HostFiles_write_textResult;
 
 /// Hosted symbol for Host.capture_set_virtual_mouse!
 /// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
@@ -17050,12 +18103,12 @@ pub extern fn roc_task_sleep(arg0: u64) callconv(.c) void;
 pub extern fn roc_task_spawn(arg0: RocErasedCallable) callconv(.c) void;
 
 /// Hosted symbol for Host.tilemap_load_tmx!
-/// Roc signature: Resource.Authority, Str => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PermissionDenied, ReadFailed, Unsupported])
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     arg1.decref(roc_host);
+///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_tilemap_load_tmx_raw(arg0: u64, arg1: RocStr) callconv(.c) HostTilemap_load_tmxResult;
+pub extern fn roc_tilemap_load_tmx_raw(arg0: HostTilemap_load_tmxArgs) callconv(.c) HostTilemap_load_tmxResult;
 
 /// Hosted symbol for Host.tilemap_draw!
 /// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
@@ -17209,7 +18262,7 @@ pub extern fn roc_stdio_write_line(arg0: u64, arg1: u8, arg2: RocStr) callconv(.
 pub extern fn roc_stdio_write_bytes(arg0: u64, arg1: u8, arg2: RocListWith(u8, false)) callconv(.c) HostStdio_write_textResult;
 
 /// Hosted symbol for Host.udp_bind!
-/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
+/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
@@ -17217,7 +18270,7 @@ pub extern fn roc_stdio_write_bytes(arg0: u64, arg1: u8, arg2: RocListWith(u8, f
 pub extern fn roc_udp_bind(arg0: u64, arg1: __AnonStruct_63b1422749dba501) callconv(.c) HostUdp_bindResult;
 
 /// Hosted symbol for Host.udp_send!
-/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
+/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -17232,12 +18285,13 @@ pub extern fn roc_udp_send(arg0: HostUdp_sendArgs) callconv(.c) HostUdp_sendResu
 pub extern fn roc_udp_receive(arg0: HostUdp_receiveArgs) callconv(.c) HostUdp_receiveResult;
 
 /// Hosted symbol for Host.sqlite_open!
-/// Roc signature: Resource.Authority, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
+/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_sqlite_open(arg0: u64, arg1: RocStr, arg2: u8, arg3: u64, arg4: u64) callconv(.c) HostSqlite_openResult;
+pub extern fn roc_sqlite_open(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: u8, arg4: u64, arg5: u64) callconv(.c) HostSqlite_openResult;
 
 /// Hosted symbol for Host.sqlite_close!
 /// Roc signature: Resource.Handle([SqliteDbResource]) => Try({}, [SqliteErr({ code : I64, message : Str })])
@@ -17285,7 +18339,7 @@ pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__Anon
 pub extern fn roc_sqlite_exec_script(arg0: *u64, arg1: RocStr) callconv(.c) HostSqlite_closeResult;
 
 /// Hosted symbol for Host.cmd_run!
-/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
+/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
@@ -17464,13 +18518,13 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // Roc exports these symbols from the app with their natural C ABI signatures.
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct_a868748fcc059834;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct_4f0c1c4bc3c3ab28;
 
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host(arg0: u64) callconv(.c) Init_for_hostResult;
 
 /// Entrypoint: update_for_host!
-pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_11f285e8dfedfde1, arg2: u64) callconv(.c) Update_for_hostResult;
+pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_789266b361159fc9, arg2: u64) callconv(.c) Update_for_hostResult;
 
 /// Entrypoint: render_for_host!
 pub extern fn render_for_host(arg0: RocBox) callconv(.c) Render_for_hostResult;

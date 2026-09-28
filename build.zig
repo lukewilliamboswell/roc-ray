@@ -27,7 +27,7 @@ const windows_import_libs = link_inputs.windows_import_libs;
 const all_native_targets = [_]RocTarget{
     .x64mac,
     .arm64mac,
-    .x64glibc,
+    .x64v1glibc,
     .x64win,
 };
 
@@ -285,7 +285,7 @@ pub fn build(b: *std.Build) void {
         // build the kernels without ever executing them.
         const parity_target_arch: RocTarget = switch (native_target.result.cpu.arch) {
             .aarch64 => .arm64mac,
-            else => .x64glibc,
+            else => .x64v1glibc,
         };
         const parity_config_dir = parity_target_arch.libvpxConfigDir();
 
@@ -433,7 +433,7 @@ fn detectNativeRocTarget(target: std.Target) ?RocTarget {
             else => null,
         },
         .linux => switch (target.cpu.arch) {
-            .x86_64 => .x64glibc,
+            .x86_64 => .x64v1glibc,
             else => null,
         },
         .windows => switch (target.cpu.arch) {
@@ -526,6 +526,12 @@ fn buildHostLib(
 
     if (target.result.os.tag == .linux) {
         host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+    }
+
+    // The glibc 2.38 C23 aliases the prebuilt Linux raylib references, resolved
+    // inside the app so it runs on older glibc; see src/isoc23_shims.s.
+    if (target.result.os.tag == .linux and target.result.abi.isGnu() and target.result.cpu.arch == .x86_64) {
+        host_lib.root_module.addAssemblyFile(b.path("src/isoc23_shims.s"));
     }
 
     // Roc links the static host library directly, so include Zig compiler-rt

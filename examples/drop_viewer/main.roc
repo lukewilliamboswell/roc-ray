@@ -1,7 +1,7 @@
 ## Displays an image dropped onto the window; press Escape to quit. This
 ## example shows one-time dropped-file input, tasks that read without pausing
 ## drawing, messages that return the bytes to `update!`, and texture creation.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -54,7 +54,7 @@ init! = App.init(
 		Ok({
 			font,
 			title: Text.from("Drop Viewer", font).size(28).prepare!()?,
-			subtitle: Text.from("A dropped path, read off the frame thread and decoded into a texture", font).size(15).prepare!()?,
+			subtitle: Text.from("A dropped file, read in a task and decoded into a texture", font).size(15).prepare!()?,
 			empty_hint: Text.from("Drop a PNG, JPEG, GIF, QOI or BMP file here", font).size(18).prepare!()?,
 			overflow_hint: Text.from("That drop carried more than 64 files; only the first 64 were delivered", font).size(16).prepare!()?,
 			footer: Text.from("Drag a file onto the window  |  ESC quits", font).size(14).prepare!()?,
@@ -69,15 +69,24 @@ update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	# One dropped path starts one read. If several files are dropped, the app
 	# displays the result whose message arrives last.
-	List.for_each!(
-		input.dropped,
-		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, io.files().read_bytes!(drop.path))),
-	)
-
-	requested = match List.last(input.dropped) {
-		Ok(drop) => Reading(drop.path)
-		Err(_) => model.status
+	# The user dropping a file is what lets the app read it: `accept_drop!`
+	# turns this cycle's dropped path into a handle on exactly that file,
+	# with no permission declared. A path it refuses is reported, not dropped
+	# on the floor, so the status never waits for a read that was not started.
+	files = io.files()
+	var $requested = model.status
+	for drop in input.dropped {
+		match files.accept_drop!(drop.path) {
+			Ok(item) => {
+				Task.spawn!(input, || Opened(drop.path, drop.position, item.read_bytes!()))
+				$requested = Reading(drop.path)
+			}
+			Err(PermissionDenied) => {
+				$requested = Refused("${drop.path}: file access was not granted")
+			}
+		}
 	}
+	requested = $requested
 
 	# Decoding is a host-state change, so it belongs here rather than in the
 	# task. `plan` decides what each message means without performing anything,
@@ -92,16 +101,12 @@ update! = |model, input, io| {
 			}
 		}
 
-	if input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({
-			..model,
-			status: next.status,
-			image: next.image,
-			partial_drop: if List.is_empty(input.dropped) model.partial_drop else input.dropped_overflow,
-		})
-	}
+	Ok({
+		..model,
+		status: next.status,
+		image: next.image,
+		partial_drop: if List.is_empty(input.dropped) model.partial_drop else input.dropped_overflow,
+	})
 }
 
 ## Converts one delivered read into the next status and an optional decode.
@@ -123,6 +128,7 @@ describe_read = |reason|
 	match reason {
 		NotFound => "not found"
 		PermissionDenied => "file access was not granted"
+		PathInvalid => "the path was refused"
 		ReadFailed => "could not be read"
 		Busy => "the host was busy"
 		Unavailable => "reads are unavailable"

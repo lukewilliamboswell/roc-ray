@@ -43,10 +43,10 @@ Time := [].{
 	## fraction of second zero. That is what makes ordering and differences
 	## work the same on both sides of 1970.
 	##
-	## A timestamp carries no time zone, no calendar policy, and no
+	## A timestamp has no time zone, no calendar policy, and no
 	## leap-second model. Everything this module formats is UTC; local time and
 	## calendar arithmetic belong to a pure Roc package, and a `Timestamp` is
-	## the value to hand it.
+	## the value to pass to it.
 	Timestamp :: {
 		seconds : I64,
 		nanosecond : U32,
@@ -78,7 +78,7 @@ Time := [].{
 		## Build a timestamp from signed nanoseconds since the epoch.
 		##
 		## `OutOfRange` is an instant further from 1970 than a signed 64-bit
-		## count of seconds reaches, which is about 292 billion years either
+		## count of seconds can hold, which is about 292 billion years either
 		## way.
 		from_nanos_since_epoch : I128 -> Try(Timestamp, [OutOfRange])
 		from_nanos_since_epoch = |nanos| {
@@ -146,7 +146,7 @@ Time := [].{
 	## given the model rather than an input, and should draw the instant the
 	## model already decided on.
 	##
-	## Two calls in one `update!` can answer differently, and an app that wants
+	## Two calls in one `update!` can return different values, and an app that wants
 	## one instant for a whole cycle should read it once and keep it in the model.
 	## Nothing else about the platform changes with it: the calendar is explicitly
 	## nondeterministic, it is not what a capture paces, and it is not what
@@ -195,7 +195,7 @@ expect floor_div_i64(0, 86_400) == 0
 expect floor_div_i64(86_400, 86_400) == 1
 expect floor_div_i128(-1_000_000_001, 1_000_000_000) == -2
 
-## Whether a formatted instant carries its fractional second.
+## Whether a formatted instant includes its fractional second.
 Fraction : [NoFraction, WithFraction]
 
 ## A UTC calendar date and time of day.

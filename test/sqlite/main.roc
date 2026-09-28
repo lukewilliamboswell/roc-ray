@@ -5,6 +5,7 @@ import rr.Draw
 import rr.Files
 import rr.Sqlite
 import rr.Task
+import rr.Permission
 
 ## Does a value written to a database come back as the value that was written?
 ##
@@ -23,19 +24,19 @@ Msg : [Checked(U64)]
 program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("sqlite"), |_io| Ok({ checked: Bool.False }))
+init! = App.init(App.default.with_title("sqlite").with_permission(Directory("probe_out", ReadWrite)), |_io| Ok({ checked: Bool.False }))
 
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which property went wrong.
 expected_score : U64
-expected_score = 2047
+expected_score = 4095
 
 score : Bool, U64 -> U64
 score = |held, bit| if held bit else 0
 
 expect score(Bool.True, 8) == 8
 expect score(Bool.False, 8) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 + 2048 == expected_score
 
 ## Text with a NUL-unsafe shape on purpose: a binding that went through a C
 ## string would truncate at the newline-free tail, and a length-confused one
@@ -54,36 +55,36 @@ schema = "CREATE TABLE kinds(i INTEGER NOT NULL, r REAL NOT NULL, s TEXT NOT NUL
 ## Write every `Value` kind, read them back, and compare.
 check! : App.Io => Msg
 check! = |io| {
-	# Opening a database does not create its parent directory, so make one the
-	# way an app would. A write creates the tree on its way.
-	match io.files().write_bytes!("probe_out/.keep", []) {
-		Ok({}) => {}
-		Err(_) => return Checked(0)
-	}
+	# A database opens beneath a writable directory handle, which is created
+	# on the way.
+	out =
+		match io.files().open_dir!("probe_out") {
+			Ok(dir) => dir
+			Err(_) => return Checked(0)
+		}
 
 	db =
-		match io.sqlite().open!("probe_out/probe.db") {
+		match io.sqlite().open!(out, "probe.db") {
 			Ok(opened) => opened
 			Err(_) => return Checked(0)
 		}
 
-	match Sqlite.exec_script!(db, schema) {
+	match db.exec_script!(schema) {
 		Ok({}) => {}
 		Err(_) => return Checked(0)
 	}
 
 	inserted =
-		Sqlite.execute!({
-			db,
-			query: "INSERT INTO kinds VALUES (:i, :r, :s, :b, :n)",
-			bindings: [
+		db.execute!(
+			"INSERT INTO kinds VALUES (:i, :r, :s, :b, :n)",
+			[
 				{ name: ":i", value: Integer(-4242) },
 				{ name: ":r", value: Real(1.5) },
 				{ name: ":s", value: String(probe_text) },
 				{ name: ":b", value: Bytes(probe_blob) },
 				{ name: ":n", value: Null },
 			],
-		})
+		)
 
 	outcome =
 		match inserted {
@@ -96,11 +97,7 @@ check! = |io| {
 	rowid = score(outcome.last_insert_rowid == 1, 2)
 
 	row =
-		match Sqlite.query_exactly_one!({
-			db,
-			query: "SELECT i, r, s, b, n FROM kinds",
-			bindings: [],
-		}) {
+		match db.query_exactly_one!("SELECT i, r, s, b, n FROM kinds", []) {
 			Ok(found) => found
 			Err(_) => return Checked(changed + rowid)
 		}
@@ -120,7 +117,7 @@ check! = |io| {
 	# A prepared statement run twice must answer for its own bindings each time
 	# rather than reusing the previous run's.
 	reused =
-		match Sqlite.prepare!(db, "SELECT :n + 1 AS answer") {
+		match db.prepare!("SELECT :n + 1 AS answer") {
 			Err(_) => 0
 			Ok(stmt) => {
 				first = stmt.query_exactly_one!([{ name: ":n", value: Integer(1) }])
@@ -136,7 +133,15 @@ check! = |io| {
 			}
 		}
 
-	Checked(changed + rowid + read_back + names + missing + reused + error_paths!(db))
+	# A database path is confined like any other: one that would leave the
+	# handle is refused as `PathInvalid` before SQLite sees it.
+	escaped =
+		match io.sqlite().open!(out, "../escaped.db") {
+			Err(PathInvalid) => 2048
+			_ => 0
+		}
+
+	Checked(changed + rowid + read_back + names + missing + reused + escaped + error_paths!(db))
 }
 
 ## The failures an app is most likely to meet, each as its own typed outcome.
@@ -144,7 +149,7 @@ error_paths! : Sqlite.Db => U64
 error_paths! = |db| {
 	# A SELECT handed to execute! has nowhere to put its rows.
 	wrong_call =
-		match Sqlite.execute!({ db, query: "SELECT 1", bindings: [] }) {
+		match db.execute!("SELECT 1", []) {
 			Err(RowsReturnedUseQueryInstead) => Bool.True
 			_ => Bool.False
 		}
@@ -152,11 +157,7 @@ error_paths! = |db| {
 	# A UNIQUE violation is Constraint even though SQLite reports the extended
 	# code 2067, which is what the primary-code reduction is for.
 	insert_name! = |name|
-		Sqlite.execute!({
-			db,
-			query: "INSERT INTO unique_names VALUES (:name)",
-			bindings: [{ name: ":name", value: String(name) }],
-		})
+		db.execute!("INSERT INTO unique_names VALUES (:name)", [{ name: ":name", value: String(name) }])
 
 	constrained =
 		match (insert_name!("only"), insert_name!("only")) {
@@ -165,39 +166,48 @@ error_paths! = |db| {
 		}
 
 	syntax =
-		match Sqlite.query!({ db, query: "SELEKT nope", bindings: [] }) {
+		match db.query!("SELEKT nope", []) {
 			Err(SqliteErr(Error, _)) => Bool.True
 			_ => Bool.False
 		}
 
 	no_rows =
-		match Sqlite.query_exactly_one!({ db, query: "SELECT 1 WHERE 0", bindings: [] }) {
+		match db.query_exactly_one!("SELECT 1 WHERE 0", []) {
 			Err(NoRowsReturned) => Bool.True
 			_ => Bool.False
 		}
 
 	too_many =
-		match Sqlite.query_exactly_one!({ db, query: "SELECT 1 UNION ALL SELECT 2", bindings: [] }) {
+		match db.query_exactly_one!("SELECT 1 UNION ALL SELECT 2", []) {
 			Err(TooManyRowsReturned) => Bool.True
 			_ => Bool.False
 		}
 
 	# A released handle answers Misuse rather than reaching host memory.
+	stub = Sqlite.Db.stub
 	stubbed =
-		match Sqlite.query!({ db: Sqlite.Db.stub, query: "SELECT 1", bindings: [] }) {
+		match stub.query!("SELECT 1", []) {
 			Err(SqliteErr(Misuse, _)) => Bool.True
 			_ => Bool.False
 		}
 
 	# A query string holding two statements is refused, not half run.
 	multiple =
-		match Sqlite.query!({ db, query: "SELECT 1; SELECT 2", bindings: [] }) {
+		match db.query!("SELECT 1; SELECT 2", []) {
 			Err(MultipleStatements) => Bool.True
 			_ => Bool.False
 		}
 
+	# `ATTACH` is disabled on every connection, so a database cannot reach a
+	# second file.
+	attached =
+		match db.execute!("ATTACH DATABASE 'other.db' AS other", []) {
+			Err(SqliteErr(_, _)) => Bool.True
+			_ => Bool.False
+		}
+
 	score(
-		wrong_call and constrained and syntax and no_rows and too_many and stubbed and multiple,
+		wrong_call and constrained and syntax and no_rows and too_many and stubbed and multiple and attached,
 		1024,
 	)
 }

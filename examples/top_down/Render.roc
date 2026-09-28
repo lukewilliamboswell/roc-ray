@@ -256,24 +256,19 @@ burst_dir = |index|
 		_ => { x: 0.7, y: -0.7 }
 	}
 
-## Draws the current collection-burst particle recursively.
-draw_burst_particle! : Draw.Frame, Game.World, U64 => {}
-draw_burst_particle! = |frame, world, index| {
-	if index >= 6 or world.burst_timer <= 0 {
-		{}
-	} else {
-		progress = 1 - world.burst_timer / Game.burst_duration
-		dir = burst_dir(index)
-		pos = Math.add(world.burst_pos, Math.scale(dir, 18 + progress * 58))
-		size = 6 + ping_pong(wrap_unit(world.phase * 5 + U64.to_f32(index) * 0.11)) * 3
-		frame.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
-		draw_burst_particle!(frame, world, index + 1)
-	}
-}
-
 ## Draws the active spark collection burst.
 draw_burst! : Draw.Frame, Game.World => {}
-draw_burst! = |frame, world| draw_burst_particle!(frame, world, 0)
+draw_burst! = |frame, world| {
+	if world.burst_timer > 0 {
+		progress = 1 - world.burst_timer / Game.burst_duration
+		for index in 0.U64..<6 {
+			dir = burst_dir(index)
+			pos = Math.add(world.burst_pos, Math.scale(dir, 18 + progress * 58))
+			size = 6 + ping_pong(wrap_unit(world.phase * 5 + U64.to_f32(index) * 0.11)) * 3
+			frame.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
+		}
+	}
+}
 
 player_source : Math.Rect
 player_source = Math.rect(0, 0, 52, 43)

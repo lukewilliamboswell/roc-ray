@@ -92,6 +92,14 @@ extern fn rocray_sqlite_init() c_int;
 extern fn rocray_sqlite_shutdown() void;
 extern fn rocray_sqlite_open(path: [*:0]const u8, mode: c_int, busy_timeout_ms: c_int, out_db: *?*anyopaque) c_int;
 extern fn rocray_sqlite_close(db: ?*anyopaque) c_int;
+
+/// SQLite's own `sqlite3_limit`, declared directly: it takes and returns plain
+/// integers, so it needs no header, and changing the shim would mean a new
+/// locked linker-input release.
+extern fn sqlite3_limit(db: ?*anyopaque, id: c_int, new_value: c_int) c_int;
+
+/// `SQLITE_LIMIT_ATTACHED` from `sqlite3.h`.
+const SQLITE_LIMIT_ATTACHED: c_int = 7;
 extern fn rocray_sqlite_interrupt(db: ?*anyopaque) void;
 extern fn rocray_sqlite_errmsg(db: ?*anyopaque) ?[*:0]const u8;
 extern fn rocray_sqlite_extended_errcode(db: ?*anyopaque) c_int;
@@ -695,6 +703,14 @@ fn immediateQuery(comptime Record: type, roc_host: *RocHost, code: i64, text: []
     };
 }
 
+/// `Sqlite.Mode.ReadWriteCreate` as `Sqlite.roc` numbers it.
+pub const MODE_READ_WRITE_CREATE: u8 = 0;
+/// `Sqlite.Mode.ReadWrite` as `Sqlite.roc` numbers it.
+pub const MODE_READ_WRITE: u8 = 1;
+/// `Sqlite.Mode.ReadOnly` as `Sqlite.roc` numbers it: the one mode a
+/// read-only directory declaration admits.
+pub const MODE_READ_ONLY: u8 = 2;
+
 /// `Sqlite.Db.open_with!`: open or create a database.
 pub fn open(
     roc_host: *RocHost,
@@ -734,6 +750,12 @@ pub fn open(
         if (handle) |failed| _ = rocray_sqlite_close(failed);
         return .{ .err = @intCast(rc), .message = message, .db = invalidHandle() };
     }
+
+    // An app opens a database beneath a directory handle, and that file is the
+    // only one it gets: with no attached-database slots, `ATTACH` cannot reach
+    // a second file anywhere else. The shim already did this for read-only
+    // connections; every connection needs it.
+    _ = sqlite3_limit(handle, SQLITE_LIMIT_ATTACHED, 0);
 
     const stored = db_heap.insert(0, .{
         .db = handle,
@@ -800,7 +822,7 @@ pub fn close(
     return toRocStatus(StatusOutcome, roc_host, &result);
 }
 
-/// `Sqlite.prepare!`: compile one statement for reuse.
+/// `Db.prepare!`: compile one statement for reuse.
 pub fn prepare(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
@@ -904,7 +926,7 @@ pub fn runStmt(
     return toRocQuery(Record, roc_host, &result);
 }
 
-/// `Sqlite.execute!` / `Sqlite.query!`: compile, run and finalize in one call.
+/// `Db.execute!` / `Db.query!`: compile, run and finalize in one call.
 pub fn runOnce(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
@@ -943,7 +965,7 @@ pub fn runOnce(
     return toRocQuery(Record, roc_host, &result);
 }
 
-/// `Sqlite.exec_script!`: run every statement in a script.
+/// `Db.exec_script!`: run every statement in a script.
 pub fn execScript(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,

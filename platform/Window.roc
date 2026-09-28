@@ -15,17 +15,29 @@ import Resource
 
 Window := [].{
 
-	## The window's logical drawing size, whether it has keyboard focus, and
-	## whether it is minimized.
+	## The window's logical drawing size, whether it has keyboard focus,
+	## whether it is minimized, and whether the user asked it to close.
 	##
 	## `size` is in the same logical units as mouse positions and every drawing
 	## call, not in framebuffer pixels; multiply by `Window.scale!` for those.
 	## A minimized window still runs the frame loop, so an app that should idle
-	## while minimized has to check this.
+	## while minimized has to check this. These three are state samples: the
+	## latest value when the cycle began.
+	##
+	## `close_requested` is an interval event. It is `Bool.True` on the one
+	## cycle after the user clicked the window's close button (or the system
+	## asked the app to quit), and only when the app chose
+	## `App.Config.with_close_request(Deliver)`; under the default `Exit` the
+	## host closes the window itself and `update!` never sees the request.
+	## Several requests between two cycles arrive as one, and a request is
+	## never lost: the next input includes it. The exit key is separate -- it
+	## closes the app directly -- so set `with_exit_key(NoExitKey)` as well if
+	## the app must see every way out.
 	Snapshot : {
 		size : { width : I32, height : I32 },
 		focused : Bool,
 		minimized : Bool,
+		close_requested : Bool,
 	}
 
 	## Suggest a new logical window size to the window manager.
@@ -109,7 +121,7 @@ Window := [].{
 	## The list is as long as the operating system's monitor count, and that
 	## count is the bound: the host asks for it, builds exactly that many
 	## entries, and never retains any of them. Monitors come and go while an
-	## app runs, so an answer describes the moment it was taken; ask again
+	## app runs, so a result describes the moment it was taken; ask again
 	## rather than caching one for the life of the process.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -137,7 +149,8 @@ Window := [].{
 	suggest_monitor! : I32 => {}
 	suggest_monitor! = |index| Host.window_suggest_monitor!(index)
 
-	## Opaque clipboard authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque clipboard authority supplied by App.Io. Reads need
+	## `ClipboardRead` and writes need `ClipboardWrite`.
 	Clipboard :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -147,7 +160,7 @@ Window := [].{
 		## Read the system clipboard as text.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
-		## backend only answers on the thread that owns the window, and the read is a
+		## backend only responds on the thread that owns the window, and the read is a
 		## pointer copy rather than I/O, so this does not wait.
 		##
 		## Content that is not text, or is larger than the host will copy into a

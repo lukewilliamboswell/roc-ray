@@ -1,7 +1,5 @@
 ## Static arena data loaded from Tiled, with a complete fallback layout.
-import rr.App
 import rr.Color
-import rr.Draw
 import rr.Math
 import rr.Tilemap
 import Hazard
@@ -49,8 +47,8 @@ Level := {
 	}
 
 	## Loads the authored Tiled map and binds its visible layers to the tile texture.
-	load! = |io, tiles| {
-		raw_map = io.tilemaps().load_tmx!("examples/top_down/assets/top_down.tmx")?
+	load! = |store, tiles| {
+		raw_map = Tilemap.load_tmx!(store, "top_down.tmx")?
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_origin({ x: world_left, y: world_top })
 			.with_tileset_texture(1, tiles)

@@ -66,6 +66,18 @@ pub const ERR_BAD_BODY: u8 = 3;
 /// Anything else; `err_message` describes it. `Http` maps this to `Other`.
 pub const ERR_OTHER: u8 = 4;
 
+/// A redirect led to an origin the app did not declare. `Http` maps this to
+/// `PermissionDenied`.
+pub const ERR_NOT_PERMITTED: u8 = 5;
+
+/// Redirects followed before the exchange gives up, as `std.http.Client`'s
+/// own default did.
+const max_redirects: u8 = 3;
+
+/// Whether a redirect target may be followed. The host supplies its declared
+/// origins; the exchange asks before connecting to every hop.
+pub const AdmitHop = *const fn (uri: std.Uri) bool;
+
 /// Room for the redirect chain's URIs. RFC 9110 suggests at least 8000 bytes
 /// for a request line, and a redirect target is one URI out of that budget.
 const redirect_buffer_bytes: usize = 8192;
@@ -130,6 +142,7 @@ const ExchangeError = error{
     BodyNotAllowed,
     InvalidHeader,
     TlsFailure,
+    RedirectNotPermitted,
 };
 
 /// One header, as plain Zig slices owned by the exchange arena.
@@ -153,6 +166,8 @@ const Exchange = struct {
     body: []u8,
     /// Zero means no cap.
     max_response_bytes: u64,
+    /// Asked before following each redirect.
+    admit_hop: AdmitHop,
 
     status: u16 = 0,
     headers: []OutHeader = &.{},
@@ -164,7 +179,7 @@ const Exchange = struct {
 /// Consumes `args`. The returned record's `err` is `ERR_OK` on success and one
 /// of the other codes otherwise, in which case `err_message` describes the
 /// failure and the other fields are empty.
-pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request) Response {
+pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request, admit_hop: AdmitHop) Response {
     defer args.decref(roc_host);
 
     const rt = runtime orelse return failure(
@@ -177,7 +192,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request)
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var exchange = prepare(arena, rt.io(), args) catch |err| return describe(roc_host, err, args, 0);
+    var exchange = prepare(arena, rt.io(), args, admit_hop) catch |err| return describe(roc_host, err, args, 0);
 
     if (trace) std.log.info("[TASK] http {s} {s} parking", .{
         @tagName(exchange.method),
@@ -212,7 +227,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request)
 ///
 /// Every slice this produces is copied into the arena, so the Roc strings the
 /// caller owns can be released the moment `send` returns whatever happens.
-fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request) ExchangeError!Exchange {
+fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request, admit_hop: AdmitHop) ExchangeError!Exchange {
     const method = try methodFromCode(args.method);
     const uri = std.Uri.parse(try arena.dupe(u8, args.uri.asSlice())) catch return error.UnsupportedUri;
 
@@ -238,6 +253,7 @@ fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request) ExchangeError!Ex
         .standard_headers = standard,
         .body = body,
         .max_response_bytes = args.max_response_bytes,
+        .admit_hop = admit_hop,
     };
 }
 
@@ -270,49 +286,147 @@ fn runWithDeadline(exchange: *Exchange, timeout: zio.Timeout) ExchangeError!void
 /// would have to be torn down from outside any coroutine, where its `io` calls
 /// are not valid. The cost is a handshake per request, and on HTTPS a rescan
 /// of the system certificate store.
+///
+/// Redirects are followed here rather than inside `std.http.Client`, because
+/// every hop has to be checked against the origins the app declared before a
+/// connection is made to it.
 fn run(exchange: *Exchange) ExchangeError!void {
     var client: std.http.Client = .{ .allocator = exchange.arena, .io = exchange.io };
     defer client.deinit();
 
-    var request = client.request(exchange.method, exchange.uri, .{
-        // The client dies with this send, so there is nothing to pool into.
-        .keep_alive = false,
-        .headers = exchange.standard_headers,
-        .extra_headers = exchange.extra_headers,
-    }) catch |err| return translate(err);
-    defer request.deinit();
+    var hops: u8 = 0;
+    while (true) {
+        var request = client.request(exchange.method, exchange.uri, .{
+            // The client dies with this send, so there is nothing to pool into.
+            .keep_alive = false,
+            .redirect_behavior = .unhandled,
+            .headers = exchange.standard_headers,
+            .extra_headers = exchange.extra_headers,
+        }) catch |err| return translate(err);
+        defer request.deinit();
 
-    if (exchange.method.requestHasBody()) {
-        request.sendBodyComplete(exchange.body) catch |err| return translate(err);
-    } else {
-        request.sendBodiless() catch |err| return translate(err);
+        if (exchange.method.requestHasBody()) {
+            request.sendBodyComplete(exchange.body) catch |err| return translate(err);
+        } else {
+            request.sendBodiless() catch |err| return translate(err);
+        }
+
+        const redirect_buffer = try exchange.arena.alloc(u8, redirect_buffer_bytes);
+        var response = request.receiveHead(redirect_buffer) catch |err| return translate(err);
+        if (try followRedirect(exchange, &response.head, &hops)) continue;
+
+        exchange.status = @intFromEnum(response.head.status);
+
+        // `readerDecompressing` invalidates the head's string pointers, so the
+        // headers have to be copied out of it first.
+        exchange.headers = try copyHeaders(exchange.arena, response.head);
+
+        const transfer_buffer = try exchange.arena.alloc(u8, transfer_buffer_bytes);
+        const decompress = try exchange.arena.create(std.http.Decompress);
+        const decompress_buffer = try exchange.arena.alloc(u8, std.compress.flate.max_window_len);
+        const reader = response.readerDecompressing(transfer_buffer, decompress, decompress_buffer);
+
+        // `allocRemaining` fails once the limit is *reached*, so a body of exactly
+        // `max_response_bytes` has to be allowed one byte of headroom to succeed.
+        const limit: std.Io.Limit = if (exchange.max_response_bytes == 0)
+            .unlimited
+        else
+            .limited(@intCast(@min(exchange.max_response_bytes +| 1, std.math.maxInt(usize))));
+
+        exchange.response_body = reader.allocRemaining(exchange.arena, limit) catch |err| switch (err) {
+            error.StreamTooLong => return error.ResponseTooLarge,
+            error.OutOfMemory => return error.OutOfMemory,
+            error.ReadFailed => return translate(response.bodyErr() orelse error.ReadFailed),
+        };
+        return;
     }
+}
 
-    const redirect_buffer = try exchange.arena.alloc(u8, redirect_buffer_bytes);
-    var response = request.receiveHead(redirect_buffer) catch |err| return translate(err);
-    exchange.status = @intFromEnum(response.head.status);
+/// Follow one redirect in place, or report that `head` is the final answer.
+///
+/// The target is checked with `admit_hop` before anything connects to it, and
+/// an undeclared origin ends the exchange. Crossing to another origin drops
+/// the credentials the app attached for the first one, and a `303`, or a
+/// `301` or `302` answering a `POST`, turns the retry into a bodiless `GET`,
+/// as `std.http.Client` itself does.
+fn followRedirect(exchange: *Exchange, head: *const std.http.Client.Response.Head, hops: *u8) ExchangeError!bool {
+    switch (head.status) {
+        .moved_permanently, .found, .see_other, .temporary_redirect, .permanent_redirect => {},
+        else => return false,
+    }
+    const location = head.location orelse return error.MalformedResponse;
+    if (hops.* == max_redirects) return error.MalformedResponse;
+    hops.* += 1;
+    if (location.len > redirect_buffer_bytes) return error.MalformedResponse;
 
-    // `readerDecompressing` invalidates the head's string pointers, so the
-    // headers have to be copied out of it first.
-    exchange.headers = try copyHeaders(exchange.arena, response.head);
+    // The resolved URI points into this buffer, so it lives in the arena for
+    // the rest of the exchange.
+    var aux = try exchange.arena.alloc(u8, redirect_buffer_bytes);
+    @memcpy(aux[0..location.len], location);
+    const next = exchange.uri.resolveInPlace(location.len, &aux) catch return error.MalformedResponse;
+    if (!exchange.admit_hop(next)) return error.RedirectNotPermitted;
 
-    const transfer_buffer = try exchange.arena.alloc(u8, transfer_buffer_bytes);
-    const decompress = try exchange.arena.create(std.http.Decompress);
-    const decompress_buffer = try exchange.arena.alloc(u8, std.compress.flate.max_window_len);
-    const reader = response.readerDecompressing(transfer_buffer, decompress, decompress_buffer);
-
-    // `allocRemaining` fails once the limit is *reached*, so a body of exactly
-    // `max_response_bytes` has to be allowed one byte of headroom to succeed.
-    const limit: std.Io.Limit = if (exchange.max_response_bytes == 0)
-        .unlimited
-    else
-        .limited(@intCast(@min(exchange.max_response_bytes +| 1, std.math.maxInt(usize))));
-
-    exchange.response_body = reader.allocRemaining(exchange.arena, limit) catch |err| switch (err) {
-        error.StreamTooLong => return error.ResponseTooLarge,
-        error.OutOfMemory => return error.OutOfMemory,
-        error.ReadFailed => return translate(response.bodyErr() orelse error.ReadFailed),
+    if (!sameOrigin(exchange.uri, next)) {
+        exchange.standard_headers.authorization = .default;
+        exchange.extra_headers = try withoutCredentials(exchange.arena, exchange.extra_headers);
+    }
+    const becomes_get = switch (head.status) {
+        .see_other => exchange.method != .HEAD,
+        .moved_permanently, .found => exchange.method == .POST,
+        else => false,
     };
+    if (becomes_get) {
+        exchange.method = .GET;
+        exchange.body = &.{};
+        exchange.standard_headers.content_type = .default;
+    }
+    exchange.uri = next;
+    return true;
+}
+
+/// Whether two URIs share a scheme, host, and effective port.
+fn sameOrigin(a: std.Uri, b: std.Uri) bool {
+    if (!std.ascii.eqlIgnoreCase(a.scheme, b.scheme)) return false;
+    var a_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
+    var b_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
+    const a_host = (a.host orelse return false).toRaw(&a_buffer) catch return false;
+    const b_host = (b.host orelse return false).toRaw(&b_buffer) catch return false;
+    if (!std.ascii.eqlIgnoreCase(a_host, b_host)) return false;
+    return effectivePort(a) == effectivePort(b);
+}
+
+fn effectivePort(uri: std.Uri) u16 {
+    return uri.port orelse @as(u16, if (std.ascii.eqlIgnoreCase(uri.scheme, "https")) 443 else 80);
+}
+
+/// The app's extra headers minus the ones that carry credentials, for a hop to
+/// an origin they were not written for.
+fn withoutCredentials(arena: std.mem.Allocator, headers: []const std.http.Header) ExchangeError![]const std.http.Header {
+    var kept: std.ArrayList(std.http.Header) = .empty;
+    for (headers) |header| {
+        if (std.ascii.eqlIgnoreCase(header.name, "cookie")) continue;
+        if (std.ascii.eqlIgnoreCase(header.name, "proxy-authorization")) continue;
+        try kept.append(arena, header);
+    }
+    return kept.items;
+}
+
+test "a redirect keeps credentials only within one origin" {
+    const base = try std.Uri.parse("https://api.example.com/a");
+    try std.testing.expect(sameOrigin(base, try std.Uri.parse("https://API.example.com:443/b")));
+    try std.testing.expect(!sameOrigin(base, try std.Uri.parse("http://api.example.com/b")));
+    try std.testing.expect(!sameOrigin(base, try std.Uri.parse("https://cdn.example.com/b")));
+    try std.testing.expect(!sameOrigin(base, try std.Uri.parse("https://api.example.com:8443/b")));
+
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const stripped = try withoutCredentials(arena_state.allocator(), &.{
+        .{ .name = "Cookie", .value = "session=1" },
+        .{ .name = "X-Trace", .value = "7" },
+        .{ .name = "Proxy-Authorization", .value = "secret" },
+    });
+    try std.testing.expectEqual(@as(usize, 1), stripped.len);
+    try std.testing.expectEqualStrings("X-Trace", stripped[0].name);
 }
 
 /// Copy the response's headers out of the head buffer before it is invalidated.
@@ -454,6 +568,7 @@ fn describe(roc_host: *abi.RocHost, err: anyerror, args: Request, max_response_b
             ) catch "the response body is larger than max_response_bytes",
         ),
         error.UnsupportedUri => failure(roc_host, ERR_OTHER, "the host could not use this URI"),
+        error.RedirectNotPermitted => failure(roc_host, ERR_NOT_PERMITTED, "a redirect led to an origin the app did not declare"),
         error.UnsupportedMethod => failure(
             roc_host,
             ERR_OTHER,

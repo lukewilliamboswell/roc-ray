@@ -25,19 +25,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Download the starter linked by the README
+      # The README sends readers to the latest release and its examples zip,
+      # so this checks exactly that: whatever GitHub currently marks latest.
+      - name: Download the latest release's examples
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           import io
+          import json
           import os
           from pathlib import Path
           import re
+          import subprocess
           import urllib.request
           import zipfile
 
-          readme = Path("README.md").read_text()
-          url = re.search(r"https://github.com/lukewilliamboswell/roc-ray/releases/download/[^/\s)]+/examples-[^/\s)]+\.zip", readme).group()
+          latest = json.loads(subprocess.check_output(
+              ["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/releases/latest"], text=True))
+          zips = [asset["browser_download_url"] for asset in latest["assets"]
+                  if re.fullmatch(r"examples-.+\.zip", asset["name"])]
+          if len(zips) != 1:
+              raise SystemExit(f"latest release {latest['tag_name']} has {len(zips)} examples zips; "
+                               "the README tells readers to download one")
+          url = zips[0]
+          print(f"latest release {latest['tag_name']}: {url}")
           root = Path(os.environ["RUNNER_TEMP"]) / "public-starter"
           with urllib.request.urlopen(url, timeout=60) as response:
               data = response.read()
@@ -80,9 +93,9 @@ jobs:
   #
   # Deliberately outside the build matrix. This is the only thing here that
   # links the system libc directly (`-lc`), and the vendored raylib references
-  # glibc 2.38's `__isoc23_*` symbols, which ubuntu-22.04 does not provide. The
-  # platform and the examples are unaffected: they link through the generated
-  # libc stub instead.
+  # glibc 2.38's `__isoc23_*` symbols, which ubuntu-22.04 does not provide. Apps
+  # are unaffected: the host defines those aliases (src/isoc23_shims.s), and
+  # all_tests.py checks no built example leaves one for the dynamic linker.
   graphical-smoke:
     name: Graphical smoke tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -164,8 +177,8 @@ jobs:
         os:
           - macos-15         # arm64mac
           - macos-15-intel   # x64mac
-          - ubuntu-22.04     # x64glibc, oldest supported glibc
-          - ubuntu-24.04     # x64glibc, the only Linux that can open a window (see below)
+          - ubuntu-22.04     # x64v1glibc, oldest supported glibc
+          - ubuntu-24.04     # x64v1glibc
           - windows-2022     # x64win
     defaults:
       run:
@@ -195,6 +208,17 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
 
+      # The same unit tests with the optimizer on. A slice into a by-value copy
+      # of a Roc value -- a short string's bytes live inside the string -- reads
+      # correctly in Debug, where the dead stack is left alone, and goes wrong
+      # only once the optimizer reuses it. That shipped once because every local
+      # run used a Debug host. ReleaseSafe keeps the safety checks, so a failure
+      # here names itself. One Linux runner is enough: the defect is not
+      # platform-specific, and the step roughly doubles the Zig test time.
+      - name: Run Zig tests optimized (ReleaseSafe)
+        if: matrix.os == 'ubuntu-24.04'
+        run: zig build test -Droc-tests=false -Doptimize=ReleaseSafe
+
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
         run: |
@@ -210,6 +234,19 @@ jobs:
                   print(f"FAILED: {failure}")
               raise SystemExit(1)
           PY
+
+      # Every example exactly as it is checked in, the way a contributor runs
+      # it: the working tree's platform by path, and a warning fails. The
+      # suite below rewrites each header to a served bundle, so on its own it
+      # never sees what `roc examples/<name>/main.roc` does; that gap once let
+      # every example pair a stale release bundle with a newer compiler.
+      - name: Check the examples as written
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          for app in examples/*/main.roc; do
+            roc check "$app" || { echo "::error file=$app::roc check failed as written"; exit 1; }
+          done
 
       # all_tests.py bundles the complete platform and serves
       # it on a loopback port, and builds copies of the examples that point at
@@ -235,6 +272,12 @@ jobs:
         timeout-minutes: 20
         run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
 
+      # The first-game tutorial's apps are the manual's longest code; every
+      # step must check, pass its tests, build, and run as printed.
+      - name: Check the tutorial's apps
+        timeout-minutes: 10
+        run: python3 scripts/check_tutorial.py
+
       # The broad suite uses Roc's dev backend to fit hosted runners. This
       # small app also covers the default LLVM link path used by run-example.py.
       - name: Link and run a default-mode macOS example
@@ -253,13 +296,8 @@ jobs:
       # - macOS (arm64 and Intel): the hosted runners have no GPU and NSOpenGL
       #   offers no pixel format, so InitWindow fails. Only a real Mac can run
       #   this sweep; macos-15-intel still earns its place as x64mac coverage.
-      # - ubuntu-22.04: the vendored Linux raylib was built against glibc 2.38
-      #   and every example aborts at window init with "undefined symbol:
-      #   __isoc23_strtoul". Headless runs never reach that symbol, which is
-      #   how it went unnoticed. Tracked separately; ubuntu-24.04 covers Linux
-      #   until the archive is rebuilt against an older glibc baseline.
       - name: Install X11 and GL dependencies
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
@@ -272,7 +310,7 @@ jobs:
       # virtual one: a PulseAudio null sink on Linux, the Scream virtual
       # sound card on Windows.
       - name: Start a virtual audio device (Linux)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y pulseaudio pulseaudio-utils
           pulseaudio --start --exit-idle-time=-1
@@ -317,7 +355,7 @@ jobs:
           ls -l ci-gl
 
       - name: Run examples in a real window
-        if: runner.os != 'macOS' && matrix.os != 'ubuntu-22.04'
+        if: runner.os != 'macOS'
         timeout-minutes: 25
         env:
           ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}

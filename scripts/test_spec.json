@@ -163,6 +163,13 @@
             "events: KeyPressed(81)"
           ],
           "_note": "Two taps and two characters inside cycle 3 must reach the app as six ordered events -- the bits alone would show one press per key -- and the held Q on cycle 4 as a press event that also quits"
+        },
+        {
+          "name": "tapped-quit",
+          "frames": 1000000,
+          "keys": "3:A,6:Q~",
+          "timeout_seconds": 30,
+          "_note": "Q is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
         }
       ]
     },
@@ -172,6 +179,20 @@
         {
           "name": "sweep",
           "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/move_box",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "moves",
+          "frames": 60,
+          "keys": "3:RIGHT,4:RIGHT,5:DOWN,6:LEFT+UP"
         }
       ]
     },
@@ -202,7 +223,7 @@
           "frames": 1000000,
           "keys": "3:W,6:ESCAPE~",
           "timeout_seconds": 30,
-          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
+          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if the host sees a press that began and ended between two polls and honours it as the exit key"
         }
       ]
     },
@@ -256,10 +277,24 @@
           "frames": 20
         },
         {
-          "name": "turns-and-quits",
-          "frames": 1000000,
-          "keys": "3:RIGHT,6:DOWN,9:LEFT,14:ESCAPE",
-          "timeout_seconds": 30
+          "name": "turns",
+          "frames": 40,
+          "keys": "3:RIGHT,6:DOWN,9:LEFT",
+          "_note": "Escape is handled by the host's exit key, which a --host-keys script does not reach, so this run ends at its frame limit"
+        }
+      ]
+    },
+    {
+      "path": "examples/sprite_and_sound",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "hops-and-plays",
+          "frames": 60,
+          "keys": "3:SPACE,20:SPACE~"
         }
       ]
     },

@@ -1,0 +1,318 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+ifndef::langref[]
+:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
+endif::[]
+
+[#roc-primer]
+= Roc for RocRay
+
+This chapter teaches the parts of Roc that a small RocRay app uses, and no
+more. Read it once before <<first-game>>, and come back to it when you do not
+understand a line of code. Each section links to the matching page of the
+{langref}/README.md[Roc language reference], which covers the whole language.
+
+Roc is a _functional_ language. A value never changes once it exists. To
+"change" something, such as your app's model, you build a new value from the
+old one and return it. RocRay is organised around that idea: `update!` takes
+the current model and returns the next one.
+
+[WARNING]
+====
+Much of the Roc material online, including the tutorial on roc-lang.org, is
+written for an older version of the language with different syntax. If an
+example uses `+\x ->+` for a function, `+when ... is+` for matching, `Result`,
+`Task`, or calls functions without parentheses (`f x y`), it will not compile
+with the compiler RocRay uses. The syntax in this manual and in the
+{langref}/README.md[language reference] is current.
+====
+
+== Values and blocks
+
+Give a value a name with `=`. The name keeps that value for as long as it is
+in scope, and the compiler warns if you define the same name twice.
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=values,indent=0]
+----
+
+`480.F32` is the number 480 as an `F32`, a 32-bit floating-point number.
+RocRay uses `F32` for positions, sizes and times, `U64` for counts, and `I64`
+for exit codes. A string goes in double quotes.
+See {langref}/naming.md#constants[Constants] and
+{langref}/numbers.md[Numbers].
+
+A _block_ is a pair of braces holding some lines of code. It evaluates to its
+last line, and the names defined inside it are not visible outside:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=block,indent=0]
+----
+
+A line starting with `+#+` is a comment; `+##+` starts a documentation comment.
+See {langref}/expressions.md[Expressions].
+
+== Records
+
+A _record_ groups named values, called _fields_. Read a field with a dot. To
+get a record with one field changed, write `..` and the old record, then the
+fields to replace:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=records,indent=0]
+----
+
+`moved` is a new record; `paddle` is unchanged. Apps use this form in almost
+every `update!`: `Ok({ ..model, score: model.score + 1 })`.
+
+When a name already holds the value a field should have, you can write the
+name alone. `{ x, y }` means `{ x: x, y: y }`:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=pun,indent=0]
+----
+
+CAUTION: `{ score }` on its own is a block that evaluates to `score`, not a
+record. A trailing comma makes it a record: `{ score, }`.
+
+For a record with one field, add the trailing comma, or write the field in
+full. `roc fmt` puts a record with a trailing comma on separate lines, one
+field per line:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=single-field,indent=0]
+----
+
+See {langref}/records.md[Records].
+
+== Types, type aliases, and nominal types
+
+A line of the form `name : Type` states a value's type. The compiler checks
+that the value matches. Annotations are optional in Roc, but RocRay's
+functions are always annotated, and yours should be, because they make the
+compiler's error messages much clearer.
+
+A _type alias_ gives a type a name. It uses a single colon, and the name
+starts with a capital letter:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=alias,indent=0]
+----
+
+An alias is only another name: any record with an `x` and a `y` of type `F32`
+is a `Point`. Your app's `Model` is usually an alias, such as
+`Model : { paddle_x : F32, score : U64 }`.
+
+A _nominal type_ is a new type that is not interchangeable with anything
+else, even a type with the same contents. It is declared with `:=`, or with
+`::` when other modules must not see inside it. It can have functions of its
+own, called _methods_, in a `.{ }` block after it:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=nominal,indent=0]
+----
+
+Inside the module that declares it, `Lives.(count)` builds a `Lives` from a
+number, or takes one apart. You rarely need to declare a nominal type in a
+small app, but you use the platform's all the time. `Draw.Frame`,
+`Audio.Sound`, `App.Config` and `App.Input` are nominal types. You cannot
+build one from its contents; the platform gives you one, such as
+`App.default`, and you change it with its methods.
+See {langref}/types.md#type-aliases[Type aliases] and
+{langref}/types.md#nominal-types[Nominal types].
+
+== Tags, tag unions, and match
+
+A _tag_ is a capitalised name that is a value in its own right, such as
+`PaddleHit` or `KeyLeft`. A _tag union_ is a type listing the tags a value can
+be, in square brackets. `match` chooses what to do for each one:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=tags,indent=0]
+----
+
+The compiler checks that a `match` handles every tag. A branch written `_`
+handles everything the branches above it did not.
+
+A tag can hold values, called its _payload_:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=payloads,indent=0]
+----
+
+RocRay uses tags throughout: keys (`KeySpace`), options
+(`Capped(60)`), and outcomes (`Exit(0)`). `Msg : []` is a tag union with no
+tags. See {langref}/tag-unions.md[Tag unions] and
+{langref}/pattern-matching.md[Pattern matching].
+
+`if` and `else` choose between two values. Both branches must have the same
+type:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=if,indent=0]
+----
+
+See {langref}/if-else.md[if and else].
+
+== Functions
+
+A function is written `|arguments| body`. Its type lists the argument types,
+an arrow, and the result type. Call it with parentheses:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=functions,indent=0]
+----
+
+`double(21)` is `42`. See {langref}/functions.md[Functions].
+
+=== Pure and effectful functions
+
+Most functions are _pure_: the result depends only on the arguments, and
+calling one does nothing else. A pure function's type uses a thin arrow,
+`+->+`.
+
+An _effectful function_ does something beyond returning a value: it draws,
+plays a sound, reads the keyboard, or writes a file. Its type uses a thick
+arrow, `+=>+`, and its name ends in `!`:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=effectful,indent=0]
+----
+
+Only an effectful function can call another effectful function. So the `!`
+tells you, at a glance, every place where your app interacts with the world
+outside it. All
+three RocRay callbacks, `init!`, `update!` and `render!`, are effectful, and
+the platform's effectful functions, such as `frame.circle!` and
+`sound.play!`, are the only way your app can draw on the screen or play
+through the speakers.
+
+Keep your game logic in pure functions and call them from `update!`. Pure
+functions are easy to test, as <<primer-expect>> shows.
+See {langref}/functions.md#effectful-functions[Effectful functions].
+
+== Try, Ok, Err, and ?
+
+A function that can fail returns a `Try`: either `Ok(value)` or `Err(error)`.
+Its type lists both, and the error is a tag union naming every way it can
+fail. `Audio.gen_tone!` returns
+`Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit])`.
+
+Writing `?` after a call unwraps an `Ok`, or returns the `Err` from the
+enclosing function at once:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=try,indent=0]
+----
+
+Because `?` can return early, the enclosing function's error list must
+include every error its `?` calls can produce. When you add a `?` on a call
+that fails in a new way, the compiler tells you to add that error to the list.
+That is how `init! : App.Init(Model, [])` grows into
+`init! : App.Init(Model, [SoundGenerationFailed, ResourceLimit])` once
+`init!` generates a sound.
+
+RocRay treats one error specially. A callback that returns `Err(Exit(code))`
+ends the app with that exit code. Any other error returned to the host
+also ends the app, with a message naming the callback and the error.
+See {langref}/operators.md#-unwrap-if-ok-early-return-if-err[The ? operator].
+
+== Tuples
+
+A _tuple_ holds a fixed number of values in order, in parentheses. It is a
+handy way to return two things from a function. Take it apart by writing the
+same shape on the left of `=`:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=tuples,indent=0]
+----
+
+See {langref}/tuples.md[Tuples].
+
+== Methods and static dispatch
+
+A _method_ is a function that belongs to a type. You call it with a dot after
+a value of that type: `value.method(arguments)`. The value becomes the first
+argument. The compiler picks the function from the value's type, which Roc
+calls _static dispatch_:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=methods,indent=0]
+----
+
+`App.default` is an `App.Config`, so `.with_title("Paddle")` calls the
+`with_title` method of `App.Config`, which returns a new config; the next
+`+.with_size(...)+` is called on that one. `(42.U64).to_str()` and
+`U64.to_str(42)` are the same call.
+
+The same holds for the platform's effects: `+frame.circle!(...)+` calls the
+`circle!` method of `Draw.Frame` with `frame` as its first argument.
+See {langref}/static-dispatch.md#methods[Methods].
+
+A string can include a value with `+${...}+`. RocRay's text drawing uses this
+with `to_str` to show a number:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=interpolation,indent=0]
+----
+
+See {langref}/strings.md[Strings].
+
+== Imports
+
+The header gives the platform a short name, `rr` in every RocRay app. An
+`import` line makes one of its modules available, and you then use the
+module's name in front of what it provides, such as `Draw.filled` or
+`App.init`:
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=imports,indent=0]
+----
+
+The {api}[API reference] lists every RocRay module and what each provides.
+See {langref}/modules.md#import-statements[Imports].
+
+[#primer-expect]
+== Tests with expect
+
+An `expect` at the top level of a file is a test. It must evaluate to `true`
+(`Bool.True`):
+
+[source,roc]
+----
+include::tutorial/primer.roc[tag=expect,indent=0]
+----
+
+`roc test main.roc` runs every `expect` and reports the ones that fail. An
+`expect` cannot call an effectful function, which is one more reason to keep
+your game logic pure. <<testing>> shows how to test an app's logic.
+See {langref}/statements.md[Statements].
+
+== What this chapter leaves out
+
+Roc has more: lists and their functions, `for` and `while` loops, variables
+with `var`, dictionaries, and more. The RocRay examples use them, and the
+{langref}/README.md[language reference] explains them when you meet them.

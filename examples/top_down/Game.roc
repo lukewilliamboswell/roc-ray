@@ -1,10 +1,12 @@
 ## Pure Spark Run world updates and their ordered gameplay events.
 import rr.Math
-import Hazard
 import Level
 import Player
 import Spark
 
+## `Game` is a namespace. `[]` is an empty tag union, so no `Game` value can
+## ever exist; the type is here only so the block after it can hold the types
+## and functions other modules use as `Game.World`, `Game.update`, and so on.
 Game := [].{
 	State := [Playing, Won, GameOver].{
 		is_eq : _
@@ -20,7 +22,7 @@ Game := [].{
 				GateOpen => Bool.True
 			}
 	}
-	Controls : { move : Math.Vec2, dash_pressed : Bool, restart_pressed : Bool, quit_pressed : Bool }
+	Controls : { move : Math.Vec2, dash_pressed : Bool, restart_pressed : Bool }
 	World : {
 		player : Player,
 		sparks : List(Spark),

@@ -5,11 +5,11 @@
 ## image at another size.
 ##
 ## Every path here is relative to the output directory set with
-## `App.default.with_output_dir`, and one that would escape it -- absolute, or
-## containing `..` -- is refused rather than rewritten. Capture is the only
-## path-sandboxed writer the platform grants: `Files.Access.write_text!` and
-## `Files.Access.write_bytes!` write wherever the process may write, while everything
-## here is confined to the output directory.
+## `App.default.with_output_dir`, and one that would escape it -- absolute,
+## containing `..`, or passing through a symbolic link -- is refused rather
+## than rewritten. Captures are the app's own output, so they need no declared
+## permission; being confined to the output directory is what makes that
+## safe.
 ##
 ## `start!` and `stop!` control recording. `screenshot!` writes a presented
 ## frame, and `screenshot_texture!` writes an offscreen render texture.
@@ -167,7 +167,7 @@ Capture := [].{
 	Quality : CaptureQuality
 
 	## A validated recording request. Its fields cannot be updated directly;
-	## use its receiver updates so the invariants are preserved.
+	## use its `with_*` methods so the invariants are preserved.
 	Recording :: {
 		path : Str,
 		format : CaptureFormat,
@@ -200,7 +200,7 @@ Capture := [].{
 		with_fps = |rec, value| { ..rec, fps: normalize_fps(value) }
 
 		## Return a recording that stops after this many captured frames. `0`
-		## records until a `Capture.stop` command is applied or the app exits.
+		## records until `io.capture().stop!()` is called or the app exits.
 		with_max_frames : Recording, U64 -> Recording
 		with_max_frames = |rec, value| { ..rec, max_frames: value }
 
@@ -331,8 +331,8 @@ Capture := [].{
 	## `TargetUnavailable` is a render target that no longer resolves to a host
 	## resource -- a released one, or the `Draw.RenderTexture.stub` a pure test
 	## holds. `BudgetExceeded` is an image too large for the host to hold at all,
-	## so retrying will not help; `Busy` is one that would fit were other exports
-	## not in flight, so a later frame may take it. `Unavailable` is the app
+	## so retrying will not help; `Busy` is one that would fit if other exports
+	## were not still running, so a later frame may take it. `Unavailable` is the app
 	## shutting down before the write started.
 	TextureExportError : [
 		PermissionDenied,
@@ -371,11 +371,10 @@ Capture := [].{
 	## becomes possible on a later frame. `TargetUnavailable` is a render target
 	## that no longer resolves to a host resource -- a released one, or the
 	## `Draw.RenderTexture.stub` a pure test holds. `Busy` is the readback budget
-	## being committed elsewhere -- to still exports in flight, or to the
-	## delivery slots that carry byte lists to this app -- or, for a render
+	## being committed elsewhere -- to still exports that are running, or to the
+	## delivery slots that pass byte lists to this app -- or, for a render
 	## target bigger than `max_readback_bytes` on its own, committed for good.
-	## `ReadbackFailed` is the graphics driver declining to hand the pixels
-	## over. `Unavailable` is there being nothing to read at all -- a headless
+	## `ReadbackFailed` is the graphics driver declining to return the pixels. `Unavailable` is there being nothing to read at all -- a headless
 	## run, or a `Screen` read before the host has a presented frame to read.
 	PixelReadError : [RegionOutOfBounds, TargetUnavailable, Busy, ReadbackFailed, Unavailable]
 
@@ -406,7 +405,7 @@ Capture := [].{
 	## small the point, because that is what the graphics API will give. Read a
 	## region once rather than a point many times.
 	##
-	## A headless run has no pixels of any kind and answers `Unavailable`, so an
+	## A headless run has no pixels of any kind and returns `Unavailable`, so an
 	## app that reads pixels has to say what it does without them before it can
 	## run under `--host-headless`.
 	pixel_at! : Source, { x : I32, y : I32 } => Try(Color.Rgba, PixelReadError)
@@ -474,7 +473,8 @@ Capture := [].{
 	max_readback_bytes : U64
 	max_readback_bytes = 128 * 1024 * 1024
 
-	## Opaque capture authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque capture authority supplied by App.Io. Captures are the app's own
+	## output, confined beneath its output directory, and need no declaration.
 	Writer :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -487,7 +487,7 @@ Capture := [].{
 		## the draw batch is flushed and before the buffers are swapped, so the
 		## pixels are the ones just drawn -- and the PNG is encoded and written off
 		## the frame thread. This call waits for that write, so it parks the task
-		## until the file exists and answers with the write's own outcome.
+		## until the file exists and returns the write's own outcome.
 		##
 		## Legal only in a task, where it parks the task; refused in `init!`,
 		## `update!`, and `render!`. Every other waiting effect also works in
@@ -502,11 +502,11 @@ Capture := [].{
 		## }
 		## ```
 		##
-		## A headless run has no framebuffer at all and answers `Ok({})` without
+		## A headless run has no framebuffer at all and returns `Ok({})` without
 		## writing, so a screenshotting app still runs under `--host-headless`.
 		##
-		## Only one screenshot can be in flight: a second one while the first is
-		## still waiting for its frame is `AlreadyPending`.
+		## Only one screenshot can be pending: asking for a second one while the
+		## first is still waiting for its frame returns `AlreadyPending`.
 		screenshot! : Writer, Str => Try({}, ScreenshotError)
 		screenshot! = |Writer.(authority), path| perform_screenshot!(authority, path)
 
@@ -528,7 +528,7 @@ Capture := [].{
 		## showed. The path is resolved under the output directory exactly as
 		## `screenshot!` resolves one.
 		##
-		## A headless run has no pixels to read and answers `Ok({})` without writing,
+		## A headless run has no pixels to read and returns `Ok({})` without writing,
 		## so an exporting app still runs under `--host-headless`.
 		##
 		## ```roc

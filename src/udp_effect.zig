@@ -76,8 +76,9 @@ pub const ERR_ADDRESS_IN_USE: u8 = 8;
 /// The address is not one of this machine's.
 pub const ERR_ADDRESS_UNAVAILABLE: u8 = 9;
 
-/// Binding this port needs privileges this process does not have.
-pub const ERR_PERMISSION_DENIED: u8 = 10;
+/// The operating system refused: binding this port, or sending to this
+/// address, needs privileges this process does not have.
+pub const ERR_ACCESS_REFUSED: u8 = 10;
 
 /// The payload is longer than `max_datagram_bytes`.
 pub const ERR_TOO_LARGE: u8 = 11;
@@ -93,6 +94,10 @@ pub const ERR_TIMEOUT: u8 = 14;
 
 /// Another task is already parked in `receive` on this socket.
 pub const ERR_ALREADY_RECEIVING: u8 = 15;
+
+/// The destination is not a peer the app declared. Produced by the host's
+/// permission check before this module sees the datagram.
+pub const ERR_NOT_PERMITTED: u8 = 16;
 
 /// One open UDP socket, and everything that belongs to it.
 ///
@@ -341,7 +346,7 @@ fn bindErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.AddressInUse => ERR_ADDRESS_IN_USE,
         error.AddressNotAvailable => ERR_ADDRESS_UNAVAILABLE,
-        error.AccessDenied, error.PermissionDenied => ERR_PERMISSION_DENIED,
+        error.AccessDenied, error.PermissionDenied => ERR_ACCESS_REFUSED,
         error.ProcessFdQuotaExceeded, error.SystemFdQuotaExceeded => ERR_RESOURCE_LIMIT,
         error.Canceled => ERR_UNAVAILABLE,
         else => ERR_FAILED,
@@ -358,7 +363,7 @@ fn sendErrorCode(err: anyerror) u8 {
         error.WouldBlock => ERR_WOULD_BLOCK,
         error.MessageTooBig => ERR_TOO_LARGE,
         error.NetworkUnreachable, error.NetworkDown => ERR_UNREACHABLE,
-        error.AccessDenied, error.PermissionDenied => ERR_PERMISSION_DENIED,
+        error.AccessDenied, error.PermissionDenied => ERR_ACCESS_REFUSED,
         error.Canceled => ERR_UNAVAILABLE,
         else => ERR_FAILED,
     };
@@ -406,7 +411,7 @@ test "an address survives the trip through zio and back" {
 
 test "operating-system failures fold onto the codes Udp names" {
     try std.testing.expectEqual(ERR_ADDRESS_IN_USE, bindErrorCode(error.AddressInUse));
-    try std.testing.expectEqual(ERR_PERMISSION_DENIED, bindErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(ERR_ACCESS_REFUSED, bindErrorCode(error.AccessDenied));
     try std.testing.expectEqual(ERR_FAILED, bindErrorCode(error.Unexpected));
     try std.testing.expectEqual(ERR_WOULD_BLOCK, sendErrorCode(error.WouldBlock));
     try std.testing.expectEqual(ERR_TOO_LARGE, sendErrorCode(error.MessageTooBig));

@@ -25,7 +25,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARCHIVES = [
-    "platform/targets/x64glibc/libvpx.a",
+    "platform/targets/x64v1glibc/libvpx.a",
     "platform/targets/x64mac/libvpx.a",
     "platform/targets/arm64mac/libvpx.a",
     "platform/targets/x64win/vpx.lib",

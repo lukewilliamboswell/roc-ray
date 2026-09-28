@@ -1,0 +1,143 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#testing]
+= Testing your app
+
+An app's logic can be tested without a window, and the whole app can be run
+unattended for a fixed number of cycles, with or without drawing. This chapter
+covers both. It assumes <<app-model>>.
+
+== Test the pure functions
+
+`roc test` runs the `expect` blocks in your source, but an `expect` cannot call
+an effectful function such as `update!`. Keep the decisions `update!` makes in
+pure functions, and test those. Here `decide` returns whether this input
+should quit the game:
+
+[source,roc]
+----
+decide : Model, App.Input(Msg) -> [Quit, Continue]
+decide = |_model, input| if input.devices.key_pressed(KeyQ) Quit else Continue
+
+expect {
+    model = { blip: Audio.Sound.stub, quitting: Bool.False }
+    input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyQ))
+    decide(model, input) == Quit
+}
+----
+
+An `expect` with more than one line wraps them in braces, `+expect { ... }+`;
+the last line is the condition that must be true. `update!` then calls
+`decide` and does what it returns.
+
+`App.Input.for_tests({})` is a neutral input: nothing pressed, an ordinary
+focused 800 by 600 window, the clock at its first cycle, no messages, and
+nothing recording. Its `with_*` methods change one thing each:
+
+* `with_devices(snapshot)`: start from `Devices.none` and add keys and mouse
+  state with `with_key_down`, `with_key_pressed`, `with_key_released`, and the
+  `with_mouse_*` methods, typed text with `with_text_input([72, 105])`, and
+  the ordered event record with `with_events`;
+* `with_time(cycle)`, `with_window(snapshot)`, `with_capture(status)`;
+* `with_messages(list)` and `with_message(msg)`, to deliver task results;
+* `with_dropped(list)` and `with_dropped_overflow(bool)`.
+
+A model usually holds host resources, such as textures, fonts, sounds, and
+prepared text. Every resource type has a `stub` that holds nothing, such as
+`Assets.Texture.stub`, `Audio.Sound.stub`, and `Text.Prepared.stub`, so a
+whole model can be written down inside a test. A stub cannot be drawn or
+played, and loading and resource lifetimes cannot be tested this way.
+
+Run `roc check` as well as `roc test`: `roc check` reports type errors that a
+test run may not.
+
+== Run the app unattended
+
+A built RocRay app accepts a few switches of its own, all beginning with
+`+--host-+`. The host removes them before the app sees its arguments. Pass them
+after `+--+` when running through `roc`, as in
+`+roc main.roc -- --host-headless+`.
+
+[source,sh]
+----
+./my-app --host-headless --host-headless-frames=120
+----
+
+`+--host-headless+` runs without a window, GPU, or audio device: every cycle,
+task, and effect behaves as usual, but nothing is drawn, and every cycle
+reports exactly 1/60 of a second as its elapsed time. It is a test of the
+app's behaviour, not of its pixels. `+--host-headless-frames=N+` stops after N
+cycles (note the `=`).
+
+To test the real renderer without anyone watching, run a real window
+hidden for a fixed number of cycles:
+
+[source,sh]
+----
+./my-app --host-hidden --host-frames=60
+----
+
+A hidden window still needs a display server; on Linux without one, run under
+`xvfb-run -a`.
+
+=== Scripted keys and text
+
+`+--host-keys+` and `+--host-text+` script the keyboard on the cycles they name:
+
+[source,sh]
+----
+./my-app --host-headless --host-headless-frames=30 --host-keys=3:S,4:LEFT+X --host-text=5:hi
+----
+
+A key is a character, a name such as `LEFT` or `SPACE`, or a raw key code. By
+default a scripted key is held on the cycles listed. A `~` suffix, as in
+`3:SPACE~`, taps the key inside that cycle instead: it is pressed and
+released in one input and never held, which is what a quick tap between two
+cycles looks like. (`~` is used because it needs no quoting in cmd,
+PowerShell, bash, or zsh.)
+
+Scripted keys and text work the same in headless, hidden, and windowed runs.
+A scripted press of the exit key ends the app, as a real one does, so
+`3:ESCAPE~` tests that Escape quits. An app can also drive its own input with
+`Keys.set_source!` (see <<capture>>).
+
+=== Scripted close requests
+
+`+--host-close=CYCLE+` acts as if the user clicked the window's close button on
+that cycle, and `+--host-close=30,90+` on each cycle listed. It works in
+headless and hidden runs, so a test can check that an app using
+`with_close_request(Deliver)` saves and exits as it should (see
+<<app-model-closing>>):
+
+[source,sh]
+----
+./my-app --host-headless --host-headless-frames=600 --host-close=30
+----
+
+== Details: watching tasks
+
+Set the environment variable `ROC_RAY_TRACE_TASKS` to have the host print a
+line for each task as it is spawned, queued, parked (paused at a waiting
+effect), resumed, finished, and delivered:
+
+[source,sh]
+----
+ROC_RAY_TRACE_TASKS=1 ./my-app --host-headless --host-headless-frames=120
+----
+
+A test script can then check when each task ran, and not only the final
+state.
+
+== Further reading
+
+* <<reference-switches>> lists every host switch and environment variable.
+* <<observatory>> records timing and allocation data for a run.
+* {src}/examples/breakout/main.roc[Breakout] separates its game logic from
+  its effects and tests them with `expect`.

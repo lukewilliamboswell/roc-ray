@@ -1,0 +1,129 @@
+= RocRay: A manual for building native games and interactive apps in Roc
+:doctype: book
+:author: The RocRay contributors
+// The build stamps the platform version it documents. A checkout that has not
+// been released yet says so rather than claiming a version it is not.
+:revnumber: {docs-version}
+:revremark: macOS (Intel and Apple silicon), Linux x86-64, Windows x86-64
+:toc: left
+:toclevels: 3
+:sectnums:
+:sectanchors:
+:!icons:
+:source-highlighter: rouge
+:imagesdir: images
+// Links into the repository. The manual is published away from the source
+// tree, so a relative link to an example or script would not resolve.
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
+
+[.lead]
+Make 2D games, visual tools, and other interactive programs in Roc. You write
+your game's logic in Roc: what happens when a key is pressed, how things move,
+and what to draw each frame. RocRay opens the window, reads the keyboard and
+mouse, plays sound, and calls your code once for every frame it draws, up to
+240 times a second by default. This manual
+assumes no Roc and no graphics experience. It takes you from installing the
+compiler to a small finished game, and then through each feature as your own
+app needs it.
+
+ifdef::backend-html5[]
+{api}[Browse the API reference] ·
+link:roc-ray.pdf[Download this manual as a PDF].
+endif::[]
+
+[discrete]
+== Choose a path
+
+New to RocRay:: Follow these in order.
++
+. <<overview>>: what RocRay is for, and how an app is put together.
+. <<install>> and <<run-an-example>>: set up the compiler and see an app run.
+. <<roc-primer>>: the Roc you need, if the language is new to you.
+. <<smallest-app>>: write and run your first program.
+. <<first-game>>: grow it, step by step, into a small game.
+. <<app-model>>, then the other guides as your app needs them.
+. <<shipping>>: give your finished app to other people.
++
+<<glossary>> explains any unfamiliar term along the way.
+
+Coming from raylib:: Read <<overview>>, then <<coming-from-raylib>>, which maps
+raylib's functions and habits onto RocRay. <<roc-primer>> covers the language.
+Building an app:: Read <<app-model>> first; every later guide builds on it.
+Then read the guides for the features you need, in any order: <<input>>,
+<<drawing>>, <<tasks>>, and so on. Before your app touches a file, the
+network, or another program, read <<permissions>>. <<shipping>> covers giving
+your app to other people.
+Testing and investigating performance:: <<testing>> covers pure tests and
+unattended runs. <<observatory>> records what the host did, cycle by cycle,
+into a database you can query.
+Curious about the design:: <<architecture>> lists the design rules that the
+guides introduce one at a time, and explains why RocRay chose them.
+Contributing to RocRay:: Start with <<contributing>>. <<host-development>>
+covers changes to the native host, and <<maintaining>> covers dependencies,
+bundles, and releases.
+
+= Start here
+
+include::overview.adoc[leveloffset=+1]
+
+include::getting-started.adoc[leveloffset=+1]
+
+include::roc-primer.adoc[leveloffset=+1]
+
+include::first-game.adoc[leveloffset=+1]
+
+include::examples.adoc[leveloffset=+1]
+
+= Guides
+
+include::app-model.adoc[leveloffset=+1]
+
+include::input.adoc[leveloffset=+1]
+
+include::drawing.adoc[leveloffset=+1]
+
+include::tasks.adoc[leveloffset=+1]
+
+include::permissions.adoc[leveloffset=+1]
+
+include::files-and-assets.adoc[leveloffset=+1]
+
+include::audio.adoc[leveloffset=+1]
+
+include::networking.adoc[leveloffset=+1]
+
+include::host-services.adoc[leveloffset=+1]
+
+include::capture.adoc[leveloffset=+1]
+
+include::testing.adoc[leveloffset=+1]
+
+include::observatory.adoc[leveloffset=+1]
+
+include::shipping.adoc[leveloffset=+1]
+
+= Reference
+
+include::reference.adoc[leveloffset=+1]
+
+include::glossary.adoc[leveloffset=+1]
+
+include::coming-from-raylib.adoc[leveloffset=+1]
+
+include::architecture.adoc[leveloffset=+1]
+
+= Contributing
+
+include::contributing.adoc[leveloffset=+1]
+
+include::host-development.adoc[leveloffset=+1]
+
+include::maintaining.adoc[leveloffset=+1]
+
+= Release notes
+
+include::releases/index.adoc[leveloffset=+1]

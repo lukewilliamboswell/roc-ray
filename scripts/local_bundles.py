@@ -89,16 +89,31 @@ def read_roc_pin(root: Path) -> str:
 
 
 def rewrite_compiler_pin(source: str, pin: str) -> str:
-    """Rebind an application header in a development or release-candidate copy."""
+    """Pin an application header to `pin`, replacing its `roc:` field or adding one.
+
+    The checked-in examples name the working tree's platform by path and carry
+    no pin, because that platform's own header pins the compiler. A copy that
+    points at a bundle needs the pin that bundle was built for, so the field is
+    added after the platform reference: on its own line in a multi-line header,
+    inline in a one-line header.
+    """
     rewritten, count = re.subn(
         r'(?m)^([^#\n]*\broc\s*:\s*)"[^"\n]+"',
         lambda match: match.group(1) + '"' + pin + '"',
         source,
         count=1,
     )
-    if count != 1:
-        raise LocalBundleError("application header must declare one roc compiler pin")
-    return rewritten
+    if count == 1:
+        return rewritten
+    line = re.search(r'(?m)^(?P<indent>[ \t]*)(?P<before>[^#\n]*\bplatform\s+"[^"\n]*")(?P<after>[^\n]*)$', source)
+    if line is None:
+        raise LocalBundleError("application header has no platform reference to pin a compiler beside")
+    if line.group("after").strip() == ",":
+        # A multi-line header: one field per line, each with a trailing comma.
+        added = f'{line.group(0)}\n{line.group("indent")}roc: "{pin}",'
+    else:
+        added = f'{line.group("indent")}{line.group("before")}, roc: "{pin}"{line.group("after")}'
+    return source[:line.start()] + added + source[line.end():]
 
 
 def roc_version(roc: str = "roc") -> str:

@@ -41,27 +41,28 @@ Task := [].{
 	## ordering between its synchronous work and the spawning `update!`.
 	## Messages are delivered in task-completion order.
 	##
-	## When the same kind of work can be in flight more than once, a reply can
-	## arrive after a newer one. Put a generation counter or id in the message
+	## When more than one task of the same kind can be running, an older reply
+	## can arrive after a newer one. Put a generation counter or id in the message
 	## and drop replies that do not match the latest; `examples/http_fetch`
 	## shows the shape.
 	##
 	## This is the only way to start a task. `Input` is a pure platform value
-	## with no effectful receivers, so there is no
+	## with no effectful methods, so there is no
 	## `input.spawn!` form.
 	##
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`
-	## never sees the answering input, and `render!` does not change the world.
+	## never sees an input for the message to arrive on, and `render!` does not
+	## change the world.
 	spawn! : App.Input(msg), (() => msg) => {}
 	spawn! = |_input, task!| Host.task_spawn!(Box.box(task!))
 
 	## Start a task whose message belongs to a component, wrapped into the app's
 	## own `Msg` on the way back.
 	##
-	## `spawn!` needs the closure to answer in the app's `Msg`, which forces a
+	## `spawn!` needs the closure to return the app's `Msg`, which forces a
 	## component to know the type of the app that hosts it. `spawn_with!` splits
-	## that in two: the closure answers in the component's own message type, and
-	## the parent supplies the constructor that lifts it.
+	## that in two: the closure returns the component's own message type, and
+	## the parent supplies the constructor that converts it to the app's `Msg`.
 	##
 	## ```roc
 	## # Counter.roc -- knows nothing about the app's Msg
@@ -76,7 +77,8 @@ Task := [].{
 	## `|m| CounterMsg(m)` rather than as `CounterMsg`.
 	##
 	## The wrapper runs on the task's own stack, right after the closure returns
-	## and before the message is handed back, so it is ordinary pure code and not
+	## and before the message is returned to the host, so it is ordinary pure
+	## code and not
 	## a second scheduled step.
 	##
 	## Everything `spawn!` says about the `App.Input` witness, about when a task's

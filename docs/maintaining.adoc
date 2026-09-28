@@ -1,0 +1,264 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#maintaining]
+= Dependencies, bundles, and releases
+
+This chapter is for maintainers: how the platform's native dependencies are
+produced and pinned, how bundles are assembled, how a release is published,
+and how the compiler pin is kept current. It assumes <<contributing>>.
+
+[#maintaining-link-inputs]
+== Linker inputs
+
+Every file named in the `targets` blocks of `platform/main.roc` and
+`platform/main-wayland.roc` is a linker input, except the host archive
+(`libhost.a`/`host.lib`) and the Roc app. That means raylib, msf_gif, libvpx,
+SQLite, the Linux CRT objects and link stubs, and the Windows import libraries.
+They change far less often than the host, so they are released on their own,
+and `link-inputs.lock.json` selects exact bytes for them.
+
+An ordinary build, CI job, nightly check, or release compiles only the host and
+installs the locked archives, rehashing each one against the lock on every use.
+A missing, stale, or mismatched input fails the build; it never falls back to a
+local rebuild. The producer workflow that builds new archives, the publisher
+that releases them, and the procedure for changing one are documented beside
+the recipes, in
+{src}/dependencies/link-inputs/README.md[`dependencies/link-inputs/README.md`].
+{src}/dependencies/README.md[`dependencies/README.md`] explains why linker
+inputs and the macOS interfaces are separate trust boundaries with separate
+locks.
+
+[#maintaining-macos]
+== macOS linker interfaces
+
+RocRay maintains a reviewed catalog for the minimal macOS linker interfaces it
+needs. A normal build downloads the release pinned in `dependencies.lock.json`,
+checks its size, SHA-256 digest, identity, and complete file inventory, then
+materializes it under the ignored `platform/targets/macos-sysroot/` directory:
+
+[source,bash]
+----
+zig build
+----
+
+The cache is `~/.cache/roc-ray/dependencies`. For producer work, generate an
+unpublished candidate independently and opt into it explicitly:
+
+[source,bash]
+----
+python3 scripts/build_macos_interfaces.py --tree /tmp/roc-ray-macos-sysroot
+zig build -Dmacos-interfaces-path=/tmp/roc-ray-macos-sysroot
+ROC_RAY_MACOS_INTERFACES_DIR=/tmp/roc-ray-macos-sysroot \
+    scripts/run-example.py examples/pong
+----
+
+Use `scripts/audit_macos_archives.py` only to inventory unresolved references
+in RocRay's five macOS archives. An archive reference does not establish public
+API status or library ownership; additions to
+`dependencies/macos-interfaces/interfaces.json` require the evidence described
+in {src}/dependencies/macos-interfaces/README.md[`dependencies/macos-interfaces/README.md`].
+
+The independent producer workflow generates the archive twice, validates the
+exact candidate on Intel and Apple Silicon, attests it with GitHub build
+provenance, and publishes an immutable dependency release. Platform releases
+verify that attestation against the repository, trusted `main` source commit,
+and producing workflow before building. To verify it yourself, run:
+
+[source,bash]
+----
+python3 scripts/verify_release_attestations.py dependencies.lock.json \
+    --cache ~/.cache/roc-ray/dependencies
+----
+
+== Vendored C libraries
+
+Screenshots go through raylib's own PNG writer, but GIF and video need encoders
+the vendored raylib does not have. Both are vendored as _source_ and compiled for
+every target by the linker-input producer (`zig build link-inputs`, recipes in
+`link_inputs.zig`), so there is no configure step and no per-OS build runner in
+the loop:
+
+* `vendor/msf_gif/`: a single-header GIF encoder (MIT or public domain). Built
+freestanding like the host; the handful of libc declarations it needs come
+from the `shim/` directory beside it.
+* `vendor/libvpx/`: the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
+C only: libvpx writes some of its SIMD as compiler intrinsics, which `zig cc`
+compiles, and the rest as NASM/GAS assembly, which Zig cannot assemble. The
+intrinsics are vendored, the assembly is not, so no assembler is needed to
+build or to re-vendor. Because the ISA is fixed at compile time (there is no
+runtime CPU detection), the generated headers are per architecture:
+`config/x86_64/` for the three x86-64 targets, `config/arm64/` for arm64mac.
+`vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
+`config/README.md` explains what it produces. That script is the one thing to
+run when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
+* `vendor/sqlite/`: the SQLite amalgamation (public domain), behind `Sqlite`.
+One source file and no configure step, so upgrading is a two-file copy;
+`vendor/sqlite/README.md` pins the version and SHA-256 and explains the
+compile flags that are decisions rather than tuning. `SQLITE_THREADSAFE=1`,
+`SQLITE_OMIT_LOAD_EXTENSION` and `SQLITE_DQS=0` are the three worth knowing
+about before changing anything.
+
+`zig build graphical-smoke` runs the pixel-level rendering and capture checks
+under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
+newer runner than the build matrix: it is the only target that links the system
+libc directly, and the vendored raylib references glibc 2.38 symbols that
+ubuntu-22.04 lacks. Apps are unaffected: the host defines those aliases
+(`src/isoc23_shims.s`), and `scripts/all_tests.py` checks that no built example
+leaves one for the dynamic linker.
+
+Both expose only primitives and opaque pointers to Zig through a small C shim,
+so the freestanding host module never needs C headers. Each produces its own
+static archive, released as a linker input and named in the `targets:` block of
+`platform/main.roc`, exactly as `libraylib.a` is. `zig build libvpx-parity`
+checks the SIMD kernels; the producer workflow runs it on arm64 and x64.
+
+libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
+added to the glibc link stubs in `platform/targets/x64v1glibc/libc_stub.s`. SQLite's unix
+VFS and its serialized threading mode added ten more there and in
+`libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
+library: the stub files are hand-written assembly, and a missing symbol shows up
+as a link error naming it, not as a build failure in the library itself.
+
+Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
+Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
+ARM Linux is not currently included.
+
+
+== Bundles and targets
+
+Build the default release bundle:
+
+[source,bash]
+----
+scripts/bundle.sh
+----
+
+Build the Linux x64 native Wayland bundle:
+
+[source,bash]
+----
+scripts/bundle.sh --platform wayland
+----
+
+Both bundles take the host archives that `zig build` writes under
+`platform/targets/`, and install their other linker inputs from the locked
+release into a fresh staging directory. The default package takes the
+`x64mac`, `arm64mac`, `x64v1glibc-x11`, and `x64win` profiles, and the Wayland
+package takes `x64v1glibc-wayland`. So a local checkout can build a complete
+bundle, which is what `scripts/all_tests.py` relies on. The Wayland raylib
+archive itself (`vendor/raylib/linux-x64-wayland/libraylib.a`, rebuilt with
+`scripts/build-raylib-wayland.sh`) is a producer input like the other vendored
+libraries.
+
+`bundle.sh` includes all platform modules, including the private `Resource`
+module, with their relative paths preserved. Local tests and release
+builds use the same bundling path.
+
+== Releases
+
+Run the "Release" workflow to publish the platform. Types, helpers, effects,
+and native host inputs ship together in each content-addressed platform
+bundle. There is no separate vocabulary release or package pin to update.
+The default and Wayland bundles expose the same API with different native
+link configurations.
+
+The release workflow builds and tests both bundles, publishes this manual and
+the API reference for the release to Pages. Nothing in the repository changes
+after a release: the checked-in examples name the platform in the checkout, and
+only the examples zip points at the release. Do not manually publish an
+untested local bundle as a release artifact.
+
+Besides the bundles, every GitHub release includes:
+
+* `examples-<version>.zip`: every example, its header rewritten to point at
+  this release's default bundle and to pin the compiler the release was built
+  for, so an unzipped copy builds with no checkout;
+* `roc-ray-manual-<version>.pdf`: this manual as one PDF;
+* `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
+  it;
+* `roc-ray-api-docs-<version>.zip`: the `roc docs` API reference.
+
+`scripts/release_helpers.py package-examples` and `package-docs` build them,
+and the workflow's build job dry-runs both on every pull request. Pages serves
+only the current release's documentation; the release assets keep each
+release's own copy.
+
+=== Release notes
+
+Write the notes for a release in `docs/releases/<version>.adoc` and add it to
+`docs/releases/index.adoc`, newest first, so it appears in this manual. The
+release workflow converts the same file to Markdown for the GitHub release
+page, then appends the bundle URLs, the supported compiler, and links to the
+examples archive and the docs. The conversion accepts the subset of AsciiDoc
+the notes need (section titles, paragraphs, lists, `[source]` blocks, tables,
+links, and inline emphasis), and fails on anything else rather than publishing
+it garbled. Check a draft with:
+
+[source,bash]
+----
+python3 scripts/release_helpers.py preview-release-notes docs/releases/<version>.adoc
+----
+
+[#maintaining-docs]
+=== Publishing the documentation
+
+GitHub Pages serves the documentation for the current release only, from the
+release workflow's `publish-docs` job: this manual at the site's root, built by
+`scripts/build_manual.py --pdf`, and the API reference that
+`scripts/build_docs.py` generates under `api/`.
+`scripts/release_helpers.py assemble-pages` lays the site out, redirects the
+old `manual/` address to the root, and gives it a 404 page that sends readers
+of an earlier version to the releases page. Each release has its own copy
+of both as attached assets, so nothing generated is committed and old versions
+never accumulate on the site.
+The `docs` workflow builds the manual as HTML and PDF on every pull request and
+push to `main` and uploads it as a workflow artifact, so a change can be
+reviewed before it is released.
+
+[#maintaining-nightly]
+== Roc nightly updates
+
+RocRay tracks recent nightly builds of the Roc compiler, and every development
+Roc root pins the same nightly. `platform/main.roc` holds the development pin; every
+other tracked root that pins a compiler (the Wayland header, the examples, the
+test probes) must name the same one. The automated updater rewrites exactly the
+roots listed under `compiler_roots` in `.github/roc-nightly.json`, and
+`zig build lint` (through `scripts/check_compiler_pins.py`) fails if that list
+misses a pinned root or a pin disagrees. Documented headers inside `##` doc
+comments omit the `roc:` field instead, because nothing rewrites them. The
+published starter's compiler, named in `README.md`, is deliberately separate;
+the "Published quickstart" CI job checks it unchanged.
+
+The repository checks for a new nightly once daily at 13:40 UTC, about four
+hours after the upstream 09:00 UTC build. If a nightly is published late, the
+update waits until the next day. `.github/roc-nightly.json` also selects the validation workflows,
+including their validation-only release paths. The controller, its tests, and
+job permissions are maintained in
+https://github.com/lukewilliamboswell/roc-automation[roc-automation]. The
+caller workflows pin shared code to `75f3e1b4f2d6558e631a0d35d739165056b036d2`.
+Dependabot proposes reviewed updates to Actions/workflow references.
+
+Follow the shared https://github.com/lukewilliamboswell/roc-automation/blob/75f3e1b4f2d6558e631a0d35d739165056b036d2/docs/integration.md[integration and permissions guide]
+for the PR-creation setting, action allowlists, required checks, and first live
+`GITHUB_TOKEN` run. Keep default token permissions read-only. The updater never
+approves or merges PRs and receives no protection bypass.
+
+`automation/roc-nightly` is reserved for the bot's pin-only commits. Put manual
+compatibility changes on a separate branch. Candidate failures require diagnosis;
+do not weaken tests or mechanically replace baselines to accept a compiler.
+
+The PR configuration check validates the local pin and selected workflow files.
+The shared repository owns the controller regression suite. Project tests remain
+in this repository and run on the exact candidate commit. Scheduled bot-token
+acceptance must be verified after merge; file changes alone cannot prove it.
+
+Use the shared https://github.com/lukewilliamboswell/roc-automation/blob/75f3e1b4f2d6558e631a0d35d739165056b036d2/docs/openssf.md[OpenSSF rollout checklist]
+to record project-specific evidence. This integration does not establish badge
+compliance or change repository settings.

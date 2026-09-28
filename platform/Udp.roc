@@ -45,10 +45,14 @@
 ## a hostname, because resolving a name waits and neither of these effects
 ## does.
 ##
-## This grants the app the network authority the process already has: any port
-## it may bind, any host it may send to. Ports below 1024 usually need
-## privileges, and report `PermissionDenied` when they are missing. Broadcast
-## and multicast are not enabled.
+## An app binds only the ports it declared with `UdpBind` and sends
+## only to the peers it declared with `UdpPeer`; `UdpAny`
+## lifts both limits. A port or peer outside the declarations is
+## `PermissionDenied`, and using `Udp` with no UDP declaration at all stops the
+## app as a programmer error. Declaring a peer also permits an ephemeral bind
+## (port `0`). Ports below 1024 usually need operating-system privileges, and
+## report `AccessRefused` when they are missing. Broadcast and multicast are not
+## enabled.
 import Resource
 import Host
 
@@ -94,18 +98,20 @@ Udp := [].{
 	## `AddressUnavailable` is an address that is not one of this machine's,
 	## and `ResourceLimit` is this platform's own ceiling of eight open
 	## sockets. `InvalidAddress` is a string that is not a dotted-quad IPv4
-	## literal.
-	BindError : [InvalidAddress, AddressInUse, AddressUnavailable, PermissionDenied, ResourceLimit, Unavailable]
+	## literal. `PermissionDenied` is a port the app did not declare, and
+	## `AccessRefused` is the operating system refusing the bind.
+	BindError : [InvalidAddress, AddressInUse, AddressUnavailable, AccessRefused, PermissionDenied, ResourceLimit, Unavailable]
 
 	## Why a datagram was not handed to the kernel.
 	##
 	## `WouldBlock` is the send buffer being full: the datagram was not sent,
-	## and the app is producing faster than the link can carry. `TooLarge` is a
+	## and the app is sending faster than the network link can transmit. `TooLarge` is a
 	## payload over `max_datagram_bytes`, refused rather than truncated,
 	## because a truncated datagram decodes into wrong data. None of these mean
 	## the peer received anything, and no code means it did -- UDP does not
-	## report that.
-	SendError : [InvalidAddress, TooLarge, WouldBlock, Unreachable, PermissionDenied, SendFailed, Unavailable]
+	## report that. `PermissionDenied` is a peer the app did not declare, and
+	## `AccessRefused` is the operating system refusing the send.
+	SendError : [InvalidAddress, TooLarge, WouldBlock, Unreachable, AccessRefused, PermissionDenied, SendFailed, Unavailable]
 
 	## Why a receive produced no datagrams.
 	##
@@ -114,7 +120,7 @@ Udp := [].{
 	## second task trying to receive on a socket that already has one parked.
 	ReceiveError : [Timeout, AlreadyReceiving, ReceiveFailed, Unavailable]
 
-	## The largest payload one datagram may carry: 65535 bytes of IPv4 packet
+	## The largest payload one datagram may hold: 65535 bytes of IPv4 packet
 	## less the 20-byte IP header and the 8-byte UDP header. A send over this
 	## is `TooLarge`.
 	##
@@ -160,6 +166,7 @@ Udp := [].{
 			match result {
 				Ok({}) => Ok({})
 				Err(InvalidAddress) => Err(InvalidAddress)
+				Err(AccessRefused) => Err(AccessRefused)
 				Err(PermissionDenied) => Err(PermissionDenied)
 				Err(SendFailed) => Err(SendFailed)
 				Err(TooLarge) => Err(TooLarge)
@@ -169,7 +176,7 @@ Udp := [].{
 			}
 		}
 
-		## Wait for datagrams, and answer with every one that was ready.
+		## Wait for datagrams, and return every one that was ready.
 		##
 		## Parks until the first datagram arrives or `timeout_ms` expires, then
 		## returns it together with whatever else is already buffered, in
@@ -210,7 +217,8 @@ Udp := [].{
 		stub = Socket.({ handle: Resource.Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
 
-	## Opaque udp authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque UDP authority supplied by App.Io, scoped by the app's declared
+	## `UdpBind`, `UdpPeer`, `UdpLoopback`, and `UdpAny` entries.
 	Network :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -286,6 +294,7 @@ perform_bind! = |authority, address| {
 		Err(AddressInUse) => Err(AddressInUse)
 		Err(AddressUnavailable) => Err(AddressUnavailable)
 		Err(InvalidAddress) => Err(InvalidAddress)
+		Err(AccessRefused) => Err(AccessRefused)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(ResourceLimit) => Err(ResourceLimit)
 		Err(Unavailable) => Err(Unavailable)

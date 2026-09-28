@@ -116,6 +116,9 @@ pub const Map = struct {
 /// TMX loader failures.
 pub const LoadError = error{
     NotFound,
+    /// A reference the reader will not follow: absolute, or climbing above
+    /// the directory the reader is rooted in.
+    PathInvalid,
     ReadFailed,
     ParseFailed,
     Unsupported,
@@ -442,10 +445,52 @@ fn parseProperty(allocator: Allocator, element: *xml.Element) LoadError!Property
     return .{ .name = name, .kind = property_string, .text = text, .number = 0, .integer = 0, .bool_value = false };
 }
 
+/// Resolve a reference relative to the file that makes it, lexically, into a
+/// path from the reader's root.
+///
+/// A map is read out of one asset store, so everything it references has to
+/// be in that store: a `..` that climbs above it, an absolute path, or a
+/// backslash is `PathInvalid` rather than something to try. Tiled writes
+/// `../tilesets/x.tsx` for a tileset beside the map's directory, so `..` within
+/// the store is resolved rather than refused.
 fn resolveRelative(allocator: Allocator, base_path: []const u8, source: []const u8) LoadError![]const u8 {
-    if (std.fs.path.isAbsolute(source)) return allocator.dupe(u8, source) catch return error.OutOfMemory;
-    const dirname = std.fs.path.dirname(base_path) orelse ".";
-    return std.fs.path.join(allocator, &.{ dirname, source }) catch return error.OutOfMemory;
+    if (source.len == 0 or source[0] == '/' or std.mem.indexOfAny(u8, source, "\\:\x00") != null) return error.PathInvalid;
+    var parts: std.ArrayList([]const u8) = .empty;
+    defer parts.deinit(allocator);
+    const dirname = std.fs.path.dirnamePosix(base_path) orelse "";
+    var base_parts = std.mem.tokenizeScalar(u8, dirname, '/');
+    while (base_parts.next()) |part| {
+        if (std.mem.eql(u8, part, ".")) continue;
+        parts.append(allocator, part) catch return error.OutOfMemory;
+    }
+    var source_parts = std.mem.splitScalar(u8, source, '/');
+    while (source_parts.next()) |part| {
+        if (part.len == 0 or std.mem.eql(u8, part, ".")) continue;
+        if (std.mem.eql(u8, part, "..")) {
+            _ = parts.pop() orelse return error.PathInvalid;
+            continue;
+        }
+        parts.append(allocator, part) catch return error.OutOfMemory;
+    }
+    if (parts.items.len == 0) return error.PathInvalid;
+    return std.mem.join(allocator, "/", parts.items) catch return error.OutOfMemory;
+}
+
+test "references resolve within the reader's root and never above it" {
+    const allocator = std.testing.allocator;
+    const cases = [_]struct { base: []const u8, source: []const u8, want: []const u8 }{
+        .{ .base = "maps/level.tmx", .source = "../tilesets/tiles.tsx", .want = "tilesets/tiles.tsx" },
+        .{ .base = "level.tmx", .source = "tiles.tsx", .want = "tiles.tsx" },
+        .{ .base = "a/b/c.tsx", .source = "./img/../tiles.png", .want = "a/b/tiles.png" },
+    };
+    for (cases) |case| {
+        const got = try resolveRelative(allocator, case.base, case.source);
+        defer allocator.free(got);
+        try std.testing.expectEqualStrings(case.want, got);
+    }
+    for ([_][]const u8{ "../secret.tsx", "/etc/passwd", "a\\b.tsx", "C:x.tsx" }) |source| {
+        try std.testing.expectError(error.PathInvalid, resolveRelative(allocator, "level.tmx", source));
+    }
 }
 
 fn dupeObjectType(allocator: Allocator, element: *xml.Element) LoadError![]const u8 {
@@ -510,7 +555,7 @@ test "tmx parses map attributes and CSV layer gids" {
 
     try std.testing.expectEqual(@as(u64, 2), map.raw.width);
     try std.testing.expectEqual(@as(u64, 1), map.raw.tilesets.len);
-    try std.testing.expectEqualStrings("./tiles.png", map.raw.tilesets[0].image_source);
+    try std.testing.expectEqualStrings("tiles.png", map.raw.tilesets[0].image_source);
     try std.testing.expectEqual(@as(u64, 4), map.raw.gids.len);
     try std.testing.expectEqual(@as(u64, 2), map.raw.gids[2]);
 }

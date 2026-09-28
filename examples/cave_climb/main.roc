@@ -4,8 +4,7 @@
 ## Escape. It demonstrates tilemaps, collision and movement, cameras, sprites,
 ## and calculations for the two tools.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-27-a3ce7f1",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App
@@ -15,9 +14,7 @@ import rr.Color
 import rr.Draw
 import rr.Text
 import rr.Devices
-import rr.Keys
 import rr.Math
-import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
@@ -69,8 +66,9 @@ screen_w = 800.F32
 
 screen_h = 600.F32
 
+## The map's name inside the asset store.
 map_path : Str
-map_path = "examples/cave_climb/assets/cave_climb.tmx"
+map_path = "cave_climb.tmx"
 
 player_width = 42.F32
 
@@ -130,16 +128,20 @@ ground_friction = 70.F32
 
 air_drag = 0.35.F32
 
+## Where the game's assets live, relative to the repository root it runs from.
+## The config declares this directory, read-only, and nothing else on disk.
+asset_root = "examples/cave_climb/assets"
+
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)).with_permission(Directory(asset_root, ReadOnly)),
 	|io| {
-		assets = io.assets().open!(Assets.working_directory("examples/cave_climb/assets"))?
+		assets = Assets.open!(io.files().open_dir_read!(asset_root)?, IgnoreManifest)?
 		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
 		characters = Assets.load_texture!(assets, "kenney-platformer/spritesheet-characters-default.png")?
 		enemies_texture = Assets.load_texture!(assets, "kenney-platformer/spritesheet-enemies-default.png")?
 		background = Assets.load_texture!(assets, "kenney-platformer/background_color_hills.png")?
-		raw_map = io.tilemaps().load_tmx!(map_path)?
+		raw_map = Tilemap.load_tmx!(assets, map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_tileset_texture(
@@ -757,31 +759,30 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
+update! = |model, input, _io| {
+	devices = input.devices
+	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# window, a breakpoint) cannot carry the player through a platform.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
-	restart = input.key_pressed(KeySpace)
-	tools = tool_input(input, camera_for(model.level, model.world.player.pos))
+	restart = devices.key_pressed(KeySpace)
+	tools = tool_input(devices, camera_for(model.level, model.world.player.pos))
 	update_zone = Trace.begin!("advance cave world")
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
 			model.world,
-			input_axis(input),
-			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
+			input_axis(devices),
+			devices.key_pressed(KeySpace) or devices.key_pressed(KeyUp) or devices.key_pressed(KeyW),
 			tools,
-			program_input.time.elapsed_seconds,
+			dt,
 		)
 		Won => if restart new_world(model.level) else model.world
 		GameOver => if restart new_world(model.level) else model.world
 	}
 	Trace.end!(update_zone)
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, world: next_world })
-	}
+	Ok({ ..model, world: next_world })
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

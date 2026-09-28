@@ -5,6 +5,9 @@ import Snake
 
 step_time = 0.115.F32
 
+## `Game` is a namespace. `[]` is an empty tag union, so no `Game` value can
+## ever exist; the type is here only so the block after it can hold the types
+## and functions other modules use as `Game.World`, `Game.update`, and so on.
 Game := [].{
 	State := [Playing, GameOver].{
 		is_eq : _
@@ -12,7 +15,7 @@ Game := [].{
 	RequestedDirection := [KeepDirection, Turn(Snake.Direction)].{
 		is_eq : _
 	}
-	Controls : { requested_direction : RequestedDirection, restart_pressed : Bool, quit_pressed : Bool }
+	Controls : { requested_direction : RequestedDirection, restart_pressed : Bool }
 	World : { snake : Snake, food : Board.Cell, score : U64, accumulator : F32, state : State, rng : Random.State }
 	Event := [FoodEaten, SnakeCrashed, GameStarted].{
 		is_eq : _
@@ -34,7 +37,7 @@ Game := [].{
 		}
 }
 
-## Applies a requested legal turn before the next fixed movement step.
+## Applies a requested legal turn before the next simulation step.
 apply_controls : Game.World, Game.Controls -> Game.World
 apply_controls = |world, controls|
 	match controls.requested_direction {
@@ -61,7 +64,7 @@ step_snake = |world| {
 	}
 }
 
-## Runs every fixed snake step currently paid for by the accumulator.
+## Runs every fixed simulation step currently paid for by the accumulator.
 advance_fixed_steps : Game.World, List(Game.Event) -> (Game.World, List(Game.Event))
 advance_fixed_steps = |world, events| {
 	if world.accumulator < step_time {
@@ -88,7 +91,7 @@ update_game_over : Game.World, Game.Controls -> (Game.World, List(Game.Event))
 update_game_over = |world, controls| if controls.restart_pressed (Game.new_world(world.rng), [GameStarted]) else (world, [])
 
 no_controls : Game.Controls
-no_controls = { requested_direction: KeepDirection, restart_pressed: Bool.False, quit_pressed: Bool.False }
+no_controls = { requested_direction: KeepDirection, restart_pressed: Bool.False }
 
 expect {
 	world = Game.new_world(Random.seed(1))

@@ -11,8 +11,9 @@ Pins inside `##` doc comments are rejected outright: nothing rewrites them, so
 a documented header would go stale on the first nightly update. A doc example
 omits the `roc:` field instead; the compiler treats a missing pin as unpinned.
 
-The published starter's compiler named in README.md is deliberately separate
-and is not checked here: the "Published quickstart" CI job checks it unchanged.
+The checked-in examples carry no pin: they name the platform in the checkout,
+whose header pins the compiler. A release's examples zip pins that release's
+compiler, and the "Published quickstart" CI job checks the latest one unchanged.
 """
 
 from __future__ import annotations

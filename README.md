@@ -1,139 +1,121 @@
 # RocRay
 
-Build native games, visual tools, and interactive apps in
+Make 2D games, visual tools, and interactive apps in
 [Roc](https://www.roc-lang.org/), powered by
 [raylib](https://www.raylib.com/).
 
-RocRay is a focused app platform, not a game engine. Your app keeps its own
-state and rules; RocRay provides drawing, audio, keyboard and mouse input,
-windows, recording, files, and networking. It runs on macOS (Intel and Apple
-Silicon), Linux x64, and Windows x64.
+RocRay is for smaller graphical programs, such as games, visualizations, and
+interactive tools. It is not meant to compete with large, purpose-built game
+engines: it has no editor, scene graph, physics engine, or asset pipeline.
+Your app keeps its own state and makes every decision itself; RocRay provides
+drawing, sound, keyboard, mouse and gamepad input, the window, recording,
+files, and networking. It runs on macOS (Intel and Apple silicon), Linux
+x86-64, and Windows x86-64.
 
-The platform includes the complete RocRay API: value types, pure helpers, and
-host effects are documented and released together. Import them through your
-platform dependency, such as `rr.App`, `rr.Math`, and `rr.Assets`.
+RocRay draws in 2D today. 3D models, cameras, and lighting are planned but not
+yet available. RocRay is not a GUI toolkit: for desktop applications built
+from widgets such as buttons, text fields, and layouts, see
+[roc-gui](https://github.com/lukewilliamboswell/roc-gui).
 
-## See what it can do
-
-These nine apps span small games, designed levels, creative tools, responsive
-interfaces, and scenes with thousands of moving objects. Each tile links to its
-complete Roc source; the [example guide](examples/README.md) covers the rest and
-suggests a learning path.
+Start with [Hello World](examples/hello_world/main.roc),
+[Pong](examples/pong/main.roc), and [Snake](examples/snake/main.roc). These
+larger examples show what else it can do:
 
 <table>
   <tr>
-    <td align="center"><a href="examples/cave_climb/main.roc"><img src="examples/gallery/cave_climb.webp" alt="Cave Climb gameplay" width="260"><br><strong>Cave Climb</strong></a><br>Designed level, jumping, camera, sound</td>
-    <td align="center"><a href="examples/breakout/main.roc"><img src="examples/gallery/breakout.webp" alt="Breakout gameplay" width="260"><br><strong>Breakout</strong></a><br>Arcade rules, sounds made in code, recording</td>
-    <td align="center"><a href="examples/capture_ui_demo/main.roc"><img src="examples/gallery/capture_ui_demo.webp" alt="A scripted responsive interface demonstration" width="260"><br><strong>Capture UI</strong></a><br>Automated controls and GIF recording</td>
-  </tr>
-  <tr>
-    <td align="center"><a href="examples/top_down/main.roc"><img src="examples/gallery/top_down.webp" alt="Top Down gameplay" width="260"><br><strong>Top Down</strong></a><br>Designed map, characters, music, game states</td>
+    <td align="center"><a href="examples/breakout/main.roc"><img src="examples/gallery/breakout.webp" alt="Breakout gameplay" width="260"><br><strong>Breakout</strong></a><br>Arcade gameplay, sounds made in code, recording</td>
     <td align="center"><a href="examples/generated_assets/main.roc"><img src="examples/gallery/generated_assets.webp" alt="Painting in Pixel Workshop" width="260"><br><strong>Pixel Workshop</strong></a><br>Drawing pixels and creating sounds in code</td>
-    <td align="center"><a href="examples/postcard_studio/main.roc"><img src="examples/gallery/postcard_studio.webp" alt="An animated postcard composition" width="260"><br><strong>Postcard Studio</strong></a><br>Generative art and saving larger images</td>
+    <td align="center"><a href="examples/responsive_ui/main.roc"><img src="examples/gallery/responsive_ui.webp" alt="Navigating the responsive settings interface" width="260"><br><strong>Responsive Settings</strong></a><br>Keyboard, mouse, resizing, display scaling</td>
   </tr>
   <tr>
-    <td align="center"><a href="examples/responsive_ui/main.roc"><img src="examples/gallery/responsive_ui.webp" alt="Navigating the responsive settings interface" width="260"><br><strong>Responsive Settings</strong></a><br>Keyboard, mouse, resizing, display scaling</td>
-    <td align="center"><a href="examples/live_plot/main.roc"><img src="examples/gallery/live_plot.webp" alt="Source files appearing in Live Plot" width="260"><br><strong>Live Plot</strong></a><br>Loading and drawing hundreds of thousands of lines</td>
+    <td align="center"><a href="examples/postcard_studio/main.roc"><img src="examples/gallery/postcard_studio.webp" alt="An animated postcard composition" width="260"><br><strong>Postcard Studio</strong></a><br>Generative art and saving larger images</td>
     <td align="center"><a href="examples/particles/main.roc"><img src="examples/gallery/particles.webp" alt="A moving fountain of particles" width="260"><br><strong>Particles</strong></a><br>Thousands of moving images at once</td>
+    <td align="center"><a href="examples/capture_ui_demo/main.roc"><img src="examples/gallery/capture_ui_demo.webp" alt="A scripted responsive interface demonstration" width="260"><br><strong>Capture UI Demo</strong></a><br>Automated controls and GIF recording</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="examples/live_plot/main.roc"><img src="examples/gallery/live_plot.webp" alt="Source files appearing in Live Plot" width="260"><br><strong>Live Plot</strong></a><br>Loading and drawing hundreds of thousands of lines</td>
+    <td align="center"><a href="examples/top_down/main.roc"><img src="examples/gallery/top_down.webp" alt="Spark Run gameplay" width="260"><br><strong>Spark Run</strong></a><br>Designed map, characters, music, game states</td>
+    <td align="center"><a href="examples/cave_climb/main.roc"><img src="examples/gallery/cave_climb.webp" alt="Cave Climb gameplay" width="260"><br><strong>Cave Climb</strong></a><br>Designed level, jumping, camera</td>
   </tr>
 </table>
 
-The capture examples also produce deterministic media directly, including this
-[WebM plot recording](examples/gallery/capture_plot.webm).
-
-For performance investigation, [RocRay Observatory](docs/observatory.md)
-records host-cycle summaries and opt-in application annotations to a bounded,
-queryable SQLite `.rrstats` capture.
-
 ## Try it
 
-Download the [0.10.0-rc3 example starter](https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/examples-0.10.0-rc3.zip)
-and install its declared compiler,
-[`nightly-2026-08-23-fb208ba`](https://github.com/roc-lang/nightlies/releases/tag/nightly-2026-08-23-fb208ba).
-Unzip it, open a terminal in the extracted directory containing `examples/`, and run:
+1. Open the [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
+   and install the Roc compiler its notes name, as
+   [Getting started](docs/getting-started.adoc#install) describes.
+2. Download that release's `examples-<version>.zip` and unzip it.
+3. Open a terminal in the extracted directory, the one containing `examples/`,
+   and run:
 
 ```bash
 roc version
 roc examples/hello_world/main.roc
 ```
 
-Each starter includes immutable platform URLs and the matching compiler in its
-application headers. The header records the requirement; it does not install
-or select the compiler. Run from the extracted directory so asset paths resolve.
-Use `roc build` when producing an executable for distribution.
+## A whole app
 
-Choose a starting point from the [example guide](examples/README.md). The
-[platform release](https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0-rc3)
-contains the tested downloads; the platform's development compiler can be newer.
-
-`main` contains development source, including examples of unreleased APIs.
-To run those against the checkout, follow [Contributing](CONTRIBUTING.md) and use
-`scripts/run-example.py examples/hello_world`. Development checks rebind temporary
-copies to the platform source and its compiler, while published starters keep
-their own pins.
-
-## The programming model
-
-A RocRay app provides three functions:
-
-- `init!` runs once. It sets the window options, loads what the app needs, and
-  creates the starting state.
-- `update!` handles input such as keys and mouse movement, then returns the next
-  state.
-- `render!` draws that state on the screen.
-
-`init!` receives `App.Io`; the update signature is
-`update!(model, input, io)`. Select a service and call its receivers:
+A red circle that follows the mouse. Replace `BUNDLE-URL` and `COMPILER` with
+the default bundle URL and the compiler the release notes name.
 
 ```roc
-files = io.files()
-Task.spawn!(input, || Loaded(files.read_text!("data.json")))
-# In a task or init!:
-response = io.http().send!(request)?
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+
+import rr.App
+import rr.Color
+import rr.Draw
+
+Model : { pointer : { x : F32, y : F32 } }
+
+Msg : []
+
+program = { init!, update!, render! }
+
+init! : App.Init(Model, [])
+init! = App.init(App.default.with_title("Hello"), |_io| Ok({ pointer: { x: 400, y: 300 } }))
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |_model, input, _io| Ok({ pointer: input.devices.mouse.position() })
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |model, frame| {
+    frame.clear!(Color.black)
+    frame.circle!({ center: model.pointer, radius: 40, style: Draw.filled(Color.red) })
+    Ok({})
+}
 ```
 
-Development builds deny external services by default. Launch a trusted app with
-`--host-caps-allow-all` to grant the previous broad behavior:
+`init!` creates the starting state, `update!` uses each host cycle's input to
+compute the next state, and `render!` draws it. Anything that waits, such as
+reading a file or fetching a URL, runs as a task, and its result arrives in a
+later `update!`. Anything the app accesses beyond its own window, such as the
+network, a directory, or another program, is declared in its startup settings.
 
-```sh
-scripts/run-example.py examples/http_fetch -- --host-caps-allow-all
-```
+## Documentation
 
-Files (including cwd and asset files), networking, processes, SQLite,
-environment, clipboard, stdout/stderr, and capture output otherwise return
-`PermissionDenied`. Drawing, input, generated resources, audio playback, clocks,
-and timers remain available. This is a host API policy, not an OS sandbox;
-allow-all does not confine files, network destinations, or child processes.
+The [RocRay manual](https://lukewilliamboswell.github.io/roc-ray/) is
+published as a website and a PDF. Its chapters are the AsciiDoc files in
+[`docs/`](docs/), which you can also read here:
 
-Reading a file or waiting for a network reply can take time. Start that work as
-a task so the app can keep updating and drawing; when it finishes, `update!`
-receives the result.
+- [Getting started](docs/getting-started.adoc): install, run an example, and
+  write the smallest app
+- [Roc for RocRay](docs/roc-primer.adoc): the Roc a small app uses
+- [Your first game](docs/first-game.adoc): build a small game in six steps
+- [Example gallery](docs/examples.adoc): what each example shows, and a
+  learning path
+- Guides: [the app model](docs/app-model.adoc), [input](docs/input.adoc),
+  [drawing](docs/drawing.adoc), [tasks](docs/tasks.adoc),
+  [permissions](docs/permissions.adoc),
+  [files and assets](docs/files-and-assets.adoc), [audio](docs/audio.adoc),
+  [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
+  [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)
+- [Glossary](docs/glossary.adoc)
+- [API reference](https://lukewilliamboswell.github.io/roc-ray/api/)
+- [Architecture](docs/architecture.adoc)
+- [Contributing](docs/contributing.adoc)
+- [Release notes](docs/releases/) and the
+  [releases page](https://github.com/lukewilliamboswell/roc-ray/releases)
 
-Read [`hello_world/main.roc`](examples/hello_world/main.roc) for the smallest
-complete app, then choose a project from the
-[example guide](examples/README.md). The
-[API reference](https://lukewilliamboswell.github.io/roc-ray/) documents the
-available features and functions.
-
-Configure a shared startup font when one font serves most of the app. Loading
-a font file requires `--host-caps-allow-all`; the built-in font does not:
-
-```roc
-config = App.default.with_default_font({ path: "assets/body.ttf", size: 32 })
-font = io.default_font!()?
-```
-
-`Text.Font` carries both its opaque host handle and an immutable metric
-snapshot, so `font.measure(...)` is pure.
-
-## Project links
-
-- [Examples and learning path](examples/README.md)
-- [API reference](https://lukewilliamboswell.github.io/roc-ray/)
-- [Latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
-- [Architecture](design.md)
-- [Contributing](CONTRIBUTING.md)
-
-RocRay follows Roc's new compiler closely, and its APIs may still change as the
-language evolves. Bug reports, documentation improvements, approachable APIs,
-and focused capabilities are welcome.
+RocRay tracks recent nightly builds of the Roc compiler. Because Roc is still
+changing, RocRay's API may also change. Bug reports, documentation improvements, and focused new
+capabilities are welcome.

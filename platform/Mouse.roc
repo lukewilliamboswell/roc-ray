@@ -1,7 +1,7 @@
 ## Mouse helpers for `input.devices.mouse`.
 ##
 ## Pass `input.devices.mouse` directly to these helpers; there is nothing to
-## construct, and the receivers read the same either way:
+## construct, and the methods read the same either way:
 ## `input.devices.mouse.position()`.
 ##
 import Host

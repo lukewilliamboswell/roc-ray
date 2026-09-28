@@ -173,10 +173,10 @@ case "$package" in
     default)
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
 
-        install_link_inputs x64mac arm64mac x64glibc-x11 x64win
+        install_link_inputs x64mac arm64mac x64v1glibc-x11 x64win
         copy_host x64mac libhost.a
         copy_host arm64mac libhost.a
-        copy_host x64glibc libhost.a
+        copy_host x64v1glibc libhost.a
         copy_host x64win host.lib
 
         if [[ ! -d "$macos_interfaces_dir" ]]; then
@@ -188,8 +188,8 @@ case "$package" in
     wayland)
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
 
-        install_link_inputs x64glibc-wayland
-        copy_host x64glibc libhost.a
+        install_link_inputs x64v1glibc-wayland
+        copy_host x64v1glibc libhost.a
         ;;
 esac
 
@@ -252,9 +252,30 @@ fi
 if [[ "${#sysroot_metadata_files[@]}" -gt 0 ]]; then
     bundle_args+=("${sysroot_metadata_files[@]}")
 fi
-bundle_args+=(--output-dir "$output_dir")
+# `roc bundle` writes its archive beside its working directory and then
+# renames it into --output-dir, and a rename cannot cross filesystems: with the
+# stage in the checkout and the output on a tmpfs /tmp or a container mount, it
+# fails with CrossDevice. So Roc writes into the stage, on its own working
+# directory's filesystem, and each finished archive is moved out with `mv`,
+# which copies when it has to. The `Created:` lines name the final paths.
+# Remove once https://github.com/roc-lang/roc/issues/11608 is fixed upstream.
+staged_output="$stage_dir/.bundle-output"
+mkdir -p "$staged_output"
+bundle_args+=(--output-dir "$staged_output")
 if [[ "${#roc_bundle_args[@]}" -gt 0 ]]; then
     bundle_args+=("${roc_bundle_args[@]}")
 fi
 
-"$roc_bin" bundle "${bundle_args[@]}"
+roc_status=0
+roc_output="$("$roc_bin" bundle "${bundle_args[@]}")" || roc_status=$?
+while IFS= read -r line; do
+    if [[ "$line" == Created:* ]]; then
+        created="${line#Created:}"
+        created_name="$(basename "${created#"${created%%[![:space:]]*}"}")"
+        mv -f "$staged_output/$created_name" "$output_dir/$created_name"
+        echo "Created: $output_dir/$created_name"
+    else
+        printf '%s\n' "$line"
+    fi
+done <<< "$roc_output"
+exit "$roc_status"

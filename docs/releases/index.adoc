@@ -1,0 +1,8 @@
+// The release notes, newest first. Each file is also the source of its GitHub
+// release page: the release workflow converts it to Markdown with
+// `scripts/release_helpers.py make-release-notes`.
+//
+// Earlier releases are described on their GitHub release pages:
+// https://github.com/lukewilliamboswell/roc-ray/releases
+
+include::0.10.0.adoc[]

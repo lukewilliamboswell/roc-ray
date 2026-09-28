@@ -7,6 +7,8 @@ app [Model, program] {
 import rr.App
 import rr.Task
 import rr.Http
+import rr.Permission
+import rr.Url
 import http.Request
 import http.Response
 
@@ -50,7 +52,13 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init_for_args(
-	|_args| App.default,
+	# Declare exactly the origin of the URL this run fetches, so a redirect
+	# anywhere else is refused.
+	|args|
+		match Url.parse(flag_value(args, "--http-url", "")) {
+			Ok(url) => App.default.with_permission(HttpOrigin(url))
+			Err(_) => App.default
+		},
 	|io| {
 		args = io.args!()
 		expected_error = flag_value(args, "--http-expect-error", "")
@@ -159,7 +167,7 @@ judge = |current, message, expectation|
 describe : [PermissionDenied, InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str
 describe = |err|
 	match err {
-		PermissionDenied => "HTTP access was not granted"
+		PermissionDenied => "the origin was not declared"
 		InvalidUrl(_) => "the URL was rejected before any host effect ran"
 		HttpErr(Timeout) => "the request timed out"
 		HttpErr(NetworkError) => "the request failed at the network layer"

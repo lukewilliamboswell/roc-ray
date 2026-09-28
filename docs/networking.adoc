@@ -1,0 +1,139 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#networking]
+= HTTP and UDP
+
+This chapter covers fetching over HTTP and exchanging UDP datagrams. It assumes
+<<tasks>>, because a request and a receive both wait, and <<permissions>>,
+because every destination must be declared.
+
+== HTTP requests
+
+Declare the origin the app sends requests to, then send from a task:
+
+[source,roc]
+----
+config = App.default.with_permission(HttpOrigin("https://api.example.com"))
+----
+
+[source,roc]
+----
+update! = |model, input, io| {
+    if input.devices.key_pressed(KeyR) {
+        http = io.http()
+        Task.spawn!(
+            input,
+            || match http.get_utf8!("https://api.example.com/data.json") {
+                Ok(body) => Loaded(body)
+                Err(PermissionDenied) => Failed("that origin is not declared")
+                Err(HttpErr(Timeout)) => Failed("the request timed out")
+                Err(_) => Failed("the request failed")
+            },
+        )
+    }
+    Ok(model)
+}
+----
+
+The client, `io.http()`, offers:
+
+* `get_utf8!(url)`: fetch a URL and return its body as text;
+* `get!(url)`: fetch a URL and decode its JSON body, with the type inferred
+  from where the result is used;
+* `send!(request)`: send a full request and return the response;
+* `send_json!(request, value)`: send a value encoded as JSON;
+* `send_with!(config, request)`: send with a different time limit or size
+  limit.
+
+`get!` and `get_utf8!` need no package other than the platform. An app that builds
+`Request` values or reads `Response` values itself uses the
+https://github.com/roc-lang/http[`roc-lang/http`] package's types, and declares
+that package in its own header beside the platform.
+
+=== What to expect
+
+* **Every request has limits.** By default a request must finish within thirty
+  seconds, and its response body, measured after decompression, may not exceed
+  8 MiB. A response over the limit fails rather than being truncated.
+  Pass a `Config` to `send_with!` to change either limit, or `0` to disable
+  one.
+* **A status code is not an error.** A 404 or a 503 arrives as `Ok(response)`
+  with that status. Only a request that gets no complete response is
+  `HttpErr`.
+* **Redirects** are followed up to three times, and each step is checked
+  against the declared origins.
+* **HTTPS** verifies servers with the operating system's certificate store.
+  Custom certificate authorities and disabling verification are not supported.
+* **URLs** are validated before the request is sent. Quoted URL literals are
+  checked at compile time; runtime strings go through `Url.parse`, which is
+  deliberately stricter than a browser and rejects input rather than repairing
+  it.
+
+{src}/examples/http_fetch/main.roc[HTTP Fetch] fetches on a task and marks
+each reply with the fetch it belongs to, so a reply to an older fetch is
+ignored.
+
+== UDP datagrams
+
+UDP moves individual datagrams between two addresses. Bind a socket once, in
+`init!`, and keep it in the model. Send from `update!`, and receive from a
+task:
+
+[source,roc]
+----
+Msg : [Arrived(List(Udp.Datagram)), ReceiveFailed(Udp.ReceiveError)]
+
+update! = |model, input, _io| {
+    socket = model.socket
+    if !model.listening {
+        Task.spawn!(
+            input,
+            || match Udp.Socket.receive!(socket, Udp.default_receive) {
+                Ok(datagrams) => Arrived(datagrams)
+                Err(err) => ReceiveFailed(err)
+            },
+        )
+    }
+    dropped = match Udp.Socket.send!(socket, model.peer, position_bytes(input)) {
+        Ok({}) => model.dropped
+        Err(_) => model.dropped + 1
+    }
+    answered = !List.is_empty(input.messages)
+    Ok({ ..model, dropped, listening: !answered })
+}
+----
+
+Here `position_bytes` is the app's own encoder.
+
+* `io.udp().bind!(address)` binds a socket. It does not wait, so it is legal in
+  `init!`, `update!`, and tasks.
+* `send!` queues one datagram and returns at once, reporting a full queue as an
+  error rather than waiting.
+* `receive!` waits until at least one datagram arrives, then returns every
+  datagram that had arrived, in order, up to a fixed maximum per call. Start the next
+  receive after its message arrives.
+
+Addresses are IPv4 literals, such as `"127.0.0.1"`; there is no name lookup,
+because resolving a name waits and `bind!` and `send!` never do. UDP itself
+guarantees neither delivery, order, nor uniqueness, and the operating system
+may drop datagrams when its buffer is full. The app must design its own
+framing, retransmission, and session state.
+
+Declare `UdpBind(port)` for each port the app binds, `UdpPeer(address, port)`
+for each peer it sends to, or `UdpLoopback` for traffic that stays on this
+machine. A port below 1024 usually needs operating-system privileges; without
+them, binding reports `AccessRefused`. Broadcast and multicast are not enabled.
+
+{src}/examples/udp_cursor/main.roc[UDP Cursor] runs two instances that show
+each other's pointer.
+
+== Further reading
+
+* The `Http`, `Url`, and `Udp` pages of the {api}[API reference].

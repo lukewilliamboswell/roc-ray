@@ -59,12 +59,12 @@ Text := [].{
 	}
 
 	## A string and its drawing style. Start one with `Text.from`, adjust it with
-	## the receivers below, then draw it immediately or finish it with
+	## the methods below, then draw it immediately or finish it with
 	## `prepare!` for repeated drawing.
 	##
 	## A builder is a plain description, so building and measuring one costs
 	## nothing and it can be assembled anywhere. `draw!` and `prepare!` are the
-	## operations that reach the host.
+	## operations that call the host.
 	Builder :: {
 		content : Str,
 		size : F32,
@@ -117,7 +117,27 @@ Text := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		prepare! : Builder => Try(Prepared, [ResourceLimit])
-		prepare! = |builder| Text.prepare_builder!(builder)
+		prepare! = |builder| {
+			result = Host.text_prepare!({
+				text: builder.content,
+				size: builder.size,
+				spacing: builder.spacing,
+				font: builder.font.handle,
+			})
+			match result {
+				# closed error union to open error union
+				Ok(prepared_result) => Ok(
+					Prepared.(
+						{
+							resource: prepared_result.prepared,
+							measured: { width: prepared_result.width, height: prepared_result.height },
+						},
+					),
+				)
+				Err(ResourceLimit) => Err(ResourceLimit)
+				Err(InvalidResource) => crash "prepared text host invariant failed"
+			}
+		}
 	}
 
 	## Host-owned immutable text. Its ARC handle retains any loaded font and its
@@ -140,7 +160,7 @@ Text := [].{
 		## Legal in `render!` only.
 		##
 		## The frame is the second argument here because the prepared text is
-		## the receiver; `Text.draw_prepared!` is the same call with the frame
+		## the value the method is called on; `Text.draw_prepared!` is the same call with the frame
 		## first.
 		draw! : Prepared, Draw.Frame, Placement => {}
 		draw! = |prepared, frame, placement|
@@ -156,10 +176,10 @@ Text := [].{
 
 		## Resource-free prepared text for pure tests.
 		##
-		## Prepared text carries more than a handle: the host measured it once
+		## Prepared text holds more than a handle: the host measured it once
 		## while preparing it, and the value keeps that size. A stub has no
 		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
-		## answers `{ width: 0, height: 0 }` and every alignment therefore
+		## returns `{ width: 0, height: 0 }` and every alignment therefore
 		## resolves to the placement point itself. Copy this value with the
 		## bounds a test needs, the way the platform's
 		## `Texture.stub` is copied with dimensions.
@@ -189,32 +209,6 @@ Text := [].{
 		size: 20,
 		spacing: Text.default_spacing,
 		font,
-	}
-
-	## Prepare a builder's text, as `Builder.prepare!` does.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	prepare_builder! : Builder => Try(Prepared, [ResourceLimit])
-	prepare_builder! = |builder| {
-		result = Host.text_prepare!({
-			text: builder.content,
-			size: builder.size,
-			spacing: builder.spacing,
-			font: builder.font.handle,
-		})
-		match result {
-			# closed error union to open error union
-			Ok(prepared_result) => Ok(
-				Prepared.(
-					{
-						resource: prepared_result.prepared,
-						measured: { width: prepared_result.width, height: prepared_result.height },
-					},
-				),
-			)
-			Err(ResourceLimit) => Err(ResourceLimit)
-			Err(InvalidResource) => crash "prepared text host invariant failed"
-		}
 	}
 
 	## How far the anchor named by an `Align` sits from the text's top-left
@@ -256,7 +250,7 @@ Text := [].{
 	##
 	## Legal in `render!` only.
 	##
-	## Prefer the receiver. This form takes the frame first, like every other
+	## Prefer the method. This form takes the frame first, like every other
 	## free drawing function, and takes the text as a field of its config
 	## record rather than as its own argument.
 	draw_prepared! : Draw.Frame, PreparedPlacement => {}
@@ -275,7 +269,7 @@ default_placement = { pos: { x: 0, y: 0 }, color: Color.white }
 expect default_placement.align == (Top, Left)
 
 ## Prepared text keeps the size the host measured while preparing it, and the
-## stub has no measurement to keep. Zeroed bounds are the honest answer: they
+## stub has no measurement to keep. Zeroed bounds are the honest result: they
 ## say the value was never measured rather than inventing a size for it.
 expect Text.Prepared.stub.bounds() == { width: 0, height: 0 }
 

@@ -13,6 +13,7 @@ This script runs:
 - roc fmt --check - Verify formatting of the checked-in examples
 - roc test        - Run inline tests
 - roc build       - Build executables against the served platform bundle
+- glibc baseline  - On Linux, no built example needs a glibc 2.38-only symbol
 - headless runs   - Run each built example for a few frames
 - windowed sweep  - Run the cases in `scripts/test_spec.json` against the real
                     raylib backend, with a real (hidden) window, so the window,
@@ -31,6 +32,15 @@ This script runs:
                     cycle, annotation, gap and recorder-health tables.
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
+- close request   - Script the close button under each `CloseRequest` and assert
+                    Exit ends the app before update! sees it, Deliver reports
+                    each request once and waits for the app's own save, and
+                    the exit key still ends a Deliver app; also that a
+                    headless run honours --host-keys and --host-text
+                    (test/close_request).
+- designation     - Read a dropped file and one named on the command line with
+                    no permission declared, and refuse anything else
+                    (test/designation).
 - udp sockets     - Send datagrams between two loopback sockets and assert the
                     bytes, the sender address, and that a parked receive lets
                     the frame loop keep running (test/udp).
@@ -78,6 +88,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import tarfile
 import time
 from pathlib import Path
@@ -182,6 +193,37 @@ def executable_for(entry: Path) -> Path:
     return entry.with_name(f"{entry.stem}{suffix}")
 
 
+def check_glibc_baseline(built: list[tuple[Path, Path]]) -> list[str]:
+    """Fail if a built Linux example leaves a glibc 2.38-only symbol for the
+    dynamic linker.
+
+    The prebuilt raylib references C23 aliases (`__isoc23_strtoul` and so on)
+    that only glibc 2.38 and later export. The host defines them, so they must
+    resolve inside the executable; an undefined one aborts every app on older
+    glibc the moment raylib initialises, and headless runs never reach it.
+    """
+    if not IS_LINUX or not built or shutil.which("readelf") is None:
+        return []
+    print("\nChecking the glibc baseline of built examples...", end=" ", flush=True)
+    failures = []
+    for example, staged in built:
+        result = subprocess.run(
+            ["readelf", "--dyn-syms", "-W", str(executable_for(staged))],
+            capture_output=True, text=True,
+        )
+        undefined = [
+            line.split()[-1]
+            for line in result.stdout.splitlines()
+            if " UND " in line and line.split()[-1].startswith("__isoc23_")
+        ]
+        if undefined:
+            failures.append(f"{example_name(example)} needs glibc 2.38 for {', '.join(sorted(set(undefined)))}")
+    print("ok" if not failures else "FAILED")
+    for failure in failures:
+        print(f"  {failure}")
+    return [f"glibc baseline: {failure}" for failure in failures]
+
+
 def run_headless_examples(
     root: Path, built: list[tuple[Path, Path]], frames: int, verbose: bool
 ) -> list[str]:
@@ -208,7 +250,6 @@ def run_headless_examples(
             [
                 str(executable),
                 "--host-headless",
-                *([] if name == "hello_world" else ["--host-caps-allow-all"]),
                 f"--host-headless-frames={frames}",
             ],
             f"headless run {name}",
@@ -297,7 +338,7 @@ def _check_windowed_case(
         for stale in root.glob(expect_png["glob"]):
             stale.unlink()
 
-    cmd = [str(executable), "--host-hidden", "--host-caps-allow-all", f"--host-frames={frames}"]
+    cmd = [str(executable), "--host-hidden", f"--host-frames={frames}"]
     if "keys" in case:
         cmd.append(f"--host-keys={case['keys']}")
     if "text" in case:
@@ -438,7 +479,7 @@ def run_graphical_observatory_probe(
     graphical_run = subprocess.run(
         [
             str(executable),
-            "--host-hidden", "--host-caps-allow-all",
+            "--host-hidden",
             "--host-frames=3",
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
@@ -525,32 +566,73 @@ def run_graphical_observatory_probe(
     return failures
 
 
+# Each undeclared use must stop the app, and the message must name the fix.
+UNDECLARED_PROBES = {
+    "http": ["declares no permission", "HttpOrigin"],
+    "udp": ["declares no permission", "UdpBind"],
+    "command": ["declares no permission", "Command"],
+    "env": ["declares no permission", "EnvVar"],
+    "clipboard-read": ["declares no permission", "ClipboardRead"],
+    "clipboard-write": ["declares no permission", "ClipboardWrite"],
+    "files": ["declares no permission", "WorkingDirectory"],
+    "app-id": ["no app id", "with_app_id"],
+}
+
+
 def run_capability_probe(root: Path, packages: local_bundles.ServedPackages, verbose: bool) -> list[str]:
-    """The same app must deny by default and admit explicitly granted work."""
+    """Declared scopes admit, undeclared targets refuse, undeclared facilities stop the app."""
+    print("\nRunning capability probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(
         root / "test/capabilities/main.roc", packages, packages.scratch_dir / "capabilities"
     )
     if not run_cmd(["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS],
                    "build capability probe", verbose, cwd=staged.parent):
         return ["build capability probe"]
+    executable = str(executable_for(staged))
     failures = []
-    for allowed in (False, True):
-        cwd = staged.parent / ("allowed" if allowed else "denied")
+
+    def probe(name: str, *args: str) -> tuple[subprocess.CompletedProcess, Path]:
+        cwd = staged.parent / name
         cwd.mkdir()
-        command = [str(executable_for(staged)), "--host-headless", "--host-headless-frames=200"]
-        if allowed:
-            command.extend(["--host-caps-allow-all", "--expect-allowed"])
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
-        if result.returncode or "DENIED_OUTPUT_LEAK" in result.stdout + result.stderr:
-            failures.append(f"capability probe allowed={allowed}: {result.returncode} {result.stderr}")
-        if (cwd / "denied.txt").exists() or (cwd / "stub.txt").exists() or (cwd / "task.txt").exists() != allowed:
-            failures.append(f"capability probe touched unexpected files: allowed={allowed}")
-    crashed = subprocess.run(
-        [str(executable_for(staged)), "--host-headless", "--probe-crash"],
-        cwd=staged.parent, capture_output=True, text=True, timeout=60,
-    )
-    if crashed.returncode != 1 or "DENIED_OUTPUT_LEAK" in crashed.stdout + crashed.stderr:
-        failures.append("restricted crash diagnostics leaked a payload or lost the failure")
+        result = subprocess.run(
+            [executable, "--host-headless", "--host-headless-frames=200", *args],
+            cwd=cwd, capture_output=True, text=True, timeout=60,
+        )
+        return result, cwd
+
+    scoped, cwd = probe("scoped", "--probe=scoped")
+    if scoped.returncode != 0:
+        failures.append(f"capability probe scoped: exit {scoped.returncode} {scoped.stderr}")
+    if "OWN_STDOUT_WRITTEN" not in scoped.stdout:
+        failures.append("capability probe scoped: standard output was not written without a declaration")
+    if (cwd / "stub.txt").exists() or not (cwd / "task.txt").exists():
+        failures.append("capability probe scoped: a stub wrote, or a declared task write did not")
+    if Path("/tmp/roc-ray-caps-must-not-exist.txt").exists():
+        failures.append("capability probe scoped: an out-of-scope write reached the disk")
+
+    for facility, expected in UNDECLARED_PROBES.items():
+        result, _ = probe(f"undeclared-{facility}", f"--probe=undeclared-{facility}")
+        stderr = result.stderr
+        if result.returncode == 0 or any(text not in stderr for text in expected):
+            failures.append(
+                f"capability probe undeclared {facility}: expected a failure naming {expected}, "
+                f"got exit {result.returncode}: {stderr[-400:]}"
+            )
+
+    for name in ("invalid-directory", "escaping-output"):
+        result, _ = probe(name, f"--probe={name}")
+        if result.returncode != 1 or "startup config is invalid" not in result.stderr:
+            failures.append(f"capability probe {name}: startup was not refused: {result.returncode} {result.stderr[-400:]}")
+
+    # An error init! returns stops the app and says which callback and what.
+    init_error, _ = probe("init-error", "--probe=init-error")
+    if init_error.returncode == 0 or "init! returned an error" not in init_error.stderr or "init failed on purpose" not in init_error.stderr:
+        failures.append(f"capability probe init-error: the error was not reported: {init_error.returncode} {init_error.stderr[-400:]}")
+
+    crashed, _ = probe("crash", "--probe-crash")
+    if crashed.returncode != 1 or "CRASH_PAYLOAD_VISIBLE" not in crashed.stdout + crashed.stderr:
+        failures.append("capability probe crash: the failure or its payload was lost")
+    print("ok" if not failures else "FAILED")
     return failures
 
 
@@ -573,7 +655,7 @@ def run_cli_args_integration(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=3",
             "--cli-args-config",
             "--headless",
@@ -613,7 +695,7 @@ def run_task_delivery_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
         ],
         "run task delivery probe",
@@ -644,7 +726,7 @@ def run_observatory_probe(
     recorded_run = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -675,7 +757,7 @@ def run_observatory_probe(
     unwritable = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={staged.parent / 'missing-parent' / 'capture.rrstats'}",
         ],
@@ -695,7 +777,7 @@ def run_observatory_probe(
     refusal = subprocess.run(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=8",
             f"--host-stats-output={capture}",
             "--host-stats-detail=standard",
@@ -714,7 +796,7 @@ def run_observatory_probe(
     race_capture = staged.parent / "race.rrstats"
     race_command = [
         str(executable_for(staged)),
-        "--host-headless", "--host-caps-allow-all",
+        "--host-headless",
         "--host-headless-frames=8",
         f"--host-stats-output={race_capture}",
         "--host-stats-detail=summary",
@@ -973,7 +1055,7 @@ def run_observatory_probe(
         process = subprocess.Popen(
             [
                 str(executable_for(abrupt_staged)),
-                "--host-headless", "--host-caps-allow-all",
+                "--host-headless",
                 "--host-headless-frames=1000000000",
                 f"--host-stats-output={abrupt_capture}",
                 "--host-stats-detail=summary",
@@ -1067,7 +1149,7 @@ def run_task_cap_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=400",
         ],
         "run task cap probe",
@@ -1076,6 +1158,127 @@ def run_task_cap_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run task cap probe"]
+
+
+def run_close_request_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check what the window's close button does under each `CloseRequest`.
+
+    `--host-close` stands in for the button. Under the default `Exit` the host
+    must end the app before the requested cycle's `update!`, without waiting
+    for a task that never answers: the app prints every cycle it saw, and the
+    last one must be the cycle before the request. Under `Deliver` the window
+    must stay open, each request must reach exactly one input, and a save the
+    app starts on a task must answer before the app exits. Exit 3 means a
+    wrong report; exit 4 means the save never answered.
+
+    The exit key is not a close request: a scripted Escape must end a
+    `Deliver` app before the cycle it lands on, as a hardware one would. The
+    same runs check that a headless run honours `--host-keys` and
+    `--host-text`, which it has no hardware to fall back on.
+    """
+    fixture = root / "test" / "close_request" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning close request probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "close_request")
+    if not run_cmd(
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build close request probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build close request probe"]
+
+    executable = str(executable_for(staged))
+    failures = []
+    exit_mode = subprocess.run(
+        [executable, "--host-headless", "--host-headless-frames=200", "--host-close=3", "--mode=exit"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    cycles = [line for line in exit_mode.stdout.splitlines() if line.startswith("cycle ")]
+    if exit_mode.returncode != 0 or cycles != ["cycle 0", "cycle 1", "cycle 2"]:
+        failures.append(
+            f"close request probe exit: expected cycles 0-2 and exit 0, got exit {exit_mode.returncode}, "
+            f"{cycles}: {exit_mode.stderr[-400:]}"
+        )
+
+    deliver = subprocess.run(
+        [
+            executable, "--host-headless", "--host-headless-frames=200", "--host-close=3,5", "--mode=deliver",
+            "--host-keys=1:S", "--host-text=2:abc",
+        ],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    if deliver.returncode != 0:
+        failures.append(f"close request probe deliver: exit {deliver.returncode}: {deliver.stderr[-400:]}")
+    lines = deliver.stdout.splitlines()
+    if "key S" not in lines or "text 3" not in lines:
+        failures.append(f"close request probe: a headless run ignored --host-keys or --host-text: {lines[:12]}")
+
+    escape = subprocess.run(
+        [executable, "--host-headless", "--host-headless-frames=200", "--mode=deliver", "--host-keys=2:ESCAPE~"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    escape_cycles = [line for line in escape.stdout.splitlines() if line.startswith("cycle ")]
+    if escape.returncode != 0 or escape_cycles != ["cycle 0", "cycle 1"]:
+        failures.append(
+            f"close request probe escape: expected the exit key to end a Deliver app before cycle 2, got exit "
+            f"{escape.returncode}, {escape_cycles[-3:]}: {escape.stderr[-400:]}"
+        )
+
+    malformed = subprocess.run(
+        [executable, "--host-headless", "--host-close=soon"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    if malformed.returncode != 2 or "--host-close" not in malformed.stderr:
+        failures.append(f"close request probe: a malformed --host-close was not refused: {malformed.returncode}")
+
+    print("ok" if not failures else "FAILED")
+    return failures
+
+
+def run_designation_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a dropped file and a file named on the command line can be
+    read with no permission declared, and that nothing else can.
+
+    A `--host-drops` script drops a file through the same path a real drop
+    takes, so `accept_drop!` is exercised exactly as a user's drag would. The
+    probe also offers a made-up path, a stale drop, and a string that is not an
+    argument, each of which must be refused. Exit 3 means a check failed; exit
+    4 means the reads never answered.
+    """
+    fixture = root / "test" / "designation" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning designation probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "designation")
+    if not run_cmd(
+        ["roc", "build", *ROC_BUILD_ARGS, staged.name, *LIMITS], "build designation probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build designation probe"]
+
+    dropped = staged.parent / "dropped.txt"
+    dropped.write_text("dropped contents")
+    (staged.parent / "named.txt").write_text("named contents")
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+            f"--host-drops=2:{dropped.resolve()}",
+            "named.txt",
+        ],
+        "run designation probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["designation probe"]
 
 
 def run_file_write_probe(
@@ -1109,7 +1312,7 @@ def run_file_write_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'file-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1153,7 +1356,7 @@ def run_cmd_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=400",
             f"--host-stats-output={staged.parent / 'cmd-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1208,7 +1411,7 @@ def run_udp_probe(
         ok = run_cmd(
             [
                 str(executable_for(staged)),
-                "--host-headless", "--host-caps-allow-all",
+                "--host-headless",
                 "--host-headless-frames=300",
                 *extra,
             ],
@@ -1248,7 +1451,7 @@ def run_virtual_keys_probe(
         return ["build virtual keys probe"]
 
     ok = run_cmd(
-        [str(executable_for(staged)), "--host-headless", "--host-caps-allow-all", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8", f"--host-stats-output={staged.parent / 'input-privacy.rrstats'}", "--host-stats-detail=full"],
         "run virtual keys probe",
         verbose,
         cwd=staged.parent,
@@ -1289,7 +1492,7 @@ def run_sqlite_probe(
     ok = run_cmd(
         [
             str(executable_for(staged)),
-            "--host-headless", "--host-caps-allow-all",
+            "--host-headless",
             "--host-headless-frames=200",
             f"--host-stats-output={staged.parent / 'sqlite-privacy.rrstats'}",
             "--host-stats-detail=full",
@@ -1464,7 +1667,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
                     failed.append(f"wayland main.roc contains {token}")
 
             expected_target = (
-                'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
+                'x64v1glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
                 '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, '
                 '"libc.so", "crtn.o"] }'
             )
@@ -1473,16 +1676,16 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
                 failed.append("wayland main.roc target section")
 
         expected_files = {
-            "targets/x64glibc/Scrt1.o",
-            "targets/x64glibc/crti.o",
-            "targets/x64glibc/crtn.o",
-            "targets/x64glibc/libhost.a",
-            "targets/x64glibc/libraylib.a",
-            "targets/x64glibc/libmsf_gif.a",
-            "targets/x64glibc/libvpx.a",
-            "targets/x64glibc/libsqlite3.a",
-            "targets/x64glibc/libm.so",
-            "targets/x64glibc/libc.so",
+            "targets/x64v1glibc/Scrt1.o",
+            "targets/x64v1glibc/crti.o",
+            "targets/x64v1glibc/crtn.o",
+            "targets/x64v1glibc/libhost.a",
+            "targets/x64v1glibc/libraylib.a",
+            "targets/x64v1glibc/libmsf_gif.a",
+            "targets/x64v1glibc/libvpx.a",
+            "targets/x64v1glibc/libsqlite3.a",
+            "targets/x64v1glibc/libm.so",
+            "targets/x64v1glibc/libc.so",
         }
         for expected_file in expected_files:
             if expected_file not in names:
@@ -1496,7 +1699,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
             "targets/macos-sysroot/",
         )
         for name in sorted(names):
-            if name == "targets/x64glibc/libX11.so":
+            if name == "targets/x64v1glibc/libX11.so":
                 print("  Wayland bundle unexpectedly includes libX11.so")
                 failed.append("wayland bundle includes libX11.so")
             if name.startswith(forbidden_prefixes):
@@ -1657,8 +1860,15 @@ def main() -> int:
     # SIGTERM/SIGINT become SystemExit so the server and scratch directory are
     # released promptly. Repository safety does not depend on this: no tracked
     # file is ever rewritten, so even SIGKILL leaves the tree clean.
-    with local_bundles.terminating_signals():
-        return _run_tests(args, root, examples)
+    # Apps keep private storage under the user's data, config and cache
+    # directories. Point those at scratch space for the run, so a test never
+    # writes into the real home directory; every app launched below inherits
+    # it.
+    with tempfile.TemporaryDirectory(prefix="rr-app-storage-") as storage:
+        for variable in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+            os.environ[variable] = str(Path(storage) / variable.lower())
+        with local_bundles.terminating_signals():
+            return _run_tests(args, root, examples)
 
 
 def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> int:
@@ -1854,6 +2064,7 @@ def _run_example_stages(
     elif args.skip_roc_build:
         print("\nSkipping headless runtime (--skip-roc-build)")
     else:
+        failed.extend(check_glibc_baseline(built))
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
 
     # The windowed sweep is its own stage rather than part of the headless
@@ -1882,6 +2093,8 @@ def _run_example_stages(
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
+        failed.extend(run_designation_probe(root, packages, args.verbose))
+        failed.extend(run_close_request_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
         failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
         failed.extend(run_cmd_probe(root, packages, args.verbose))

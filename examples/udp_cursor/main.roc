@@ -4,7 +4,7 @@
 ##
 ## This example shows immediate UDP sends, a Task for receiving data that may
 ## wait, and Messages that carry received batches back to `update!`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color
@@ -41,7 +41,9 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, BindFailed])
 init! = App.init_for_args(
-	|_args| App.default.with_title("RocRay UDP Cursor").with_frame_pacing(Capped(60)),
+	# Both instances, and a lone instance talking to itself, stay on this
+	# machine, so loopback is all the network this example declares.
+	|_args| App.default.with_title("RocRay UDP Cursor").with_frame_pacing(Capped(60)).with_permission(UdpLoopback),
 	|io| {
 		args = io.args!()
 		font = Draw.default_font!()
@@ -71,7 +73,7 @@ init! = App.init_for_args(
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	# One listener at a time. It answered this cycle, or has never run, so
-	# start the next one; in between, datagrams wait in the kernel's buffer.
+	# start the next one; in between, datagrams wait in the operating system.
 	socket = model.socket
 	if !model.listening {
 		Task.spawn!(
@@ -96,11 +98,7 @@ update! = |model, input, _io| {
 	answered = !List.is_empty(input.messages)
 	next = List.fold(input.messages, { ..model, dropped }, apply_message)
 
-	if input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..next, listening: !answered, pointer })
-	}
+	Ok({ ..next, listening: !answered, pointer })
 }
 
 ## Fold one delivered message into the model.
@@ -226,18 +224,17 @@ render! = |model, frame| {
 ## A faint square grid, so a pointer moving over it reads as motion rather than
 ## as a circle floating in the dark.
 draw_grid! : Draw.Frame, Draw.FrameSize => {}
-draw_grid! = |frame, size|
-	List.for_each!(
-		List.map_with_index(List.repeat({}, 32), |_unit, index| U64.to_f32(index) * 40),
-		|offset| {
-			if offset <= size.width {
-				frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
-			}
-			if offset <= size.height {
-				frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
-			}
-		},
-	)
+draw_grid! = |frame, size| {
+	for index in 0.U64..<32 {
+		offset = U64.to_f32(index) * 40
+		if offset <= size.width {
+			frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
+		}
+		if offset <= size.height {
+			frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
+		}
+	}
+}
 
 ## One pointer: a soft glow, a ring, and a crosshair with its name.
 draw_pointer! : Draw.Frame, Draw.Vector2, Color.Rgba, Str, F32 => {}

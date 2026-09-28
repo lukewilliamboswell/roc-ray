@@ -4,20 +4,25 @@
 ## startup, and in tasks, where they park the task. They are refused in
 ## `update!` and `render!`.
 ##
-## Use the free `query!` and `execute!` functions for one-off SQL. Retain a
-## prepared `Stmt` when reusing the same query or command. Transactions use
+## Use `db.query!` and `db.execute!` for one-off SQL. Retain a prepared
+## `Stmt` from `db.prepare!` when reusing the same query or command. Transactions use
 ## explicit `BEGIN`, `COMMIT`, and `ROLLBACK` SQL.
 ##
 ## `Db` and `Stmt` are reference-counted host resources. Final release closes
-## them automatically; `Db.close!` provides deliberate early closure. Paths
-## are resolved from the process working directory and are not sandboxed.
-## `":memory:"` creates a private in-memory database.
+## them automatically; `Db.close!` provides deliberate early closure.
+##
+## A database file is named beneath a `Files` directory handle, so it lives
+## where the app may write -- usually `io.files().app_data!()` -- and nowhere
+## else. `open_memory!` creates a private in-memory database, which needs no
+## handle. `ATTACH` is disabled on every connection: a database cannot open a
+## second file.
 ##
 ## At most eight connections and sixty-four statements may be open. Queries
 ## refuse results above one million cells or `Config.max_result_bytes` rather
 ## than truncating them. The default byte limit is sixteen megabytes.
 import Resource
 import Host
+import Files
 
 Sqlite := [].{
 
@@ -48,13 +53,13 @@ Sqlite := [].{
 	##
 	## Extended result codes are reduced to the primary code they extend, so a
 	## `UNIQUE` violation is `Constraint` rather than a number an app would have
-	## to know. The accompanying `Str` carries SQLite's message, which is where
+	## to know. The accompanying `Str` holds SQLite's message, which is where
 	## the detail went.
 	##
 	## `Interrupt` is what shutdown looks like from inside a query. Rather than
 	## making the window wait for a long statement to finish, the host
-	## interrupts every connection with work in flight, and each of those calls
-	## answers `SqliteErr(Interrupt, _)`. A task that treats it as a database
+	## interrupts every connection with a statement still running, and each of
+	## those calls returns `SqliteErr(Interrupt, _)`. A task that treats it as a database
 	## failure will report one on the way out; a task that is about to be
 	## cancelled anyway has nothing to report.
 	ErrCode : [
@@ -93,9 +98,12 @@ Sqlite := [].{
 
 	## Why a connection was not opened.
 	##
-	## `TooManyConnections` means eight are already open; releasing a `Db` the
-	## app no longer needs frees a slot.
-	OpenErr : [PermissionDenied, SqliteErr(ErrCode, Str), TooManyConnections]
+	## `PathInvalid` is a path that is not plainly relative, or that meets a
+	## symbolic link, as for a `Files` read. `PermissionDenied` is a stub
+	## directory handle, which gives no access. `TooManyConnections` means
+	## eight are already open; releasing a `Db` the app no longer needs frees
+	## a slot.
+	OpenErr : [PermissionDenied, PathInvalid, SqliteErr(ErrCode, Str), TooManyConnections]
 
 	## Why a statement was not prepared.
 	##
@@ -134,14 +142,14 @@ Sqlite := [].{
 	## `ReadWriteCreate` creates the file if it is not there. `ReadOnly` opens
 	## an existing database for reading only, and the host locks that
 	## connection down further: schema-rewriting tricks are disabled and
-	## `ATTACH` cannot reach a second file, so a connection opened to visualize
+	## `ATTACH` cannot open a second file, so a connection opened to visualize
 	## someone else's data cannot be talked into writing.
 	Mode : [ReadWriteCreate, ReadWrite, ReadOnly]
 
 	## Per-connection limits.
 	##
 	## `busy_timeout_ms` is how long a statement waits for another process's
-	## write lock before answering `SqliteErr(Busy, _)`.
+	## write lock before returning `SqliteErr(Busy, _)`.
 	##
 	## `max_result_bytes` caps the text and blob payload of one query. A query
 	## that would exceed it fails with `ResultTooLarge` rather than returning
@@ -197,6 +205,68 @@ Sqlite := [].{
 				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 			}
 
+		## Compile one statement for repeated use.
+		##
+		## The string must hold exactly one statement; several is
+		## `MultipleStatements`, and `exec_script!` is the call that runs those.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		prepare! : Db, Str => Try(Stmt, PrepareErr)
+		prepare! = |Db.(db), query| {
+			# closed error union to open error union
+			match Host.sqlite_prepare!(db, query) {
+				Ok(stmt) => Ok(Stmt.(stmt))
+				Err(TooManyStatements) => Err(TooManyStatements)
+				Err(MultipleStatements) => Err(MultipleStatements)
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
+			}
+		}
+
+		## Run one statement that changes data and does not return rows.
+		##
+		## This does not occupy a prepared-statement slot: the statement is
+		## compiled, run, and finalized inside the call. Use `prepare!` when the
+		## same SQL runs many times.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		execute! : Db, Str, List(Binding) => Try(Outcome, ExecuteErr)
+		execute! = |Db.(db), query, bindings|
+			executed(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run one query and decode every row it returns.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		query! : Db, Str, List(Binding) => Try(List(Row), QueryErr)
+		query! = |Db.(db), query, bindings|
+			queried(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run one query that must return exactly one row.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		query_exactly_one! : Db, Str, List(Binding) => Try(Row, ExactlyOneErr)
+		query_exactly_one! = |Db.(db), query, bindings|
+			exactly_one(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
+
+		## Run every statement in a script, for schema setup and migrations.
+		##
+		## Takes no bindings and returns no rows, because a script is SQL the app
+		## wrote rather than SQL assembled from input. Anything that needs a
+		## parameter, or returns data, is a query.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
+		exec_script! = |Db.(db), script|
+		# closed error union to open error union
+			match Host.sqlite_exec_script!(db, script) {
+				Ok({}) => Ok({})
+				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
+			}
+
 		## Resource-free connection value for pure tests.
 		##
 		## The handle never resolves to an open database, so every call through
@@ -212,7 +282,7 @@ Sqlite := [].{
 	##
 	## A row is ordinary Roc data by the time an app sees it: the whole result
 	## crossed the boundary at once, so reading a column is a lookup rather
-	## than an effect. Decode with the receivers below.
+	## than an effect. Decode with the methods below.
 	Row := { names : List(Str), values : List(Value) }.{
 
 		## Two rows are equal when their names and values are. Worth having so
@@ -385,68 +455,6 @@ Sqlite := [].{
 		stub = Stmt.(Resource.Handle.stub)
 	}
 
-	## Compile one statement for repeated use.
-	##
-	## The string must hold exactly one statement; several is
-	## `MultipleStatements`, and `exec_script!` is the call that runs those.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	prepare! : Db, Str => Try(Stmt, PrepareErr)
-	prepare! = |Db.(db), query| {
-		# closed error union to open error union
-		match Host.sqlite_prepare!(db, query) {
-			Ok(stmt) => Ok(Stmt.(stmt))
-			Err(TooManyStatements) => Err(TooManyStatements)
-			Err(MultipleStatements) => Err(MultipleStatements)
-			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
-		}
-	}
-
-	## Run one statement that changes data and does not return rows.
-	##
-	## This does not occupy a prepared-statement slot: the statement is
-	## compiled, run, and finalized inside the call. Use `prepare!` when the
-	## same SQL runs many times.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	execute! : { db : Db, query : Str, bindings : List(Binding) } => Try(Outcome, ExecuteErr)
-	execute! = |{ db: Db.(db), query, bindings }|
-		executed(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run one query and decode every row it returns.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	query! : { db : Db, query : Str, bindings : List(Binding) } => Try(List(Row), QueryErr)
-	query! = |{ db: Db.(db), query, bindings }|
-		queried(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run one query that must return exactly one row.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	query_exactly_one! : { db : Db, query : Str, bindings : List(Binding) } => Try(Row, ExactlyOneErr)
-	query_exactly_one! = |{ db: Db.(db), query, bindings }|
-		exactly_one(Host.sqlite_run_once!(db, query, List.map(bindings, binding_wire)))
-
-	## Run every statement in a script, for schema setup and migrations.
-	##
-	## Takes no bindings and returns no rows, because a script is SQL the app
-	## wrote rather than SQL assembled from input. Anything that needs a
-	## parameter, or answers with data, is a query.
-	##
-	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
-	## the task; refused in `update!` and `render!`.
-	exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
-	exec_script! = |Db.(db), script|
-	# closed error union to open error union
-		match Host.sqlite_exec_script!(db, script) {
-			Ok({}) => Ok({})
-			Err(SqliteErr(failure)) => Err(sqlite_err(failure))
-		}
-
 	## Describe an error code, for a log line or an error screen.
 	errcode_to_str : ErrCode -> Str
 	errcode_to_str = |code|
@@ -484,34 +492,50 @@ Sqlite := [].{
 			Unknown(other) => "Unknown: result code ${I64.to_str(other)}"
 		}
 
-	## Opaque sqlite authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque SQLite authority supplied by App.Io. Opening a file also takes the
+	## directory handle it is in.
 	Service :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
 		for_host : Resource.Authority -> Service
 		for_host = |authority| Service.(authority)
 
-		## Open or create a database under `default_config`.
+		## Open or create a database beneath a writable directory, under
+		## `default_config`. Missing directories on the way are created.
 		##
-		## The parent directory must already exist. Unlike `Files.Access.write_text!`,
-		## which builds the tree on its way, opening a database does not create
-		## one: a database file is normally placed beside an application rather
-		## than into a directory the application is inventing, and a mistyped
-		## path should be `SqliteErr(CanNotOpen, _)` rather than a new empty
-		## tree. Create it with a write if the app owns that decision.
+		## ```roc
+		## data = io.files().app_data!()?
+		## db = io.sqlite().open!(data, "scores.db")?
+		## ```
+		##
+		## A path that is not plainly relative, or that meets a symbolic link,
+		## is `PathInvalid`, as for a `Files` read. Legal in `init!`, where it blocks startup, and in
+		## tasks, where it parks the task; refused in `update!` and `render!`.
+		open! : Service, Files.Dir, Str => Try(Db, OpenErr)
+		open! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, Sqlite.default_config)
+
+		## Open a database beneath a writable directory with explicit limits and
+		## access mode.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
-		open! : Service, Str => Try(Db, OpenErr)
-		open! = |Service.(authority), path| perform_open!(authority, path)
+		open_with! : Service, Files.Dir, Str, Config => Try(Db, OpenErr)
+		open_with! = |Service.(authority), dir, path, config| perform_open!(authority, dir.for_host(), path, config)
 
-		## Open a database with explicit limits and access mode.
+		## Open an existing database read-only beneath any directory handle.
+		## The connection is locked down so it cannot be turned into a writer.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
-		open_with! : Service, Str, Config => Try(Db, OpenErr)
-		open_with! = |Service.(authority), path, config| perform_open_with!(authority, path, config)
+		open_read! : Service, Files.ReadDir, Str => Try(Db, OpenErr)
+		open_read! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, { ..Sqlite.default_config, mode: ReadOnly })
 
+		## Open a private in-memory database, gone when its last reference is.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_memory! : Service => Try(Db, OpenErr)
+		open_memory! = |Service.(authority)| perform_open!(authority, { authority, root: "", path: "" }, memory_path, Sqlite.default_config)
 	}
 
 }
@@ -792,7 +816,7 @@ expect decode_names(['i', 'd', 0], 0, []) == ["id"]
 expect decode_names(['i', 'd', 0, 'n', 0], 0, []) == ["id", "n"]
 
 ## A name with no terminator ends the list rather than being guessed at. The
-## host writes the terminator, so this cannot happen; answering with the names
+## host writes the terminator, so this cannot happen; returning the names
 ## that were whole is what keeps this total.
 expect decode_names(['i', 'd', 0, 'n'], 0, []) == ["id"]
 
@@ -833,15 +857,17 @@ expect Sqlite.Row.names(Sqlite.Row.for_tests(["a", "b"], [Integer(1), Integer(2)
 
 expect Sqlite.Row.values(Sqlite.Row.for_tests(["a"], [Integer(1)])) == [Integer(1)]
 
-## Private authority-taking implementations.
-perform_open! : Resource.Authority, Str => Try(Sqlite.Db, Sqlite.OpenErr)
-perform_open! = |authority, path| perform_open_with!(authority, path, Sqlite.default_config)
+## SQLite's name for a private in-memory database. Only `open_memory!` sends
+## it, with no root; the host refuses it from anywhere else.
+memory_path = ":memory:"
 
-perform_open_with! : Resource.Authority, Str, Sqlite.Config => Try(Sqlite.Db, Sqlite.OpenErr)
-perform_open_with! = |authority, path, config| {
+## Private authority-taking implementation.
+perform_open! : Resource.Authority, { authority : Resource.Authority, root : Str, path : Str }, Str, Sqlite.Config => Try(Sqlite.Db, Sqlite.OpenErr)
+perform_open! = |authority, handle, path, config| {
 	result = Host.sqlite_open!(
 		authority,
-		path,
+		handle.root,
+		joined_path(handle.path, path),
 		mode_code(config.mode),
 		config.busy_timeout_ms,
 		config.max_result_bytes,
@@ -850,7 +876,11 @@ perform_open_with! = |authority, path, config| {
 	match result {
 		Ok(db) => Ok(Sqlite.Db.(db))
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(TooManyConnections) => Err(TooManyConnections)
 		Err(SqliteErr(failure)) => Err(sqlite_err(failure))
 	}
 }
+
+joined_path : Str, Str -> Str
+joined_path = |prefix, path| if prefix == "" path else "${prefix}/${path}"

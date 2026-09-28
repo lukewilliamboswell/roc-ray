@@ -30,6 +30,9 @@ CASES = (
     (ROOT / "test/compile_fail/io_manufacture.roc", ("cannot use opaque nominal type", "instance of App.Io")),
     (ROOT / "test/compile_fail/http_client_manufacture.roc", ("cannot use opaque nominal type", "instance of Http.Client")),
     (ROOT / "test/compile_fail/service_kind_confusion.roc", ("type mismatch", "Http.Client", "Files.Access")),
+    (ROOT / "test/compile_fail/files_dir_manufacture.roc", ("cannot use opaque nominal type", "instance of Files.Dir")),
+    (ROOT / "test/compile_fail/designated_manufacture.roc", ("cannot use opaque nominal type", "instance of Files.Designated")),
+    (ROOT / "test/compile_fail/read_dir_write.roc", ("missing method", "write_text!")),
     (
         ROOT / "test" / "compile_fail" / "host_module.roc",
         ("package module is private", "`rr.Host`"),

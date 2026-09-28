@@ -30,8 +30,9 @@
 ## verbatim; spaces, globs, pipes, and redirects are not interpreted.
 ##
 ## A child inherits this process's user, working directory, and, unless
-## `with_clear_envs` is used, environment. `Cmd` does not restrict executable
-## paths or child authority; use it only in apps trusted with the host machine.
+## `with_clear_envs` is used, environment. The program must be declared with
+## `Command`, matched exactly as the app names it; a child then has
+## all of the user's authority, which no declaration can narrow.
 ##
 ## Standard input is closed. Standard output and error are captured up to the
 ## configured limits rather than inherited.
@@ -97,23 +98,26 @@ Cmd := {
 	## A non-zero exit status is not one of these; it is an `Ok`.
 	##
 	## `CommandNotFound` is no such executable on `PATH` or at that path, and
-	## `PermissionDenied` is one that is there and may not be started.
+	## `AccessRefused` is one that is there and the operating system will not
+	## start. `PermissionDenied` is a program the app did not declare with
+	## `Command`; nothing was started.
 	## `SpawnFailed` is every other refusal to start the child or to run it to
 	## its end, including a working directory that is not there and an
 	## environment name this operating system cannot represent -- one that is
 	## empty, or contains `=` or a NUL.
 	##
-	## `Timeout` carries what the child had written before the
+	## `Timeout` holds what the child had written before the
 	## deadline killed it, because a program that hangs after printing why is
 	## the ordinary case. `StdoutLimitExceeded` and `StderrLimitExceeded` are
 	## refusals rather than truncations: half a stream decodes into wrong data
-	## rather than into an error, so nothing is handed back.
+	## rather than into an error, so nothing is returned.
 	##
 	## `Busy` is the host already running as many children as it will run at
 	## once; nothing was started, and the same command run later can succeed.
 	## `Unavailable` is the app shutting down while the child was running.
 	CmdErr : [
 		CommandNotFound,
+		AccessRefused,
 		PermissionDenied,
 		SpawnFailed,
 		Busy,
@@ -126,7 +130,7 @@ Cmd := {
 	## Thirty seconds.
 	##
 	## Long enough for a real encode of a short clip, short enough that a task
-	## parked on a program that will never answer is eventually collected. A
+	## parked on a program that will never finish is eventually collected. A
 	## command that genuinely takes longer says so with `with_timeout_ms`.
 	default_timeout_ms : U64
 	default_timeout_ms = 30_000
@@ -223,7 +227,8 @@ Cmd := {
 	with_stderr_limit : Cmd, U64 -> Cmd
 	with_stderr_limit = |cmd, limit_bytes| { ..cmd, stderr_limit_bytes: limit_bytes }
 
-	## Opaque commands authority supplied by App.Io. Effects return PermissionDenied when external access is disabled.
+	## Opaque process authority supplied by App.Io, scoped by the app's declared
+	## `Command` entries.
 	Runner :: Resource.Authority.{
 
 		## Private platform construction; no application can manufacture the argument.
@@ -318,6 +323,7 @@ perform_run! = |authority, cmd| {
 		Err(Timeout(output)) => Err(Timeout(output))
 		Err(Busy) => Err(Busy)
 		Err(CommandNotFound) => Err(CommandNotFound)
+		Err(AccessRefused) => Err(AccessRefused)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(SpawnFailed) => Err(SpawnFailed)
 		Err(StderrLimitExceeded) => Err(StderrLimitExceeded)

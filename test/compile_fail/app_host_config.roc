@@ -31,6 +31,10 @@ transport = {
 	record_timing: 0,
 	record_cursor: 0,
 	record_quality: 1,
+	default_font_path: "",
+	default_font_size: 20,
+	app_id: "",
+	permissions: [],
 }
 
 program = { init!, update!, render! }

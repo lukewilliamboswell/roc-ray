@@ -1,13 +1,18 @@
 ## Press Space to add a random score to a SQLite-backed high-score board;
-## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
-## This example shows startup database setup, prepared statements, and Tasks:
-## work that may wait runs separately and returns rows as a later Message.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+## Escape quits. Scores remain in `scores.db` in the app's private data
+## directory between runs. This example shows startup database setup,
+## prepared statements, and Tasks: work that may wait runs separately and
+## returns rows as a later Message.
+##
+## It also shows private storage. The config names the app with
+## `with_app_id`, and `io.files().app_data!()` opens the directory the system
+## keeps for it -- `~/.local/share/dev.roc-ray.sqlite-scores` on Linux -- with
+## no permission to declare, because it is the app's own.
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Files
 import rr.Random
 import rr.Sqlite
 import rr.Task
@@ -47,11 +52,9 @@ Status : [Ready, Working, Failed(Str)]
 Msg : [Refreshed(List(Entry)), Failed(Str)]
 
 ## `Files` creates the directory on its way; opening a database does not.
-db_dir : Str
-db_dir = "sqlite_scores_out"
-
-db_path : Str
-db_path = "sqlite_scores_out/scores.db"
+## The database's name beneath the app's private data directory.
+db_name : Str
+db_name = "scores.db"
 
 ## `played_at` is a REAL holding fractional seconds since the Unix epoch, and
 ## `name` is UNIQUE, so the board exercises three column types and gives a
@@ -77,12 +80,12 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, ..])
 init! = App.init(
-	App.default.with_title("RocRay SQLite Scores").with_size({ width: 880, height: 560 }).with_frame_pacing(Capped(60)),
+	App.default
+		.with_title("RocRay SQLite Scores")
+		.with_size({ width: 880, height: 560 })
+		.with_frame_pacing(Capped(60))
+		.with_app_id("dev.roc-ray.sqlite-scores"),
 	|io| {
-		# A write builds the tree on its way, which is how the directory the
-		# database lives in comes to exist.
-		_ = io.files().write_bytes!("${db_dir}/.keep", [])
-
 		rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 		font = Draw.default_font!()
 		title = Text.from("High scores that outlive the process", font).size(26).prepare!()?
@@ -128,9 +131,10 @@ init! = App.init(
 ## Open the store and read the first board. Waits, which `init!` permits.
 open_board! : App.Io => Try({ db : Sqlite.Db, insert : Sqlite.Stmt, rows : List(Entry) }, Str)
 open_board! = |io| {
-	db = io.sqlite().open!(db_path) ? |err| describe(err)
-	Sqlite.exec_script!(db, schema) ? |err| describe(err)
-	insert = Sqlite.prepare!(db, insert_run) ? |err| describe(err)
+	data = io.files().app_data!() ? |_| "the app's data directory could not be opened"
+	db = io.sqlite().open!(data, db_name) ? |err| describe(err)
+	db.exec_script!(schema) ? |err| describe(err)
+	insert = db.prepare!(insert_run) ? |err| describe(err)
 	rows = read_board!(db)?
 	Ok({ db, insert, rows })
 }
@@ -140,7 +144,7 @@ open_board! = |io| {
 ## Waits, so it is only ever reached from `init!` or from inside a task.
 read_board! : Sqlite.Db => Try(List(Entry), Str)
 read_board! = |db| {
-	rows = Sqlite.query!({ db, query: top_ten, bindings: [] }) ? |err| describe(err)
+	rows = db.query!(top_ten, []) ? |err| describe(err)
 	Ok(List.map(rows, decode_entry))
 }
 
@@ -195,14 +199,11 @@ record_run! = |db, insert, name, score| {
 	# costs the task nothing to ask on its own.
 	played_at = Time.now!()
 	written =
-		Sqlite.Stmt.execute!(
-			insert,
-			[
-				{ name: ":name", value: String(name) },
-				{ name: ":score", value: Integer(score) },
-				{ name: ":played_at", value: Real(epoch_seconds(played_at)) },
-			],
-		)
+		insert.execute!([
+			{ name: ":name", value: String(name) },
+			{ name: ":score", value: Integer(score) },
+			{ name: ":played_at", value: Real(epoch_seconds(played_at)) },
+		])
 
 	match written {
 		Err(SqliteErr(Constraint, _)) =>
@@ -226,7 +227,7 @@ record_run! = |db, insert, name, score| {
 ## here because the statement runs rarely and has nothing to bind.
 reset_board! : Sqlite.Db => Msg
 reset_board! = |db| {
-	match Sqlite.execute!({ db, query: clear_runs, bindings: [] }) {
+	match db.execute!(clear_runs, []) {
 		Err(err) => Failed(describe(err))
 		Ok(_outcome) =>
 			match read_board!(db) {
@@ -283,11 +284,8 @@ next_run = |state| {
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
+	devices = input.devices
 	folded = List.fold(input.messages, { ..model, elapsed: model.elapsed + input.time.elapsed_seconds }, apply_message)
-
-	if input.devices.key_pressed(KeyEscape) {
-		return Err(Exit(0))
-	}
 
 	# One database operation in flight at a time. A second would answer with a
 	# board that does not include the first, and the later reply would win.
@@ -295,13 +293,13 @@ update! = |model, input, _io| {
 		return Ok(folded)
 	}
 
-	if input.devices.key_pressed(KeySpace) {
+	if devices.key_pressed(KeySpace) {
 		run = next_run(folded.rng)
 		db = folded.db
 		insert = folded.insert
 		Task.spawn!(input, || record_run!(db, insert, run.name, run.score))
 		Ok({ ..folded, rng: run.state, status: Working, pending: Bool.True })
-	} else if input.devices.key_pressed(KeyR) {
+	} else if devices.key_pressed(KeyR) {
 		db = folded.db
 		Task.spawn!(input, || reset_board!(db))
 		Ok({ ..folded, status: Working, pending: Bool.True })
@@ -331,10 +329,9 @@ render! = |model, frame| {
 		frame.text_at!({ pos: { x: 68, y: 190 }, text: "No runs yet -- press SPACE to record one", size: 18, color: muted })
 	} else {
 		best = List.fold(model.rows, 1, |top, entry| I64.max(top, entry.score))
-		List.for_each!(
-			List.map_with_index(model.rows, |entry, index| { entry, index }),
-			|row| draw_entry!(frame, row.index, row.entry, best, width),
-		)
+		for (index, entry) in model.rows.iter().with_index() {
+			draw_entry!(frame, index, entry, best, width)
+		}
 	}
 
 	draw_status!(frame, model.status, model.elapsed, size.height - 46)

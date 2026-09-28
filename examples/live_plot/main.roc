@@ -2,13 +2,12 @@
 ##
 ## Run this app from the directory you want to inspect. Use the wheel to scroll,
 ## Shift-wheel to zoom, drag to pan, R to return to new results, N to change the
-## horizontal scale, and Escape to quit. Run with `--record-demo` to create the
-## gallery GIF from built-in sample data. This larger example uses Tasks for
+## horizontal scale, and Escape to quit. Run with `--record-demo` to write
+## `examples/gallery/live_plot.gif` from built-in sample data. This larger example uses Tasks for
 ## file work, limits how much work and data it keeps at once, and draws many
 ## points efficiently.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-27-a3ce7f1",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App
@@ -107,6 +106,10 @@ import rr.Text
 ## every line from every file in memory.
 Model : {
 	demo : Bool,
+
+	## The directory being walked: the working directory, read-only, as the
+	## config declares. Every listing and read names a path beneath it.
+	tree : Files.ReadDir,
 
 	## The one sprite behind every point, and the offscreen buffer it is
 	## painted into. A batch draws a single texture, so hundreds of differently
@@ -485,37 +488,48 @@ expect WorkQueue.new().completed() == WorkQueue.new()
 
 program = { init!, update!, render! }
 
-demo_frames = 150.U64
-
-record_demo_flag : Str
+## Recording mode. `--record-demo` hides the window, feeds the plot the
+## built-in `demo_paths` through `demo_message` instead of walking the disk,
+## and writes a GIF for the README gallery into `examples/gallery/`. The
+## recording stops itself after `demo_frames` frames, and `update!` exits when
+## it has been written.
 record_demo_flag = "--record-demo"
 
+demo_frames = 150.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("live_plot.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## Declares the working directory, read-only, then selects an interactive
+## window or a hidden one that records the demo.
 live_plot_config : List(Str) -> App.Config
 live_plot_config = |args| {
 	base = App.default
-		.with_title("A tree, streamed - RocRay live plot")
+		.with_title("RocRay Live Plot")
 		.with_size({ width: 1240, height: 860 })
 		.with_min_size({ width: 980, height: 640 })
 		.with_resizable(Bool.True)
 		.with_frame_pacing(VSync)
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("live_plot.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	# The plot walks and reads the directory it was launched from.
+		.with_permission(WorkingDirectory(ReadOnly))
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
 
 ## A small built-in tree for reproducible capture. Each file still enters as a
 ## `FileRead` message and goes through the ordinary bounded parser.
@@ -674,18 +688,19 @@ is_separator = |bytes, at| List.get(bytes, at) == Ok(47)
 ## Join a directory to one of its entries.
 join_path : Str, Str -> Str
 join_path = |dir, name|
-	if dir == "." {
+	if dir == "" {
 		name
 	} else {
 		Str.concat(dir, Str.concat("/", name))
 	}
 
-## The root the walk starts from. Everything else is discovered.
+## The root the walk starts from, relative to the directory handle: the
+## handle's own directory. Everything else is discovered.
 walk_root : Str
-walk_root = "."
+walk_root = ""
 
 ## Run one unit of work as a task. The only effectful line in the walk.
-start_work! : Files.Access, App.Input(Msg), Work => {}
+start_work! : Files.ReadDir, App.Input(Msg), Work => {}
 start_work! = |files, input, work|
 	match work {
 		ListDir(path) => Task.spawn!(input, || Listed(path, files.list!(path)))
@@ -752,7 +767,8 @@ describe_list_error = |reason|
 	match reason {
 		NotFound => "not found"
 		NotADirectory => "not a directory"
-		PermissionDenied => "file access was not granted"
+		PermissionDenied => "outside the declared directories"
+		PathInvalid => "path refused"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "listings unavailable"
@@ -763,7 +779,8 @@ describe_read_error : Files.ReadBytesError -> Str
 describe_read_error = |reason|
 	match reason {
 		NotFound => "not found"
-		PermissionDenied => "file access was not granted"
+		PermissionDenied => "outside the declared directories"
+		PathInvalid => "path refused"
 		ReadFailed => "read failed"
 		Busy => "host busy"
 		Unavailable => "reads unavailable"
@@ -1602,9 +1619,9 @@ init! : App.Init(Model, _)
 init! = App.init_for_args(
 	live_plot_config,
 	|io| {
-		match live_plot_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
@@ -1631,8 +1648,10 @@ init! = App.init_for_args(
 				.spacing(1.6)
 				.prepare!()?
 
+		tree = io.files().working_directory_read!() ? |_| WorkingDirectoryUnavailable
 		Ok({
-			demo: List.contains(io.args!(), record_demo_flag),
+			demo,
+			tree,
 			glow: glow,
 			queue: WorkQueue.new(),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
@@ -1672,15 +1691,15 @@ sprite_of : Model -> Draw.Texture
 sprite_of = |model| model.glow.texture()
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, io| {
+update! = |model, input, _io| {
 	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
 	#    deal more work while it is at it.
-	received = List.fold(program_input.messages, model, receive)
+	received = List.fold(input.messages, model, receive)
 	settled_model =
 		if model.demo {
-			match demo_message(program_input.time.cycle_count) {
+			match demo_message(input.time.cycle_count) {
 				Ok(message) => {
 					with_file = { ..received, walk: { ..received.walk, files_found: received.walk.files_found + 1 } }
 					receive(with_file, message)
@@ -1693,7 +1712,7 @@ update! = |model, program_input, io| {
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
 	primed =
-		if !model.demo and program_input.time.cycle_count == 0 {
+		if !model.demo and input.time.cycle_count == 0 {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
@@ -1713,7 +1732,7 @@ update! = |model, program_input, io| {
 	# 4. The view is pure state too, so a headless run scrolls the same way an
 	#    interactive one does.
 	view_zone = Trace.begin!("update plot view")
-	viewed = look(parsed, program_input)
+	viewed = look(parsed, input)
 	Trace.end!(view_zone)
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
@@ -1738,28 +1757,14 @@ update! = |model, program_input, io| {
 		}
 
 	for work in ready.starting {
-		start_work!(io.files(), program_input, work)
+		start_work!(model.tree, input, work)
 	}
 
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if program_input.devices.key_pressed(KeyEscape) {
-			Err(Exit(0))
-		} else {
-			Ok({})
-		}
-
-	result = match exit {
-		Err(code) => Err(code)
-		Ok({}) => Ok({ ..refetched, queue: ready.queue })
-	}
+	# Decided before the zone closes, so an exit still ends the trace zone.
+	finished = if model.demo demo_finished(input.capture) else Ok({})
 	Trace.end!(update_zone)
-	result
+	finished?
+	Ok({ ..refetched, queue: ready.queue })
 }
 
 ## Fold one completion into the model.
@@ -1824,17 +1829,17 @@ receive = |model, message|
 
 ## Advance the camera, the clocks and the throughput samples.
 look : Model, App.Input(Msg) -> Model
-look = |model, program_input| {
-	input = program_input.devices
-	screen = { x: I32.to_f32(program_input.window.size.width), y: I32.to_f32(program_input.window.size.height) }
+look = |model, input| {
+	devices = input.devices
+	screen = { x: I32.to_f32(input.window.size.width), y: I32.to_f32(input.window.size.height) }
 	area = plot_area(screen)
 
-	wheel = input.mouse.wheel_delta().y
-	zooming = input.key_down(KeyLeftShift) or input.key_down(KeyRightShift)
-	dragging = input.mouse.button_down(Left)
-	refit = input.key_pressed(KeyR)
+	wheel = devices.mouse.wheel_delta().y
+	zooming = devices.key_down(KeyLeftShift) or devices.key_down(KeyRightShift)
+	dragging = devices.mouse.button_down(Left)
+	refit = devices.key_pressed(KeyR)
 
-	delta = F32.min(program_input.time.elapsed_seconds, 0.05)
+	delta = Math.clamp(input.time.elapsed_seconds, 0, 0.05)
 	advanced = model.sweep + delta
 	opened = F32.min(model.entrance + delta / entrance_seconds, 1)
 
@@ -1852,12 +1857,12 @@ look = |model, program_input| {
 	# point in the middle of the plot rather than sliding it.
 	base = model.camera.with_offset(Math.center(area))
 	zoomed = if zooming {
-		zoom_at(base, input.mouse.position(), wheel)
+		zoom_at(base, devices.mouse.position(), wheel)
 	} else {
 		scroll_by(base, wheel)
 	}
 	panned = if dragging {
-		pan(zoomed, input.mouse.delta())
+		pan(zoomed, devices.mouse.delta())
 	} else {
 		zoomed
 	}
@@ -1873,7 +1878,7 @@ look = |model, program_input| {
 			panned.with_target({ x: panned.target().x, y: clamp_scroll(panned.target().y, model.lanes, area, panned.zoom()) })
 		}
 
-	mode = if input.key_pressed(KeyN) {
+	mode = if devices.key_pressed(KeyN) {
 		other_mode(model.x_mode)
 	} else {
 		model.x_mode
@@ -2109,30 +2114,28 @@ draw_plot! = |frame, model| {
 ## One band per visible file, alternating, with the lane being parsed lifted out
 ## of the alternation so the eye can find it.
 draw_bands! : Draw.Frame, Model, Math.Rect, Visible => {}
-draw_bands! = |frame, model, area, window|
-	List.for_each!(
-		lane_indices(window),
-		|index| {
-			top = screen_y(model, U64.to_f32(index) * lane_height)
-			bottom = screen_y(model, U64.to_f32(index + 1) * lane_height)
-			working = is_working(model, index)
-			frame.rectangle!({
-				x: area.x,
-				y: top,
-				width: area.width,
-				height: F32.max(bottom - top - 1, 1),
-				style: Draw.filled(
-					if working {
-						Color.from_hex_rgb(0x18202c)
-					} else if index % 2 == 0 {
-						band_even
-					} else {
-						band_odd
-					},
-				),
-			})
-		},
-	)
+draw_bands! = |frame, model, area, window| {
+	for index in lane_indices(window) {
+		top = screen_y(model, U64.to_f32(index) * lane_height)
+		bottom = screen_y(model, U64.to_f32(index + 1) * lane_height)
+		working = is_working(model, index)
+		frame.rectangle!({
+			x: area.x,
+			y: top,
+			width: area.width,
+			height: F32.max(bottom - top - 1, 1),
+			style: Draw.filled(
+				if working {
+					Color.from_hex_rgb(0x18202c)
+				} else if index % 2 == 0 {
+					band_even
+				} else {
+					band_odd
+				},
+			),
+		})
+	}
+}
 
 ## The two reference lines every lane carries.
 ##
@@ -2143,39 +2146,36 @@ draw_bands! = |frame, model, area, window|
 draw_rules! : Draw.Frame, Model, Math.Rect, Visible => {}
 draw_rules! = |frame, model, area, window| {
 	named = window.first
-	List.for_each!(
-		lane_indices(window),
-		|index| {
-			baseline = screen_y(model, lane_baseline(index))
-			eighty = screen_y(model, lane_baseline(index) - column_offset(80))
-			if baseline >= area.y and baseline <= area.y + area.height {
-				frame.line!({
-					start: { x: area.x, y: baseline },
-					end: { x: area.x + area.width, y: baseline },
-					stroke: Draw.stroke(rule_strong, 1),
-				})
+	for index in lane_indices(window) {
+		baseline = screen_y(model, lane_baseline(index))
+		eighty = screen_y(model, lane_baseline(index) - column_offset(80))
+		if baseline >= area.y and baseline <= area.y + area.height {
+			frame.line!({
+				start: { x: area.x, y: baseline },
+				end: { x: area.x + area.width, y: baseline },
+				stroke: Draw.stroke(rule_strong, 1),
+			})
+		} else {
+			{}
+		}
+		if eighty >= area.y + 16 and eighty <= area.y + area.height {
+			frame.line!({
+				start: { x: area.x, y: eighty },
+				end: { x: area.x + area.width, y: eighty },
+				stroke: Draw.stroke(Color.with_alpha(rule_strong, 190), 1),
+			})
+			# Named once rather than on every lane. It is the only y in the
+			# figure that means anything outside it, and the only thing that
+			# says the axis is not linear.
+			if index == named {
+				text_left!(frame, model.small, { x: area.x + 8, y: eighty - 14 }, "80 COLUMNS", 9, 1.6, ink_faint)
 			} else {
 				{}
 			}
-			if eighty >= area.y + 16 and eighty <= area.y + area.height {
-				frame.line!({
-					start: { x: area.x, y: eighty },
-					end: { x: area.x + area.width, y: eighty },
-					stroke: Draw.stroke(Color.with_alpha(rule_strong, 190), 1),
-				})
-				# Named once rather than on every lane. It is the only y in the
-				# figure that means anything outside it, and the only thing that
-				# says the axis is not linear.
-				if index == named {
-					text_left!(frame, model.small, { x: area.x + 8, y: eighty - 14 }, "80 COLUMNS", 9, 1.6, ink_faint)
-				} else {
-					{}
-				}
-			} else {
-				{}
-			}
-		},
-	)
+		} else {
+			{}
+		}
+	}
 }
 
 ## Lanes whose points have been dropped, drawn as the density their summary
@@ -2187,19 +2187,18 @@ draw_rules! = |frame, model, area, window| {
 ## going blank. Scrolling onto one asks for the file again; until it arrives,
 ## this is what is there.
 draw_summaries! : Draw.Frame, Model, Visible => {}
-draw_summaries! = |frame, model, window|
-	List.for_each!(
-		lane_indices(window),
-		|index|
-			if has_run(model.runs, index) {
-				{}
-			} else {
-				match List.get(model.lanes, index) {
-					Err(_) => {}
-					Ok(lane) => draw_density!(frame, lane, index)
-				}
-			},
-	)
+draw_summaries! = |frame, model, window| {
+	for index in lane_indices(window) {
+		if has_run(model.runs, index) {
+			{}
+		} else {
+			match List.get(model.lanes, index) {
+				Err(_) => {}
+				Ok(lane) => draw_density!(frame, lane, index)
+			}
+		}
+	}
+}
 
 draw_density! : Draw.Frame, Lane, U64 => {}
 draw_density! = |frame, lane, index| {
@@ -2207,24 +2206,22 @@ draw_density! = |frame, lane, index| {
 	peak = U64.to_f32(hist_peak(lane.hist))
 	span = max_columns / U64.to_f32(hist_buckets)
 
-	List.for_each!(
-		indexed(lane.hist),
-		|entry|
-			if entry.value == 0 {
-				{}
-			} else {
-				low = column_offset(U64.to_f32(entry.index) * span)
-				high = column_offset(U64.to_f32(entry.index + 1) * span)
-				weight = F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
-					x: 0,
-					y: baseline - high,
-					width: world_width,
-					height: F32.max(high - low, 0.4),
-					style: Draw.filled(Color.with_alpha(lane.tint, alpha_of(18 + weight * 74))),
-				})
-			},
-	)
+	for (bucket, count) in lane.hist.iter().with_index() {
+		if count == 0 {
+			{}
+		} else {
+			low = column_offset(U64.to_f32(bucket) * span)
+			high = column_offset(U64.to_f32(bucket + 1) * span)
+			weight = F32.sqrt(U64.to_f32(count) / peak)
+			frame.rectangle!({
+				x: 0,
+				y: baseline - high,
+				width: world_width,
+				height: F32.max(high - low, 0.4),
+				style: Draw.filled(Color.with_alpha(lane.tint, alpha_of(18 + weight * 74))),
+			})
+		}
+	}
 }
 
 ## Every retained point, in one crossing of the Roc/host boundary -- and then,
@@ -2285,7 +2282,7 @@ draw_head! = |frame, model|
 		}
 	}
 
-## A slow highlight crossing the plot, driven by `program_input.time` alone, so the frame
+## A slow highlight crossing the plot, driven by `input.time` alone, so the frame
 ## has something moving in it whether or not data is still arriving.
 draw_sweep! : Draw.Frame, Model, Math.Rect => {}
 draw_sweep! = |frame, model, area| {
@@ -2316,21 +2313,10 @@ screen_y = |model, y| model.camera.world_to_screen({ x: 0, y: y }).y
 
 ## The visible lanes, as a list to walk. With hundreds of lanes this is the only
 ## thing the furniture ever iterates.
-lane_indices : Visible -> List(U64)
-lane_indices = |window|
-	if window.last < window.first {
-		[]
-	} else {
-		count_up(window.first, window.last, [])
-	}
-
-count_up : U64, U64, List(U64) -> List(U64)
-count_up = |at, last, found|
-	if at > last {
-		found
-	} else {
-		count_up(at + 1, last, List.append(found, at))
-	}
+## The visible lanes' indices, for a `for` loop. Empty when `last` is before
+## `first`.
+lane_indices : Visible -> Range(U64)
+lane_indices = |window| window.first..=window.last
 
 is_working : Model, U64 -> Bool
 is_working = |model, index|
@@ -2431,23 +2417,20 @@ draw_graph! = |frame, model, graph| {
 	# by index rather than right-aligned: a run that has only been going two
 	# seconds should look like two seconds of history, not like a full window
 	# that happens to be flat.
-	List.for_each!(
-		indexed(model.rates.samples),
-		|entry| {
-			height = plot_height * U64.to_f32(measure(entry.value)) / peak
-			if height < 0.6 {
-				{}
-			} else {
-				frame.rectangle!({
-					x: bounds.x + U64.to_f32(entry.index) * step,
-					y: plot_top + plot_height - height,
-					width: F32.max(step - 0.8, 0.8),
-					height: height,
-					style: Draw.filled(Color.with_alpha(graph.tint, alpha_of(graph.fade * 190))),
-				})
-			}
-		},
-	)
+	for (index, sample) in model.rates.samples.iter().with_index() {
+		height = plot_height * U64.to_f32(measure(sample)) / peak
+		if height < 0.6 {
+			{}
+		} else {
+			frame.rectangle!({
+				x: bounds.x + U64.to_f32(index) * step,
+				y: plot_top + plot_height - height,
+				width: F32.max(step - 0.8, 0.8),
+				height: height,
+				style: Draw.filled(Color.with_alpha(graph.tint, alpha_of(graph.fade * 190))),
+			})
+		}
+	}
 }
 
 ## The figures under the rule, as a row of label-over-value columns.
@@ -2502,15 +2485,12 @@ draw_figures! = |frame, model, fade| {
 
 	pitch = (model.screen.x - margin * 2) / U64.to_f32(List.len(figures))
 
-	List.for_each!(
-		indexed(figures),
-		|entry| {
-			x = margin + U64.to_f32(entry.index) * pitch
-			text_left!(frame, model.small, { x: x, y: 130 }, entry.value.label, 10, 1.5, fade_to(ink_faint, fade))
-			text_left!(frame, model.font, { x: x, y: 144 }, entry.value.value, 17, Draw.default_spacing, fade_to(ink, fade))
-			text_left!(frame, model.small, { x: x, y: 166 }, entry.value.note, 9, 1.4, fade_to(Color.with_alpha(ink_faint, 190), fade))
-		},
-	)
+	for (index, figure) in figures.iter().with_index() {
+		x = margin + U64.to_f32(index) * pitch
+		text_left!(frame, model.small, { x: x, y: 130 }, figure.label, 10, 1.5, fade_to(ink_faint, fade))
+		text_left!(frame, model.font, { x: x, y: 144 }, figure.value, 17, Draw.default_spacing, fade_to(ink, fade))
+		text_left!(frame, model.small, { x: x, y: 166 }, figure.note, 9, 1.4, fade_to(Color.with_alpha(ink_faint, 190), fade))
+	}
 }
 
 mode_label : XMode -> Str
@@ -2536,26 +2516,24 @@ draw_gutter! = |frame, model| {
 	frame.with_scissor!(
 		Math.rect(0, area.y, hud_left, area.height),
 		|clipped| {
-			List.for_each!(
-				lane_indices(window),
-				|index|
-					match List.get(model.lanes, index) {
-						Err(_) => {}
-						Ok(lane) =>
-							draw_row!(
-								clipped,
-								model,
-								{
-									lane: lane,
-									index: index,
-									top: screen_y(model, U64.to_f32(index) * lane_height),
-									bottom: screen_y(model, U64.to_f32(index + 1) * lane_height),
-									longest: longest,
-									area: area,
-								},
-							)
-						},
-			)
+			for index in lane_indices(window) {
+				match List.get(model.lanes, index) {
+					Err(_) => {}
+					Ok(lane) =>
+						draw_row!(
+							clipped,
+							model,
+							{
+								lane: lane,
+								index: index,
+								top: screen_y(model, U64.to_f32(index) * lane_height),
+								bottom: screen_y(model, U64.to_f32(index + 1) * lane_height),
+								longest: longest,
+								area: area,
+							},
+						)
+					}
+			}
 			Ok({})
 		},
 	)
@@ -2567,16 +2545,18 @@ draw_gutter! = |frame, model| {
 ## bars readable: one 11,000-line file would otherwise flatten every bar on
 ## screen to nothing for the rest of the run.
 widest_lane : Model, Visible -> U64
-widest_lane = |model, window|
-	List.fold(
-		lane_indices(window),
-		1,
-		|most, index|
-			match List.get(model.lanes, index) {
-				Ok(lane) => U64.max(most, lane.lines)
-				Err(_) => most
-			},
-	)
+widest_lane = |model, window| {
+	var $most = 1
+	for index in lane_indices(window) {
+		match List.get(model.lanes, index) {
+			Ok(lane) => {
+				$most = U64.max($most, lane.lines)
+			}
+			Err(_) => {}
+		}
+	}
+	$most
+}
 
 Row : {
 	lane : Lane,
@@ -2705,27 +2685,25 @@ draw_violin! = |frame, lane, top, bottom| {
 	peak = U64.to_f32(hist_peak(lane.hist))
 	span = max_columns / U64.to_f32(hist_buckets)
 
-	List.for_each!(
-		indexed(lane.hist),
-		|entry|
-			if entry.value == 0 {
-				{}
-			} else {
-				# Buckets are even in columns but not in height, because they
-				# are placed by the same square root the points are: this is the
-				# lane's own y axis, forty pixels wide.
-				low = column_offset(U64.to_f32(entry.index) * span) / lane_span
-				high = column_offset(U64.to_f32(entry.index + 1) * span) / lane_span
-				half = 20 * F32.sqrt(U64.to_f32(entry.value) / peak)
-				frame.rectangle!({
-					x: centre - half,
-					y: origin + height * (1 - high),
-					width: half * 2,
-					height: F32.max(height * (high - low), 1),
-					style: Draw.filled(Color.with_alpha(lane.tint, 110)),
-				})
-			},
-	)
+	for (bucket, count) in lane.hist.iter().with_index() {
+		if count == 0 {
+			{}
+		} else {
+			# Buckets are even in columns but not in height, because they
+			# are placed by the same square root the points are: this is the
+			# lane's own y axis, forty pixels wide.
+			low = column_offset(U64.to_f32(bucket) * span) / lane_span
+			high = column_offset(U64.to_f32(bucket + 1) * span) / lane_span
+			half = 20 * F32.sqrt(U64.to_f32(count) / peak)
+			frame.rectangle!({
+				x: centre - half,
+				y: origin + height * (1 - high),
+				width: half * 2,
+				height: F32.max(height * (high - low), 1),
+				style: Draw.filled(Color.with_alpha(lane.tint, 110)),
+			})
+		}
+	}
 }
 
 # ---------------------------------------------------------------------------
@@ -2783,10 +2761,6 @@ alpha_of = |value|
 
 		Err(_) => 0
 	}
-
-## `List.for_each!` with the index alongside the element.
-indexed : List(a) -> List({ value : a, index : U64 })
-indexed = |items| List.map_with_index(items, |value, index| { value: value, index: index })
 
 ## Keep the end of a path rather than the start of it, because the end is the
 ## part that names the file.
@@ -2925,7 +2899,7 @@ expect extension_of("etc/.gitignore") == ""
 expect extension_of("www/0.9.0/index") == ""
 expect extension_of("www/0.9.0/index.html") == "html"
 
-expect join_path(".", "src") == "src"
+expect join_path("", "src") == "src"
 expect join_path("src", "host_native.zig") == "src/host_native.zig"
 expect join_path("a/b", "c") == "a/b/c"
 
@@ -2967,7 +2941,7 @@ sample_runs : List(Run)
 sample_runs = [{ lane: 0, count: 4 }, { lane: 1, count: 3 }, { lane: 2, count: 2 }]
 
 sample_points : List(Draw.TextureInstance)
-sample_points = List.map(count_up(0, 8, []), |line| plot_dot(line, 10, { baseline: lane_baseline(0), tint: ink, x_scale: line_scale, size: dot_size }))
+sample_points = List.map([0, 1, 2, 3, 4, 5, 6, 7, 8], |line| plot_dot(line, 10, { baseline: lane_baseline(0), tint: ink, x_scale: line_scale, size: dot_size }))
 
 ## Under budget, nothing moves.
 expect trim(sample_points, sample_runs, 9).runs == sample_runs
@@ -3291,7 +3265,7 @@ expect {
 	zoom = fit_zoom(screen)
 	lanes = List.repeat(empty_lane, 500)
 	window = visible_lanes(camera_at(area, zoom, follow_scroll(lanes, area, zoom)), area, lanes)
-	List.len(lane_indices(window)) < 40 and window.last == List.len(lanes) - 1
+	List.len(lane_indices(window).iter().collect()) < 40 and window.last == List.len(lanes) - 1
 }
 
 ## A window never names a lane that does not exist, however far the view has
@@ -3304,9 +3278,9 @@ expect {
 	window.last < List.len(lanes) and window.first <= window.last
 }
 
-expect lane_indices({ first: 2, last: 5 }) == [2, 3, 4, 5]
-expect lane_indices({ first: 4, last: 4 }) == [4]
-expect lane_indices({ first: 5, last: 4 }) == []
+expect lane_indices({ first: 2, last: 5 }).iter().collect() == [2, 3, 4, 5]
+expect lane_indices({ first: 4, last: 4 }).iter().collect() == [4]
+expect lane_indices({ first: 5, last: 4 }).iter().collect() == []
 
 ## Zooming keeps the world point under the pointer under the pointer. That is
 ## the only thing zoom-at-cursor has to get right.

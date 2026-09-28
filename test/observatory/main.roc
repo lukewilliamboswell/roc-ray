@@ -4,6 +4,7 @@ import rr.App
 import rr.Files
 import rr.Trace
 import rr.Task
+import rr.Permission
 
 ## End-to-end probe for Observatory's primitive annotations and cycle summary.
 Model : { cycles : U64 }
@@ -14,9 +15,12 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, Msg)
 init! = App.init(
-	App.default.with_title("Observatory probe"),
+	App.default.with_title("Observatory probe").with_permission(WorkingDirectory(ReadWrite)),
 	|io| {
-		_init_sentinel = io.files().write_text!("observatory-init-ran", "init")
+		_init_sentinel = match io.files().working_directory!() {
+			Ok(dir) => dir.write_text!("observatory-init-ran", "init")
+			Err(_) => Ok({})
+		}
 		Trace.mark!("probe init")
 		startup_zone = Trace.begin!("probe startup wait")
 		Task.sleep!(2)

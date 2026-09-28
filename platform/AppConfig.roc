@@ -1,16 +1,18 @@
 ## Internal host transport for validated startup configuration.
 ##
-## `App` owns the application-facing `Config` and its receivers. This module
+## `App` owns the application-facing `Config` and its methods. This module
 ## holds only the flattening to the native ABI record, and is deliberately
-## omitted from the platform's `exposes` list so an app cannot reach it.
+## omitted from the platform's `exposes` list so an app cannot import it.
 ##
-## It reads a Config through `App`'s public receivers rather than its fields:
+## It reads a Config through `App`'s public methods rather than its fields:
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
 import Host
 import Keys
 import Mouse
+import Permission
+import Url
 
 capture_format_code = |value|
 	match value {
@@ -63,6 +65,7 @@ AppHostConfig : {
 	vsync : Bool,
 	cursor_visible : Bool,
 	exit_key_code : I32,
+	deliver_close_request : Bool,
 	visible : Bool,
 	output_dir : Str,
 	record_enabled : Bool,
@@ -78,12 +81,14 @@ AppHostConfig : {
 	record_quality : U8,
 	default_font_path : Str,
 	default_font_size : I32,
+	app_id : Str,
+	permissions : List(Host.PermissionDeclaration),
 }
 
 AppConfig := [].{
 
 	## Flatten validated choices to the stable native ABI record. This is a
-	## module function, not a Config receiver, and AppConfig is not exposed.
+	## module function, not a Config method, and AppConfig is not exposed.
 	HostConfig : AppHostConfig
 
 	to_host : {}, App.Config -> HostConfig
@@ -105,6 +110,7 @@ AppConfig := [].{
 			vsync: pacing.vsync,
 			cursor_visible: Mouse.cursor_mode_code(cfg.cursor_mode()) == 0,
 			exit_key_code: Keys.exit_key_code(cfg.exit_key()),
+			deliver_close_request: cfg.close_request() == Deliver,
 			visible: cfg.visible(),
 			output_dir: cfg.output_dir(),
 			record_enabled: record.enabled,
@@ -120,6 +126,8 @@ AppConfig := [].{
 			record_quality: record.quality,
 			default_font_path: default_font.path,
 			default_font_size: default_font.size,
+			app_id: cfg.app_id(),
+			permissions: cfg.permissions().map(permission_for_host),
 		}
 	}
 }
@@ -200,6 +208,8 @@ expect {
 expect AppConfig.to_host({}, App.default).exit_key_code == 256
 expect AppConfig.to_host({}, App.default.with_exit_key(NoExitKey)).exit_key_code == 0
 expect AppConfig.to_host({}, App.default.with_exit_key(ExitKey(KeyQ))).exit_key_code == 81
+expect !(AppConfig.to_host({}, App.default).deliver_close_request)
+expect AppConfig.to_host({}, App.default.with_close_request(Deliver)).deliver_close_request
 expect AppConfig.to_host({}, App.default).visible
 expect !(AppConfig.to_host({}, App.default.with_visible(Bool.False)).visible)
 expect AppConfig.to_host({}, App.default).output_dir == "."
@@ -245,3 +255,45 @@ expect {
 	host = AppConfig.to_host({}, App.default)
 	host.record_path == "" and host.record_scale_denominator == 1 and host.record_every_nth == 1 and host.record_quality == 1
 }
+
+## One declaration as the host validates it: the same tag, with an
+## `HttpOrigin` reduced to the origin the host checks against.
+permission_for_host : Permission -> Host.PermissionDeclaration
+permission_for_host = |permission|
+	match permission {
+		HttpOrigin(url) => HttpOrigin(origin_of(url))
+		HttpAny => HttpAny
+		UdpBind(port) => UdpBind(port)
+		UdpPeer(address, port) => UdpPeer({ address, port })
+		UdpLoopback => UdpLoopback
+		UdpAny => UdpAny
+		Command(program) => Command(program)
+		CommandAny => CommandAny
+		EnvVar(name) => EnvVar(name)
+		EnvAny => EnvAny
+		ClipboardRead => ClipboardRead
+		ClipboardWrite => ClipboardWrite
+		WorkingDirectory(mode) => WorkingDirectory(mode)
+		Directory(path, mode) => Directory({ path, mode })
+		FilesAny(mode) => FilesAny(mode)
+	}
+
+## A URL's origin, `scheme://host[:port]`: the only part of an `HttpOrigin`
+## the host checks against.
+origin_of : Url -> Str
+origin_of = |url| {
+	scheme = match url.scheme() {
+		Http => "http"
+		Https => "https"
+	}
+	port = match url.port() {
+		Some(number) => ":${U16.to_str(number)}"
+		None => ""
+	}
+	"${scheme}://${url.host()}${port}"
+}
+
+expect permission_for_host(HttpOrigin("https://api.example.com")) == HttpOrigin("https://api.example.com")
+expect permission_for_host(HttpOrigin("http://Example.test:8080/data.json?q=1")) == HttpOrigin("http://example.test:8080")
+expect permission_for_host(UdpPeer("127.0.0.1", 9000)) == UdpPeer({ address: "127.0.0.1", port: 9000 })
+expect permission_for_host(Directory("/srv/data", ReadWrite)) == Directory({ path: "/srv/data", mode: ReadWrite })

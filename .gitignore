@@ -1,5 +1,8 @@
 generated-docs/
 
+# The manual built by scripts/build_manual.py
+.docs-out/
+
 # Built example executables (each Roc app is examples/<name>/main.roc)
 examples/*/main
 examples/*/main.exe
@@ -37,12 +40,8 @@ app
 # `zig build lint` reads this one, so losing it breaks the build rather than
 # quietly dropping a note.
 !docs/action-coverage.md
-!docs/observatory.md
-!docs/releases/*.md
-# The architecture document. Ignoring it would make the one file a newcomer is
-# pointed at silently uncommittable.
-!design.md
 !dependencies/**/*.md
+!examples/README.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a
@@ -65,9 +64,9 @@ app
 !vendor/raylib/**/*.lib
 
 # Exception: keep CRT runtime files for cross-compilation
-!platform/targets/x64glibc/Scrt1.o
-!platform/targets/x64glibc/crti.o
-!platform/targets/x64glibc/crtn.o
+!platform/targets/x64v1glibc/Scrt1.o
+!platform/targets/x64v1glibc/crti.o
+!platform/targets/x64v1glibc/crtn.o
 
 .claude
 
@@ -141,3 +140,6 @@ postcards/
 # Databases written by the sqlite example and probe
 sqlite_scores_out/
 probe_out/
+.docs-api/
+.pages/
+www/

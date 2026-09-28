@@ -2,7 +2,7 @@
 ## window stays hidden, but a display is still required; use `xvfb-run` on a
 ## machine without one. This example shows how to configure recording, advance
 ## animation by the same amount for every recorded frame, and track progress.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Capture
@@ -30,30 +30,37 @@ bar_count = 12.U64
 ## Frames recorded before the host finalizes the files and the app exits.
 recorded_frames = 75.U64
 
+## What to record, and how. `FixedStep` advances the app's clock by exactly
+## one frame's worth per recorded frame, so the video plays at the right speed
+## however long each frame took to encode.
+plot_recording : Capture.Recording
+plot_recording =
+	Capture.default
+		.with_path("plot.webm")
+		.with_format(WebM)
+		.with_fps(25)
+		.with_max_frames(recorded_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## A hidden window whose captures go into `captures/`.
+startup_config : App.Config
 startup_config = App.default
-	.with_title("RocRay Capture: Plot")
+	.with_title("RocRay Capture Plot")
 	.with_size({ width: 640, height: 360 })
 	.with_frame_pacing(Capped(60))
 	.with_visible(Bool.False)
 	.with_output_dir("captures")
-	.with_recording(
-		Capture.default
-			.with_path("plot.webm")
-			.with_format(WebM)
-			.with_fps(25)
-			.with_max_frames(recorded_frames)
-			.with_scale(Half)
-			.with_timing(FixedStep),
-	)
 
+## A configuration can describe a recording but never starts one; `init!`
+## starts it. `PermissionDenied` is in the error list only because
+## `Capture.Writer.start!` can return it; the `io` that `init!` receives always
+## has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init(
 	startup_config,
 	|io| {
-		match startup_config.recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
-		}
+		io.capture().start!(plot_recording)?
 
 		font = Draw.default_font!()
 		Ok({
@@ -74,17 +81,17 @@ init! = App.init(
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
+update! = |model, input, _io| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. Match on that rather than on `Idle`:
 	# `Idle` is also what a run with no recording at all looks like -- a
 	# headless run is exactly that -- so treating it as done would exit on the
 	# first cycle having captured nothing and call it a success.
-	match program_input.capture {
+	match input.capture {
 		Finished(_) => Err(Exit(0))
 		Failed(_) => Err(Exit(1))
-		Idle => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-		Active(progress) => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds, frames: progress.frames })
+		Idle => Ok({ ..model, elapsed: model.elapsed + input.time.elapsed_seconds })
+		Active(progress) => Ok({ ..model, elapsed: model.elapsed + input.time.elapsed_seconds, frames: progress.frames })
 	}
 }
 
@@ -124,29 +131,26 @@ draw_bars! = |frame, elapsed, size| {
 
 	# Four gridlines behind the bars, so the wave has something to be measured
 	# against and a duplicated frame is easier to spot.
-	List.for_each!(
-		List.map_with_index(List.repeat({}, 4), |_unit, index| U64.to_f32(index + 1) * 42),
-		|step| frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) }),
-	)
+	for index in 1.U64..=4 {
+		step = U64.to_f32(index) * 42
+		frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) })
+	}
 	frame.line!({ start: { x: 32, y: baseline }, end: { x: size.width - 32, y: baseline }, stroke: Stroke({ color: axis, thickness: 1.5 }) })
 
-	List.repeat({}, bar_count)
-		|> List.map_with_index(|_, index| U64.to_f32(index))
-		|> List.for_each!(
-			|offset| {
-				# A travelling wave, so every frame differs and a dropped or
-				# duplicated frame is visible in the finished sequence.
-				phase = elapsed * 2.2 + offset * 0.5
-				height = 40 + 90 * (1 + F32.sin(phase)) / 2
-				x = 40 + offset * 46
-				top = baseline - height
-				# The gradient runs the bar's own length rather than the
-				# window's, so a tall bar is brighter than a short one.
-				frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
-				frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
-				frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
-			},
-		)
+	for index in 0.U64..<bar_count {
+		offset = U64.to_f32(index)
+		# A travelling wave, so every frame differs and a dropped or
+		# duplicated frame is visible in the finished sequence.
+		phase = elapsed * 2.2 + offset * 0.5
+		height = 40 + 90 * (1 + F32.sin(phase)) / 2
+		x = 40 + offset * 46
+		top = baseline - height
+		# The gradient runs the bar's own length rather than the
+		# window's, so a tall bar is brighter than a short one.
+		frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
+		frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
+		frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
+	}
 }
 
 bg_top = Color.from_hex_rgb(0x0b0e17)

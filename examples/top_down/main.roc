@@ -1,18 +1,18 @@
 ## Spark Run: collect every spark, avoid moving hazards, and reach the gate.
 ##
 ## Use WASD or Arrow keys to move, Space to dash or restart, and Escape to quit.
+## Pass `--record-demo` to write `examples/gallery/top_down.gif`.
 ## File structure:
 ##
 ## - State (`Game.roc`): player, remaining sparks, score, lives, gate, and feedback
-## - Controls (`main.roc`): movement, dash, restart, quit, and repeatable demo route
+## - Controls (`main.roc`): movement, dash, restart, and repeatable demo route
 ## - Assets (`GameAssets.roc`): character and tile textures, font, sounds, and music
 ## - Level (`Level.roc`): Tiled map, spawn, exit, obstacles, hazards, and decorations
 ## - Gameplay (`Player.roc`, `Spark.roc`, `Hazard.roc`): movement, dash, collection, and damage bodies
 ## - Rendering (`Render.roc`): camera, arena layers, sprites, effects, HUD, and end states
 ## - Tests (`main.roc`): facing, collisions, collection, damage, escape, and dash events
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-	roc: "nightly-2026-09-27-a3ce7f1",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App
@@ -36,10 +36,6 @@ Controls : Game.Controls
 
 program = { init!, update!, render! }
 
-demo_frames = 150.U64
-
-record_demo_flag = "--record-demo"
-
 collect_volume = 0.58.F32
 
 hurt_volume = 0.55.F32
@@ -58,42 +54,58 @@ music_volume = 0.13.F32
 
 music_won_volume = 0.08.F32
 
-## Configures the interactive window or the repeatable hidden gallery recording.
+## Recording mode. `--record-demo` hides the window, plays the route in
+## `demo_controls` instead of the keyboard, and writes a GIF for the README
+## gallery into `examples/gallery/`. The recording stops itself after
+## `demo_frames` frames, and `update!` exits when it has been written.
+record_demo_flag = "--record-demo"
+
+demo_frames = 150.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("top_down.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Quarter)
+		.with_timing(FixedStep)
+
+## Declares the one directory the game reads, then selects an interactive
+## window or a hidden one that records the demo.
 top_down_config : List(Str) -> App.Config
 top_down_config = |args| {
-	base = App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("top_down.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Quarter)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	base = App.default
+		.with_title("RocRay Spark Run")
+		.with_frame_pacing(Capped(120))
+		.with_permission(Directory(GameAssets.assets_dir, ReadOnly))
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
 
 ## Loads resources and level data before starting music and the first world.
 init! : App.Init(Model, _)
 init! = App.init_for_args(
 	top_down_config,
 	|io| {
-		match top_down_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		assets = GameAssets.load!(io)?
-		level = Level.load!(io, assets.tiles)?
+		level = Level.load!(assets.store, assets.tiles)?
 		assets.sounds.music.play!()
-		Ok({ assets, level, world: Game.new(level), demo: List.contains(io.args!(), record_demo_flag), demo_frame: 0 })
+		Ok({ assets, level, world: Game.new(level), demo, demo_frame: 0 })
 	},
 )
 
@@ -112,7 +124,6 @@ read_controls = |input| {
 		move: { x: axis(left, right), y: axis(up, down) },
 		dash_pressed: input.key_pressed(KeySpace),
 		restart_pressed: input.key_pressed(KeySpace),
-		quit_pressed: input.key_pressed(KeyEscape),
 	}
 }
 
@@ -132,7 +143,7 @@ demo_controls = |frame| {
 			{ x: -1, y: 0 }
 		}
 	pressed = frame == 20 or frame == 43 or frame == 82 or frame == 116
-	{ move, dash_pressed: pressed, restart_pressed: pressed, quit_pressed: Bool.False }
+	{ move, dash_pressed: pressed, restart_pressed: pressed }
 }
 
 ## Converts a world x-coordinate into stereo pan across the level bounds.
@@ -171,26 +182,23 @@ play_event! = |assets, level, previous_world, world, event| {
 
 Msg : []
 
-## Advances pure gameplay, performs its events, and handles capture or quit.
+## Advances pure gameplay and performs its events. In recording mode it also
+## exits once the recording is done. Escape needs no code here: `App.default`
+## closes the window when it is pressed.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	controls = if model.demo demo_controls(model.demo_frame) else read_controls(program_input.devices)
-	dt = program_input.time.elapsed_seconds
+update! = |model, input, _io| {
+	controls = if model.demo demo_controls(model.demo_frame) else read_controls(input.devices)
+	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# window, a breakpoint) cannot carry the player through a wall.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 	(world, events) = Game.update(model.level, model.world, controls, dt)
 	for event in events {
 		play_event!(model.assets, model.level, model.world, world, event)
 	}
 	if model.demo {
-		match program_input.capture {
-			Finished(_) => Err(Exit(0))
-			Failed(_) => Err(Exit(1))
-			_ => Ok({ ..model, world, demo_frame: model.demo_frame + 1 })
-		}
-	} else if controls.quit_pressed {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, world, demo_frame: model.demo_frame + 1 })
+		demo_finished(input.capture)?
 	}
+	Ok({ ..model, world, demo_frame: model.demo_frame + 1 })
 }
 
 ## Delegates the complete presentation frame to the rendering module.
@@ -198,7 +206,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| Render.draw!(frame, model.assets, model.level, model.world)
 
 no_controls : Controls
-no_controls = { move: { x: 0, y: 0 }, dash_pressed: Bool.False, restart_pressed: Bool.False, quit_pressed: Bool.False }
+no_controls = { move: { x: 0, y: 0 }, dash_pressed: Bool.False, restart_pressed: Bool.False }
 
 test_level : Level
 test_level = {

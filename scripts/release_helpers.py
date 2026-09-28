@@ -7,13 +7,16 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any
 
 from local_bundles import rewrite_compiler_pin
+from release_notes_markdown import ConversionError, convert_file
 from roc_platform_abi import read_pin
 
 
@@ -51,13 +54,12 @@ def main() -> int:
     notes.add_argument("--notes-dir", default="docs/releases")
     notes.set_defaults(func=cmd_make_release_notes)
 
-    examples = subcommands.add_parser("update-example-urls")
-    examples.add_argument("--release-version", default="")
-    examples.add_argument("--release-bundles", default="")
-    examples.add_argument("--default-url", default="")
-    examples.add_argument("--examples-dir", default="examples")
-    examples.add_argument("--repo", default="")
-    examples.set_defaults(func=cmd_update_example_urls)
+    preview = subcommands.add_parser(
+        "preview-release-notes",
+        help="print the Markdown a release-notes .adoc file becomes on the GitHub release page",
+    )
+    preview.add_argument("notes")
+    preview.set_defaults(func=cmd_preview_release_notes)
 
     package = subcommands.add_parser("package-examples")
     package.add_argument("--release-version", default="")
@@ -70,6 +72,26 @@ def main() -> int:
     package.add_argument("--output-dir", default=".release")
     package.add_argument("--github-output", default="")
     package.set_defaults(func=cmd_package_examples)
+
+    docs = subcommands.add_parser(
+        "package-docs",
+        help="build the manual (HTML and PDF) and the API reference, and package them as release assets",
+    )
+    docs.add_argument("--release-version", default="")
+    docs.add_argument("--docs-version", default="")
+    docs.add_argument("--roc", default="roc")
+    docs.add_argument("--output-dir", default=".release")
+    docs.set_defaults(func=cmd_package_docs)
+
+    pages = subcommands.add_parser(
+        "assemble-pages",
+        help="lay out the Pages site: the manual at the root and the API reference under api/",
+    )
+    pages.add_argument("--manual", required=True, help="the built manual site (build_manual.py's site/)")
+    pages.add_argument("--api", required=True, help="one version's API reference (build_docs.py's <root>/<version>/)")
+    pages.add_argument("--repo", default="")
+    pages.add_argument("--output", required=True)
+    pages.set_defaults(func=cmd_assemble_pages)
 
     args = parser.parse_args()
     try:
@@ -112,8 +134,9 @@ def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
         if not repo:
             raise RuntimeError("repo is required")
 
-        latest = gh_json(["api", f"repos/{repo}/releases/latest"])
-        previous_url = default_url_from_release(latest)
+        releases = gh_json(["api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"])
+        previous = latest_platform_release([release for page in releases for release in page])
+        previous_url = default_url_from_release(previous) if previous else ""
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text(previous_url + "\n", encoding="utf-8")
@@ -138,15 +161,7 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     default_url = release_asset_url(repo, release_version, default_file)
     wayland_url = release_asset_url(repo, release_version, wayland_file)
 
-    notes_path = Path(args.notes_dir) / f"{release_version}.md"
-    if notes_path.exists():
-        if not notes_path.is_file():
-            raise RuntimeError(f"release notes path is not a file: {notes_path}")
-        editorial_notes = notes_path.read_text(encoding="utf-8").strip()
-        if not editorial_notes:
-            raise RuntimeError(f"release notes are empty: {notes_path}")
-    else:
-        editorial_notes = f"Release {release_version}."
+    editorial_notes = read_editorial_notes(Path(args.notes_dir), release_version)
 
     lines = [
         editorial_notes,
@@ -180,12 +195,54 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         "release; unzip and `roc examples/<name>/main.roc`.",
     ])
 
+    lines.extend(["", "## Docs", ""])
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
-        lines.extend(["", "## Docs", "", f"- [View docs for {release_version}]({docs_url})"])
+        lines.append(f"- [The documentation online]({docs_url}), for the current release")
+    manual_pdf = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.pdf")
+    manual_zip = release_asset_url(repo, release_version, f"roc-ray-manual-{release_version}.zip")
+    api_zip = release_asset_url(repo, release_version, f"roc-ray-api-docs-{release_version}.zip")
+    lines.extend([
+        f"- This release's own copy: [the manual as a PDF]({manual_pdf}), and as zipped static sites,",
+        f"  [the manual]({manual_zip}) and [the API reference]({api_zip}); unzip and open `index.html`",
+    ])
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return 0
+
+
+def read_editorial_notes(notes_dir: Path, release_version: str) -> str:
+    """The hand-written notes for a release, as Markdown.
+
+    Notes are written in AsciiDoc (`<version>.adoc`), the manual's format, and
+    converted here. A Markdown file (`<version>.md`) is used as it is. With
+    neither, the release gets a one-line generated introduction.
+    """
+    adoc = notes_dir / f"{release_version}.adoc"
+    markdown = notes_dir / f"{release_version}.md"
+    if adoc.exists() and markdown.exists():
+        raise RuntimeError(f"release notes exist as both {adoc} and {markdown}; keep one")
+    notes_path = adoc if adoc.exists() else markdown
+    if not notes_path.exists():
+        return f"Release {release_version}."
+    if not notes_path.is_file():
+        raise RuntimeError(f"release notes path is not a file: {notes_path}")
+    if not notes_path.read_text(encoding="utf-8").strip():
+        raise RuntimeError(f"release notes are empty: {notes_path}")
+    if notes_path.suffix == ".adoc":
+        try:
+            return convert_file(notes_path).strip()
+        except ConversionError as err:
+            raise RuntimeError(str(err)) from None
+    return notes_path.read_text(encoding="utf-8").strip()
+
+
+def cmd_preview_release_notes(args: argparse.Namespace) -> int:
+    try:
+        sys.stdout.write(convert_file(Path(args.notes)))
+    except ConversionError as err:
+        raise RuntimeError(str(err)) from None
     return 0
 
 
@@ -211,29 +268,131 @@ def resolve_default_bundle_url(
     return release_asset_url(repo, release_version, default_file)
 
 
-def cmd_update_example_urls(args: argparse.Namespace) -> int:
-    default_url = resolve_default_bundle_url(
-        args.default_url, args.release_version, args.release_bundles, args.repo
-    )
 
-    examples_dir = Path(args.examples_dir)
-    examples = sorted(examples_dir.glob("*/main.roc"))
-    if not examples:
-        raise RuntimeError(f"no Roc examples found in {examples_dir}")
+def zip_tree(source: Path, output: Path, prefix: str) -> None:
+    """Zip every file under `source` beneath one top-level `prefix` directory,
+    in a stable order, so an unzipped copy is one folder named for the release."""
+    files = sorted(path for path in source.rglob("*") if path.is_file())
+    if not files:
+        raise RuntimeError(f"nothing to package under {source}")
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            archive.write(path, f"{prefix}/{path.relative_to(source).as_posix()}")
 
-    replacement = f'"{default_url}"'
-    compiler = read_pin(examples_dir.resolve().parent / "platform" / "main.roc").nightly
-    for example in examples:
-        original = example.read_text(encoding="utf-8")
-        rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
-        if count != 1:
-            raise RuntimeError(
-                f"expected one recognized platform reference in {example}, found {count}"
+
+PAGES_NOT_FOUND = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found · RocRay</title>
+<style>
+body {{ font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; color: #1f231e; background: #fafaf7; }}
+@media (prefers-color-scheme: dark) {{ body {{ color: #e6e8e3; background: #1b1d1a; }} a {{ color: #8fb8e8; }} }}
+</style>
+</head>
+<body>
+<h1>Page not found</h1>
+<p>This site shows the documentation for the current RocRay release only:
+the <a href="{root}">manual</a> and the <a href="{root}api/">API reference</a>.</p>
+<p>The documentation for an earlier release is attached to that release on the
+<a href="https://github.com/{repo}/releases">releases page</a>, as a PDF and as
+zipped static sites.</p>
+</body>
+</html>
+"""
+
+MANUAL_REDIRECT = """<!doctype html>
+<meta charset="utf-8">
+<title>RocRay manual</title>
+<meta http-equiv="refresh" content="0; url=../">
+<link rel="canonical" href="../">
+<p>The manual has moved to <a href="../">the site's front page</a>.</p>
+"""
+
+
+def cmd_assemble_pages(args: argparse.Namespace) -> int:
+    """Lay out the Pages site for the current release only.
+
+    The manual is the front page and the API reference is under `api/`.
+    Earlier releases' documentation lives in the assets attached to each
+    release, so the site never accumulates old versions. `manual/` redirects
+    to the front page for links made when the manual lived there, and
+    `404.html` says where an old version's pages went.
+    """
+    manual = Path(args.manual)
+    api = Path(args.api)
+    output = Path(args.output)
+    for source, what in ((manual, "manual"), (api, "API reference")):
+        if not (source / "index.html").is_file():
+            raise RuntimeError(f"no {what} index.html under {source}")
+    if output.exists():
+        shutil.rmtree(output)
+    shutil.copytree(manual, output)
+    if (output / "api").exists():
+        raise RuntimeError("the manual already has an api/ directory")
+    shutil.copytree(api, output / "api")
+    (output / "manual").mkdir()
+    (output / "manual" / "index.html").write_text(MANUAL_REDIRECT, encoding="utf-8")
+    repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "lukewilliamboswell/roc-ray")
+    owner, _, name = repo.partition("/")
+    root = f"https://{owner}.github.io/{name}/"
+    (output / "404.html").write_text(PAGES_NOT_FOUND.format(root=root, repo=repo), encoding="utf-8")
+    print(output)
+    return 0
+
+
+def cmd_package_docs(args: argparse.Namespace) -> int:
+    """Build the release's documentation and package it beside the bundles.
+
+    Produces three assets, each named for the release:
+
+    - `roc-ray-manual-<tag>.pdf`: the manual as one PDF;
+    - `roc-ray-manual-<tag>.zip`: the manual as a static site, opening at
+      `index.html`, with the PDF beside it;
+    - `roc-ray-api-docs-<tag>.zip`: the `roc docs` API reference.
+
+    Pages carries the latest of each; these keep every release's copy with the
+    release itself. Prints the asset paths, one per line, for the publish step.
+    """
+    tag = args.release_version or os.environ.get("RELEASE_VERSION", "")
+    if not tag or "/" in tag or "\\" in tag or not tag.strip():
+        raise RuntimeError(f"a valid release version is required, got {tag!r}")
+    docs_version = args.docs_version or tag
+    root = repo_root()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="rr-release-docs-") as scratch:
+        scratch_root = Path(scratch)
+
+        api_root = scratch_root / "api"
+        subprocess.run(
+            [sys.executable, str(root / "scripts" / "build_docs.py"), "--roc", args.roc,
+             "--docs-root", str(api_root), "--version", docs_version],
+            check=True, cwd=root,
+        )
+        api_zip = output_dir / f"roc-ray-api-docs-{tag}.zip"
+        zip_tree(api_root / docs_version, api_zip, f"roc-ray-api-docs-{tag}")
+
+        # The manual builds in a container that sees only the checkout, so its
+        # output has to be inside it; `.docs-out/` is ignored.
+        manual_root = root / ".docs-out" / f"release-{tag}"
+        try:
+            subprocess.run(
+                [sys.executable, str(root / "scripts" / "build_manual.py"), "--pdf",
+                 "--docs-version", tag, "--output", str(manual_root)],
+                check=True, cwd=root,
             )
-        rewritten = rewrite_compiler_pin(rewritten, compiler)
-        example.write_text(rewritten, encoding="utf-8")
+            pdf = output_dir / f"roc-ray-manual-{tag}.pdf"
+            shutil.copyfile(manual_root / "roc-ray.pdf", pdf)
+            manual_zip = output_dir / f"roc-ray-manual-{tag}.zip"
+            zip_tree(manual_root / "site", manual_zip, f"roc-ray-manual-{tag}")
+        finally:
+            shutil.rmtree(manual_root, ignore_errors=True)
 
-    print(f"Updated {len(examples)} example(s) to {default_url}")
+    for asset in (manual_zip, pdf, api_zip):
+        print(asset)
     return 0
 
 
@@ -361,6 +520,24 @@ def require_url(url: str) -> str:
     if "\n" in url or "\r" in url or not url.startswith("https://") or not url.endswith(BUNDLE_SUFFIX):
         raise RuntimeError(f"invalid previous release URL: {url!r}")
     return url
+
+
+# A platform release's tag is its version; the repository also publishes
+# linker-input, macOS-interface and types releases under prefixed tags.
+PLATFORM_TAG = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")
+
+
+def latest_platform_release(releases: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The most recently published platform release, prereleases included.
+
+    GitHub's "latest release" skips prereleases and can name a dependency
+    release, so a bump check against it compares with the wrong API.
+    """
+    platform = [
+        release for release in releases
+        if not release.get("draft") and PLATFORM_TAG.match(str(release.get("tag_name", "")))
+    ]
+    return max(platform, key=lambda release: str(release.get("published_at") or ""), default=None)
 
 
 def bump_check_mode(_previous_url: str) -> str:

@@ -1,6 +1,6 @@
 ## One cycle of keyboard, text, mouse and gamepad input.
 ##
-## `App.Input` carries the host's observation as `input.devices`. A snapshot is
+## `App.Input` contains the host's observation as `input.devices`. A snapshot is
 ## pure data and grants no device authority.
 ##
 ## Two kinds of information are in it, and each field says which it is. A
@@ -25,7 +25,7 @@
 ## two characters.
 ##
 ## Tests can start from `Devices.none` and set only the relevant state with the
-## `with_key_*` and `with_mouse_*` receivers.
+## `with_key_*` and `with_mouse_*` methods.
 ##
 ## ```roc
 ## Devices.none.with_key_pressed(KeySpace)
@@ -38,7 +38,7 @@ Devices := [].{
 
 	## Everything the host sampled from the input devices for one cycle.
 	##
-	## Reach for the receivers rather than indexing the packed lists directly:
+	## Reach for the methods rather than indexing the packed lists directly:
 	## `input.key_pressed(KeyW)`, `input.mouse.position()`,
 	## `input.gamepad(One)`.
 	Snapshot := {
@@ -50,7 +50,7 @@ Devices := [].{
 		## key in one interval coalesce into one bit; the count and the order
 		## are not retained. A key tapped between two cycles is therefore
 		## pressed and released in one input and held in neither. Use the
-		## `key_down`/`key_pressed`/`key_released` receivers.
+		## `key_down`/`key_pressed`/`key_released` methods.
 		keys : List(U8),
 
 		## Unicode codepoints typed since the previous input, in the order
@@ -72,7 +72,7 @@ Devices := [].{
 		## packed bits and `text_input` summarize: where the bits coalesce two
 		## taps into one, this holds both; where `text_input` is bounded at
 		## 32, this holds text in order relative to the key edges around it;
-		## a click carries the pointer position it landed at. At most 256
+		## a click includes the pointer position where it happened. At most 256
 		## events per input; past that the rest are discarded and
 		## `events_overflow` is set, while the bits, the wheel sum and
 		## `text_input` keep recording regardless, so the coalesced view is
@@ -88,7 +88,7 @@ Devices := [].{
 		## Gamepad input sampled once per host-cycle input. The held bits and
 		## axes are state samples; the pressed and released bits are derived by
 		## comparing two samples, so a button pressed and released between two
-		## cycles is not seen. Use the `gamepad` receiver, or the `Gamepad`
+		## cycles is not seen. Use the `gamepad` method, or the `Gamepad`
 		## helpers, rather than indexing these flat lists.
 		gamepads : Gamepad.Snapshot,
 
@@ -137,7 +137,7 @@ Devices := [].{
 		## bytes, so these compose:
 		## `Devices.none.with_key_pressed(KeySpace).with_key_down(KeyLeftShift)`.
 		##
-		## Only a snapshot with the host's packed list lengths can carry these.
+		## Only a snapshot with the host's packed list lengths can hold these.
 		## Start from `Devices.none`, not `Devices.empty`.
 		with_key_down : Snapshot, Keys.Key -> Snapshot
 		with_key_down = |input, key| with_key_state(input, key, held)
@@ -200,6 +200,20 @@ Devices := [].{
 		with_mouse_button_released : Snapshot, Mouse.Button -> Snapshot
 		with_mouse_button_released = |input, button| with_mouse_button_state(input, button, released)
 
+		## Say that these codepoints were typed this cycle, in order, as
+		## `Devices.none.with_text_input([72, 105])` for typing "Hi".
+		##
+		## As the host does, at most 32 codepoints are kept; a longer burst keeps
+		## the first 32 and sets `text_input_overflow`. The key bits and the
+		## event record are not derived from it: a test that wants them to
+		## agree states them too, as the host would have.
+		with_text_input : Snapshot, List(U32) -> Snapshot
+		with_text_input = |input, codepoints| {
+			..snapshot_fields(input),
+			text_input: List.take_first(codepoints, text_input_capacity),
+			text_input_overflow: List.len(codepoints) > text_input_capacity,
+		}
+
 		## Say whether typed text was cut at the interval's capacity, which is
 		## what `text_input_overflow` reports.
 		with_text_input_overflow : Snapshot, Bool -> Snapshot
@@ -213,7 +227,7 @@ Devices := [].{
 		##
 		## The bits are not derived from it: a test that wants both views to
 		## agree states both, as the host would have. Unlike the `with_key_*`
-		## receivers this works on `Devices.empty` too, since a list has no
+		## methods this works on `Devices.empty` too, since a list has no
 		## fixed length to fit.
 		with_events : Snapshot, List(Event) -> Snapshot
 		with_events = |input, events| {
@@ -233,8 +247,8 @@ Devices := [].{
 	## One input event, as the window system delivered it.
 	##
 	## `KeyPressed` and `KeyReleased` are physical key edges; auto-repeat is
-	## not an event. `ButtonPressed` and `ButtonReleased` carry the pointer
-	## position the click landed at, in the same logical coordinates as
+	## not an event. `ButtonPressed` and `ButtonReleased` include the pointer
+	## position where the click happened, in the same logical coordinates as
 	## `mouse.position()`. `Wheel` is one scroll event's offsets, which
 	## `mouse.wheel_delta()` sums. `Text` is one typed codepoint, following the
 	## active keyboard layout, which is why it is separate from the key edge
@@ -250,13 +264,13 @@ Devices := [].{
 
 	## A neutral snapshot with the host's own packed list lengths, for tests.
 	##
-	## `empty` and `none` answer every query the same way -- nothing held,
+	## `empty` and `none` return the same result for every query -- nothing held,
 	## nothing typed, pointer at the origin, no gamepad connected. They differ in
 	## what they are made of. `empty`'s packed lists are empty, which is all a
 	## model seed needs and costs nothing. `none`'s are the lengths the host
 	## actually samples: 349 key bytes, 7 mouse-button bytes, 4 gamepad
 	## availability bytes, 4 x 18 gamepad button bytes, and 4 x 6 axes. That is
-	## what makes it writable, so the `with_key_*` and `with_mouse_*` receivers
+	## what makes it writable, so the `with_key_*` and `with_mouse_*` methods
 	## have somewhere to put a bit.
 	##
 	## ```roc
@@ -409,7 +423,7 @@ mouse_fields = |mouse| mouse
 ##
 ## A snapshot whose lists are shorter than the host's -- `Devices.empty`, whose
 ## lists are empty -- has nowhere to put the byte, so it comes back unchanged.
-## That is why the receivers document starting from `Devices.none`, and why the
+## That is why the methods document starting from `Devices.none`, and why the
 ## expects below check a decode rather than only an encode.
 set_byte : List(U8), U64, U8 -> List(U8)
 set_byte = |bytes, index, value|
@@ -473,7 +487,7 @@ mouse_button_code = |button|
 every_mouse_button : List(Mouse.Button)
 every_mouse_button = [Left, Right, Middle, Side, Extra, Forward, Back]
 
-## `none` carries exactly what the host samples, so a `List.set` into it lands.
+## `none` holds exactly what the host samples, so a `List.set` into it lands.
 expect List.len(Devices.none.keys) == key_state_len
 expect List.len(Devices.none.mouse.buttons) == mouse_button_state_len
 expect List.len(Devices.none.gamepads.connected) == gamepad_count
@@ -484,7 +498,7 @@ expect List.len(Devices.none.gamepads.axes) == gamepad_count * gamepad_axis_coun
 ## what pins its length to the host's rather than to a number written twice.
 expect Keys.key_code(KeyKbMenu) == key_state_len - 1
 
-## A neutral snapshot answers every query the way `empty` does.
+## A neutral snapshot returns the same result for every query as `empty` does.
 expect !(Devices.none.key_down(KeyW))
 expect Devices.none.key_up(KeyW)
 expect !(Devices.none.key_pressed(KeyEscape))
@@ -511,12 +525,12 @@ expect Devices.none.with_key_released(KeySpace).key_released(KeySpace)
 expect !(Devices.none.with_key_released(KeySpace).key_down(KeySpace))
 expect Devices.none.with_key_released(KeySpace).key_up(KeySpace)
 
-## One key does not answer for another, at either end of the code range.
+## One key is never reported as another, at either end of the code range.
 expect !(Devices.none.with_key_pressed(KeySpace).key_pressed(KeyEscape))
 expect Devices.none.with_key_pressed(KeyKbMenu).key_pressed(KeyKbMenu)
 expect Devices.none.with_key_pressed(Raw(0)).key_pressed(Raw(0))
 
-## Keys are independent bytes, so the receivers compose.
+## Keys are independent bytes, so the methods compose.
 expect {
 	input = Devices.none.with_key_pressed(KeyEscape).with_key_down(KeyLeftShift).with_key_released(KeyW)
 	input.key_pressed(KeyEscape) and input.key_down(KeyLeftShift) and input.key_released(KeyW)
@@ -532,7 +546,7 @@ expect List.all(every_mouse_button, |button| Devices.none.with_mouse_button_down
 expect List.all(every_mouse_button, |button| Devices.none.with_mouse_button_released(button).mouse.button_released(button))
 expect List.all(every_mouse_button, |button| !(Devices.none.with_mouse_button_released(button).mouse.button_down(button)))
 
-## And no button answers for a different one.
+## And no button is reported as a different one.
 expect !(Devices.none.with_mouse_button_pressed(Left).mouse.button_pressed(Right))
 expect !(Devices.none.with_mouse_button_pressed(Back).mouse.button_pressed(Forward))
 
@@ -556,6 +570,10 @@ expect Devices.none.with_events([KeyPressed(KeyR)]).with_key_pressed(KeyR).key_p
 ## Text overflow is an ordinary flag on the sample, clear until stated.
 expect !(Devices.none.text_input_overflow)
 expect Devices.none.with_text_input_overflow(Bool.True).text_input_overflow
+expect Devices.none.with_text_input([72, 105]).text_input == [72, 105]
+expect !(Devices.none.with_text_input([72, 105]).text_input_overflow)
+expect Devices.none.with_text_input(List.repeat(97, 40)).text_input == List.repeat(97, 32)
+expect Devices.none.with_text_input(List.repeat(97, 40)).text_input_overflow
 expect !(Devices.none.with_text_input_overflow(Bool.True).with_text_input_overflow(Bool.False).text_input_overflow)
 expect Devices.none.with_text_input_overflow(Bool.True).with_key_pressed(KeyR).key_pressed(KeyR)
 
@@ -565,7 +583,7 @@ expect Devices.none.with_mouse_delta({ x: 3, y: -4 }).mouse.delta() == { x: 3, y
 expect Devices.none.with_mouse_wheel({ x: 0, y: 2 }).mouse.wheel_delta() == { x: 0, y: 2 }
 expect Devices.none.with_mouse_wheel({ x: 0, y: 2 }).mouse.wheel == 2
 
-## Mouse receivers compose with each other and with the key ones.
+## Mouse methods compose with each other and with the key ones.
 expect {
 	input =
 		Devices.none
@@ -574,3 +592,6 @@ expect {
 			.with_key_pressed(KeyR)
 	input.mouse.position() == { x: 300, y: 500 } and input.mouse.button_down(Left) and input.key_pressed(KeyR)
 }
+
+## The most codepoints the host delivers in one input. Mirrored in the host.
+text_input_capacity = 32.U64

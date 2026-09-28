@@ -1,0 +1,253 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#shipping]
+= Ship your game
+
+This chapter shows how to package an app so you can give it to other people:
+one executable and its assets, in a zip file, for each system you support. It covers
+building the executable, where the app finds its assets and keeps its saves,
+and what the person you send it to may need to do. It assumes
+<<files-and-assets>>.
+
+== Build a release executable
+
+`roc main.roc` compiles your app and runs it straight away. To produce an
+executable you keep, use `roc build`:
+
+[source,sh]
+----
+mkdir -p dist
+roc build --opt=speed main.roc --output=dist/rocket
+----
+
+`--opt=speed` asks for an optimised build, which is also ``roc build``'s
+default. `--output` names the executable; its directory must already exist,
+or the build fails at the link step.
+
+The executable is self-contained. Your app, the RocRay host, raylib, SQLite,
+and the video and GIF encoders are all linked into it, so there is no runtime
+to install and no library to include next to it. It uses only what every desktop
+system already has:
+
+* the system's C library;
+* on Linux, the X11 client libraries (or the Wayland libraries, with the
+  Wayland bundle), an OpenGL 3.3 driver, and PulseAudio, PipeWire, or ALSA
+  for sound, all loaded when the app starts (see <<system-requirements>>);
+* on macOS and Windows, the system's own graphics and audio frameworks.
+
+== Where the assets go
+
+A packaged game keeps its assets in a directory beside the executable:
+
+----
+rocket/
+├── rocket          (rocket.exe on Windows)
+└── assets/
+    ├── logo.png
+    └── ...
+----
+
+`io.files().beside_executable!()` returns that directory, read-only, with no
+declaration. It does not depend on where the user launches the game from:
+double-clicking the executable, running it from a terminal in another
+directory, and a desktop shortcut all find the same `assets`.
+
+While you develop, the assets are in your source directory, and `roc main.roc`
+builds the executable in the compiler's cache, so there is nothing beside it.
+There the app opens the source directory by path instead, which needs a
+`Directory("assets", ReadOnly)` declaration, as in <<drawing-first-sprite>>.
+
+=== One `init!` for both
+
+This app reads its assets from the source directory when started with
+`--dev`, and from beside the executable otherwise. `App.init_for_args` makes
+the startup configuration depend on the command line, so the packaged game
+declares nothing it does not use:
+
+[source,roc]
+----
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+
+import rr.App
+import rr.Assets
+import rr.Color
+import rr.Draw
+import rr.Files
+
+Model : { logo : Assets.Texture, saves : Files.Dir }
+
+Msg : []
+
+program = { init!, update!, render! }
+
+## Run with `roc main.roc -- --dev` to read the assets from the source tree.
+dev_flag = "--dev"
+
+config_for : List(Str) -> App.Config
+config_for = |args| {
+    base = App.default.with_title("Rocket").with_app_id("dev.example.rocket")
+    if List.contains(args, dev_flag) {
+        base.with_permission(Directory("assets", ReadOnly))
+    } else {
+        base
+    }
+}
+
+## The asset directory: the source tree with `--dev`, else beside the executable.
+open_assets! : App.Io => Try(Files.ReadDir, _)
+open_assets! = |io| {
+    if List.contains(io.args!(), dev_flag) {
+        io.files().open_dir_read!("assets")
+    } else {
+        exe_dir = io.files().beside_executable!()?
+        exe_dir.subdir("assets")
+    }
+}
+
+init! : App.Init(Model, _)
+init! = App.init_for_args(
+    config_for,
+    |io| {
+        store = Assets.open!(open_assets!(io)?, IgnoreManifest)?
+        logo = Assets.load_texture!(store, "logo.png")?
+        saves = io.files().app_data!()?
+        Ok({ logo: logo, saves: saves })
+    },
+)
+
+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
+update! = |model, _input, _io| Ok(model)
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64)])
+render! = |model, frame| {
+    frame.clear!(Color.black)
+    frame.texture!(Draw.texture_at(model.logo, { x: 32, y: 32 }))
+    Ok({})
+}
+----
+
+During development, run it from the directory that holds `main.roc` and
+`assets/`. Arguments after `+--+` go to the app:
+
+[source,sh]
+----
+roc main.roc -- --dev
+----
+
+To package it, build the executable and copy the assets beside it:
+
+[source,sh]
+----
+mkdir -p dist/rocket
+roc build --opt=speed main.roc --output=dist/rocket/rocket
+cp -r assets dist/rocket/
+----
+
+`io.args!()` is legal only in `init!`, which is where the choice is made.
+
+[#shipping-app-id]
+== Saves and the app id
+
+`App.default.with_app_id("dev.example.rocket")` names the app, and
+`io.files().app_data!()`, `app_config!()`, and `app_cache!()` return
+directories under the user's home named after it. They are created the first
+time the app asks for them and survive reinstalling the game:
+
+[cols="1,3,3",options="header"]
+|===
+|System |Data and configuration |Cache
+|Linux |`~/.local/share/<id>` and `~/.config/<id>`, or beneath `$XDG_DATA_HOME` and `$XDG_CONFIG_HOME` when those are set |`~/.cache/<id>`, or beneath `$XDG_CACHE_HOME`
+|macOS |Both `~/Library/Application Support/<id>` |`~/Library/Caches/<id>`
+|Windows |Both `%APPDATA%\<id>` |`%LOCALAPPDATA%\<id>`
+|===
+
+On macOS and Windows the data and configuration directories are the same
+directory, so do not give a save file and a settings file the same name.
+
+Choose the id once, before anyone plays. It is the directory name, so changing
+it later leaves every player's saves behind in the old directory.
+
+== Build for other systems
+
+`roc build` builds for the system you run it on. `--target` builds for
+another:
+
+[cols="2,1,3",options="header"]
+|===
+|System |Target |Notes
+|Linux x86-64 |`x64v1glibc` |Runs on any x86-64 processor. The default bundle uses X11, which also runs under XWayland; the Wayland bundle, a separate platform URL, uses Wayland directly.
+|macOS, Intel |`x64mac` |
+|macOS, Apple silicon |`arm64mac` |
+|Windows x86-64 |`x64win` |Build on Windows, with Microsoft's C++ build tools installed. Building a Windows executable from macOS or Linux fails, because the linker needs the Windows SDK's libraries.
+|===
+
+For example, on Linux:
+
+[source,sh]
+----
+roc build --opt=speed --target=arm64mac main.roc --output=dist/rocket-macos-arm64/rocket
+----
+
+Linux and macOS executables can be built from Linux; the platform bundle
+contains what the linker needs. ARM Linux is not supported.
+
+== Package a release
+
+Zip one directory per system, each holding the executable and its assets.
+Name the zip after the game, the version, and the system:
+
+----
+rocket-1.0-linux-x64.zip
+└── rocket/
+    ├── rocket
+    ├── assets/
+    └── LICENSES/
+rocket-1.0-macos-arm64.zip
+rocket-1.0-windows-x64.zip
+----
+
+The executable contains code under other licences. Put their notices in
+`LICENSES/`: RocRay's {src}/LICENSE[licence] and libvpx's
+{src}/vendor/libvpx/LICENSE[licence] ask to be included with a binary copy.
+raylib, SQLite, and msf_gif ask for nothing in a binary.
+
+== What the recipient sees
+
+The executables RocRay builds are not signed with a publisher's certificate,
+so each system warns the first time someone runs one they downloaded.
+
+macOS::
+  Gatekeeper, the macOS security check, refuses to open a downloaded
+  executable that Apple has not notarized. The recipient can clear the
+  download flag in a terminal, then run the game:
++
+[source,sh]
+----
+xattr -dr com.apple.quarantine rocket
+./rocket/rocket
+----
++
+An Apple silicon executable already has the ad-hoc signature the system
+requires to run it at all. To avoid the warning, sign the executable with an Apple
+Developer ID and notarize it; RocRay does not do this for you.
+
+Windows::
+  SmartScreen may say "Windows protected your PC". The recipient chooses
+  _More info_, then _Run anyway_.
+
+Linux::
+  The executable needs its execute permission, which `zip` and `unzip`
+  preserve. If it is lost, `chmod +x rocket` restores it.
+
+== Further reading
+
+* <<files-and-assets>> for directory handles and asset stores.
+* <<permissions>> for what the `--dev` declaration permits.
+* <<reference>> for the supported targets and bundles.

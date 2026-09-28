@@ -14,7 +14,7 @@
 ## model -- or `Err(Exit(code))` to stop the app.
 ##
 ## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
-## change the model or reach host work of any other kind.
+## change the model or do host work of any other kind.
 ##
 ## Each effect documents its legal phases. Host-state effects are legal in
 ## `init!`, `update!`, and tasks. Drawing effects are legal only in `render!`.
@@ -27,25 +27,31 @@
 ## effect, the phase it was called from, and where it belongs.
 ##
 ## Work that waits belongs on a task.
-## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
+## `Task.spawn!(input, || ...)`, from `update!` or from another task, gives the
 ## host an effectful closure to run on its own stack. When the closure returns,
 ## its value is delivered as a message on `input.messages` in a later cycle, in
 ## the order the tasks finished. A task cannot read or write the model, so its
 ## message is the only thing it can say. See `Task`.
 ##
+## The app ends when `update!` returns `Err(Exit(code))`, when the exit key is
+## pressed, or when the user closes the window. By default the host closes the
+## window itself. An app with work to finish first -- a save, say -- chooses
+## `App.Config.with_close_request(Deliver)`: the request then arrives as
+## `input.window.close_requested`, the window stays open, and the app exits when
+## it is ready, typically once the message of the task it started arrives.
+##
 ## For pure tests, build input with `App.Input.for_tests({})` and its `with_*`
-## receivers. Host resource types provide inert `stub` values for constructing
+## methods. Host resource types provide inert `stub` values for constructing
 ## models; stubs cannot test loading or resource lifetime.
 import Host
 import Resource
-import Tilemap
-import Assets
 import Sqlite
 import Udp
 import Stderr
 import Stdout
 import Cmd
 import Http
+import Permission
 import Keys
 import Mouse
 
@@ -72,7 +78,6 @@ AppRecording := [NoRecording, Record(Capture.Recording)].{
 import Devices
 import Window
 import Time
-import Audio
 import Capture
 import Files
 import AppTransport
@@ -84,12 +89,19 @@ App := [].{
 	## landed.
 	##
 	## The path is the one the window system reported, absolute on every
-	## platform. Reading the file is a separate, waiting effect, so a drop is
-	## handled by starting a task:
+	## platform. It is an observation, not access: the user dropping the file
+	## is what grants it, so turn the path into a handle with
+	## `io.files().accept_drop!` in the `update!` that received it, then read
+	## through the handle on a task:
 	##
 	## ```roc
-	## Task.spawn!(input, || Opened(io.files().read_bytes!(drop.path)))
+	## match io.files().accept_drop!(drop.path) {
+	##     Ok(item) => Task.spawn!(input, || Opened(item.read_bytes!()))
+	##     Err(PermissionDenied) => {}
+	## }
 	## ```
+	##
+	## A path kept past that `update!` is only a string.
 	##
 	## `position` is the pointer position the host sampled for the cycle the
 	## drop arrived on, in the same logical coordinates as
@@ -108,7 +120,7 @@ App := [].{
 	## input, in the order the window system reported them. Like a key press it
 	## is an interval event rather than a latest value: it is empty on almost
 	## every cycle, and exactly one call to `update!` sees any given drop. At
-	## most 64 paths are delivered per cycle; a single drop carrying more has
+	## most 64 paths are delivered per cycle; a single drop with more has
 	## its extra paths discarded, and `dropped_overflow` says so.
 	Input(msg) := {
 		devices : Devices.Snapshot,
@@ -134,12 +146,12 @@ App := [].{
 
 		## Build an input by stating every sampled field at once.
 		##
-		## This is the from-scratch constructor; `for_tests` is the one to reach
-		## for when only a field or two matters, since it supplies neutral values
+		## This is the from-scratch constructor; `for_tests` is the one to use
+		## when only a field or two matters, since it supplies neutral values
 		## for the rest.
 		##
 		## Pass a structural record written out here. Use `fields` when reading an
-		## existing input and the `with_*` receivers when changing one field.
+		## existing input and the `with_*` methods when changing one field.
 		from_fields : {
 			devices : Devices.Snapshot,
 			window : Window.Snapshot,
@@ -154,15 +166,15 @@ App := [].{
 		## A neutral input for testing an app's pure update logic from an `expect`.
 		##
 		## Nothing is pressed, the window is an ordinary focused
-		## `default_test_size`, the clock reads zero on its first cycle, no
-		## messages arrived, and nothing is recording. Customize it with the
-		## `with_*` receivers, which is what makes a test say only the one thing
-		## it is about:
+		## `default_test_size` nobody has asked to close, the clock reads zero on
+		## its first cycle, no messages arrived, and nothing is recording.
+		## Customize it with the `with_*` methods, which is what makes a test say
+		## only the one thing it is about:
 		##
 		## ```roc
 		## expect
-		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
-		##     decide(model, input) == Quit
+		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeySpace))
+		##     decide(model, input) == Jump
 		## ```
 		##
 		## Building the model this is called with is the other half: every host
@@ -172,15 +184,15 @@ App := [].{
 		## down in a pure test.
 		##
 		## `update!` itself is effectful, and an `expect` cannot call it. Keep
-		## the decisions in pure functions -- which message to fold in, whether
-		## to quit, what work to start -- and test those; `update!` is the thin
-		## shell that performs them.
+		## the decisions in pure functions (how each message changes the model,
+		## whether to quit, which tasks to start) and test those; `update!` is
+		## the thin shell that carries them out.
 		for_tests : {} -> Input(msg)
 		for_tests = |{}|
 			Input.(
 				{
 					devices: Devices.none,
-					window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+					window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False },
 					time: Time.first_cycle,
 					messages: [],
 					capture: Idle,
@@ -193,7 +205,12 @@ App := [].{
 		with_devices : Input(msg), Devices.Snapshot -> Input(msg)
 		with_devices = |Input.(sampled), devices| Input.({ ..sampled, devices: devices })
 
-		## Replace this input's sampled window geometry and visibility.
+		## Replace this input's sampled window geometry and visibility, and
+		## whether the user asked the window to close:
+		##
+		## ```roc
+		## closing = input.with_window({ ..input.window, close_requested: Bool.True })
+		## ```
 		with_window : Input(msg), Window.Snapshot -> Input(msg)
 		with_window = |Input.(sampled), window| Input.({ ..sampled, window: window })
 
@@ -237,16 +254,31 @@ App := [].{
 	## `App.FramePacing` is the name to write.
 	FramePacing : AppFramePacing
 
-	## Which key, if any, closes the window: `ExitKey(key)` or `NoExitKey`, which
-	## disables the behaviour.
+	## Which key, if any, ends the app: `ExitKey(key)` or `NoExitKey`, which
+	## disables the behaviour. The exit key ends the app directly, before
+	## `update!` sees the press, whatever `CloseRequest` says, and a scripted
+	## press (`--host-keys`, `Keys.set_source!`) does the same as a real one.
 	##
 	## This is `Keys.ExitKey`, re-exported. The signature renders as
 	## `ExitKey : ExitKey` because the alias and the nominal share a name; they
 	## are one type, and a value passes between the two spellings freely.
 	ExitKey : Keys.ExitKey
 
+	## What happens when the user asks the window to close, with its close
+	## button or the system's quit command.
+	##
+	## - `Exit`, the default: the host closes the window and the app ends
+	##   before the next `update!`. Live tasks are cancelled and their messages
+	##   are never delivered.
+	## - `Deliver`: the host keeps the window open and reports the request as
+	##   `input.window.close_requested` on the next cycle. The app ends when
+	##   `update!` returns `Err(Exit(code))`, so it can finish a save first.
+	##
+	## The exit key is separate from both; see `ExitKey`.
+	CloseRequest : [Exit, Deliver]
+
 	## Validated startup configuration. Its fields cannot be updated directly;
-	## use its receiver updates so startup invariants are preserved.
+	## use its `with_*` methods so startup invariants are preserved.
 	Config :: {
 		title : Str,
 		width : I32,
@@ -258,10 +290,13 @@ App := [].{
 		fullscreen : Bool,
 		cursor : Mouse.CursorMode,
 		exit_key : Keys.ExitKey,
+		close_request : CloseRequest,
 		visible : Bool,
 		output_dir : Str,
 		recording : AppRecording,
 		default_font : { path : Str, size : I32 },
+		app_id : Str,
+		permissions : List(Permission),
 	}.{
 
 		## Return a config with a different window title.
@@ -293,9 +328,44 @@ App := [].{
 		with_frame_pacing = |cfg, value| { ..cfg, frame_pacing: normalize_pacing(value) }
 
 		## Return a config with a different exit key. `NoExitKey` stops any key
-		## from closing the window; the window close button still works.
+		## from ending the app; the window's close button still works, as
+		## `with_close_request` says.
 		with_exit_key : Config, ExitKey -> Config
 		with_exit_key = |cfg, value| { ..cfg, exit_key: value }
+
+		## Choose what the window's close button does: `Exit` (the default)
+		## ends the app, and `Deliver` reports the request to `update!` and
+		## leaves ending the app to it.
+		##
+		## ```roc
+		## config = App.default.with_close_request(Deliver)
+		##
+		## update! = |model, input, io| {
+		##     if input.window.close_requested and !model.saving {
+		##         saves = model.saves
+		##         Task.spawn!(input, || Saved(saves.write_text!("save.json", encode(model))))
+		##         Ok({ ..model, saving: Bool.True })
+		##     } else if model.saving and List.len(input.messages) > 0 {
+		##         Err(Exit(0))
+		##     } else {
+		##         Ok(model)
+		##     }
+		## }
+		## ```
+		##
+		## Under `Deliver` an app that never exits cannot be closed with the
+		## button, so return `Err(Exit(code))` once the request is handled.
+		## `--host-close=CYCLE` makes a request on a given cycle in a
+		## headless or hidden run, so a test can script it.
+		##
+		## The exit key is not a close request. Under either choice it ends the
+		## app directly, before `update!` sees the press, so with the default
+		## `ExitKey(KeyEscape)` Escape still quits a `Deliver` app without a
+		## save. An app that must finish work on every way out also sets
+		## `with_exit_key(NoExitKey)` and handles the key it wants in
+		## `update!`.
+		with_close_request : Config, CloseRequest -> Config
+		with_close_request = |cfg, value| { ..cfg, close_request: value }
 
 		## Return a config with a different initial cursor mode.
 		with_cursor_mode : Config, Mouse.CursorMode -> Config
@@ -323,18 +393,17 @@ App := [].{
 		## Return a config whose captures are written under a different
 		## directory, created on first use.
 		##
-		## Every `Capture` path resolves beneath this directory, and one that
-		## would escape it -- an absolute path, or one containing `..` -- is
-		## refused rather than rewritten. The directory itself is the app
-		## author's choice and is used as given, so it may be absolute; what it
-		## bounds is where the paths an app computes at runtime can reach. An
-		## empty value means the working directory.
+		## Captures are the app's own output, so writing them needs no
+		## permission; in exchange the directory is confined. It is relative to
+		## the working directory and may not be absolute or contain `..`, and
+		## the host refuses to start with one that does. Every `Capture` path
+		## resolves beneath it, and one that would escape it is refused rather
+		## than rewritten. An empty value means the working directory.
 		with_output_dir : Config, Str -> Config
 		with_output_dir = |cfg, value| { ..cfg, output_dir: value }
 
 		## Store a recording description in the configuration. This is pure data;
 		## start it explicitly with `io.capture().start!(recording)` in `init!`.
-		## Starting requires external authority and may return PermissionDenied.
 		with_recording : Config, Capture.Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: Record(value) }
 
@@ -345,8 +414,40 @@ App := [].{
 		## Load the startup default font from a working-directory-relative asset
 		## path at the requested base pixel size. The path is validated and loaded
 		## once before `Io.default_font!` returns it.
+		##
+		## Reading it needs a declared directory covering the path, such as
+		## `Directory("assets", ReadOnly)`.
 		with_default_font : Config, { path : Str, size : I32 } -> Config
 		with_default_font = |cfg, value| { ..cfg, default_font: value }
+
+		## Name the app for its private storage: the data, config, and cache
+		## directories `Files` keeps for it under the user's home.
+		##
+		## Use a reverse-DNS style name the app will keep, such as
+		## `"dev.example.pong"` -- 1 to 128 ASCII letters, digits, `.`, `-`, or
+		## `_`. It becomes a directory name, so if you change it later, the app
+		## can no longer find its saved data. An app that never touches private storage
+		## does not need one.
+		with_app_id : Config, Str -> Config
+		with_app_id = |cfg, value| { ..cfg, app_id: value }
+
+		## Declare access beyond the app's own resources: a network origin, a
+		## directory, a program, an environment variable, the clipboard. The
+		## declaration is the grant; see `Permission`.
+		##
+		## Call it once per declaration. Declarations accumulate, and a
+		## duplicate is harmless.
+		with_permission : Config, Permission -> Config
+		with_permission = |cfg, value| { ..cfg, permissions: cfg.permissions.append(value) }
+
+		## Declare several permissions at once, in order, as repeated
+		## `with_permission` calls would:
+		##
+		## ```roc
+		## App.default.with_permissions([HttpOrigin("https://api.example.com"), EnvVar("API_TOKEN")])
+		## ```
+		with_permissions : Config, List(Permission) -> Config
+		with_permissions = |cfg, values| { ..cfg, permissions: cfg.permissions.concat(values) }
 
 		## Inspect the window title.
 		title : Config -> Str
@@ -381,6 +482,10 @@ App := [].{
 		exit_key : Config -> ExitKey
 		exit_key = |cfg| cfg.exit_key
 
+		## Inspect what the window's close button does.
+		close_request : Config -> CloseRequest
+		close_request = |cfg| cfg.close_request
+
 		## Inspect whether the window is shown at startup.
 		visible : Config -> Bool
 		visible = |cfg| cfg.visible
@@ -397,6 +502,14 @@ App := [].{
 		## the backend's built-in font.
 		default_font : Config -> { path : Str, size : I32 }
 		default_font = |cfg| cfg.default_font
+
+		## Inspect the app id. Empty means none was declared.
+		app_id : Config -> Str
+		app_id = |cfg| cfg.app_id
+
+		## Inspect the declared permissions, in declaration order.
+		permissions : Config -> List(Permission)
+		permissions = |cfg| cfg.permissions
 	}
 
 	## Application-lifetime authority supplied by the host to init! and update!.
@@ -408,7 +521,7 @@ App := [].{
 		for_host : Resource.Authority -> Io
 		for_host = |authority| Io.(authority)
 
-		## IO for pure tests; it never grants access to external services.
+		## IO for pure tests. The host refuses every effect made through it with `PermissionDenied`.
 		stub : Io
 		stub = Io.(Resource.Authority.stub)
 
@@ -440,18 +553,6 @@ App := [].{
 		sqlite : Io -> Sqlite.Service
 		sqlite = |Io.(authority)| Sqlite.Service.for_host(authority)
 
-		## Select assets authority without performing an effect.
-		assets : Io -> Assets.Loader
-		assets = |Io.(authority)| Assets.Loader.for_host(authority)
-
-		## Select audio authority without performing an effect.
-		audio : Io -> Audio.Loader
-		audio = |Io.(authority)| Audio.Loader.for_host(authority)
-
-		## Select tilemaps authority without performing an effect.
-		tilemaps : Io -> Tilemap.Loader
-		tilemaps = |Io.(authority)| Tilemap.Loader.for_host(authority)
-
 		## Select clipboard authority without performing an effect.
 		clipboard : Io -> Window.Clipboard
 		clipboard = |Io.(authority)| Window.Clipboard.for_host(authority)
@@ -464,10 +565,17 @@ App := [].{
 		env : Io -> Environment
 		env = |Io.(authority)| Environment.(authority)
 
-		## Exit the application with the given exit code.
+		## Stop the application with the given exit code at the end of the
+		## current host cycle.
 		##
-		## The exit happens after startup completes, so `init!` finishes and the
-		## host shuts down in the ordinary way. Legal only in `init!`.
+		## The call returns, the cycle finishes -- including its `render!` --
+		## and then the host shuts down in the ordinary way: live tasks are
+		## cancelled, and a message nobody has received yet is never delivered.
+		## Called from `init!`, the app still runs one host cycle first.
+		##
+		## `update!` usually stops by returning `Err(Exit(code))`; this is the
+		## spelling for `init!` and for a task. Legal in `init!`, `update!`, and
+		## tasks; refused in `render!`.
 		exit! : Io, I32 => {}
 		exit! = |io, code| app_exit!(io, code)
 
@@ -477,8 +585,9 @@ App := [].{
 		## in order. The host removes its reserved `--host-*` switches before this
 		## list reaches the app. The value is stable for the process lifetime.
 		##
-		## Legal only in `init!`. `App.init_for_args` is the other way to read
-		## argv, before the window exists.
+		## Legal only in `init!`. Keep what `update!` needs from it in the model.
+		## `App.init_for_args` is the other way to read argv, before the window
+		## exists.
 		args! : Io => List(Str)
 		args! = |io| app_args!(io)
 
@@ -520,7 +629,7 @@ App := [].{
 		##
 		## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
 		## Call as `io.suggest_window_size!(size)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		## A running app resizes itself with `Window.suggest_size!`, which reaches
+		## A running app resizes itself with `Window.suggest_size!`, which makes
 		## the same host call, and only this spelling can report a refusal.
 		suggest_window_size! : Io, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported])
 		suggest_window_size! = |io, size| app_suggest_window_size!(io, size)
@@ -543,13 +652,14 @@ App := [].{
 		set_target_fps! : Io, I32 => {}
 		set_target_fps! = |io, fps| app_set_target_fps!(io, fps)
 
-		## Set which key closes the window, or `NoExitKey` to stop any key from
-		## closing it.
+		## Set which key ends the app, or `NoExitKey` to stop any key from
+		## ending it.
 		##
-		## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
-		## unaffected either way, so an app that disables the exit key should still
-		## handle shutdown itself by returning `Err(Exit(code))`. Call as
-		## `io.set_exit_key!(NoExitKey)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## The exit key ends the app directly, before `update!` sees the press,
+		## whatever `Config.with_close_request` chose; the window's close button
+		## follows `with_close_request` and is unaffected by this. Call as
+		## `io.set_exit_key!(NoExitKey)`. Legal in `init!`, `update!`, and
+		## tasks; refused in `render!`.
 		set_exit_key! : Io, ExitKey => {}
 		set_exit_key! = |io, key| app_set_exit_key!(io, key)
 
@@ -568,7 +678,10 @@ App := [].{
 		## none was configured. A configured path is resolved from the process
 		## working directory. The host loads it once; repeat calls return retained
 		## aliases of the same resource. Legal only in `init!`.
-		## A configured file requires external authority; otherwise PermissionDenied.
+		##
+		## Reading a configured file needs a declared directory covering its path,
+		## such as `WorkingDirectory(ReadOnly)`; calling this with no
+		## file declaration at all stops the app with a message naming one.
 		default_font! : Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 		default_font! = |io| app_default_font!(io)
 	}
@@ -576,7 +689,10 @@ App := [].{
 	## Opaque access to startup environment variables.
 	Environment :: Resource.Authority.{
 
-		## Read a variable; denied access is `PermissionDenied`. Legal only in `init!`.
+		## Read a variable. The name must be declared with `EnvVar`, or
+		## covered by `EnvAny`; an undeclared name is `PermissionDenied`,
+		## and reading with no environment declaration at all stops the app as a
+		## programmer error. Legal only in `init!`.
 		read! : Environment, Str => Try(Str, [NotFound, PermissionDenied])
 		read! = |Environment.(authority), key| match Host.app_read_env!(authority, key) {
 			Ok(value) => Ok(value)
@@ -614,10 +730,13 @@ App := [].{
 		fullscreen: Bool.False,
 		cursor: Visible,
 		exit_key: ExitKey(KeyEscape),
+		close_request: Exit,
 		visible: Bool.True,
 		output_dir: ".",
 		recording: NoRecording,
 		default_font: { path: "", size: 20 },
+		app_id: "",
+		permissions: [],
 	}
 
 	## Build initialization from a static startup configuration.
@@ -653,6 +772,8 @@ normalize_min_dimension = |value| if value > 0 value else 0
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
 expect App.default.frame_pacing() == Capped(240)
+expect App.default.with_permission(HttpAny).with_permissions([EnvVar("A"), ClipboardRead]).permissions() == [HttpAny, EnvVar("A"), ClipboardRead]
+expect App.default.permissions() == []
 expect App.default.frame_pacing() != Capped(60)
 expect App.default.frame_pacing() != VSync
 expect App.default.with_frame_pacing(VSync).frame_pacing() != Uncapped
@@ -674,6 +795,10 @@ expect App.default.with_exit_key(NoExitKey).exit_key() != ExitKey(KeyEscape)
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() == ExitKey(Raw(256))
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(Raw(257))
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(KeyEscape)
+expect App.default.close_request() == Exit
+expect App.default.with_close_request(Deliver).close_request() == Deliver
+expect App.default.with_close_request(Deliver).close_request() != Exit
+expect App.default.with_close_request(Deliver).with_close_request(Exit).close_request() == Exit
 expect App.default.with_resizable(Bool.True).resizable()
 expect App.default.with_fullscreen(Bool.True).fullscreen()
 expect App.default.visible()
@@ -687,7 +812,7 @@ expect App.default.with_recording(Capture.default).recording() == Record(Capture
 
 ## A component's model and message, so the recipe `Input.for_tests` documents is
 ## exercised here rather than only described. `counter_step` is the pure core
-## an app keeps behind its effectful `update!`: it folds the messages in and
+## an app keeps behind its effectful `update!`: it applies the messages and
 ## decides what to do, and `update!` performs the decision.
 CounterModel : { ticks : U64, quitting : Bool }
 
@@ -701,7 +826,7 @@ fresh_counter = { ticks: 0, quitting: Bool.False }
 counter_step : CounterModel, App.Input(CounterMessage) -> CounterStep
 counter_step = |model, input| {
 	ticked = List.fold(input.messages, model, |acc, _message| { ..acc, ticks: acc.ticks + 1 })
-	if input.devices.key_pressed(KeyEscape) {
+	if input.devices.key_pressed(KeyQ) {
 		Quit
 	} else {
 		Continue(ticked)
@@ -714,7 +839,7 @@ neutral_input : App.Input(CounterMessage)
 neutral_input = App.Input.for_tests({})
 
 ## One dropped file, named once so the drop assertions below read as one idea.
-## An absolute path is what the window system hands over, and `Files` reads it
+## An absolute path is what the window system provides, and `Files` reads it
 ## as given.
 dropped_png : App.Dropped
 dropped_png = { path: "/home/user/pictures/holiday.png", position: { x: 120, y: 64 } }
@@ -726,7 +851,7 @@ expect neutral_input.capture == Idle
 expect neutral_input.dropped == []
 expect !(neutral_input.dropped_overflow)
 expect neutral_input.time == Time.first_cycle
-expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False }
+expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False }
 expect !(neutral_input.devices.key_pressed(KeyEscape))
 expect !(neutral_input.devices.mouse.button_down(Left))
 expect neutral_input.devices.gamepad(One) == Disconnected
@@ -739,7 +864,12 @@ expect neutral_input.with_devices(Devices.none.with_key_pressed(KeySpace)).devic
 expect neutral_input.with_messages([Tick, Tick]).messages == [Tick, Tick]
 expect neutral_input.with_message(Tick).with_message(Tick).messages == [Tick, Tick]
 expect neutral_input.with_time({ ..Time.first_cycle, cycle_count: 7, elapsed_seconds: 0.25 }).time.cycle_count == 7
-expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True }).window.size == { width: 320, height: 240 }
+expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True, close_requested: Bool.False }).window.size == { width: 320, height: 240 }
+
+## A close request is expressible in a pure test, so the decision an app makes
+## about it can be tested without a window.
+expect neutral_input.with_window({ ..neutral_input.window, close_requested: Bool.True }).window.close_requested
+expect neutral_input.with_window({ ..neutral_input.window, close_requested: Bool.True }).window.size == App.default_test_size
 expect neutral_input.with_capture(Active({ frames: 3, dropped: 0 })).capture == Active({ frames: 3, dropped: 0 })
 expect neutral_input.with_messages([Tick]).window == neutral_input.window
 expect neutral_input.with_dropped([dropped_png]).dropped == [dropped_png]
@@ -753,7 +883,7 @@ expect neutral_input.with_capture(Finished({ frames: 30, bytes: 4096 })).time ==
 expect
 	App.Input.from_fields({
 		devices: Devices.none.with_key_pressed(KeyEscape),
-		window: { size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True },
+		window: { size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True, close_requested: Bool.False },
 		time: Time.first_cycle,
 		messages: [Tick],
 		capture: Idle,
@@ -767,7 +897,7 @@ expect
 expect
 	App.Input.from_fields({
 		devices: Devices.none,
-		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False },
 		time: Time.first_cycle,
 		messages: [],
 		capture: Idle,
@@ -777,13 +907,14 @@ expect
 		.dropped
 		== [dropped_png]
 
-## Escape decides to shut down.
-expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape))) == Quit
+## Q decides to shut down. (Escape is the default exit key, which the host
+## handles before `update!` sees it, so an app never checks it by hand.)
+expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyQ))) == Quit
 
-## An ordinary input carries on.
+## An ordinary input lets the app continue.
 expect counter_step(fresh_counter, neutral_input) == Continue(fresh_counter)
 
-## Delivered messages are folded in, in the order the input carries them.
+## Delivered messages are applied in the order the input lists them.
 expect counter_step(fresh_counter, neutral_input.with_messages([Tick, Tick, Tick])) == Continue({ ticks: 3, quitting: Bool.False })
 
 ## Private IO implementations.

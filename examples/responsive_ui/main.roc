@@ -1,10 +1,11 @@
-## Resize the window and select the Display, Audio, or Controls panel. Press M
-## to suggest moving the window to another monitor and Escape to quit. Run with
-## `--record-demo` to save a repeatable gallery recording.
+## Responsive Settings: resize the window and select the Display, Audio, or
+## Controls panel with the arrow keys, 1-3, or the mouse. Press M to suggest
+## moving the window to another monitor and Escape to quit. Run with
+## `--record-demo` to write `examples/gallery/responsive_ui.gif`.
 ##
 ## This example shows one shared layout calculation for drawing and pointer hit
 ## testing, resizable-window settings, and monitor information.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Capture
@@ -70,7 +71,7 @@ UiCopy : {
 ## Window size is intentionally omitted because `update!` and `render!` each
 ## receive the current size when they need it.
 Model : {
-	ui : Box(UiCopy),
+	ui : UiCopy,
 	selection : Selection,
 	mouse : Math.Vec2,
 	simulation_nanos : U64,
@@ -81,51 +82,70 @@ Model : {
 
 program = { init!, update!, render! }
 
-demo_frames = 150.U64
-
+## Recording mode. `--record-demo` hides the window, drives the selection from
+## `demo_input` instead of the keyboard, and writes a GIF for the README
+## gallery into `examples/gallery/`. The recording stops itself after
+## `demo_frames` frames, and `update!` exits when it has been written.
 record_demo_flag = "--record-demo"
 
+demo_frames = 150.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("responsive_ui.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## Selects an interactive window or a hidden one that records the demo.
 responsive_config : List(Str) -> App.Config
 responsive_config = |args| {
 	base =
 		App.default
-			.with_title("RocRay Responsive UI")
+			.with_title("RocRay Responsive Settings")
 			.with_size({ width: 960, height: 640 })
 			.with_resizable(Bool.True)
 			.with_min_size({ width: 480, height: 400 })
-			.with_exit_key(NoExitKey)
 			.with_frame_pacing(Capped(120))
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("responsive_ui.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
+## The keys the demo presses, by cycle: down, down, then back up, so the
+## recording visits every panel. Everything else is the real input path.
+demo_input : Devices.Snapshot, U64 -> Devices.Snapshot
+demo_input = |devices, cycle|
+	match cycle {
+		38 | 78 => devices.with_key_pressed(KeyDown)
+		118 => devices.with_key_pressed(KeyUp)
+		_ => devices
+	}
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
+
+## `PermissionDenied` is in the error list only because `Capture.Writer.start!`
+## can return it; the `io` that `init!` receives always has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init_for_args(
 	responsive_config,
 	|io| {
-		match responsive_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		font = Draw.default_font!()
 		Ok({
-			ui: Box.box({
+			ui: {
 				font,
 				title: Text.from("Settings", font).size(38).prepare!()?,
 				subtitle: Text.from("A resizable, input-aware application screen", font).size(18).prepare!()?,
@@ -135,14 +155,14 @@ init! = App.init_for_args(
 				display_body: Text.from("Live layout preview", font).size(24).prepare!()?,
 				audio_body: Text.from("Mix groups", font).size(24).prepare!()?,
 				controls_body: Text.from("Keyboard bindings", font).size(24).prepare!()?,
-				help: Text.from("Arrow keys or click to select | M moves display | ESC does nothing | Q quits", font).size(16).prepare!()?,
-			}),
+				help: Text.from("Arrow keys, 1-3, or click to select  |  M moves display  |  ESC quits", font).size(16).prepare!()?,
+			},
 			selection: Display,
 			mouse: { x: 0, y: 0 },
 			simulation_nanos: 0,
 			monitors: Window.monitors!(),
 			monitor_choice: 0,
-			demo: List.contains(io.args!(), record_demo_flag),
+			demo,
 		})
 	},
 )
@@ -326,30 +346,24 @@ Layout := {
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
+update! = |model, input, _io| {
+	devices = if model.demo demo_input(input.devices, input.time.cycle_count) else input.devices
 
 	# Layout follows the window, pointing follows the mouse, and the preview
 	# animates on the clock -- three separate observations off one input.
-	view = Layout.from_size({ width: I32.to_f32(program_input.window.size.width), height: I32.to_f32(program_input.window.size.height) })
-	mouse = input.mouse.position()
+	view = Layout.from_size({ width: I32.to_f32(input.window.size.width), height: I32.to_f32(input.window.size.height) })
+	mouse = devices.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
 	Mouse.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
-	cycle = program_input.time.cycle_count
-	selection_input =
-		if model.demo and cycle == 38 Devices.none.with_key_pressed(KeyDown)
-		else if model.demo and cycle == 78 Devices.none.with_key_pressed(KeyDown)
-		else if model.demo and cycle == 118 Devices.none.with_key_pressed(KeyUp)
-		else input
-	from_keyboard = model.selection.from_keyboard(selection_input)
-	selection = if input.mouse.button_pressed(Left) and hover_display {
+	from_keyboard = model.selection.from_keyboard(devices)
+	selection = if devices.mouse.button_pressed(Left) and hover_display {
 		Display
-	} else if input.mouse.button_pressed(Left) and hover_audio {
+	} else if devices.mouse.button_pressed(Left) and hover_audio {
 		AudioSettings
-	} else if input.mouse.button_pressed(Left) and hover_controls {
+	} else if devices.mouse.button_pressed(Left) and hover_controls {
 		Controls
 	} else {
 		from_keyboard
@@ -357,26 +371,17 @@ update! = |model, program_input, _io| {
 
 	# Enumerating displays allocates, so it happens on the keypress that acts
 	# on the answer rather than every cycle.
-	display = if input.key_pressed(KeyM) next_monitor!(model) else { monitors: model.monitors, choice: model.monitor_choice }
+	display = if devices.key_pressed(KeyM) next_monitor!(model) else { monitors: model.monitors, choice: model.monitor_choice }
 
-	# With `with_exit_key(NoExitKey)` no key closes the window on its
-	# own, so the app decides. Escape is left free for the UI to use.
 	if model.demo {
-		match program_input.capture {
-			Finished(_) => Err(Exit(0))
-			Failed(_) => Err(Exit(1))
-			_ => Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
-		}
-	} else if input.key_pressed(KeyQ) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
+		demo_finished(input.capture)?
 	}
+	Ok({ ..model, selection, mouse, simulation_nanos: input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| {
-	ui = Box.unbox(model.ui)
+	ui = model.ui
 	# The surface being drawn to, asked for where it is used. A resize is
 	# visible here on the cycle it happens, without a copy in the model that
 	# could be a frame behind it.
@@ -461,3 +466,9 @@ expect {
 	view = Layout.from_size({ width: 360, height: 360 })
 	view.display_bounds.x >= view.nav.x and view.controls_bounds.x + view.controls_bounds.width <= view.nav.x + view.nav.width
 }
+
+## The demo presses its keys on exactly the cycles it names, and leaves every
+## other cycle's input alone.
+expect demo_input(Devices.none, 38).key_pressed(KeyDown)
+expect demo_input(Devices.none, 118).key_pressed(KeyUp)
+expect !(demo_input(Devices.none, 39).key_pressed(KeyDown))

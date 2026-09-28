@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 import rr.App
 import rr.Task
 import rr.Udp
+import rr.Permission
 
 ## Do datagrams make the round trip, from the right address, without stalling
 ## the frame?
@@ -91,7 +92,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init_for_args(
-	|_args| App.default,
+	|_args| App.default.with_permission(UdpLoopback),
 	|io| {
 		args = io.args!()
 		mode = if List.contains(args, "--udp-expect-timeout") ExpectTimeout else RoundTrip

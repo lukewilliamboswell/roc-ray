@@ -26,7 +26,7 @@ SQLite is in the public domain; see <https://sqlite.org/copyright.html>.
 2. Replace `sqlite3.c` and `sqlite3.h`; leave `shim/` alone.
 3. Run `zig build` and `zig build test`.
 4. Check whether the unix VFS reaches any libc symbol that
-   `platform/targets/x64glibc/libc_stub.s` does not yet define. A missing one
+   `platform/targets/x64v1glibc/libc_stub.s` does not yet define. A missing one
    is a link error naming the symbol; add it to the stub in the same shape as
    its neighbours.
 

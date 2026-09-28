@@ -1,0 +1,5 @@
+# Roc sources keep LF line endings on every system. `roc fmt` writes LF, so a
+# CRLF checkout (Git's default on Windows) makes every file fail
+# `roc fmt --check`, and an example copied from a Windows checkout would not
+# match what the formatter produces.
+*.roc text eol=lf

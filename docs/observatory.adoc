@@ -1,0 +1,253 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#observatory]
+= Measuring performance with Observatory
+
+[.lead]
+When an app does not run smoothly, or runs slower than expected, Observatory
+records what
+the host did, cycle by cycle, into a SQLite database you can query. This
+chapter is for app authors investigating performance; it assumes
+<<app-model>> and <<tasks>>, and some familiarity with SQL.
+
+== Record a run
+
+Start any built RocRay app with `+--host-stats-record+`:
+
+[source,sh]
+----
+./my-app --host-stats-record
+----
+
+When the app exits, the host has written a capture file with a timestamped
+name such as `20260825T235959Z-my-app.rrstats`. It is an ordinary SQLite
+database. Choose the name with `+--host-stats-output=PATH+` instead. The
+recorder refuses to overwrite an existing file.
+
+Recording works in windowed, hidden, and headless runs. A headless run
+measures `update!` and your tasks but draws nothing, so use a windowed or
+hidden run when drawing is what you are investigating. Measure the build you
+care about: an app run with `roc main.roc` is built for fast compiling, not
+fast running, and can be several times slower than one built with
+`roc build` (see <<coming-from-raylib>>).
+
+== Find the slow cycles
+
+The files in `scripts/observatory_queries/` in the RocRay repository are
+ready-made, read-only queries. Each one says at the top what question it
+answers. Start with `cycles.sql`, which lists the slowest cycles and which
+part of each one took the most time:
+
+[source,sh]
+----
+sqlite3 -readonly -header -column capture.rrstats \
+  < scripts/observatory_queries/cycles.sql
+----
+
+Each row splits a cycle into `update!`, `render!`, the time spent running
+tasks, and other host work, and names the `dominant_component`. With a frame
+rate cap, most of an idle cycle is the host waiting for the next frame, which
+counts as other host work; that is expected, not a problem. Look for cycles
+where `update!` or `render!` is large, then look at what your app does there.
+
+The other queries cover tasks, effects, allocations, queues, drawing, and
+resources, and `compare.sql` compares two captures.
+
+== Mark your own code
+
+To see where time goes inside your own code, annotate it with `Trace`:
+
+[source,roc]
+----
+zone = Trace.begin!("animation")
+walk = Sprite.step(model.walk, input.time.elapsed_seconds)
+Trace.end!(zone)
+Trace.sample_i64!("particles", U64.to_i64_wrap(List.len(model.particles)), Count)
+Trace.mark!("level start")
+----
+
+`Trace.begin!` and `Trace.end!` mark the start and end of a _zone_ and record
+how long it took.
+`Trace.mark!` records a moment, and `Trace.sample_i64!` and
+`Trace.sample_f64!` record a number with a unit. `annotations.sql` lists them.
+They are legal in `init!`, `update!`, `render!`, and tasks, and cost almost
+nothing when nothing is recording. They cannot tell whether recording is on,
+so they never change what the app does.
+
+Zones must be ended by the callback or task that began them, in the reverse
+order they were begun; ending one out of order stops the app, even when
+nothing is recording. See the `Trace` page of the {api}[API reference] for
+the label and nesting rules.
+
+== Privacy
+
+A capture never contains your model, the contents of input, task messages,
+file contents, native pointers, or secrets. It does contain the labels you
+pass to `Trace`, verbatim, so do not put personal data, credentials, URLs
+containing secrets, or file contents in a label. Treat an `.rrstats` file as
+diagnostic data that may reveal the app's structure, its timing, the machine
+it ran on, and the labels the app supplied.
+
+== Details: recording options
+
+[cols="1,2",options="header"]
+|===
+|Flag |Meaning
+|`+--host-stats-record+` |Enable recording with the defaults.
+|`+--host-stats-output=PATH+` |Select the `.rrstats` destination and enable recording.
+|`+--host-stats-detail=summary\|standard\|full+` |Select captured detail; `standard` is the default. Summary records cycle and callback timing, aggregate counts and allocation traffic, annotations, backend facts, and recorder health. Standard adds non-drawing effects, tasks, queues, structural latency, and resource lifecycle transitions. Full adds individual allocations and draw operations.
+|`+--host-stats-buffer-mib=N+` |Limit the recorder's memory, in MiB; default 32, valid range 1–4096. When memory runs short, detail records are dropped first, so the space reserved for the summary is kept.
+|`+--host-stats-max-mib=N+` |Stop recording new events once the database reaches this size; default 4096 MiB and must be greater than zero. The application keeps running.
+|===
+
+The output counter is the logical size of the main SQLite database plus its
+active WAL. Recording of new events stops a little below the selected maximum,
+leaving a reserve for the final writes; the metadata records its size. One already-started transaction may cross that threshold; metadata
+records `terminal_reserve_bytes`, `output_admission_limit_bytes`, and the
+bounded `max_transaction_overshoot_bytes` used to interpret the result.
+
+Recorder storage never runs Roc code. The frame thread copies compact events
+into a bounded host-owned pool and never waits for SQLite. A dedicated writer
+thread owns the database, writes WAL transactions, and checkpoints during
+finalization. A full buffer and the output limit do not change how the app
+behaves; omissions appear in `recording_gaps` and `recorder_health`.
+
+Startup failures, including an invalid path, an existing destination, or an
+unavailable SQLite database, fail the requested recording rather than silently
+replacing or overwriting it. A failure after startup disables further
+recording, is reported by the host, and is reflected in final metadata where
+the database remains writable.
+
+== Details: reading evidence
+
+Every query returns `evidence_status` and `evidence_reason`. Check them
+before trusting a number: a capture may be incomplete because the recorder ran
+out of room, or because the detail level did not include that measurement.
+Measurements are SQL `NULL` when the required evidence is partial, not recorded, or unavailable.
+The queries deliberately report “not known from this capture” rather than a
+number the capture cannot support. The Python analyzer remains a non-public CI
+reference for the same rules; the SQL files are the supported interface.
+
+On the native raylib backend, `gpu_facts` also separates the `render!`
+callback, drawing-scope begin, host capture/submission work, and `EndDrawing`.
+Raylib combines command submission, buffer swap/presentation, and pacing wait
+inside `EndDrawing`, so RocRay reports that duration under the explicit
+`end_drawing_including_presentation_and_pacing` name and does not invent a
+split or call it GPU time. Headless captures record the render callback and
+explicit unavailable/omitted facts for the other phases.
+
+=== Capture schema
+
+This section is for writing your own queries. `metadata.schema_version` is
+`1`. Consumers must check it before
+assuming table or column meanings.
+
+* `metadata` records schema, requested and effective detail, host environment,
+build identity, configured limits, clean shutdown, and final state. Build
+identity includes the Roc compiler pin embedded from `platform/main.roc`, target
+profile, backend, OS, architecture, and portable executable/application
+identity derived from argument zero. A generically named `main`, `main.exe`,
+or `main.roc` executable uses its parent directory as the application
+identity. `rocray_version` is `unavailable` until
+the build embeds an authoritative RocRay release version. These values come
+only from build/host configuration and process argument zero, never from the
+Roc application model or message payloads.
+`unavailable_sources` names the measurements the selected host cannot
+reliably provide.
+`clock_source`, `clock_resolution_ns`, and `utc_origin_unix_ns` make the
+monotonic-relative timestamp domain and its wall-clock correlation explicit;
+UTC is identification metadata and is never used to calculate durations.
+* `measurement_status` tells you how to interpret every measurement family. Its final status is `complete`, `partial`, `not_recorded`, or
+`unavailable`, with row and omission counts and a reason. A missing detail row
+means zero activity only when that family's status is `complete`.
+* `cycles` records one admitted host-cycle summary with application update and
+render-callback time, task-executor time (including polling or pacing), and
+residual host time; task/effect/draw/resource/queue counts; and Roc allocation,
+free, live, peak-live, and update-attributed allocation counters.
+* `annotations` records marks, zone endpoints, and numeric samples. Zone rows
+use `integer_value` for their recorder-private correlation ID; otherwise an
+irrelevant numeric column is SQL `NULL`. Zone-end rows include `wall_ns`,
+`active_ns`, and `parked_ns`; nested open zones are each charged for waits
+they span, and `wall_ns = active_ns + parked_ns`. A live task cancelled by
+orderly shutdown closes its remaining zones with the stable `zone_abort`
+annotation kind; ordinary callback escape remains a programmer error.
+* `recording_gaps` records per-family omission counts plus the bounded
+interval and producer track known by the frame-thread snapshot. When
+only one snapshot boundary is known, first/last cycle and start/end time are
+equal rather than implying unavailable precision.
+* `recorder_health` records transactions, checkpoints, queue high-water,
+database size, omissions, written rows, writer failure, output limiting, and
+writer active/idle wall time. Writer CPU time is SQL `NULL` when unavailable
+and is disclosed by `metadata.unavailable_sources`.
+`metadata.drain_duration_ns` records orderly queue-drain wall time and
+`metadata.application_outcome` records the host-owned terminal outcome.
+
+Schema v1 also defines nine detail tables. `task_events` records task
+lifecycle and scheduling facts; `hosted_effects` records non-drawing effects with stable effect and
+owner-correlation IDs, directional copy/ownership-transfer bytes, total call
+timing, and nullable validation, conversion, worker, and external intervals;
+`Task.sleep!` reports its actual waiting interval, and `Files.read_text!`
+separately brackets filesystem waiting, UTF-8 validation, and the Roc string
+copy/conversion. Other sub-intervals remain SQL `NULL` unless their production
+boundary can isolate them without inference;
+`queue_pressure` records bounded-facility occupancy, release, saturation, and
+lossy overflow. Native interval-input rows cover hardware and virtual event
+items plus typed codepoints; they report item capacity, current/high-water
+occupancy, admitted or released amount, and oldest-item age without recording
+keys, codepoints, pointer positions, or other input payloads. Overflow remains
+distinct from queue saturation. Task pending-closure and staged-message rows
+likewise contain only counts and ages. Their capacity is `0`, meaning
+application-proportional with no platform admission cap: task spawns retain
+FIFO delayed-start and exactly-one-message semantics, so these facilities emit
+reserve/release facts but never an invented saturation or refusal;
+`resource_lifecycle` records creation, saturation, reuse, retirement, and destruction
+under recorder-private resource IDs (never application-visible lifecycle
+tokens). Individual uses are represented only by the per-cycle resource-event
+counter;
+`structural_latency` links input or message observations to later cycles;
+`draw_summaries` records aggregate drawing pressure. In full detail its stable
+kind values distinguish primitive, batch/instance, upload, state change,
+readback, and render-target change records; values contain counts and copied
+bytes, never submitted payloads. For primitive and state rows, `value_a` is one
+accepted call and `value_b` is zero unless the API carries a sized byte value.
+For batch rows, `value_a` is the instance count and `value_b` is the known ABI
+descriptor span. For texture-update uploads they are pixel count and RGBA8
+payload bytes. For successful region, pixel, and screenshot readbacks they are
+returned/read pixels and the known RGBA8 byte span. Encoded-image inputs report
+their encoded source size because decoded driver-transfer bytes are not
+available; no row claims GPU traffic, bandwidth, or execution time.
+`allocation_events` is full-detail evidence and records allocation,
+free, moving realloc, and in-place realloc facts with phase, private task and
+active-zone correlation, current/prior sizes, and the bytes actually copied (only a
+move reports `min(prior_bytes, bytes)`). These columns support live, peak, and
+survivor queries without recording addresses. Summary and standard captures
+retain only the allocation counters in `cycles`. `gpu_facts` records the selected
+backend, requested pacing, presentation completion, and whether GPU timing is
+available. The native raylib backend and headless stub both report GPU timing
+as unavailable: RocRay does not force a synchronizing query or present host
+callback duration as GPU duration. Detail-level policy determines which
+of these receive rows. Their presence in the schema does not imply that the
+selected detail level or target supplied that family. `callback_summaries`
+records automatic application callback duration and outcome by callback phase.
+All recording rows belong to the single `runs` parent row through enforced
+foreign keys. Timeline indexes cover common run/cycle/time, effect, task, and
+resource lookups; orderly finalization refuses a clean marker if
+`PRAGMA foreign_key_check` finds an orphan.
+
+`clean_shutdown = 1` means orderly finalization completed. Consult
+`final_state` and `measurement_status` before drawing a conclusion. The status
+table incorporates detail policy and `recording_gaps`; consumers should not try
+to reconstruct completeness from an empty detail table.
+
+== Further reading
+
+* The `Trace` page of the {api}[API reference].
+* <<observatory-methodology>> describes how the recorder itself is tested and
+  benchmarked.

@@ -388,6 +388,34 @@ pub fn validateRelativePath(path: []const u8) u8 {
     return err_none;
 }
 
+/// Whether an app's configured output directory stays beneath the working
+/// directory: relative, with no `..` component, no drive or stream colon, and
+/// no NUL. Empty and `.` both name the working directory itself.
+///
+/// Captures are the app's own output and need no declared permission, so the
+/// directory they land in is confined rather than trusted as given.
+pub fn isSafeOutputDir(dir: []const u8) bool {
+    if (dir.len == 0) return true;
+    if (dir.len > path_capacity) return false;
+    if (std.mem.indexOfScalar(u8, dir, 0) != null) return false;
+    if (dir[0] == '/' or dir[0] == '\\' or dir[0] == '~') return false;
+    if (std.mem.indexOfScalar(u8, dir, ':') != null) return false;
+    var components = std.mem.splitAny(u8, dir, "/\\");
+    while (components.next()) |component| {
+        if (std.mem.eql(u8, component, "..")) return false;
+    }
+    return true;
+}
+
+test "an output directory must stay beneath the working directory" {
+    for ([_][]const u8{ "", ".", "captures", "examples/gallery", "./shots/" }) |dir| {
+        try std.testing.expect(isSafeOutputDir(dir));
+    }
+    for ([_][]const u8{ "/tmp", "..", "a/../../b", "~/x", "C:\\x", "a\x00b" }) |dir| {
+        try std.testing.expect(!isSafeOutputDir(dir));
+    }
+}
+
 /// Join a validated request path under the output directory.
 ///
 /// Returns the slice of `buffer` holding the result. The caller has already

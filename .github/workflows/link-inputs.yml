@@ -28,7 +28,7 @@ on:
       - vendor/msf_gif/**
       - vendor/libvpx/**
       - vendor/sqlite/**
-      - platform/targets/x64glibc/**
+      - platform/targets/x64v1glibc/**
       - platform/targets/windows-def/**
       - platform/main.roc
       - platform/main-wayland.roc

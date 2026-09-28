@@ -1,0 +1,283 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#getting-started]
+= Getting started
+
+In this chapter you install the Roc compiler, run a finished example, and
+write a small app of your own that draws a circle under the mouse pointer. You
+need a terminal and an internet connection. You do not need a copy of the
+RocRay repository.
+
+Three words come up straight away:
+
+Platform:: The part of a Roc program that you do not write. Your app is pure
+Roc code; the platform supplies everything that touches the outside world, and
+RocRay is a platform for windows, drawing, sound, and input.
+Bundle:: The single downloadable file a release publishes the platform as.
+Your app names it by URL, and the compiler downloads it the first time it
+builds the app.
+Host:: The native program inside the bundle that runs your app: it opens the
+window, calls your code, and carries out what your code asks for.
+
+<<glossary>> defines these and the other terms the manual uses.
+
+[#install]
+== Install the Roc compiler
+
+Roc is a young language that is still changing. Each RocRay release is built
+and tested with one specific _nightly_ build of the Roc compiler, and the
+release notes name that build on a line that reads
+`Supported compiler: nightly-<date>-<commit>`. Install exactly that one.
+
+. Open the {repo}/releases[RocRay releases page] and choose the newest release
+  whose name is a version number, such as `0.10.0`. The page also lists
+  dependency releases, such as "macOS linker interfaces"; skip those.
+. In that release's notes, note the compiler name after "Supported compiler".
+. Open the https://github.com/roc-lang/nightlies/releases[Roc nightlies page]
+  and find the release with exactly that name.
+. Download the file for your computer. The date and commit in its name match
+  the compiler's name:
++
+[cols="1,2",options="header"]
+|===
+|Computer |File
+|Linux, x86-64 |`roc_nightly-linux_x86_64-<date>-<commit>.tar.gz`
+|macOS, Apple silicon (M1 and later) |`roc_nightly-macos_apple_silicon-<date>-<commit>.tar.gz`
+|macOS, Intel |`roc_nightly-macos_x86_64-<date>-<commit>.tar.gz`
+|Windows, x86-64 |`roc_nightly-windows_x86_64-<date>-<commit>.zip`
+|===
++
+RocRay does not support ARM Linux.
+
+. Extract it and put the extracted folder on your `PATH`, as described for your
+  system below.
+
+=== Linux and macOS
+
+Extract the archive in your home directory. It creates a folder with the same
+name as the file, holding the `roc` executable:
+
+[source,sh]
+----
+cd ~
+tar -xzf ~/Downloads/roc_nightly-linux_x86_64-<date>-<commit>.tar.gz
+----
+
+Add the folder to your `PATH` by putting this line at the end of your shell's
+startup file (`~/.bashrc` for bash, `~/.zshrc` for zsh, the default on macOS),
+then open a new terminal:
+
+[source,sh]
+----
+export PATH="$HOME/roc_nightly-linux_x86_64-<date>-<commit>:$PATH"
+----
+
+Use the folder name you extracted. On macOS it starts with
+`roc_nightly-macos_`.
+
+On macOS, the system refuses to run a program downloaded from the internet
+until you clear its quarantine mark. Clear it once, from inside the folder:
+
+[source,sh]
+----
+cd ~/roc_nightly-macos_apple_silicon-<date>-<commit>
+xattr -d com.apple.quarantine roc
+----
+
+=== Windows
+
+. Right-click the zip file and choose *Extract All*. Extract it to a folder
+  you will keep, such as `C:\roc`. The extracted folder contains `roc.exe`.
+. Open *Settings*, search for "environment variables", and choose *Edit
+  environment variables for your account*.
+. Select *Path*, choose *Edit*, then *New*, and enter the folder that contains
+  `roc.exe`.
+. Close any open terminals and open a new PowerShell window.
+
+=== Check the install
+
+Run:
+
+[source,sh]
+----
+roc version
+----
+
+It prints the compiler's name, which must match the one the release notes
+name:
+
+[source]
+----
+Roc compiler version nightly-<date>-<commit>
+----
+
+If the terminal says it cannot find `roc`, the folder is not on your `PATH` in
+this terminal; open a new one, or check the path you added.
+
+[#system-requirements]
+=== What your computer needs
+
+macOS:: Nothing else.
+Windows:: A graphics driver that supports OpenGL 3.3. Any current driver does.
+Linux:: A glibc-based x86-64 distribution with a desktop. An app built with
+the default bundle uses X11, which also runs on Wayland desktops through
+XWayland. At run time it needs the X11 client libraries (`libX11`,
+`libXrandr`, `libXinerama`, `libXcursor`, `libXi`), an OpenGL 3.3 driver such
+as Mesa, and sound through PulseAudio, PipeWire, or ALSA. A desktop
+installation has all of these; a minimal or server installation may not.
+
+Each release also publishes a _Wayland bundle_ for Linux. Use the default
+bundle unless you specifically want native Wayland windows on Linux; the
+Wayland bundle needs `libwayland-client`, `libxkbcommon`, and EGL instead of
+the X11 libraries, and runs only on Linux. <<reference>> lists both bundles.
+
+[#run-an-example]
+== Run an example
+
+Each release attaches a zip of the examples, named `examples-<version>.zip`,
+whose files already name that release's bundle and compiler.
+
+. Download the zip from the same release and extract it.
+. Open a terminal in the extracted folder: the one that contains `examples/`.
+. Run:
++
+[source,sh]
+----
+roc examples/hello_world/main.roc
+----
+
+`roc` with a file name compiles the app and runs it. The first time, it also
+downloads the RocRay bundle, which takes a few seconds; later runs use the
+copy the compiler saved.
+
+A window opens with a panel and a circle that follows the pointer. Hold the
+left mouse button to change its colour, and press Escape to quit. Every
+RocRay app quits on Escape unless the app turns this off.
+
+Run examples from the extracted folder, as shown. The examples that load
+images or sounds find them by paths relative to that folder.
+
+If `roc` warns "This header pins Roc version ..., but you are running ...",
+the compiler on your `PATH` is not the one the release names. Install that
+one.
+
+== Build an executable
+
+`roc` on its own compiles and runs the app each time. To produce an
+executable you can run again without compiling, use `roc build`:
+
+[source,sh]
+----
+roc build examples/hello_world/main.roc --output=hello_world
+./hello_world
+----
+
+On Windows, write `--output=hello_world.exe` and run `.\hello_world.exe`.
+<<shipping>> explains how to give an app to other people.
+
+[#smallest-app]
+== The smallest app
+
+Make a new folder for your app, anywhere you like, such as `hello` in your
+home directory. Create a file named `main.roc` in it.
+
+The file starts with a _header_. The header says this file is an app, names
+the platform it runs on by its bundle URL, and names the compiler it was
+written for:
+
+[source,roc]
+----
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+----
+
+Replace `BUNDLE-URL` with the default bundle's URL from the release notes. It
+looks like
+`+https://github.com/lukewilliamboswell/roc-ray/releases/download/<version>/<hash>.tar.zst+`.
+Replace `COMPILER` with the compiler the notes name, the same name
+`roc version` prints. The simplest way to get both right is to copy
+the first line of `examples/hello_world/main.roc` from the examples zip.
+
+Below the header, add the rest of the app:
+
+[source,roc]
+----
+include::tutorial/smallest.roc[tag=body,indent=0]
+----
+
+Run it from the folder that contains `main.roc`:
+
+[source,sh]
+----
+roc main.roc
+----
+
+A window titled "Hello" opens, and a red circle follows the mouse pointer.
+Press Escape to quit.
+
+If the compiler finds a problem, it prints a report that names the file, the
+line, and what it expected, and the app does not start. To check the file
+without running it, use `roc check main.roc`.
+
+=== Reading the app
+
+`import rr.App` makes the platform's `App` module available. `rr` is the name
+the header gave the platform, and `App`, `Color`, and `Draw` are three of its
+modules.
+
+`Model : { pointer : { x : F32, y : F32 } }`:: The _model_ is everything your
+app remembers from one moment to the next. This line says the model is a
+record with one field, `pointer`, which holds a position: an `x` and a `y`,
+each an `F32` (a 32-bit floating-point number).
+
+`Msg : []`:: Apps that wait for slow work, such as reading a file, receive the
+results later as _messages_. `Msg` lists the kinds of message this app can
+receive. The empty tag union `[]` means it receives none.
+
+`program = { init!, update!, render! }`:: The record of three functions the
+host calls. The header's `[Model, program]` gives this record and the
+`Model` type to the platform.
+
+`init! : App.Init(Model, [])`:: `init!` runs once, at startup. `App.init`
+takes the window's settings and a function that builds the first model. Here
+the settings are the defaults with a different title, and the function returns
+`+Ok(...)+` with the pointer at the window's centre. The `[]` in the type lists
+the errors that function can return: none.
+
+`+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])+`:: The
+host calls `update!` over and over while the app runs. Each call receives
+the current model, an `App.Input` describing what happened since the last
+call, and an `App.Io`, which the app uses to ask the host for things such as
+sound or files. It returns the next
+model wrapped in `Ok`, or `Err(Exit(code))` to quit with that exit code. This
+one ignores the old model and returns a new one holding the mouse position.
+
+`+render! : Model, Draw.Frame => Try({}, [Exit(I64)])+`:: After each `update!`,
+the host calls `render!` to draw the new model. Everything it draws goes
+through `frame`. It returns `Ok({})` when it has finished drawing. It can also
+return `Err(Exit(code))`, like `update!`; a bigger app uses that when a drawing
+step it depends on fails.
+
+The `!` at the end of a name, and the `+=>+` in its type, mark a function that
+has _effects_: besides returning a value, it does something, such as drawing
+or reading the keyboard.
+<<roc-primer>> explains this and the rest of the syntax.
+
+You do not need to check for Escape yourself. The default settings quit on
+Escape; <<app-model-closing>> shows how to change that.
+
+== Where to go next
+
+. Read <<roc-primer>> if Roc is new to you. It covers exactly the syntax a
+  small RocRay app uses.
+. Follow <<first-game>>, which grows this app into a small game in six steps.
+. Then read <<app-model>>, and the guides for the features your app needs.
+
+<<examples>> suggests which examples to read, and the {api}[API reference]
+documents every module, type, and function.

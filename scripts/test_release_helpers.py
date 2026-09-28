@@ -23,6 +23,7 @@ assert SPEC and SPEC.loader
 helpers = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = helpers
 SPEC.loader.exec_module(helpers)
+markdown = sys.modules["release_notes_markdown"]
 
 BUNDLE_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/roc-ray-0.9.0.tar.zst"
 NEXT_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"
@@ -237,6 +238,70 @@ class ResolveDefaultBundleUrlTests(unittest.TestCase):
                 helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
 
 
+class LatestPlatformReleaseTests(unittest.TestCase):
+    def test_skips_dependency_releases_and_keeps_prereleases(self) -> None:
+        releases = [
+            {"tag_name": "link-inputs-sha256-30c1", "published_at": "2026-09-28T00:46:01Z"},
+            {"tag_name": "deps-macos-interfaces-1-20260923.1", "published_at": "2026-09-23T08:56:14Z"},
+            {"tag_name": "0.10.0-rc6", "prerelease": True, "published_at": "2026-09-19T10:44:51Z"},
+            {"tag_name": "types-0.9.0", "published_at": "2026-08-26T01:07:54Z"},
+            {"tag_name": "0.9.0", "published_at": "2026-08-01T00:00:00Z"},
+            {"tag_name": "0.11.0", "draft": True, "published_at": None},
+        ]
+        self.assertEqual(helpers.latest_platform_release(releases)["tag_name"], "0.10.0-rc6")
+
+    def test_no_platform_release(self) -> None:
+        self.assertIsNone(helpers.latest_platform_release([{"tag_name": "types-0.9.0"}]))
+
+
+class AssemblePagesTests(unittest.TestCase):
+    def test_manual_at_root_api_beneath_and_old_links_answered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "manual").mkdir()
+            (root / "manual" / "index.html").write_text("manual", encoding="utf-8")
+            (root / "api" / "App").mkdir(parents=True)
+            (root / "api" / "index.html").write_text("api", encoding="utf-8")
+            (root / "api" / "App" / "index.html").write_text("app", encoding="utf-8")
+            (root / "site").mkdir()
+            (root / "site" / "0.9.0").mkdir()
+            args = argparse.Namespace(manual=str(root / "manual"), api=str(root / "api"), repo="owner/repo", output=str(root / "site"))
+            helpers.cmd_assemble_pages(args)
+            site = root / "site"
+            self.assertEqual((site / "index.html").read_text(encoding="utf-8"), "manual")
+            self.assertEqual((site / "api" / "App" / "index.html").read_text(encoding="utf-8"), "app")
+            self.assertIn('url=../"', (site / "manual" / "index.html").read_text(encoding="utf-8"))
+            self.assertIn("https://github.com/owner/repo/releases", (site / "404.html").read_text(encoding="utf-8"))
+            self.assertFalse((site / "0.9.0").exists())
+
+    def test_missing_input_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args = argparse.Namespace(manual=str(root / "none"), api=str(root / "none"), repo="o/r", output=str(root / "site"))
+            with self.assertRaises(RuntimeError):
+                helpers.cmd_assemble_pages(args)
+
+
+class ZipTreeTests(unittest.TestCase):
+    def test_files_sit_under_one_prefix_in_a_stable_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "site" / "b").mkdir(parents=True)
+            (root / "site" / "index.html").write_text("<p>hi</p>", encoding="utf-8")
+            (root / "site" / "b" / "a.css").write_text("p{}", encoding="utf-8")
+            output = root / "out.zip"
+            helpers.zip_tree(root / "site", output, "manual-0.10.0")
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.namelist(), ["manual-0.10.0/b/a.css", "manual-0.10.0/index.html"])
+
+    def test_an_empty_tree_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "site").mkdir()
+            with self.assertRaises(RuntimeError):
+                helpers.zip_tree(root / "site", root / "out.zip", "manual")
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def make_notes(self, root: Path, version: str) -> str:
         bundles = root / "bundles.json"
@@ -262,6 +327,8 @@ class ReleaseNotesTests(unittest.TestCase):
             self.assertTrue(body.startswith("# Highlights\n\nNew API.\n"))
             self.assertIn('platform "https://github.com/owner/repo/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"', body)
             self.assertIn("https://example.com/docs/", body)
+            for asset in ("roc-ray-manual-0.10.0.pdf", "roc-ray-manual-0.10.0.zip", "roc-ray-api-docs-0.10.0.zip"):
+                self.assertIn(f"https://github.com/owner/repo/releases/download/0.10.0/{asset}", body)
 
     def test_missing_versioned_notes_uses_generated_intro(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -275,6 +342,109 @@ class ReleaseNotesTests(unittest.TestCase):
             (root / "notes" / "0.10.0.md").write_text("  \n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "release notes are empty"):
                 self.make_notes(root, "0.10.0")
+
+    def test_asciidoc_notes_are_converted_to_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text(
+                "[#release-0.10.0]\n= Highlights\n\n*New* API, see https://example.com[the docs].\n",
+                encoding="utf-8",
+            )
+            body = self.make_notes(root, "0.10.0")
+            self.assertTrue(body.startswith("# Highlights\n\n**New** API, see [the docs](https://example.com).\n"))
+
+    def test_notes_in_both_formats_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text("= A\n", encoding="utf-8")
+            (root / "notes" / "0.10.0.md").write_text("# A\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "keep one"):
+                self.make_notes(root, "0.10.0")
+
+    def test_unsupported_asciidoc_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "notes").mkdir()
+            (root / "notes" / "0.10.0.adoc").write_text("= A\n\nimage::shot.png[]\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsupported"):
+                self.make_notes(root, "0.10.0")
+
+
+class AsciiDocToMarkdownTests(unittest.TestCase):
+    def convert(self, source: str) -> str:
+        return markdown.convert(source)
+
+    def test_titles_lists_and_continuations(self) -> None:
+        source = "\n".join([
+            "= Title",
+            "",
+            "== Section",
+            "",
+            "* *Bold `code` inside.* Plain text.",
+            "+",
+            "[source,roc]",
+            "----",
+            "expect 1 == 1",
+            "----",
+            "",
+            ". First",
+            ". Second",
+        ])
+        self.assertEqual(self.convert(source), "\n".join([
+            "# Title",
+            "",
+            "## Section",
+            "",
+            "- **Bold `code` inside.** Plain text.",
+            "",
+            "  ```roc",
+            "  expect 1 == 1",
+            "  ```",
+            "",
+            "1. First",
+            "1. Second",
+            "",
+        ]))
+
+    def test_tables_keep_escaped_pipes(self) -> None:
+        source = "\n".join([
+            '[cols="1,1",options="header"]',
+            "|===",
+            "|Old |New",
+            "|`f(x)` |`App.init(config, \\|io\\| ...)`",
+            "|===",
+        ])
+        self.assertEqual(self.convert(source), "\n".join([
+            "| Old | New |",
+            "| --- | --- |",
+            "| `f(x)` | `App.init(config, \\|io\\| ...)` |",
+            "",
+        ]))
+
+    def test_links_cross_references_and_breaks(self) -> None:
+        source = "See <<upgrading,the guide>> and https://example.com/a[`a`].\n\n'''\n"
+        self.assertEqual(
+            self.convert(source),
+            "See [the guide](#upgrading) and [`a`](https://example.com/a).\n\n---\n",
+        )
+
+    def test_code_spans_are_left_alone(self) -> None:
+        self.assertEqual(self.convert("Use `+*_from_bytes!*+` and `gen_*`.\n"), "Use `*_from_bytes!*` and `gen_*`.\n")
+
+    def test_unsupported_constructs_fail(self) -> None:
+        for source in ("include::other.adoc[]\n", ":toc: left\n", "....\nx\n....\n", "See <<only-id>>.\n"):
+            with self.subTest(source=source):
+                with self.assertRaises(markdown.ConversionError):
+                    self.convert(source)
+
+    def test_published_notes_convert(self) -> None:
+        notes = sorted(Path(__file__).resolve().parents[1].joinpath("docs", "releases").glob("*.*.*.adoc"))
+        self.assertTrue(notes, "no release notes found")
+        for path in notes:
+            with self.subTest(path=path.name):
+                self.assertTrue(markdown.convert_file(path).startswith("# "))
 
 
 if __name__ == "__main__":

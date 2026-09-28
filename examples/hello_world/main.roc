@@ -4,20 +4,22 @@
 ## and press Escape to quit. This example introduces the three app functions:
 ## `init!` creates the starting state, `update!` responds to each `Input`, and
 ## `render!` draws the current state into a `Frame`.
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color
 import rr.Draw
 import rr.Text
 
-## State kept between updates: prepared text and layout that can be reused,
-## plus the latest pointer position, button state, and elapsed time needed to
-## draw the next frame.
+## State kept between host cycles: prepared text that can be reused, plus the
+## latest pointer position, button state, and elapsed time needed to draw the
+## next frame.
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
-	layout : Layout,
+
+	## How wide the title is drawn, measured once so `render!` can underline it.
+	title_width : F32,
 	pointer : { x : F32, y : F32 },
 	accent_on : Bool,
 
@@ -26,13 +28,16 @@ Model : {
 	elapsed : F32,
 }
 
-Layout : {
-	panel : { x : F32, y : F32, width : F32, height : F32 },
-	title_size : Draw.TextSize,
-}
+## The words on the panel. Named once, because `init!` both prepares and
+## measures the title.
+title_text = "Roc :heart: Raylib"
+
+title_size = 38.F32
 
 program = { init!, update!, render! }
 
+## `App.default` already ends the app when you press Escape, so this app never
+## checks for Escape itself.
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
@@ -42,9 +47,9 @@ init! = App.init(
 	|_io| {
 		font = Draw.default_font!()
 		Ok({
-			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
-			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
-			layout: solve_layout(font),
+			title: Text.from(title_text, font).size(title_size).prepare!()?,
+			help: Text.from("Move the pointer  -  hold to turn red  -  Escape quits", font).size(18).prepare!()?,
+			title_width: font.measure({ text: title_text, size: title_size, spacing: Text.default_spacing }).width,
 			pointer: { x: 400, y: 300 },
 			accent_on: Bool.False,
 			elapsed: 0,
@@ -58,45 +63,40 @@ init! = App.init(
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({
-			..model,
-			pointer: input.mouse.position(),
-			accent_on: input.mouse.button_down(Left),
-			elapsed: model.elapsed + program_input.time.elapsed_seconds,
-		})
-	}
-}
-
-solve_layout : Text.Font -> Layout
-solve_layout = |font| {
-	panel: { x: 120, y: 150, width: 560, height: 300 },
-	title_size: font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
+update! = |model, input, _io| {
+	devices = input.devices
+	Ok({
+		..model,
+		pointer: devices.mouse.position(),
+		accent_on: devices.mouse.button_down(Left),
+		elapsed: model.elapsed + input.time.elapsed_seconds,
+	})
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
+	# Everything is placed relative to the size of the window being drawn to,
+	# so nothing here repeats the 800 x 600 from the config.
+	size = frame.size!()
+	center_x = size.width * 0.5
+	panel = { x: center_x - 280, y: size.height * 0.5 - 150, width: 560, height: 300 }
+
 	accent = if model.accent_on Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
-	panel = model.layout.panel
-	title_size = model.layout.title_size
 	# One slow sine drives every moving part, so the scene breathes together.
 	pulse = 0.5 + 0.5 * F32.sin(model.elapsed * 1.6)
 
-	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x131f38), color_bottom: Color.from_hex_rgb(0x070b16) })
-	frame.circle_gradient!({ center: { x: 620, y: 90 }, radius: 220 + 40 * pulse, color_inner: Color.with_alpha(accent, 90), color_outer: Color.with_alpha(accent, 0) })
-	frame.circle_gradient!({ center: { x: 150, y: 540 }, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x06d6a0), 45), color_outer: Color.with_alpha(Color.from_hex_rgb(0x06d6a0), 0) })
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: Color.from_hex_rgb(0x131f38), color_bottom: Color.from_hex_rgb(0x070b16) })
+	frame.circle_gradient!({ center: { x: size.width - 180, y: 90 }, radius: 220 + 40 * pulse, color_inner: Color.with_alpha(accent, 90), color_outer: Color.with_alpha(accent, 0) })
+	frame.circle_gradient!({ center: { x: 150, y: size.height - 60 }, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x06d6a0), 45), color_outer: Color.with_alpha(Color.from_hex_rgb(0x06d6a0), 0) })
 
 	# A soft drop shadow, then the panel itself over the top of it.
 	frame.rounded_rectangle!({ x: panel.x + 6, y: panel.y + 10, width: panel.width, height: panel.height, radius: 22, segments: 12, style: Draw.filled(Color.with_alpha(Color.black, 90)) })
 	frame.rounded_rectangle!({ x: panel.x, y: panel.y, width: panel.width, height: panel.height, radius: 22, segments: 12, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x18243b), Color.with_alpha(Color.white, 55), 2) })
 
-	model.title.draw!(frame, { pos: { x: 400, y: 230 }, color: Color.white, align: (Top, Center) })
-	frame.line!({ start: { x: 400 - title_size.width * 0.5, y: 288 }, end: { x: 400 + title_size.width * 0.5, y: 288 }, stroke: Draw.stroke(Color.with_alpha(accent, 170), 3) })
-	model.help.draw!(frame, { pos: { x: 400, y: 310 }, color: Color.from_hex_rgb(0xa8b4cc), align: (Top, Center) })
+	model.title.draw!(frame, { pos: { x: center_x, y: panel.y + 80 }, color: Color.white, align: (Top, Center) })
+	half_title = model.title_width * 0.5
+	frame.line!({ start: { x: center_x - half_title, y: panel.y + 138 }, end: { x: center_x + half_title, y: panel.y + 138 }, stroke: Draw.stroke(Color.with_alpha(accent, 170), 3) })
+	model.help.draw!(frame, { pos: { x: center_x, y: panel.y + 160 }, color: Color.from_hex_rgb(0xa8b4cc), align: (Top, Center) })
 
 	# The pointer gets a halo that pulses with the same clock as the backdrop.
 	frame.circle!({ center: model.pointer, radius: 26 + 8 * pulse, style: Draw.filled(Color.with_alpha(accent, 40)) })

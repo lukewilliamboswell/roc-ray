@@ -1,0 +1,227 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#first-game]
+= Your first game
+
+In this chapter you build _Paddle_, a small game: bounce a ball off a paddle
+at the bottom of the screen, score a point for each hit, and lose a life for
+each miss. You build it in six steps. After each step you have a complete
+program to run and play with.
+
+Along the way you meet the ideas every RocRay game uses: moving things by
+time, keeping them on screen, collision, drawing text, sound, and restarting.
+
+Before you start, run the smallest app from <<smallest-app>>, and read
+<<roc-primer>> if Roc is new to you.
+
+== How to follow along
+
+Work in the folder that holds your smallest app. Each step replaces the
+whole of `main.roc` except its first line, the header you already have:
+
+[source,roc]
+----
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+----
+
+The listings below start after that line. Paste one in below your header, save
+the file, and run `roc main.roc`. Press Escape to quit.
+
+The complete files are in the repository's {tree}/docs/tutorial[`docs/tutorial`]
+directory, as `step1.roc` to `step6.roc`. Their headers point at the
+repository's own copy of the platform rather than at a release.
+
+[#first-game-step1]
+== Step 1: a paddle that moves
+
+[source,roc]
+----
+include::tutorial/step1.roc[tag=body,indent=0]
+----
+
+The model is one number: the paddle's left edge, `paddle_x`. `render!` draws a
+white rectangle there, near the bottom of the window.
+
+Positions are in the window's _logical units_. The default window is 800 units
+wide and 600 tall. `x` grows to the right and `y` grows downward, so `(0, 0)`
+is the top-left corner and `paddle_y = 560` is near the bottom.
+
+The host calls `update!` once per _host cycle_, typically 60 or more times
+a second. Each call reads the arrow keys: `input.devices.key_down(KeyLeft)` is
+true while the left arrow key is held. `direction` becomes `-1`, `1`, or `0`.
+
+`input.time.elapsed_seconds` is how much time has passed since the previous
+host cycle, such as `0.016` at 60 cycles a second. Multiplying the paddle's
+speed by it turns "480 units per second" into "how far to move this cycle".
+The paddle then moves at the same speed on a fast computer that runs 240 host
+cycles a second and on a slow one that runs only 30. Move things by time, never
+by a fixed amount per cycle.
+
+Run it and hold an arrow key. The paddle moves, and it keeps going straight
+off the edge of the window. Step 2 fixes that.
+
+[#first-game-step2]
+== Step 2: keep it on the screen
+
+[source,roc]
+----
+include::tutorial/step2.roc[tag=body,indent=0]
+----
+
+Two things changed.
+
+The paddle's movement is now a function of its own, `move_paddle`. It is pure:
+it takes the old position, the direction, and the time, and returns the new
+position. `Math.clamp(value, low, high)` limits a number to a range, so the
+paddle's left edge stays between `0` and `screen_width - paddle_width`.
+
+The elapsed time is clamped too, to at most `max_dt`, a twentieth of a second.
+`elapsed_seconds` is the real time since the previous host cycle. Usually that
+is a small fraction of a second, but when the computer is briefly busy with
+something else, or you drag the window, one cycle can report half a second or
+more. A game that moves by that much in one step makes things jump: a fast ball can pass straight through the
+paddle without ever touching it. With the clamp, the game slows down briefly
+instead. <<input-frame-timing>> shows a fixed-step alternative for games that
+must advance exactly the same way every time.
+
+[#first-game-step3]
+== Step 3: a ball that bounces
+
+[source,roc]
+----
+include::tutorial/step3.roc[tag=body,indent=0]
+----
+
+The model now holds a `Ball` as well: a position and a velocity, each a
+`Math.Vec2`, which is a record with an `x` and a `y`. The velocity is in units
+per second, and `serve` is where each ball starts: near the top, heading down
+and to the right.
+
+`move_ball` moves the ball by its velocity times the elapsed time. When the
+ball has passed the left or right wall and is still moving toward it, the
+function flips the sign of the horizontal velocity, which sends the ball back.
+The top wall does the same for the vertical velocity. Checking the direction
+as well as the position matters: a ball that is already heading back must not
+be flipped again, or it would stick to the wall.
+
+Nothing stops the ball at the bottom yet. When it falls below the window,
+`move_ball` returns `serve` and the ball starts again from the top.
+
+`render!` draws the ball with `frame.circle!` after the paddle. Later drawing
+covers earlier drawing, so draw from back to front.
+
+[#first-game-step4]
+== Step 4: hit the ball and keep score
+
+[source,roc]
+----
+include::tutorial/step4.roc[tag=body,indent=0]
+----
+
+The ball now bounces off the paddle. `Math.circle_rect` reports whether a
+circle and a rectangle overlap. When the ball touches the paddle while moving
+down, `move_ball` sends it back up, a little faster each time (`speed_up`).
+
+`move_ball` also says what happened, as an `Event`: a tag union of
+`PaddleHit`, `BallLost`, and `Nothing`. It returns the new ball and the event
+together, as a tuple.
+
+`advance` holds all of the game logic for one host cycle: move the paddle, move
+the ball, then count the event. A hit adds a point and a miss resets the
+score. Like `move_paddle` and `move_ball`, `advance` is pure, and `update!`
+just calls it. `update!` does not use the event yet, and the `_` at the start
+of `_event` tells the compiler that the value is unused on purpose.
+
+`frame.text_at!` draws a string with the built-in font. The string is built
+with `+${...}+`, and `model.score.to_str()` turns the score into text.
+
+[#first-game-step5]
+== Step 5: add sound
+
+[source,roc]
+----
+include::tutorial/step5.roc[tag=body,indent=0]
+----
+
+`Audio.gen_tone!` makes a short beep at a pitch you choose, in hertz, lasting
+the number of milliseconds you give. `init!` makes two, a high one for a hit
+and a low one for a miss, and keeps them in the model so they are made only
+once.
+
+Making a sound can fail, so `init!` uses `?` on each call and its error list
+grows from `[]` to `[SoundGenerationFailed, ResourceLimit]`. If either error
+happens, the app stops at startup and prints which one.
+
+`update!` now uses the event `advance` returns. It plays the matching sound
+with `play!`, which starts the sound and returns at once. Playing a sound is
+an _effect_: a call into the host. `update!` may call an effect that returns
+at once, like this one. An effect that has to wait, such as reading a file,
+belongs in a _task_ instead; <<tasks>> explains why.
+
+[#first-game-step6]
+== Step 6: lives, game over, and tests
+
+[source,roc]
+----
+include::tutorial/step6.roc[tag=body,indent=0]
+----
+
+The player now has three lives. A miss costs one, and the score no longer
+resets. When the last life is gone, `update!` stops advancing the game, and
+`render!` shows "Game over". Pressing Space calls `new_game`, which returns
+the model to its starting state but keeps the sounds.
+
+`key_pressed(KeySpace)` is true only on the host cycle when Space went down,
+while `key_down` stays true for as long as a key is held. Use `key_pressed`
+for actions that happen once per press. <<input>> covers the keyboard and
+mouse in full.
+
+`update!` only calls `advance` while at least one life is left, so
+`next.lives - 1` never goes below zero. A `U64` cannot hold a negative number,
+and subtracting past zero stops the app.
+
+At the end of the file are four tests. Because the game logic is in pure
+functions, a test can call them directly, with any situation you like. Run the
+tests with:
+
+[source,sh]
+----
+roc test main.roc
+----
+
+== Run it without a window
+
+A built RocRay app can also run _headless_: without a window, graphics or
+sound, for a set number of host cycles. Nothing is drawn, but `init!` and
+`update!` run as usual, so this catches a crash in the game's logic:
+
+[source,sh]
+----
+roc build main.roc --output=paddle
+./paddle --host-headless --host-headless-frames=60
+----
+
+The repository checks every step of this chapter this way. <<testing>>
+covers headless runs and scripted key presses.
+
+== Where to go next
+
+Some ideas for changing Paddle:
+
+* Make the ball start in a random direction. <<input-randomness>> shows how
+  to use randomness.
+* Add a row of bricks for the ball to break. The
+  {src}/examples/breakout/main.roc[Breakout] example does this.
+* Draw the paddle with rounded corners using `frame.rounded_rectangle!`. See
+  <<drawing>>.
+
+Then read <<app-model>>, which explains `init!`, `update!` and `render!` in
+full, and the {src}/examples/pong/main.roc[Pong] example, a larger game built
+the same way.

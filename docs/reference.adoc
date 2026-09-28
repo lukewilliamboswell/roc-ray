@@ -1,0 +1,144 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/api/
+endif::[]
+
+[#reference]
+= Reference
+
+This chapter collects facts to look up: where the API reference lives, the
+switches and environment variables every built app understands, the platform's
+fixed limits, and the supported targets.
+
+== API reference
+
+The {api}[API reference] documents every module, type, and function the
+platform exposes, generated from the platform's own module documentation. Each
+effect's entry says which phases it is legal in (see <<phases>>). A release
+publishes the reference for its version; its index opens the latest.
+
+== Supported targets and bundles
+
+Each release publishes two platform bundles that expose the same API:
+
+[cols="1,3,2",options="header"]
+|===
+|Bundle |Use it for |Build targets
+|Default |macOS on Intel and Apple silicon, Windows x86-64, and Linux x86-64 through raylib's X11 build (which also runs under XWayland) |`x64mac`, `arm64mac`, `x64win`, `x64v1glibc`
+|Wayland |Linux x86-64 Wayland systems, when you want raylib's native Wayland build |`x64v1glibc`
+|===
+
+ARM Linux is not supported. The release notes name each bundle's URL and the
+exact Roc compiler the release supports. <<shipping>> explains building for
+each target.
+
+[#reference-switches]
+== Host switches
+
+A built app accepts these switches. They all begin with `--host-`; the host
+removes them before the app reads its arguments, and an unrecognised
+`--host-` switch stops the app. `--host-help` prints a summary.
+
+The scripting switches (`--host-keys`, `--host-text`, `--host-drops`, and
+`--host-close`) feed the same input path as the real window, so a test or a
+recorded demo runs the app's ordinary code.
+
+[cols="2,3",options="header"]
+|===
+|Switch |Effect
+|`--host-headless` |Run without a window, GPU, or audio device; nothing is drawn
+|`--host-headless-frames=N` |Run headless and stop after N cycles
+|`--host-frames=N` |Stop a real windowed run after N cycles
+|`--host-hidden` |Open the real window hidden; still needs a display server
+|`--host-keys=SCRIPT` |Hold keys on the cycles named, such as `3:S,4:LEFT+X,10:32`; a `~` suffix taps the key within the cycle, such as `3:SPACE~`. A scripted press of the exit key ends the app
+|`--host-text=SCRIPT` |Deliver typed text on the cycles named, such as `2:ab,3:c`
+|`--host-drops=SCRIPT` |Drop files on the window on the cycles named, such as `2:/tmp/a.png,2:/tmp/b.png`; each arrives in `input.dropped`
+|`+--host-close=CYCLE[,CYCLE...]+` |Request that the window close on each cycle named, such as `30` or `30,90`, as clicking its close button does
+|`--host-debug-allocator` |In a Debug build, use Zig's stack-tracing allocator to diagnose leaks
+|`--host-stats-record` |Record an Observatory capture; see <<observatory>>
+|`--host-stats-output=PATH` |Choose the capture's path, and record
+|`--host-stats-detail=LEVEL` |`summary`, `standard` (the default), or `full`
+|`--host-stats-buffer-mib=N` |Recorder memory in MiB, 1 to 4096; default 32
+|`--host-stats-max-mib=N` |Stop recording once the capture reaches this size; default 4096
+|`--host-help` |Print a summary of these switches
+|===
+
+== Environment variables
+
+[cols="1,3",options="header"]
+|===
+|Variable |Effect
+|`ROC_RAY_TRACE_TASKS` |Print a trace line for each task as it is spawned, queued, parked, resumed, finished, and delivered
+|`ROC_RAY_ALLOC_STATS` |Print one line per host cycle to standard error with the bytes and calls that cycle allocated and freed, and how much belonged to `update!`
+|===
+
+== Limits
+
+These limits are part of the platform's behaviour. The host limits everything
+it keeps, so an app can never make it use an unlimited amount of memory, and
+reaching a limit gives the app a result it can handle. Each limit is
+documented, with what happens when it is reached, on the corresponding page of
+the API reference.
+
+=== Input and tasks
+
+[cols="2,1,3",options="header"]
+|===
+|What |Limit |At the limit
+|Tasks running at once |32 |Further spawns wait and start in submission order
+|Input events per cycle |256 |The rest are discarded and `events_overflow` is set
+|Typed codepoints per cycle |32 |The rest are discarded and `text_input_overflow` is set
+|Dropped files per cycle |64 |The rest are discarded and `dropped_overflow` is set
+|Gamepads sampled |4 |Further gamepads are not seen
+|===
+
+=== Resources held at once
+
+A resource is released when the app drops its last reference to it, which
+frees its place for another.
+
+[cols="2,1,3",options="header"]
+|===
+|Resource |Limit |At the limit
+|Textures |128 |`ResourceLimit`
+|Sounds |128 |`ResourceLimit`
+|Music streams |16 |`ResourceLimit`
+|Fonts |32 |`ResourceLimit`
+|Render textures |32 |`ResourceLimit`
+|Shaders |32 |`ResourceLimit`
+|Prepared texts |256 |`ResourceLimit`
+|Asset stores |16 |`ResourceLimit`
+|UDP sockets |8 |`ResourceLimit`
+|SQLite connections and statements |8 and 64 |`TooManyConnections` or `TooManyStatements`
+|===
+
+=== Sizes and durations
+
+[cols="2,1,3",options="header"]
+|===
+|What |Limit |At the limit
+|`read_text!` file size |64 KiB |`TooLarge`
+|`read_bytes!` file size |16 MiB |`TooLarge`
+|Byte lists from `read_bytes!` the app keeps at once |32 |`Busy`; nothing is read, and the same call can succeed once the app lets one go
+|`list!` directory listing |8192 entries or 1 MiB of names |`TooLarge`
+|Sound or music file read by `Audio` |64 MiB |The load fails
+|Any other asset file |128 MiB |The load fails
+|`Audio.gen_sound!` and `gen_tone!` length |1 ms to 5 seconds (`Audio.max_generated_ms`) |Any other `ms` stops the app, naming the fix
+|Standard output and standard error queues |256 KiB each |`TooLarge` for one payload bigger than the queue, `BufferFull` for a full queue
+|HTTP request deadline and response body |30 seconds, 8 MiB by default |The request fails; configurable with `send_with!`
+|HTTP redirects followed |3 |The request fails
+|SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default |The query is refused, never truncated
+|Permission declarations |64 |The app stops before `init!`
+|===
+
+== Permissions and phases
+
+* <<permissions>> lists every `Permission`, what it permits, and every error a
+  refusal returns.
+* <<phases>> lists which kinds of effect are legal in which callbacks.
+* <<architecture>> defines the vocabulary precisely: host cycle, task,
+  message, phase, and waiting effect.

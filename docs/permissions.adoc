@@ -10,12 +10,70 @@ endif::[]
 [#permissions]
 = Declaring what an app reaches
 
-Every app can draw, read input, play audio, and print to its terminal without
-asking. Reaching beyond its own things -- a network service, a directory,
-another program, an environment variable, the clipboard -- is declared in the
-app's startup configuration. This chapter explains what needs a declaration,
-how to write one, and what happens when an app reaches outside it. It assumes
+Every app can open its window, read input, draw, play audio, and print to its
+terminal without asking. To reach anything else -- a directory, a web service,
+another program, an environment variable, the clipboard -- the app says so in
+its startup configuration. That statement is a _declaration_, and it is the
+only permission there is: nobody is prompted, and there are no launch flags.
+
+This chapter starts with what a typical game needs, then lists every
+declaration and what happens when an app reaches outside them. It assumes
 <<app-model>>.
+
+== What a typical game needs
+
+A game that loads its own images and sounds and saves high scores needs one
+declaration at most:
+
+[source,roc]
+----
+config =
+    App.default
+    .with_title("Asteroids")
+    .with_app_id("dev.example.asteroids")
+    .with_permission(Directory("assets", ReadOnly))
+----
+
+Each line has one job:
+
+* `with_app_id` names the app. With a name, `io.files().app_data!()` gives
+  the app a private directory for its saves, with no declaration. See
+  <<files-and-assets>>.
+* `Directory("assets", ReadOnly)` lets the app read the `assets` directory
+  beneath the directory you launch it from. You need this while you develop
+  the game and run it from its source directory.
+* Once you package the game with its assets beside the executable,
+  `io.files().beside_executable!()` reaches them with no declaration at all.
+  <<shipping>> shows one `init!` that works both ways.
+
+Printing with `io.stdout()`, drawing, sound, and screenshots under the output
+directory need nothing.
+
+If that covers your app, you can stop here and come back when the app needs
+the network, another directory, or another program.
+
+== What needs no declaration
+
+These belong to the running app and are always available:
+
+* the window, input, drawing, audio playback, clocks, timers, and entropy;
+* resources built from bytes the app already holds, such as generated
+  textures and sounds;
+* standard output and standard error;
+* captures written beneath the configured output directory (see <<capture>>);
+* the read-only directory beside the executable: the app's own files;
+* the app's private data, configuration, and cache directories, once it names
+  itself with `with_app_id` (see <<files-and-assets>>);
+* in-memory SQLite databases.
+
+A file the user drops on the window, or a path the user passes on the command
+line, needs no declaration either: the user choosing it is the consent.
+<<files-designated>> shows how to accept one.
+
+One startup setting does need a declaration: a font file named with
+`App.default.with_default_font(...)` is read from disk before `init!`, so a
+file declaration must cover its path, such as `Directory("assets", ReadOnly)`
+for `"assets/ui.ttf"`. The built-in font needs nothing.
 
 == Declare it in the startup config
 
@@ -30,39 +88,20 @@ config =
     .with_permission(EnvVar("WEATHER_TOKEN"))
 ----
 
-or several at once, in order:
+or several at once:
 
 [source,roc]
 ----
 App.default.with_permissions([HttpOrigin("https://api.example.com"), EnvVar("API_TOKEN")])
 ----
 
-The declaration is the grant. There are no launch flags, prompts, or
-install-time approvals: what an app can reach is read from its source, and
-changed only by changing its source. A declaration may depend on the command
-line, through `App.init_for_args`, but every alternative is still written in
-the source.
+Declarations add up, and declaring the same thing twice is harmless.
 
-Declarations accumulate, and a duplicate is harmless.
+What an app can reach is read from its source and changed only by changing its
+source. A declaration may depend on the command line, through
+`App.init_for_args`, but every alternative is still written in the source.
 
-== What needs no declaration
-
-These belong to the running app and are always available:
-
-* the window, input, drawing, audio playback, clocks, timers, and entropy;
-* resources built from bytes the app already holds;
-* standard output and standard error;
-* captures written beneath the configured output directory (see <<capture>>);
-* the read-only directory beside the executable -- the app's own bundle;
-* the app's private data, configuration, and cache directories, once it names
-  itself with `with_app_id` (see <<files-and-assets>>);
-* in-memory SQLite databases.
-
-A file the user drops on the window, or a path the user passes on the command
-line, needs no declaration either: the user designating it is the consent.
-<<files-designated>> shows how to accept one.
-
-== Permissions
+== Every declaration
 
 Declare each facility as narrowly as it allows.
 
@@ -71,17 +110,17 @@ Declare each facility as narrowly as it allows.
 |Declaration |Permits
 
 2+h|HTTP
-|`HttpOrigin(url)` |Requests to the URL's origin: its scheme, host, and port. `HttpOrigin("https://api.example.com")` permits `https://api.example.com/v1/forecast` but not `http://api.example.com`, `https://api.example.com:8443`, or `https://cdn.example.com`. A redirect to another origin is refused unless that origin is declared too.
+|`HttpOrigin(url)` |Requests to the URL's origin: its scheme, host, and port. `HttpOrigin("https://api.example.com")` permits `+https://api.example.com/v1/forecast+` but not `+http://api.example.com+`, `+https://api.example.com:8443+`, or `+https://cdn.example.com+`. Any path or query in `url` is ignored. A redirect to another origin is refused unless that origin is declared too.
 |`HttpAny` |Requests anywhere. Prefer `HttpOrigin` unless the destinations truly are open-ended, such as a URL the user types.
 
 2+h|UDP
 |`UdpBind(port)` |Binding a socket to one local port
-|`UdpPeer(address, port)` |Sending datagrams to one IPv4 peer, written as a dotted quad such as `"192.168.1.20"`; also permits binding an ephemeral port (port `0`) to talk to it
-|`UdpLoopback` |Binding and sending on any port of any address in `127.0.0.0/8`: networking between processes on this machine and nothing beyond
+|`UdpPeer(address, port)` |Sending datagrams to one IPv4 peer, written as a dotted quad such as `"192.168.1.20"`. Also permits binding an ephemeral port (port `0`) to talk to it.
+|`UdpLoopback` |Binding and sending on any port of any address in `127.0.0.0/8`: networking between programs on this machine and nothing beyond
 |`UdpAny` |Binding any port and sending to any peer
 
 2+h|Programs
-|`Command(program)` |Running one program, named exactly as the app names it to `Cmd`. `Command("git")` permits running `"git"`, looked up on `PATH`, and not `"/usr/bin/git"`.
+|`Command(program)` |Running one program, named exactly as the app names it to `Cmd.new`. `Command("git")` permits running `"git"`, looked up on `PATH`, and not `"/usr/bin/git"`.
 |`CommandAny` |Running any program. A child process has all of the user's authority, so this is the widest declaration there is.
 
 2+h|Environment
@@ -93,48 +132,97 @@ Declare each facility as narrowly as it allows.
 |`ClipboardWrite` |Replacing the system clipboard's contents
 
 2+h|Files
-|`WorkingDirectory(mode)` |The directory the app was launched from and everything beneath it: what running an example from a repository checkout wants
-|`Directory(path, mode)` |One directory and everything beneath it. An absolute path names it directly; a relative one is resolved against the working directory. It may not contain `..` or be the filesystem root.
+|`Directory(path, mode)` |A directory and everything beneath it, as the app names it to `open_dir!` or `open_dir_read!`. A relative `path` covers relative paths beneath it; an absolute `path` covers absolute paths beneath it. It may not contain `..` or be the filesystem root.
+|`WorkingDirectory(mode)` |The directory the app was launched from: `working_directory!`, `working_directory_read!`, and every relative path given to `open_dir!` or `open_dir_read!`. What running an example from a repository checkout wants.
 |`FilesAny(mode)` |Any path on the filesystem
 |===
 
-A `mode` is `ReadOnly` or `ReadWrite`.
+A `mode` is `ReadOnly` or `ReadWrite`. A `ReadWrite` declaration also permits
+reading.
 
 Each facility's unscoped form -- `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`,
 `FilesAny` -- is spelled to stand out in review.
 
+=== How directory declarations match
+
+A directory declaration is compared with the path as the app writes it, one
+component at a time; nothing is looked up on disk to decide. So:
+
+* `Directory("assets", ReadOnly)` covers `open_dir_read!("assets")` and
+  `open_dir_read!("assets/levels")`, but not `open_dir_read!("assetsx")`.
+* It does not cover `open_dir_read!("/home/me/game/assets")`, even when that
+  is the same directory: an absolute path needs an absolute declaration.
+* A relative path is opened relative to the working directory, so which
+  directory `"assets"` names depends on where the app is launched.
+* A path containing `..` is covered only by `FilesAny`.
+
+`open_dir!` needs a `ReadWrite` declaration and creates the directory if it is
+not there. `open_dir_read!` accepts either mode and reports `NotFound` for a
+missing directory.
+
 == What happens at the edges
 
-There are three different outcomes, and they are deliberately different:
+Each kind of refusal has its own answer, so an app can tell them apart.
 
-Outside a declared scope::
+The target is outside every declaration::
   The effect returns `PermissionDenied` without doing anything. A URL on
-  another origin, a path outside the declared directories, or an undeclared
-  variable name can all be runtime data, so the app must be able to handle
-  this as an ordinary result. A followed HTTP redirect is checked the same way.
+  another origin, a directory no declaration covers, or an undeclared
+  variable name can all be runtime data, so the app handles this as an
+  ordinary result. `PermissionDenied` also answers a handle made with `stub`
+  for tests, a dropped path that was not delivered in this cycle, and a
+  command-line argument the app was not launched with. A followed HTTP
+  redirect is checked like the request that caused it.
 
-A facility the app never declared at all::
+The path's shape is refused::
+  An effect that takes a path beneath a handle returns `PathInvalid` for a
+  path that is not plainly relative -- empty, absolute, with a drive letter
+  or a backslash, or with an empty, `.`, or `..` component -- and for one
+  that passes through a symbolic link (on Windows, a reparse point) or writes
+  to one. These are refused on every system, whether or not the path would
+  lead outside the handle.
+
+The operating system refuses::
+  A declaration grants what RocRay allows; the operating system can still say
+  no. A write, `metadata!`, or a directory open that the system refuses
+  returns `AccessRefused`, and so does binding a UDP port below 1024 without
+  privileges. A read the system refuses returns `ReadFailed`, because the
+  host cannot tell that apart from other read failures; call `metadata!` on
+  the path to find out which it was.
+
+The app never declared the facility at all::
   Using `Http` with no HTTP declaration, or `Cmd` with no `Command`, is a
-  programming mistake fixed by the source. The app stops at once with a
-  message naming the declaration to add.
+  mistake in the source, so the app stops at once with a message naming the
+  declaration to add.
 
-A malformed declaration::
-  A directory containing `..`, a UDP peer that is not an IPv4 address, or an
-  origin that does not parse stops the app before `init!` runs, naming the
-  entry.
-
-`PermissionDenied` means only "not declared". When the operating system itself
-refuses -- a file the user cannot write, a port below 1024 without privileges
--- the effect reports `AccessRefused`.
+A declaration is malformed::
+  The app stops before `init!` runs, with a message naming the declaration.
+  The startup checks refuse:
++
+* a UDP port of `0` in `UdpBind` or `UdpPeer`;
+* a `UdpPeer` address that is not a dotted-quad IPv4 address, such as
+  `"localhost"`;
+* an empty `Command` or `EnvVar` name, or an environment variable name
+  containing `=`;
+* a `Directory` path that is empty, contains a `..` component, or is the
+  filesystem root;
+* an app id that is not 1 to 128 ASCII letters, digits, `.`, `-`, or `_`;
+* more than 64 declarations.
++
+`HttpOrigin` takes a `Url`, so a quoted URL literal is checked when the app
+compiles, and a malformed one is a compile error.
 
 == What this protects against
 
 A RocRay app has no way to reach anything except through the platform, so its
-declarations bound what the app's code can do. That addresses a careless or
-compromised dependency inside a trusted app, which can reach only what the app
-hands it; runtime data -- a save name, a dropped path, a network reply --
-steering an effect somewhere the app never meant; and unaudited source, which
-can reach no further than what it visibly declares.
+declarations bound what its Roc code can do. That protects against three
+things:
+
+* a careless or compromised dependency inside a trusted app, which can reach
+  only what the app hands it;
+* runtime data -- a save name, a dropped path, a network reply -- steering an
+  effect somewhere the app never meant it to go;
+* source you have not read closely, which can reach no further than what it
+  visibly declares.
 
 It is not an operating-system sandbox. It does not contain a malicious native
 executable, whose author controls the host as well as the app, and it does not
@@ -144,4 +232,5 @@ make decoding hostile data safe.
 
 * The `Permission` page of the {api}[API reference].
 * <<files-and-assets>> for how file declarations become directory handles.
+* <<shipping>> for how assets are found during development and once packaged.
 * The authority tiers are stated precisely in <<architecture>>.

@@ -28,7 +28,7 @@ init! = App.init(
     App.default.with_app_id("dev.example.notes"),
     |io| {
         saves = io.files().app_data!()?
-        Ok({ saves })
+        Ok({ saves: saves })
     },
 )
 
@@ -55,24 +55,32 @@ can only read. A write through a `ReadDir` does not compile.
 
 [cols="2,1,3",options="header"]
 |===
-|`io.files()` receiver |Returns |Needs
-|`app_data!()`, `app_config!()`, `app_cache!()` |`Dir` |No permission, but the app must name itself with `App.default.with_app_id(...)`. These are the app's private directories under the user's home, created on first use.
-|`beside_executable!()` |`ReadDir` |Nothing. This is the directory the executable is in: the app's own bundle.
-|`working_directory!()` |`Dir` |`WorkingDirectory(ReadWrite)`
-|`working_directory_read!()` |`ReadDir` |`WorkingDirectory(ReadOnly)` or `WorkingDirectory(ReadWrite)`
-|`open_dir!(path)` |`Dir` |A `Directory(path, ReadWrite)` or `FilesAny(ReadWrite)` declaration covering `path`
-|`open_dir_read!(path)` |`ReadDir` |A `Directory` or `FilesAny` declaration covering `path`
+|`io.files()` method |Returns |Needs
+|`app_data!()`, `app_config!()`, `app_cache!()` |`Dir` |No declaration, but the app must name itself with `App.default.with_app_id(...)`. These are the app's private directories under the user's home, created on first use.
+|`beside_executable!()` |`ReadDir` |Nothing. This is the directory the executable is in, where a packaged app keeps its own files.
+|`working_directory!()` |`Dir` |`WorkingDirectory(ReadWrite)` or `FilesAny(ReadWrite)`
+|`working_directory_read!()` |`ReadDir` |`WorkingDirectory` or `FilesAny`, in either mode
+|`open_dir!(path)` |`Dir` |A `ReadWrite` declaration covering `path`: a `Directory` it lies beneath, `WorkingDirectory` if `path` is relative, or `FilesAny`. The directory is created if it is not there.
+|`open_dir_read!(path)` |`ReadDir` |The same, in either mode
 |===
 
 An app id is a reverse-DNS style name the app will keep, such as
 `"dev.example.pong"`: 1 to 128 ASCII letters, digits, `.`, `-`, or `_`. It
 becomes a directory name, so changing it later moves the app's saved data out
-of reach.
+of reach. <<shipping-app-id>> lists where each system keeps these directories.
 
-Two pure receivers narrow a handle without touching the disk:
-`dir.subdir("levels")` returns a handle to a directory beneath it, and
-`dir.read_only()` turns a `Dir` into a `ReadDir`. Pass the narrowest handle a
-helper needs.
+A path given to `open_dir!` or `open_dir_read!` is matched against the
+declarations as written, not looked up on disk; <<permissions>> explains how.
+A relative one names a directory beneath the working directory.
+
+Two pure methods narrow a handle without touching the disk:
+
+* `dir.subdir("levels")` returns a handle to a directory beneath `dir`. It
+  returns `Try(_, [PathInvalid])`, because the name might not be a plain
+  relative path, so write `dir.subdir("levels")?` in `init!` or a task.
+* `dir.read_only()` turns a `Dir` into a `ReadDir`.
+
+Pass the narrowest handle a helper needs.
 
 == Reading and writing
 
@@ -95,21 +103,35 @@ repo = model.repo
 Task.spawn!(input, || SmallReadFinished(repo.read_text!("README.md")))
 ----
 
-Each returns a typed error the app can `match` on. For a read, `NotFound` is
-no file at that path; `TooLarge` is a file past the size ceiling; `NotUtf8` is
-a file that is not valid text; `Busy` means the host's file-delivery slots are
-all held by byte lists the app has kept, so nothing was read and the same call
-can succeed later; and `Unavailable` means the app was shutting down. The
-{api}[API reference] lists every error for every effect.
+Each returns a typed error the app can `match` on. For a read:
+
+* `NotFound`: no file at that path;
+* `TooLarge`: a file past the size limit;
+* `NotUtf8`: a file that is not valid text (`read_text!` only);
+* `PathInvalid` and `PermissionDenied`: see below;
+* `ReadFailed`: anything else, including the operating system refusing the
+  read;
+* `Busy`: the host's 32 file-delivery slots are all held by byte lists the
+  app has kept, so nothing was read and the same call can succeed later;
+* `Unavailable`: the app was shutting down.
+
+The {api}[API reference] lists every error for every effect.
 
 === Paths beneath a handle
 
 A path given to a handle is plainly relative: no leading `/`, no drive letter,
 no backslash, and no empty, `.`, or `..` component. Symbolic links beneath a
-handle are not followed. A path that breaks either rule returns
-`PermissionDenied`, the same answer as any target outside what the app
-declared. When the operating system itself refuses, for example a file the
-user may not write, the error is `AccessRefused`.
+handle are not followed, and a write never replaces one. A path that breaks
+either rule returns `PathInvalid`, whether or not it would lead outside the
+handle.
+
+`PermissionDenied` means the handle grants nothing: it is a `stub` made for
+tests.
+
+When the operating system itself refuses, the answer depends on the effect. A
+write, `metadata!`, or a directory open returns `AccessRefused`. A read
+returns `ReadFailed`, because the host cannot tell a refusal apart from other
+read failures; call `metadata!` on the path to find out which it was.
 
 [#files-designated]
 == Files the user hands the app
@@ -142,24 +164,24 @@ There is no file-picker dialog.
 
 Textures, sounds, music, fonts, shaders, and maps are loaded from an _asset
 store_: a directory opened from a `ReadDir`. The store reaches exactly what
-that handle reaches, so a bundle beside the executable needs no permission,
-and any other directory needs one:
+that handle reaches, so an `assets` directory beside the executable needs no
+declaration, and any other directory needs one:
 
 [source,roc]
 ----
 init! = App.init(
     App.default,
     |io| {
-        bundle = io.files().beside_executable!()?
-        store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
+        exe_dir = io.files().beside_executable!()?
+        store = Assets.open!(exe_dir.subdir("assets")?, IgnoreManifest)?
         Ok({ logo: Assets.load_texture!(store, "logo.png")?, store })
     },
 )
 ----
 
-When running an example from a repository checkout, the assets sit in the
-source tree rather than beside the executable, so the examples declare their
-asset directory and open it by path:
+While you develop, you run the app with `roc`, which builds the executable
+somewhere else, so the assets are not beside it. Declare the source directory
+and open it by path instead. The repository's examples do this:
 
 [source,roc]
 ----
@@ -182,24 +204,37 @@ Load from a store with:
 |`Draw.Shader.from_store!(store, shader)` |A shader
 |===
 
+<<shipping>> shows one `init!` that uses the source directory while you
+develop and the directory beside the executable once the game is packaged.
+
 Opening a store and loading from it wait, so they belong in `init!` or a
 task. Load long-lived resources once in `init!` and keep them in the model. To
 load something after startup, load it in a task and keep the resource its
 message carries.
 
-A path that would escape the store, or that meets a symbolic link, is refused
-rather than rewritten. `ResourceLimit` means the host's fixed table for that
-kind of resource is full; release resources the app no longer needs.
+A path given to a loader is relative to the store. One that would leave the
+store, or that meets a symbolic link, returns `PathInvalid` rather than being
+rewritten.
 
-=== Asset manifests
+The host keeps a fixed number of each kind of resource: for example, 128
+textures and 128 sounds at once. A load past that number returns
+`ResourceLimit`. A resource is released when the app drops its last reference
+to it, which frees its place for another. <<reference>> lists every limit.
 
-`Assets.open!` takes a manifest policy. `IgnoreManifest` opens a directory of
-loose files. `RequireManifest(expectation)` fails the open unless a
-`roc-assets.manifest` file beside the assets declares the expected asset set,
-schema version, content version, and, optionally, a SHA-256 content hash. The
-comparison is against the manifest's declaration only; nothing hashes the
-files, so opening a store stays fast however many assets it holds. The
-repository's `scripts/asset_manifest.py` generates and verifies a
+`Assets.open!` takes a manifest policy as its second argument. Pass
+`IgnoreManifest` to open a directory of loose files, which is what almost
+every app wants.
+
+=== Advanced: asset manifests
+
+`RequireManifest(expectation)` fails the open unless a `roc-assets.manifest`
+file in the store declares the expected asset set, schema version, content
+version, and, optionally, a SHA-256 content hash. The open compares these
+against what the manifest declares; it does not read or hash the asset files,
+so opening a store stays fast however many assets it holds. It confirms the
+store is the release you packaged, not that its files are intact.
+
+The repository's `scripts/asset_manifest.py` generates and verifies a
 deterministic manifest for a directory of loose assets, which gives packaging
 and CI a stable content revision.
 
@@ -222,8 +257,8 @@ rows = Sqlite.query!({ db, query: top_ten, bindings: [] })?
 * `io.sqlite().open_memory!()` creates a private in-memory database, which
   needs no handle.
 
-Every database effect waits, so it runs in `init!` or a task. Use the free
-`Sqlite.query!` and `Sqlite.execute!` for one-off SQL, and keep a prepared
+Every database effect waits, so it runs in `init!` or a task. Use the
+module-level functions `Sqlite.query!` and `Sqlite.execute!` for one-off SQL, and keep a prepared
 statement from `Sqlite.prepare!` when running the same SQL repeatedly.
 Transactions use explicit `BEGIN`, `COMMIT`, and `ROLLBACK`. Rows are decoded
 with pure, typed accessors such as `row.str("name")`.
@@ -231,7 +266,7 @@ with pure, typed accessors such as `row.str("name")`.
 `ATTACH` is disabled on every connection, so a database cannot reach a second
 file outside its handle. At most eight connections and sixty-four statements
 may be open. A query whose result exceeds one million cells, or the configured
-byte limit (sixteen megabytes by default), is refused rather than truncated.
+byte limit (16 MiB by default), is refused rather than truncated.
 Databases and statements close automatically when their last reference goes
 away; `Db.close!` closes one early.
 

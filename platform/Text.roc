@@ -59,7 +59,7 @@ Text := [].{
 	}
 
 	## A string and its drawing style. Start one with `Text.from`, adjust it with
-	## the receivers below, then draw it immediately or finish it with
+	## the methods below, then draw it immediately or finish it with
 	## `prepare!` for repeated drawing.
 	##
 	## A builder is a plain description, so building and measuring one costs
@@ -140,7 +140,7 @@ Text := [].{
 		## Legal in `render!` only.
 		##
 		## The frame is the second argument here because the prepared text is
-		## the receiver; `Text.draw_prepared!` is the same call with the frame
+		## the value the method is called on; `Text.draw_prepared!` is the same call with the frame
 		## first.
 		draw! : Prepared, Draw.Frame, Placement => {}
 		draw! = |prepared, frame, placement|
@@ -256,7 +256,7 @@ Text := [].{
 	##
 	## Legal in `render!` only.
 	##
-	## Prefer the receiver. This form takes the frame first, like every other
+	## Prefer the method. This form takes the frame first, like every other
 	## free drawing function, and takes the text as a field of its config
 	## record rather than as its own argument.
 	draw_prepared! : Draw.Frame, PreparedPlacement => {}

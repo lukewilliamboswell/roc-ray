@@ -173,8 +173,8 @@ App := [].{
 		##
 		## ```roc
 		## expect
-		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
-		##     decide(model, input) == Quit
+		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeySpace))
+		##     decide(model, input) == Jump
 		## ```
 		##
 		## Building the model this is called with is the other half: every host
@@ -826,7 +826,7 @@ fresh_counter = { ticks: 0, quitting: Bool.False }
 counter_step : CounterModel, App.Input(CounterMessage) -> CounterStep
 counter_step = |model, input| {
 	ticked = List.fold(input.messages, model, |acc, _message| { ..acc, ticks: acc.ticks + 1 })
-	if input.devices.key_pressed(KeyEscape) {
+	if input.devices.key_pressed(KeyQ) {
 		Quit
 	} else {
 		Continue(ticked)
@@ -907,8 +907,9 @@ expect
 		.dropped
 		== [dropped_png]
 
-## Escape decides to shut down.
-expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape))) == Quit
+## Q decides to shut down. (Escape is the default exit key, which the host
+## answers before `update!` sees it, so an app never checks it by hand.)
+expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyQ))) == Quit
 
 ## An ordinary input carries on.
 expect counter_step(fresh_counter, neutral_input) == Continue(fresh_counter)

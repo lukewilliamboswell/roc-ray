@@ -43,7 +43,7 @@ import Assets
 
 Audio := [].{
 
-	## Host-owned short sound effect. Use receiver methods such as `sound.play!()`.
+	## Host-owned short sound effect. Use methods such as `sound.play!()`.
 	##
 	## A sound has no volume, pitch, or pan of its own that outlives a play.
 	## raylib's are sticky per resource, and every play sets all three, so there

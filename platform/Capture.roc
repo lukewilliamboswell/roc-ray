@@ -167,7 +167,7 @@ Capture := [].{
 	Quality : CaptureQuality
 
 	## A validated recording request. Its fields cannot be updated directly;
-	## use its receiver updates so the invariants are preserved.
+	## use its `with_*` methods so the invariants are preserved.
 	Recording :: {
 		path : Str,
 		format : CaptureFormat,
@@ -200,7 +200,7 @@ Capture := [].{
 		with_fps = |rec, value| { ..rec, fps: normalize_fps(value) }
 
 		## Return a recording that stops after this many captured frames. `0`
-		## records until a `Capture.stop` command is applied or the app exits.
+		## records until `io.capture().stop!()` is called or the app exits.
 		with_max_frames : Recording, U64 -> Recording
 		with_max_frames = |rec, value| { ..rec, max_frames: value }
 

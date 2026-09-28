@@ -220,7 +220,7 @@ Sqlite := [].{
 	##
 	## A row is ordinary Roc data by the time an app sees it: the whole result
 	## crossed the boundary at once, so reading a column is a lookup rather
-	## than an effect. Decode with the receivers below.
+	## than an effect. Decode with the methods below.
 	Row := { names : List(Str), values : List(Value) }.{
 
 		## Two rows are equal when their names and values are. Worth having so

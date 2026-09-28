@@ -6,7 +6,7 @@
 ## authority and folds one `App.Input` into the next model;
 ## `render!` may then draw that model through a `Draw.Frame`.
 ##
-## Select services with receivers such as `io.files()` and `io.http()`. Reach
+## Select services with methods such as `io.files()` and `io.http()`. Reach
 ## beyond the app's own resources -- network origins, directories, programs,
 ## environment variables, the clipboard -- is declared in the startup config
 ## with `Permission`, and the declaration is the grant. Phase rules and
@@ -20,7 +20,8 @@
 ## Start with `App`, then use `Draw`, `Devices`, `Assets`, `Audio`, and `Task`
 ## as needed. Complete examples are available in the repository.
 ##
-## This app opens a window, draws a circle, and exits on Escape:
+## This app opens a window and draws a circle. `App.default` ends it when
+## Escape is pressed, so it needs no quit logic of its own:
 ##
 ## ```roc
 ## app [Model, program] { rr: platform "../../platform/main.roc" }
@@ -39,12 +40,7 @@
 ## init! = App.init(App.default.with_title("Hello"), |_io| Ok({ frames: 0 }))
 ##
 ## update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-## update! = |model, input, _io|
-##     if input.devices.key_pressed(KeyEscape) {
-##         Err(Exit(0))
-##     } else {
-##         Ok({ frames: model.frames + 1 })
-##     }
+## update! = |model, _input, _io| Ok({ frames: model.frames + 1 })
 ##
 ## render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 ## render! = |_model, frame| {

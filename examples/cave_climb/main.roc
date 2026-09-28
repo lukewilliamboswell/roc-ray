@@ -15,14 +15,11 @@ import rr.Color
 import rr.Draw
 import rr.Text
 import rr.Devices
-import rr.Keys
 import rr.Math
-import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
 import rr.Trace
-import rr.Permission
 import Cave
 
 GameState : Cave.GameState
@@ -763,31 +760,30 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
+update! = |model, input, _io| {
+	devices = input.devices
+	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# window, a breakpoint) cannot carry the player through a platform.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
-	restart = input.key_pressed(KeySpace)
-	tools = tool_input(input, camera_for(model.level, model.world.player.pos))
+	restart = devices.key_pressed(KeySpace)
+	tools = tool_input(devices, camera_for(model.level, model.world.player.pos))
 	update_zone = Trace.begin!("advance cave world")
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
 			model.world,
-			input_axis(input),
-			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
+			input_axis(devices),
+			devices.key_pressed(KeySpace) or devices.key_pressed(KeyUp) or devices.key_pressed(KeyW),
 			tools,
-			program_input.time.elapsed_seconds,
+			dt,
 		)
 		Won => if restart new_world(model.level) else model.world
 		GameOver => if restart new_world(model.level) else model.world
 	}
 	Trace.end!(update_zone)
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, world: next_world })
-	}
+	Ok({ ..model, world: next_world })
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

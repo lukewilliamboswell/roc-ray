@@ -18,9 +18,9 @@ assumes <<app-model>>.
 
 == What is different
 
-The shape of a raylib program is a loop you write. In RocRay the host owns
+The shape of a raylib program is a loop you write. In RocRay the host runs
 the loop, and you supply `init!`, `update!`, and `render!`; <<app-model>>
-explains why. Three consequences come up constantly:
+explains why. Three differences matter most:
 
 * *Each call has a place.* Drawing happens in `render!`. Anything that reads
   a file or otherwise waits happens in `init!` or a task. Everything else
@@ -33,9 +33,9 @@ explains why. Three consequences come up constantly:
 
 RocRay draws in 2D today. 3D models, cameras, and lighting are planned but not
 yet available, so there is no `DrawModel`, `Camera3D`, meshes, or other 3D
-drawing yet. There are no raw OpenGL (`rlgl`) calls. It also has no file-open dialog:
-an app reads files the user drops on its window or names on the command line,
-or directories it declares (see <<files-and-assets>>).
+drawing yet. There are no raw OpenGL (`rlgl`) calls, and there is no
+file-open dialog: an app reads files the user drops on its window or names on
+the command line, or directories it declares (see <<files-and-assets>>).
 
 == Call by call
 
@@ -156,8 +156,8 @@ game has 16.7 ms per frame.
 
 Two things commonly make a RocRay game slow:
 
-* *Many separate draw calls.* Each `frame.texture!` call crosses from Roc to
-  the host. For hundreds or thousands of sprites of one texture, build a list
+* *Many separate draw calls.* Each `frame.texture!` call is a separate call
+  from Roc into the host. For hundreds or thousands of sprites of one texture, build a list
   and draw it with one `frame.texture_instances!` call (see <<drawing>>).
 * *Allocating every cycle.* Building new lists or strings every cycle is
   cheap in small amounts but adds up. Prepare text once with `Text.prepare!`,

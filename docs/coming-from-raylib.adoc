@@ -1,0 +1,173 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#coming-from-raylib]
+= Coming from raylib
+
+RocRay draws, plays sound, and reads input through
+https://www.raylib.com/[raylib], so much of it will feel familiar if you have
+used raylib from C or another language. This chapter maps raylib's common
+calls to their RocRay equivalents, and says what RocRay does differently. It
+assumes <<app-model>>.
+
+== What is different
+
+The shape of a raylib program is a loop you write. In RocRay the platform owns
+the loop, and you supply `init!`, `update!`, and `render!`; <<app-model>>
+explains why. Three consequences come up constantly:
+
+* *Each call has a place.* Drawing happens in `render!`. Anything that reads
+  a file or otherwise waits happens in `init!` or a task. Everything else
+  happens in `update!`. The _Where_ column below says which.
+* *Input is a value.* `update!` receives this cycle's keys, mouse, time, and
+  window state as `input`, rather than calling `IsKeyPressed` on global state.
+* *Resources clean up after themselves.* Textures, sounds, fonts, and shaders
+  are released when your model stops referring to them. There is no `Unload*`
+  to call.
+
+RocRay is 2D only. It has no `DrawModel`, `Camera3D`, meshes, or other 3D
+drawing, and no raw OpenGL (`rlgl`) calls. It also has no file-open dialog:
+an app reads files the user drops on its window or names on the command line,
+or directories it declares (see <<files-and-assets>>).
+
+== Call by call
+
+[cols="3,4,2",options="header"]
+|===
+|raylib |RocRay |Where
+
+3+h|Window and loop
+|`InitWindow(800, 450, "Title")` |`App.default.with_size({ width: 800, height: 450 }).with_title("Title")` |Startup config
+|`SetTargetFPS(60)` |`with_frame_pacing(Capped(60))`, or `Window.set_target_fps!(60)` later |Startup config; `update!`
+|`WindowShouldClose()` loop |The platform calls `update!` and `render!` once per cycle |--
+|`CloseWindow()` |Return `Err(Exit(0))` from `update!` |`update!`
+|`SetExitKey(KEY_NULL)` |`with_exit_key(NoExitKey)` |Startup config
+|`GetFrameTime()` |`input.time.elapsed_seconds` |`update!`
+|`GetTime()` |Add up `elapsed_seconds` in your model |`update!`
+|`GetScreenWidth()` |`input.window.size.width`, or `frame.size!().width` while drawing |`update!`; `render!`
+
+3+h|Input
+|`IsKeyPressed(KEY_SPACE)` |`input.devices.key_pressed(KeySpace)` |`update!`
+|`IsKeyDown(KEY_W)` |`input.devices.key_down(KeyW)` |`update!`
+|`IsKeyReleased(KEY_W)` |`input.devices.key_released(KeyW)` |`update!`
+|`GetCharPressed()` |`input.devices.text_input`, a list of codepoints |`update!`
+|`GetMousePosition()` |`input.devices.mouse.position()` |`update!`
+|`IsMouseButtonPressed(MOUSE_BUTTON_LEFT)` |`input.devices.mouse.button_pressed(Left)` |`update!`
+|`GetMouseWheelMove()` |`input.devices.mouse.wheel_delta()` |`update!`
+|`IsGamepadButtonPressed(0, ...)` |`input.devices.gamepad(One)`, then `pad.button_pressed(FaceDown)` on `Connected(pad)` |`update!`
+|`GetGamepadAxisMovement(0, ...)` |`pad.axis(LeftX)` or `pad.left_stick()` |`update!`
+|`HideCursor()`, `DisableCursor()` |`Mouse.set_cursor_mode!(Hidden)`, `Mouse.set_cursor_mode!(Locked)` |`init!`, `update!`
+
+3+h|Drawing
+|`BeginDrawing()`, `EndDrawing()` |`render!`: the platform opens and closes the frame around it |--
+|`ClearBackground(RAYWHITE)` |`frame.clear!(Color.ray_white)` |`render!`
+|`DrawRectangle(x, y, w, h, RED)` |`frame.rectangle!({ x, y, width, height, style: Draw.filled(Color.red) })` |`render!`
+|`DrawRectangleLines(...)` |The same, with `style: Draw.outlined(Color.red, 1)` |`render!`
+|`DrawCircleV(center, r, BLUE)` |`frame.circle!({ center, radius, style: Draw.filled(Color.blue) })` |`render!`
+|`DrawLineEx(a, b, thick, BLACK)` |`frame.line!({ start, end, stroke: Draw.stroke(Color.black, thick) })` |`render!`
+|`DrawTriangle(a, b, c, GREEN)` |`frame.triangle!({ a, b, c, style: Draw.filled(Color.green) })` |`render!`
+|`DrawText("Hi", x, y, 20, GRAY)` |`frame.text_at!({ pos, text: "Hi", size: 20, color: Color.gray })` |`render!`
+|`MeasureText(...)`, `MeasureTextEx(...)` |`font.measure({ text, size, spacing: Text.default_spacing })` |Anywhere: it is pure
+|`DrawFPS(10, 10)` |`frame.fps!({ pos, size: 20, color: Color.green })` |`render!`
+|`Fade(RED, 0.5)`, `ColorAlpha(...)` |`Color.with_alpha(Color.red, 128)`: alpha is 0 to 255 |Anywhere: it is pure
+
+3+h|Textures and fonts
+|`LoadTexture("player.png")` |`Assets.load_texture!(store, "player.png")`; see <<drawing-first-sprite>> |`init!` or a task
+|`LoadTextureFromImage(...)` |`Assets.texture_from_bytes!({ format: Png, bytes })` |`init!`, `update!`
+|`UnloadTexture(tex)` |Nothing: released automatically |--
+|`DrawTextureV(tex, pos, WHITE)` |`frame.texture!(Draw.texture_at(tex, pos))` |`render!`
+|`DrawTexturePro(...)` |`frame.texture!({ ..Draw.texture_draw(tex), source, dest, origin, rotation })` |`render!`
+|`LoadFontEx("font.ttf", 32, ...)` |`Draw.load_store_font!(store, { path: "font.ttf", size: 32 })` |`init!` or a task
+
+3+h|Cameras and render state
+|`Camera2D` |`Camera.new({ target, offset, rotation, zoom })`, or `Camera.centered(target, screen_size)` |Anywhere: it is pure
+|`BeginMode2D(camera)` |`frame.with_camera!(camera, \|world\| { ... })` |`render!`
+|`GetScreenToWorld2D(p, camera)` |`camera.screen_to_world(p)` |Anywhere: it is pure
+|`BeginScissorMode(...)` |`frame.with_scissor!(rect, \|f\| { ... })` |`render!`
+|`BeginBlendMode(BLEND_ADDITIVE)` |`frame.with_blend_mode!(Draw.additive_blend, \|f\| { ... })` |`render!`
+|`LoadShader(...)`, `BeginShaderMode(...)` |`Draw.Shader.from_store!` or `Draw.Shader.from_source!`, then `frame.with_shader!` |`init!`; `render!`
+|`LoadRenderTexture(w, h)`, `BeginTextureMode(...)` |`Draw.RenderTexture.load!({ width, height })`, then `frame.with_render_texture!` |`init!`; `render!`
+
+3+h|Audio
+|`InitAudioDevice()` |Nothing: the platform opens the audio device |--
+|`LoadSound("jump.wav")` |`Audio.load_sound!(store, "jump.wav")` |`init!` or a task
+|`PlaySound(sound)` |`sound.play!()` |`update!`
+|`SetSoundVolume(...)` then `PlaySound(...)` |`sound.playback().with_volume(0.5).play!()` |`update!`
+|`LoadMusicStream(...)`, `PlayMusicStream(...)` |`Audio.load_music!(store, "theme.ogg")`, then `music.play!()` |`init!` or a task; `update!`
+|`UpdateMusicStream(music)` |Nothing: the platform streams music every cycle |--
+
+3+h|Collision, randomness, files
+|`CheckCollisionRecs(a, b)` |`Math.overlaps(a, b)`, or `a.overlaps(b)` |Anywhere: it is pure
+|`CheckCollisionCircles(...)` |`Math.circle_overlaps(a, b)` |Anywhere: it is pure
+|`CheckCollisionPointRec(p, r)` |`Math.contains(r, p)` |Anywhere: it is pure
+|`CheckCollisionCircleRec(c, r)` |`Math.circle_rect(c, r)` |Anywhere: it is pure
+|`GetRandomValue(1, 6)` |`Random.step(model.rng, Random.bounded_i32(1, 6))`; see <<input-randomness>> |`update!`
+|`TakeScreenshot("shot.png")` |`io.capture().screenshot!("shot.png")`; see <<capture>> |A task
+|`LoadFileText(...)`, `SaveFileText(...)` |`dir.read_text!(path)`, `dir.write_text!(path, text)`; see <<files-and-assets>> |`init!` or a task
+|===
+
+Rows marked `update!` are also legal in tasks, and most are legal in `init!`.
+Each function's entry in the {api}[API reference] lists exactly where it may
+be called.
+
+== Collision is in Math, not Physics
+
+RocRay has a `Physics` module, but it is not a physics engine. It implements
+3D projective geometric algebra: points, lines, and planes in 3D, and the
+_motors_ that rotate and move them. It is a mathematical toolkit for
+specialised geometry.
+
+For a 2D game, rectangles, circles, overlap tests, and vector arithmetic are
+in `Math`, and gravity, velocity, and collision response are ordinary code in
+your `update!`. <<input-time>> shows how to move things by elapsed time, with
+a fixed step for stable physics.
+
+== Performance expectations
+
+Roc has no garbage collector. Memory is managed by _reference counting_: a
+value is freed the moment nothing refers to it, so there are no collection
+pauses in the middle of a level. When a value has only one reference -- as
+your model does while `update!` runs -- Roc changes it in place instead of
+copying it, so updating a large list of entities every cycle does not copy the
+list.
+
+How you run the app matters a lot:
+
+* `roc main.roc` compiles quickly and runs the app at once. The code it makes
+  is unoptimised: good for trying changes, not for judging speed.
+* `roc build main.roc` makes an optimised executable (its default is
+  `--opt=speed`). Build this way before you measure anything, and for
+  release.
+
+As a rough guide, on a desktop Linux machine the
+{src}/examples/particles/main.roc[Particles] example -- 4,000 sprites, each
+moved every cycle and drawn in one batch -- spends about 0.07 ms per cycle in
+`update!` when built with `roc build`, against about 0.5 ms under
+`roc main.roc`. Drawing all 4,000 sprites takes about 0.3 to 0.4 ms of each
+frame. Your numbers will differ, but that is the scale: a 60 frames per second
+game has 16.7 ms per frame.
+
+Two things commonly make a RocRay game slow:
+
+* *Many separate draw calls.* Each `frame.texture!` call crosses from Roc to
+  the host. For hundreds or thousands of sprites of one texture, build a list
+  and draw it with one `frame.texture_instances!` call (see <<drawing>>).
+* *Allocating every cycle.* Building new lists or strings every cycle is
+  cheap in small amounts but adds up. Prepare text once with `Text.prepare!`,
+  and keep lists in the model to update rather than rebuilding them.
+
+To find out rather than guess, record a run with <<observatory>>, or set the
+environment variable `ROC_RAY_ALLOC_STATS=1` to print how much each frame
+allocated (see <<reference>>).
+
+== Further reading
+
+* <<app-model>> for the loop, and why each rule exists.
+* <<drawing>> and <<input>> for the full drawing and input APIs.
+* The {api}[API reference] for every function.

@@ -18,12 +18,18 @@
 ## from its source and changed only by changing its source.
 ##
 ## Declare each facility as narrowly as it allows. An origin, a port, a program
-## name, or a variable name is a scope: an effect whose target falls outside
-## every declared scope returns `PermissionDenied` without doing anything,
-## because a URL or path can be runtime data. Using a facility the app never
-## declared at all is a programmer error: the app stops at once with a message
-## naming the declaration to add. A malformed declaration -- a directory with
-## `..`, a peer that is not an IPv4 address -- stops the app before `init!`.
+## name, a variable name, or a directory is a scope: an effect whose target
+## falls outside every declared scope returns `PermissionDenied` without doing
+## anything, because a URL or path can be runtime data. `PermissionDenied`
+## means only that: no declaration covers the target. A path refused for its
+## shape -- one with `..` that no declaration can cover, or one that meets a
+## symbolic link beneath a handle -- is `PathInvalid` instead, because the fix
+## is to the path, not to the declarations.
+##
+## Using a facility the app never declared at all is a programmer error: the
+## app stops at once with a message naming the declaration to add. A malformed
+## declaration -- a directory with `..`, a peer that is not an IPv4 address --
+## stops the app before `init!`.
 ##
 ## A declaration is platform policy, not an operating-system sandbox: it bounds
 ## what Roc code in the app can reach, because that code has no way to reach
@@ -76,13 +82,22 @@ import Url
 ##
 ## - `WorkingDirectory(mode)`: the directory the app was launched from, and
 ##   everything beneath it -- what running an example from a repository
-##   checkout wants. Paths that climb out of it with `..` are not covered.
-## - `Directory(path, mode)`: one directory and everything beneath it. An
-##   absolute path names it directly; a relative one is resolved against the
-##   working directory. It may not contain `..` or be the filesystem root.
-## - `FilesAny(mode)`: any path on the filesystem.
+##   checkout wants. It covers every relative path an app gives
+##   `Files.Access.open_dir!`; a path that climbs out with `..` is
+##   `PathInvalid`.
+## - `Directory(path, mode)`: one directory and everything beneath it. It may
+##   not contain `..` or be the filesystem root.
+## - `FilesAny(mode)`: any path on the filesystem, `..` included.
 ##
 ## A `mode` is `ReadOnly` or `ReadWrite`.
+##
+## Whether a `Directory` covers a path is decided from the text of both, not by
+## asking the filesystem. An absolute declaration covers absolute paths beneath
+## it, and a relative declaration covers relative paths beneath it, component
+## by component: `Directory("saves", ReadWrite)` covers `open_dir!("saves")`
+## and `open_dir!("saves/slot1")`, and not `open_dir!("savesX")` or the same
+## directory spelled as an absolute path. Both kinds of path are opened
+## relative to the working directory when they are relative.
 ##
 ## Each facility's unscoped form -- `HttpAny`, `UdpAny`, `CommandAny`,
 ## `EnvAny`, `FilesAny` -- is spelled to stand out in review.

@@ -400,9 +400,9 @@ Files := [].{
 		## created, with any missing parents, so the first run of an app finds
 		## an empty directory rather than `NotFound`.
 		##
-		## The path is absolute, or relative to the working directory. Whether a
-		## declaration covers it is decided from the text of the path, not from
-		## the filesystem:
+		## An absolute path names the directory directly; a relative one is
+		## opened beneath the working directory. Whether a declaration covers
+		## the path is decided from its text, not by asking the filesystem:
 		##
 		## - `Directory(dir, ReadWrite)` covers `dir` and every path beneath it
 		##   written the same way: an absolute declaration covers absolute
@@ -447,10 +447,12 @@ Files := [].{
 		## Accept a file or directory named as an application argument, such
 		## as `my-tool data.csv`. The operator naming it is the grant.
 		##
-		## Only a string byte-identical to one of `io.args!()` is accepted, and
-		## the item is read-only. Relative paths are resolved against the
-		## working directory. Legal in `init!`, `update!`, and tasks; refused in
-		## `render!`.
+		## Only a string byte-identical to one of the app's arguments (what
+		## `io.args!()` returns in `init!`) is accepted, and the item is
+		## read-only. Anything else is `PermissionDenied`: the operator did not
+		## name it. A relative argument names an item beneath the directory the
+		## app was launched in, fixed when it is accepted. Legal in `init!`,
+		## `update!`, and tasks; refused in `render!`.
 		from_arg! : Access, Str => Try(Designated, [PermissionDenied])
 		from_arg! = |Access.(authority), arg| designate!(authority, Arg(arg))
 

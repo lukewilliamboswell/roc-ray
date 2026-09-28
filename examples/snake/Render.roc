@@ -44,10 +44,12 @@ draw_board! = |frame| {
 	board_w = I32.to_f32(Board.columns) * Board.cell_size
 	board_h = I32.to_f32(Board.rows) * Board.cell_size
 	frame.rounded_rectangle!({ x: Board.origin.x - 8, y: Board.origin.y - 8, width: board_w + 16, height: board_h + 16, radius: 0.06, segments: 8, style: Draw.filled_and_outlined(board_fill, Color.from_hex_rgb(0x2a3566), 2) })
-	for column in List.map_with_index(List.repeat({}, Board.columns_count + 1), |_unit, index| Board.origin.x + U64.to_f32(index) * Board.cell_size) {
+	for index in 0.U64..=Board.columns_count {
+		column = Board.origin.x + U64.to_f32(index) * Board.cell_size
 		frame.line!({ start: { x: column, y: Board.origin.y }, end: { x: column, y: Board.origin.y + board_h }, stroke: Draw.stroke(grid_line, 1) })
 	}
-	for row in List.map_with_index(List.repeat({}, Board.rows_count + 1), |_unit, index| Board.origin.y + U64.to_f32(index) * Board.cell_size) {
+	for index in 0.U64..=Board.rows_count {
+		row = Board.origin.y + U64.to_f32(index) * Board.cell_size
 		frame.line!({ start: { x: Board.origin.x, y: row }, end: { x: Board.origin.x + board_w, y: row }, stroke: Draw.stroke(grid_line, 1) })
 	}
 }
@@ -71,8 +73,9 @@ segment_color = |index, length| {
 draw_snake! : Draw.Frame, Snake => {}
 draw_snake! = |frame, snake| {
 	length = List.len(snake.cells)
-	for segment in List.map_with_index(snake.cells, |cell, index| { cell, color: segment_color(index, length) }) {
-		draw_cell!(frame, segment.cell, segment.color, Color.with_alpha(segment.color, 90))
+	for (index, cell) in snake.cells.iter().with_index() {
+		color = segment_color(index, length)
+		draw_cell!(frame, cell, color, Color.with_alpha(color, 90))
 	}
 }
 

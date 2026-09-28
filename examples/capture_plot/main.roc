@@ -131,29 +131,26 @@ draw_bars! = |frame, elapsed, size| {
 
 	# Four gridlines behind the bars, so the wave has something to be measured
 	# against and a duplicated frame is easier to spot.
-	List.for_each!(
-		List.map_with_index(List.repeat({}, 4), |_unit, index| U64.to_f32(index + 1) * 42),
-		|step| frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) }),
-	)
+	for index in 1.U64..=4 {
+		step = U64.to_f32(index) * 42
+		frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) })
+	}
 	frame.line!({ start: { x: 32, y: baseline }, end: { x: size.width - 32, y: baseline }, stroke: Stroke({ color: axis, thickness: 1.5 }) })
 
-	List.repeat({}, bar_count)
-		|> List.map_with_index(|_, index| U64.to_f32(index))
-		|> List.for_each!(
-			|offset| {
-				# A travelling wave, so every frame differs and a dropped or
-				# duplicated frame is visible in the finished sequence.
-				phase = elapsed * 2.2 + offset * 0.5
-				height = 40 + 90 * (1 + F32.sin(phase)) / 2
-				x = 40 + offset * 46
-				top = baseline - height
-				# The gradient runs the bar's own length rather than the
-				# window's, so a tall bar is brighter than a short one.
-				frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
-				frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
-				frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
-			},
-		)
+	for index in 0.U64..<bar_count {
+		offset = U64.to_f32(index)
+		# A travelling wave, so every frame differs and a dropped or
+		# duplicated frame is visible in the finished sequence.
+		phase = elapsed * 2.2 + offset * 0.5
+		height = 40 + 90 * (1 + F32.sin(phase)) / 2
+		x = 40 + offset * 46
+		top = baseline - height
+		# The gradient runs the bar's own length rather than the
+		# window's, so a tall bar is brighter than a short one.
+		frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
+		frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
+		frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
+	}
 }
 
 bg_top = Color.from_hex_rgb(0x0b0e17)

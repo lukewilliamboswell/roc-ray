@@ -8712,8 +8712,52 @@ fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     enforcePhase("Keys.set_exit_key!", during_update);
     const effect = EffectScope.begin("Keys.set_exit_key!", 0);
     defer effect.end();
+    active_exit_key = nonNegativeCInt(key_code);
     if (active_headless) return;
     raylib.setExitKey(nonNegativeCInt(key_code));
+}
+
+/// The key that ends the app, as `App.Config.with_exit_key` and
+/// `Keys.set_exit_key!` last set it; `0` (raylib's `KEY_NULL`) is none.
+var active_exit_key: c_int = 0;
+
+/// Whether this cycle's keyboard pressed the exit key, from a source raylib
+/// does not watch.
+///
+/// raylib ends the loop itself for a hardware press, inside its own key
+/// callback, before the cycle that would have delivered it. A scripted
+/// keyboard -- `--host-keys`, or `Keys.set_source!` -- never reaches that
+/// callback, and a headless run has no raylib window at all, so the host
+/// honours the exit key for them here, at the same point: after the
+/// keyboard is derived and before `update!` sees the press. The exit key
+/// always ends the app directly, whatever `with_close_request` says.
+fn exitKeyPressedBy(source: raylib.InputSource) bool {
+    if (source != .virtual) return false;
+    if (active_exit_key <= 0 or active_exit_key >= ffi.KEY_COUNT) return false;
+    return raylib.getKeyState()[@intCast(active_exit_key)] & ffi.INPUT_PRESSED != 0;
+}
+
+test "a scripted exit key ends the app; a hardware one is raylib's to end" {
+    defer resetVirtualInput();
+    const previous = active_exit_key;
+    defer active_exit_key = previous;
+    active_exit_key = 256;
+
+    applyVirtualKeys(true, &.{});
+    raylib.recordVirtualKeyEdge(256, .press);
+    raylib.recordVirtualKeyEdge(256, .release);
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expect(exitKeyPressedBy(.virtual));
+    // raylib's own callback already ended the loop for a hardware press.
+    try std.testing.expect(!exitKeyPressedBy(.hardware));
+
+    // `NoExitKey` is no key at all.
+    active_exit_key = 0;
+    try std.testing.expect(!exitKeyPressedBy(.virtual));
+
+    // Another key is not the exit key.
+    active_exit_key = 'Q';
+    try std.testing.expect(!exitKeyPressedBy(.virtual));
 }
 
 /// Copy a path into fixed host storage, returning false if it does not fit.
@@ -13694,6 +13738,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         nonNegativeCInt(app_config.min_height),
     );
     raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
+    active_exit_key = nonNegativeCInt(app_config.exit_key_code);
     // Under `Deliver` the close button reports to `update!` instead of ending
     // the loop. The exit key is unaffected: raylib raises the close flag for
     // it directly, so it still ends the loop below.
@@ -13817,6 +13862,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const scripted_text = takeVirtualText();
         const text_input = scripted_text orelse typed_text;
         input.updateFromRaylib(if (scripted_text != null) .virtual else .hardware);
+        // A hardware press of the exit key already ended the loop inside
+        // raylib; a scripted one ends it here, before `update!` sees it.
+        if (exitKeyPressedBy(if (virtual_keys_active) .virtual else .hardware)) break;
         const mouse_pos = if (virtual_mouse_active)
             raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
         else
@@ -13948,9 +13996,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     return finalExitCode(exit_code);
 }
 
-fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64, close_script: ?[]const u8) c_int {
+fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, options: RuntimeOptions) c_int {
+    const frames = options.headless_frames;
     beginAppLifetime();
     resetHeadlessRuntime(app_config);
+    active_exit_key = nonNegativeCInt(app_config.exit_key_code);
     defer deinitResources();
     // A failed or early-exiting run must not poison the next app lifetime.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
@@ -14011,7 +14061,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64, close_
         // There is no window to close, so a `--host-close` script is the only
         // request there is: under `Exit` it ends the run before this cycle's
         // input, and under `Deliver` it rides the input.
-        const close_requested = scriptedCloseRequest(close_script, cycle_count);
+        const close_requested = scriptedCloseRequest(options.close_script, cycle_count);
         if (close_requested and !app_config.deliver_close_request) break;
         observatory_cycle = cycle_count;
         observatory_draw_calls = 0;
@@ -14034,9 +14084,15 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64, close_
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
+        // Scripted keys and text reach a headless run exactly as a windowed
+        // one: there is no hardware here, so a script is the only keyboard.
+        applyInputScripts(options, cycle_count);
         const scripted_text = takeVirtualText();
         const text_input = scripted_text orelse raylib.TextInput{ .codepoints = &.{}, .overflowed = false };
         input.updateHeadless(if (scripted_text != null) .virtual else .hardware);
+        // Every keyboard here is scripted, so the host is the one to honour
+        // the exit key, as it does for a script in a windowed run.
+        if (exitKeyPressedBy(.virtual)) break;
         // A headless run has no pointer, so a scripted one is the only pointer
         // there is. Everything a windowed run derives from it -- position,
         // delta, the wheel's single frame of movement -- is derived here the
@@ -14299,7 +14355,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     raylib.setInputQueueObserver(if (active_observatory != null) observeInputQueue else null);
     defer raylib.setInputQueueObserver(null);
     const app_exit_code = if (options.headless)
-        runHeadlessApp(&roc_host, app_config, options.headless_frames, options.close_script)
+        runHeadlessApp(&roc_host, app_config, options)
     else
         runNormalApp(&roc_host, allocator, app_config, options);
 

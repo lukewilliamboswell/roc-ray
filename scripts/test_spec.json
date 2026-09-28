@@ -202,7 +202,7 @@
           "frames": 1000000,
           "keys": "3:W,6:ESCAPE~",
           "timeout_seconds": 30,
-          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
+          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if the host sees a press that began and ended between two polls and honours it as the exit key"
         }
       ]
     },

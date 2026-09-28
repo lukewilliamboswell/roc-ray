@@ -254,8 +254,10 @@ App := [].{
 	## `App.FramePacing` is the name to write.
 	FramePacing : AppFramePacing
 
-	## Which key, if any, closes the window: `ExitKey(key)` or `NoExitKey`, which
-	## disables the behaviour.
+	## Which key, if any, ends the app: `ExitKey(key)` or `NoExitKey`, which
+	## disables the behaviour. The exit key ends the app directly, before
+	## `update!` sees the press, whatever `CloseRequest` says, and a scripted
+	## press (`--host-keys`, `Keys.set_source!`) does the same as a real one.
 	##
 	## This is `Keys.ExitKey`, re-exported. The signature renders as
 	## `ExitKey : ExitKey` because the alias and the nominal share a name; they
@@ -326,7 +328,7 @@ App := [].{
 		with_frame_pacing = |cfg, value| { ..cfg, frame_pacing: normalize_pacing(value) }
 
 		## Return a config with a different exit key. `NoExitKey` stops any key
-		## from closing the window; the window close button still works, as
+		## from ending the app; the window's close button still works, as
 		## `with_close_request` says.
 		with_exit_key : Config, ExitKey -> Config
 		with_exit_key = |cfg, value| { ..cfg, exit_key: value }
@@ -355,6 +357,13 @@ App := [].{
 		## button, so return `Err(Exit(code))` once the request is handled.
 		## `--host-close=CYCLE` makes a request on a given cycle in a
 		## headless or hidden run, so a test can script it.
+		##
+		## The exit key is not a close request. Under either choice it ends the
+		## app directly, before `update!` sees the press, so with the default
+		## `ExitKey(KeyEscape)` Escape still quits a `Deliver` app without a
+		## save. An app that must finish work on every way out also sets
+		## `with_exit_key(NoExitKey)` and handles the key it wants in
+		## `update!`.
 		with_close_request : Config, CloseRequest -> Config
 		with_close_request = |cfg, value| { ..cfg, close_request: value }
 
@@ -643,13 +652,14 @@ App := [].{
 		set_target_fps! : Io, I32 => {}
 		set_target_fps! = |io, fps| app_set_target_fps!(io, fps)
 
-		## Set which key closes the window, or `NoExitKey` to stop any key from
-		## closing it.
+		## Set which key ends the app, or `NoExitKey` to stop any key from
+		## ending it.
 		##
-		## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
-		## unaffected either way, so an app that disables the exit key should still
-		## handle shutdown itself by returning `Err(Exit(code))`. Call as
-		## `io.set_exit_key!(NoExitKey)`. Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## The exit key ends the app directly, before `update!` sees the press,
+		## whatever `Config.with_close_request` chose; the window's close button
+		## follows `with_close_request` and is unaffected by this. Call as
+		## `io.set_exit_key!(NoExitKey)`. Legal in `init!`, `update!`, and
+		## tasks; refused in `render!`.
 		set_exit_key! : Io, ExitKey => {}
 		set_exit_key! = |io, key| app_set_exit_key!(io, key)
 

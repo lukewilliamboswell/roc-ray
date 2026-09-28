@@ -33,8 +33,10 @@ This script runs:
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
 - close request   - Script the close button under each `CloseRequest` and assert
-                    Exit ends the app before update! sees it, and Deliver
-                    reports each request once and waits for the app's own save
+                    Exit ends the app before update! sees it, Deliver reports
+                    each request once and waits for the app's own save, and
+                    the exit key still ends a Deliver app; also that a
+                    headless run honours --host-keys and --host-text
                     (test/close_request).
 - designation     - Read a dropped file and one named on the command line with
                     no permission declared, and refuse anything else
@@ -1170,6 +1172,11 @@ def run_close_request_probe(
     must stay open, each request must reach exactly one input, and a save the
     app starts on a task must answer before the app exits. Exit 3 means a
     wrong report; exit 4 means the save never answered.
+
+    The exit key is not a close request: a scripted Escape must end a
+    `Deliver` app before the cycle it lands on, as a hardware one would. The
+    same runs check that a headless run honours `--host-keys` and
+    `--host-text`, which it has no hardware to fall back on.
     """
     fixture = root / "test" / "close_request" / "main.roc"
     if not fixture.is_file():
@@ -1197,11 +1204,28 @@ def run_close_request_probe(
         )
 
     deliver = subprocess.run(
-        [executable, "--host-headless", "--host-headless-frames=200", "--host-close=3,5", "--mode=deliver"],
+        [
+            executable, "--host-headless", "--host-headless-frames=200", "--host-close=3,5", "--mode=deliver",
+            "--host-keys=1:S", "--host-text=2:abc",
+        ],
         cwd=staged.parent, capture_output=True, text=True, timeout=60,
     )
     if deliver.returncode != 0:
         failures.append(f"close request probe deliver: exit {deliver.returncode}: {deliver.stderr[-400:]}")
+    lines = deliver.stdout.splitlines()
+    if "key S" not in lines or "text 3" not in lines:
+        failures.append(f"close request probe: a headless run ignored --host-keys or --host-text: {lines[:12]}")
+
+    escape = subprocess.run(
+        [executable, "--host-headless", "--host-headless-frames=200", "--mode=deliver", "--host-keys=2:ESCAPE~"],
+        cwd=staged.parent, capture_output=True, text=True, timeout=60,
+    )
+    escape_cycles = [line for line in escape.stdout.splitlines() if line.startswith("cycle ")]
+    if escape.returncode != 0 or escape_cycles != ["cycle 0", "cycle 1"]:
+        failures.append(
+            f"close request probe escape: expected the exit key to end a Deliver app before cycle 2, got exit "
+            f"{escape.returncode}, {escape_cycles[-3:]}: {escape.stderr[-400:]}"
+        )
 
     malformed = subprocess.run(
         [executable, "--host-headless", "--host-close=soon"],

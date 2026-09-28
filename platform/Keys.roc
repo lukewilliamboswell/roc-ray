@@ -128,7 +128,7 @@ Keys := [].{
 		is_eq : _
 	}
 
-	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	## Which key, if any, ends the app. `NoExitKey` disables the behaviour.
 	ExitKey := [NoExitKey, ExitKey(Key)].{
 
 		## Compare two of these values.
@@ -422,12 +422,13 @@ Keys := [].{
 	expect from_code(key_count) == Err(InvalidKeyCode)
 	expect key_down({ keys: [7] }, Raw(0)) and key_pressed({ keys: [7] }, Raw(0)) and key_released({ keys: [7] }, Raw(0))
 
-	## Set which key closes the window.
+	## Set which key ends the app.
 	##
-	## `NoExitKey` stops any key from closing it; raylib defaults to
-	## `ExitKey(KeyEscape)`. The window close button is unaffected either way,
-	## so an app that disables the exit key should still handle shutdown itself
-	## by returning `Err(Exit(code))` from `update!`.
+	## `NoExitKey` stops any key from ending it; `App.default` starts with
+	## `ExitKey(KeyEscape)`. The exit key ends the app directly, before
+	## `update!` sees the press, whatever `App.Config.with_close_request`
+	## chose. The window's close button follows `with_close_request` and is
+	## unaffected by this.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_exit_key! : ExitKey => {}

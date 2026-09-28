@@ -1,7 +1,5 @@
 ## Static arena data loaded from Tiled, with a complete fallback layout.
-import rr.App
 import rr.Color
-import rr.Draw
 import rr.Math
 import rr.Tilemap
 import Hazard

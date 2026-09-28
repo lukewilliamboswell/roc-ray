@@ -1,5 +1,4 @@
 ## Spark Run textures, font, music, and sound effects loaded at startup.
-import rr.App
 import rr.Assets
 import rr.Audio
 import rr.Draw
@@ -26,9 +25,15 @@ GameAssets := {
 		music : Audio.Music,
 	}
 
+	## Where every file the game loads lives, relative to the directory you
+	## run the game from. `main.roc` declares this same directory, read-only,
+	## so the one constant keeps the declaration and the loader in step.
+	assets_dir : Str
+	assets_dir = "examples/top_down/assets"
+
 	## Loads every texture, font, sound, and music stream before the first frame.
 	load! = |io| {
-		store = Assets.open!(io.files().open_dir_read!("examples/top_down/assets")?, IgnoreManifest)?
+		store = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
 		characters = Assets.load_texture!(store, "kenney-topdown/characters.png")?
 		tiles = Assets.load_texture!(store, "kenney-topdown/tiles.png")?
 		font = Draw.default_font!()

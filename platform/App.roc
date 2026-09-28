@@ -585,7 +585,7 @@ App := [].{
 		## in order. The host removes its reserved `--host-*` switches before this
 		## list reaches the app. The value is stable for the process lifetime.
 		##
-		## Legal only in `init!`: keep what `update!` needs from it in the model.
+		## Legal only in `init!`. Keep what `update!` needs from it in the model.
 		## `App.init_for_args` is the other way to read argv, before the window
 		## exists.
 		args! : Io => List(Str)

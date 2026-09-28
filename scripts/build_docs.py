@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build and validate RocRay's complete platform API documentation.
 
-All public types, receivers, and effects are documented under www/<version>/.
+All public types, methods, and effects are documented under www/<version>/.
 `--check` builds into a temporary directory without changing published docs.
 """
 

@@ -87,7 +87,11 @@ an ordinary build reports the lock as stale until a new release is adopted.
    with the PR number. It dispatches the producer at the PR's exact head with
    attestation enabled, admits the candidate, publishes the immutable release
    `link-inputs-sha256-<manifest digest>`, and pushes one signed commit that
-   changes only `link-inputs.lock.json`.
+   changes only `link-inputs.lock.json`. The release is never marked as the
+   repository's latest, which stays a RocRay platform release. If a publish
+   fails after its producer run succeeded, pass that run's id as
+   `producer-run` to publish from it instead of producing again; it must be
+   an attested run for the PR's current head.
 4. Review the lock commit as a dependency change. Check the source SHA and ref,
    the producer run, the attestations, target coverage, and that routine CI on
    the new head consumed the release without rebuilding it.

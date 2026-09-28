@@ -238,6 +238,22 @@ class ResolveDefaultBundleUrlTests(unittest.TestCase):
                 helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
 
 
+class LatestPlatformReleaseTests(unittest.TestCase):
+    def test_skips_dependency_releases_and_keeps_prereleases(self) -> None:
+        releases = [
+            {"tag_name": "link-inputs-sha256-30c1", "published_at": "2026-09-28T00:46:01Z"},
+            {"tag_name": "deps-macos-interfaces-1-20260923.1", "published_at": "2026-09-23T08:56:14Z"},
+            {"tag_name": "0.10.0-rc6", "prerelease": True, "published_at": "2026-09-19T10:44:51Z"},
+            {"tag_name": "types-0.9.0", "published_at": "2026-08-26T01:07:54Z"},
+            {"tag_name": "0.9.0", "published_at": "2026-08-01T00:00:00Z"},
+            {"tag_name": "0.11.0", "draft": True, "published_at": None},
+        ]
+        self.assertEqual(helpers.latest_platform_release(releases)["tag_name"], "0.10.0-rc6")
+
+    def test_no_platform_release(self) -> None:
+        self.assertIsNone(helpers.latest_platform_release([{"tag_name": "types-0.9.0"}]))
+
+
 class ZipTreeTests(unittest.TestCase):
     def test_files_sit_under_one_prefix_in_a_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

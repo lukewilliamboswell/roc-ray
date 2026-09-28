@@ -132,8 +132,9 @@ def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
         if not repo:
             raise RuntimeError("repo is required")
 
-        latest = gh_json(["api", f"repos/{repo}/releases/latest"])
-        previous_url = default_url_from_release(latest)
+        releases = gh_json(["api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"])
+        previous = latest_platform_release([release for page in releases for release in page])
+        previous_url = default_url_from_release(previous) if previous else ""
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text(previous_url + "\n", encoding="utf-8")
@@ -481,6 +482,24 @@ def require_url(url: str) -> str:
     if "\n" in url or "\r" in url or not url.startswith("https://") or not url.endswith(BUNDLE_SUFFIX):
         raise RuntimeError(f"invalid previous release URL: {url!r}")
     return url
+
+
+# A platform release's tag is its version; the repository also publishes
+# linker-input, macOS-interface and types releases under prefixed tags.
+PLATFORM_TAG = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")
+
+
+def latest_platform_release(releases: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The most recently published platform release, prereleases included.
+
+    GitHub's "latest release" skips prereleases and can name a dependency
+    release, so a bump check against it compares with the wrong API.
+    """
+    platform = [
+        release for release in releases
+        if not release.get("draft") and PLATFORM_TAG.match(str(release.get("tag_name", "")))
+    ]
+    return max(platform, key=lambda release: str(release.get("published_at") or ""), default=None)
 
 
 def bump_check_mode(_previous_url: str) -> str:

@@ -83,7 +83,9 @@ def publish(directory: Path, tag: str) -> None:
             or release["targetCommitish"] != os.environ["GITHUB_SHA"]
             or actual_assets != expected_assets):
         raise ValueError("draft release identity or asset set differs from tested candidate")
-    subprocess.run(["gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false"], check=True)
+    # Publishing a draft makes it the repository's latest release unless told
+    # otherwise, and "latest" must stay a RocRay platform release.
+    subprocess.run(["gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false", "--latest=false"], check=True)
 
 
 if __name__ == "__main__":

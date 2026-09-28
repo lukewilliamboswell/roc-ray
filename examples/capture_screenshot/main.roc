@@ -1,7 +1,7 @@
-## Saves a screenshot of the app and demonstrates capture-path safety. Press S
-## to save, E to try a refused `..` path, or Escape to quit. Without input it
-## saves on the third frame and exits for automated runs. This example shows
-## screenshot tasks, result messages, and output-directory confinement.
+## Saves a screenshot of the app into its output directory. Press S to save, E
+## to try a path that climbs out of the output directory with `..` (the host
+## refuses it), and Escape to quit. This example shows screenshot tasks, result
+## messages, and how captures stay inside the output directory.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
@@ -36,7 +36,7 @@ Model : {
 }
 
 ## The latest screenshot result. `NoCapture` remains until the task returns a
-## message, because saving may complete after several frames.
+## message, because saving may finish several cycles later.
 Outcome := [NoCapture, Saved, SaveFailed, Refused].{
 	is_eq : _
 }
@@ -60,7 +60,7 @@ init! = App.init(
 			Ok({
 				title: Text.from("A picture of this frame", font).size(26).prepare!()?,
 				subtitle: Text.from("saved in a task, then reported back as a message", font).size(14).prepare!()?,
-				help: Text.from("S  save        E  try to escape the sandbox        ESC  quit", font).size(13).spacing(2.0).prepare!()?,
+				help: Text.from("S  save        E  try a path outside shots/        ESC  quit", font).size(13).spacing(2.0).prepare!()?,
 				idle: Text.from("no capture yet", font).size(16).prepare!()?,
 				saved: Text.from("saved shots/${shot_path}", font).size(16).prepare!()?,
 				save_failed: Text.from("could not write shots/${shot_path}", font).size(16).prepare!()?,
@@ -75,35 +75,25 @@ init! = App.init(
 ## `update!`. A Task is work that can wait and later returns one Message through
 ## `App.Input`. The captured pixels still come from the frame that requested it.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, io| {
-	input = program_input.devices
-	outcome = apply_messages(model.outcome, program_input.messages)
+update! = |model, input, io| {
+	devices = input.devices
+	# The result arrives only when a task returns its message, so the outcome
+	# is folded from messages rather than guessed from how many cycles passed.
+	outcome = apply_messages(model.outcome, input.messages)
 
-	# `..` cannot reach outside the output directory, so this comes back as
-	# PathEscapesOutputDir rather than writing beside the example source.
-	escape_requested = input.key_pressed(KeyE)
-	save_requested = input.key_pressed(KeyS) or program_input.time.cycle_count == 3
-
-	# Frame 3 requests the screenshot. The result arrives only when the task
-	# returns its message, rather than being inferred from a later frame number.
-	# The frame cap prevents an unattended run from waiting forever.
-	settled = outcome != NoCapture
-
-	if escape_requested {
-		Task.spawn!(program_input, || EscapingScreenshotFinished(io.capture().screenshot!("../escaped.png")))
+	if devices.key_pressed(KeyE) {
+		# `..` cannot reach outside the output directory, so this comes back as
+		# PathEscapesOutputDir rather than writing beside the example source.
+		Task.spawn!(input, || EscapingScreenshotFinished(io.capture().screenshot!("../escaped.png")))
 	}
-	if save_requested {
+	if devices.key_pressed(KeyS) {
 		# Read out of the model before spawning: the closure captures the name,
 		# and a task cannot reach into the model for it.
 		shot_path = model.shot_path
-		Task.spawn!(program_input, || SavedScreenshotFinished(io.capture().screenshot!(shot_path)))
+		Task.spawn!(input, || SavedScreenshotFinished(io.capture().screenshot!(shot_path)))
 	}
 
-	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, outcome })
-	}
+	Ok({ ..model, outcome })
 }
 
 ## Fold every message this cycle delivered, in the order the tasks finished.
@@ -121,15 +111,15 @@ apply_message = |_outcome, message|
 		SavedScreenshotFinished(Err(_)) => SaveFailed
 	}
 
-## The sandbox refusal is its own outcome: the path was rejected before
+## The refusal is its own outcome: the path was rejected before
 ## anything was written, which is not the same as a write that failed.
 expect apply_message(NoCapture, EscapingScreenshotFinished(Err(PathEscapesOutputDir))) == Refused
 expect apply_message(NoCapture, EscapingScreenshotFinished(Err(WriteFailed))) == SaveFailed
 expect apply_message(NoCapture, SavedScreenshotFinished(Ok({}))) == Saved
 expect apply_message(NoCapture, SavedScreenshotFinished(Err(WriteFailed))) == SaveFailed
 
-## Nothing delivered leaves the outcome alone, which is what keeps the app
-## waiting rather than exiting on a frame number.
+## Nothing delivered leaves the outcome alone: the card keeps saying "waiting"
+## until a task answers.
 expect apply_messages(NoCapture, []) == NoCapture
 
 ## Both tasks can finish on one cycle; they are folded in the order they did.
@@ -153,7 +143,7 @@ render! = |model, frame| {
 	model.subtitle.draw!(frame, { pos: { x: 36, y: 68 }, color: muted })
 
 	# The outcome card. Its accent is the whole report: green for a file on
-	# disk, amber for the sandbox refusing a path, red for a write that failed.
+	# disk, amber for a path the output directory refused, red for a write that failed.
 	color = outcome_color(model.outcome)
 	frame.rounded_rectangle!({ x: 36, y: 236, width: 404, height: 72, radius: 0.16, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
 	frame.rounded_rectangle!({ x: 36, y: 248, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(color) })
@@ -182,7 +172,7 @@ outcome_label = |outcome|
 		NoCapture => "WAITING FOR A TASK"
 		Saved => "Capture.screenshot!"
 		SaveFailed => "Capture.screenshot!"
-		Refused => "OUTPUT SANDBOX"
+		Refused => "OUTPUT DIRECTORY"
 	}
 
 outcome_color : Outcome -> Color.Rgba

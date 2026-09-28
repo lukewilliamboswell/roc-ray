@@ -8,16 +8,17 @@ ifndef::src[]
 endif::[]
 
 [#permissions]
-= Declaring what an app reaches
+= Declaring what an app can access
 
 Every app can open its window, read input, draw, play audio, and print to its
-terminal without asking. To reach anything else -- a directory, a web service,
+terminal without asking. To access anything else -- a directory, a web service,
 another program, an environment variable, the clipboard -- the app says so in
 its startup configuration. That statement is a _declaration_, and it is the
 only permission there is: nobody is prompted, and there are no launch flags.
 
 This chapter starts with what a typical game needs, then lists every
-declaration and what happens when an app reaches outside them. It assumes
+declaration and what happens when an app tries to access something they do
+not cover. It assumes
 <<app-model>>.
 
 == What a typical game needs
@@ -34,7 +35,7 @@ config =
     .with_permission(Directory("assets", ReadOnly))
 ----
 
-Each line has one job:
+Each line does one thing:
 
 * `with_app_id` names the app. With a name, `io.files().app_data!()` gives
   the app a private directory for its saves, with no declaration. See
@@ -43,7 +44,7 @@ Each line has one job:
   beneath the directory you launch it from. You need this while you develop
   the game and run it from its source directory.
 * Once you package the game with its assets beside the executable,
-  `io.files().beside_executable!()` reaches them with no declaration at all.
+  `io.files().beside_executable!()` opens them with no declaration at all.
   <<shipping>> shows one `init!` that works both ways.
 
 Printing with `io.stdout()`, drawing, sound, and screenshots under the output
@@ -67,7 +68,8 @@ These belong to the running app and are always available:
 * in-memory SQLite databases.
 
 A file the user drops on the window, or a path the user passes on the command
-line, needs no declaration either: the user choosing it is the consent.
+line, needs no declaration either: the user's choice of that file counts as
+permission.
 <<files-designated>> shows how to accept one.
 
 One startup setting does need a declaration: a font file named with
@@ -77,7 +79,7 @@ for `"assets/ui.ttf"`. The built-in font needs nothing.
 
 == Declare it in the startup config
 
-Add a `Permission` to the config for each thing the app reaches:
+Add a `Permission` to the config for each thing the app needs to access:
 
 [source,roc]
 ----
@@ -97,13 +99,13 @@ App.default.with_permissions([HttpOrigin("https://api.example.com"), EnvVar("API
 
 Declarations add up, and declaring the same thing twice is harmless.
 
-What an app can reach is read from its source and changed only by changing its
-source. A declaration may depend on the command line, through
+What an app can access is visible in its source, and can be changed only by
+changing its source. A declaration may depend on the command line, through
 `App.init_for_args`, but every alternative is still written in the source.
 
 == Every declaration
 
-Declare each facility as narrowly as it allows.
+Declare each facility as narrowly as possible.
 
 [cols="2,3",options="header"]
 |===
@@ -133,7 +135,7 @@ Declare each facility as narrowly as it allows.
 
 2+h|Files
 |`Directory(path, mode)` |A directory and everything beneath it, as the app names it to `open_dir!` or `open_dir_read!`. A relative `path` covers relative paths beneath it; an absolute `path` covers absolute paths beneath it. It may not contain `..` or be the filesystem root.
-|`WorkingDirectory(mode)` |The directory the app was launched from: `working_directory!`, `working_directory_read!`, and every relative path given to `open_dir!` or `open_dir_read!`. What running an example from a repository checkout wants.
+|`WorkingDirectory(mode)` |The directory the app was launched from: `working_directory!`, `working_directory_read!`, and every relative path given to `open_dir!` or `open_dir_read!`. This is what you need to run an example from a repository checkout.
 |`FilesAny(mode)` |Any path on the filesystem
 |===
 
@@ -141,7 +143,7 @@ A `mode` is `ReadOnly` or `ReadWrite`. A `ReadWrite` declaration also permits
 reading.
 
 Each facility's unscoped form -- `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`,
-`FilesAny` -- is spelled to stand out in review.
+`FilesAny` -- has a name that stands out when someone reviews the code.
 
 === How directory declarations match
 
@@ -160,20 +162,21 @@ component at a time; nothing is looked up on disk to decide. So:
 not there. `open_dir_read!` accepts either mode and reports `NotFound` for a
 missing directory.
 
-== What happens at the edges
+== What happens when access is refused
 
-Each kind of refusal has its own answer, so an app can tell them apart.
+Each kind of refusal returns a different result, so an app can tell them
+apart.
 
 The target is outside every declaration::
   The effect returns `PermissionDenied` without doing anything. A URL on
   another origin, a directory no declaration covers, or an undeclared
   variable name can all be runtime data, so the app handles this as an
-  ordinary result. `PermissionDenied` also answers a handle made with `stub`
-  for tests, a dropped path that was not delivered in this cycle, and a
+  ordinary result. An effect also returns `PermissionDenied` for a handle made
+  with `stub` for tests, a dropped path that was not delivered in this cycle, and a
   command-line argument the app was not launched with. A followed HTTP
   redirect is checked like the request that caused it.
 
-The path's shape, or a link on its way, is refused::
+The path's form, or a link along it, is refused::
   An effect that takes a path beneath a handle returns `PathInvalid` for a
   path that is not plainly relative -- empty, absolute, with a drive letter
   or a backslash, or with an empty, `.`, or `..` component -- and for one
@@ -181,13 +184,14 @@ The path's shape, or a link on its way, is refused::
   to one. These are refused on every system, whether or not the path would
   lead outside the handle. The same holds for `open_dir!` and
   `open_dir_read!`: past the declared directory, the path is opened one
-  component at a time, and a symbolic link on the way is `PathInvalid`, so a
-  link inside a declared directory cannot lead a handle outside it. The
-  declared directory itself is taken as named, links and all.
+  component at a time, and a symbolic link along the path is `PathInvalid`, so
+  a link inside a declared directory cannot lead a handle outside it. The
+  declared directory itself is opened exactly as named, even if its own path
+  contains links.
 
 The operating system refuses::
-  A declaration grants what RocRay allows; the operating system can still say
-  no. A write, `metadata!`, or a directory open that the system refuses
+  A declaration controls only what RocRay allows; the operating system can
+  still refuse. A write, `metadata!`, or a directory open that the system refuses
   returns `AccessRefused`, and so does binding a UDP port below 1024 without
   privileges. A read the system refuses returns `ReadFailed`, because the
   host cannot tell that apart from other read failures; call `metadata!` on
@@ -215,18 +219,19 @@ A declaration is malformed::
 
 == What this protects against
 
-A RocRay app has no way to reach anything except through the platform, so its
-declarations bound what its Roc code can do. That protects against three
+A RocRay app has no way to access anything except through the platform, so
+its declarations limit what its Roc code can do. That protects against three
 things:
 
-* a careless or compromised dependency inside a trusted app, which can reach
-  only what the app hands it;
+* a careless or compromised dependency inside a trusted app, which can access
+  only what the app passes to it;
 * runtime data -- a save name, a dropped path, a network reply -- steering an
   effect somewhere the app never meant it to go;
-* source you have not read closely, which can reach no further than what it
-  visibly declares.
+* source you have not read closely, which can access only what it visibly
+  declares.
 
-It is not an operating-system sandbox. It does not contain a malicious native
+It is not an operating-system sandbox. It does not protect against a malicious
+native
 executable, whose author controls the host as well as the app, and it does not
 make decoding hostile data safe.
 

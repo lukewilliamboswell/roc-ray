@@ -1492,6 +1492,27 @@ fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootR
     return .{ .path = canonical };
 }
 
+/// What a root names, read from the transported root in place: a declared
+/// path short enough to live inside its `RocStr` is only valid where the root
+/// itself is, so the slice must not come from a `payload_*()` copy.
+fn filesRootRequest(root: *const FilesRoot, writable: bool) RootRequest {
+    return switch (root.tag) {
+        .BesideExecutable => .{ .kind = .beside_executable },
+        .WorkingDirectory => .{ .kind = .working_directory },
+        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, root).asSlice(), .create = writable },
+        .AppData, .AppConfig, .AppCache => .{
+            .kind = .app_storage,
+            .storage = switch (root.tag) {
+                .AppConfig => .config,
+                .AppCache => .cache,
+                else => .data,
+            },
+            .text = active_policy.appId() orelse unreachable,
+            .create = true,
+        },
+    };
+}
+
 /// `Files.Access` roots: resolve where a handle starts. The capability
 /// boundary has already checked the declaration; this names the directory,
 /// creates it when the handle may write and the directory is the app's own or
@@ -1504,21 +1525,7 @@ fn hostedFilesOpenRoot(roc_host: *RocHost, root: FilesRoot, writable: bool) call
     defer effect.end();
     defer root.decref(roc_host);
 
-    const request: RootRequest = switch (root.tag) {
-        .BesideExecutable => .{ .kind = .beside_executable },
-        .WorkingDirectory => .{ .kind = .working_directory },
-        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, &root).asSlice(), .create = writable },
-        .AppData, .AppConfig, .AppCache => .{
-            .kind = .app_storage,
-            .storage = switch (root.tag) {
-                .AppConfig => .config,
-                .AppCache => .cache,
-                else => .data,
-            },
-            .text = active_policy.appId() orelse unreachable,
-            .create = true,
-        },
-    };
+    const request = filesRootRequest(&root, writable);
     const allocator = allocatorFromHost(roc_host);
     switch (runBeneath("open root", resolveRootBlocking, .{ allocator, request })) {
         .failed => |code| {
@@ -1540,6 +1547,12 @@ fn designationOperation(source: *const FilesDesignation) []const u8 {
         .Drop => "Files.Access.accept_drop!",
         .Arg => "Files.Access.from_arg!",
     };
+}
+
+/// The path a designation carries, read in place for the reason
+/// `filesRootRequest` gives.
+fn designatedText(source: *const FilesDesignation) []const u8 {
+    return payloadIn(abi.RocStr, source).asSlice();
 }
 
 /// Whether `arg` is byte-identical to an argument the app was launched with.
@@ -1573,12 +1586,12 @@ fn hostedFilesDesignate(roc_host: *RocHost, source: FilesDesignation) callconv(.
     defer if (owned) |bytes| allocator.free(bytes);
     const path: []const u8 = switch (source.tag) {
         .Drop => blk: {
-            const dropped = payloadIn(abi.RocStr, &source).asSlice();
+            const dropped = designatedText(&source);
             if (!std.fs.path.isAbsolute(dropped) or !current_drops.contains(dropped)) break :blk "";
             break :blk dropped;
         },
         .Arg => blk: {
-            const arg = payloadIn(abi.RocStr, &source).asSlice();
+            const arg = designatedText(&source);
             if (arg.len == 0 or !isLaunchArgument(arg)) break :blk "";
             if (std.fs.path.isAbsolute(arg)) break :blk arg;
             const cwd = std.process.currentPathAlloc(mainThreadIo(), allocator) catch break :blk "";
@@ -15839,6 +15852,88 @@ test "using a facility the app never declared is a programmer error that names t
     }
     // In-memory SQLite and a store beside the executable are the app's own.
     try std.testing.expect(last_undeclared_use == null);
+}
+
+/// Whether `slice` points into `container`'s own bytes.
+///
+/// A short `RocStr` keeps its bytes inside itself, so a slice read from a tag
+/// payload in place points into the payload; one read from a `payload_*()`
+/// copy points into a stack temporary that is gone by the next statement.
+/// Debug builds tend to leave that stack alone, so a dangling slice still
+/// reads correctly there and only goes wrong under ReleaseFast. Asking where
+/// the slice points is what makes the test fail in every build mode.
+fn sliceWithin(slice: []const u8, container: anytype) bool {
+    const start = @intFromPtr(container);
+    const end = start + @sizeOf(@TypeOf(container.*));
+    const at = @intFromPtr(slice.ptr);
+    return at >= start and at + slice.len <= end;
+}
+
+/// One transported declaration holding `text` in the payload's first `RocStr`.
+fn testDeclaration(comptime tag: @FieldType(abi.App_config_for_hostPermissions, "tag"), text: []const u8, roc_host: *RocHost) abi.App_config_for_hostPermissions {
+    var declaration = std.mem.zeroes(abi.App_config_for_hostPermissions);
+    declaration.tag = tag;
+    @as(*abi.RocStr, @ptrCast(@alignCast(&declaration.payload))).* = abi.RocStr.fromSlice(text, roc_host);
+    return declaration;
+}
+
+test "short strings in tag payloads are read in place, in every build mode" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+
+    // Every string below is short enough to live inside its `RocStr`.
+    var declarations = [_]abi.App_config_for_hostPermissions{
+        testDeclaration(.HttpOrigin, "http://a.test", &roc_host),
+        testDeclaration(.Command, "git", &roc_host),
+        testDeclaration(.EnvVar, "HOME", &roc_host),
+        testDeclaration(.Directory, "saves", &roc_host),
+        testDeclaration(.UdpPeer, "10.0.0.2", &roc_host),
+    };
+    @as(*@TypeOf(declarations[3].payload_directory()), @ptrCast(@alignCast(&declarations[3].payload))).mode = .read_write;
+    @as(*@TypeOf(declarations[4].payload_udp_peer()), @ptrCast(@alignCast(&declarations[4].payload))).port = 9000;
+    for (&declarations) |*declaration| {
+        const text = @as(*const abi.RocStr, @ptrCast(@alignCast(&declaration.payload)));
+        try std.testing.expect(text.isSmallStr());
+    }
+
+    // The declaration's slices point into the declaration itself.
+    for (&declarations) |*declaration| {
+        const text: []const u8 = switch (declarationFromConfig(declaration)) {
+            .http_origin => |origin| origin,
+            .command => |program| program,
+            .env_var => |name| name,
+            .directory => |directory| directory.path,
+            .udp_peer => |peer| peer.address,
+            else => unreachable,
+        };
+        try std.testing.expect(sliceWithin(text, declaration));
+    }
+
+    // And the policy built from them holds the text they said.
+    var config = deniedTestArgument(AppConfig);
+    config.permissions = abi.RocList(abi.App_config_for_hostPermissions).fromSlice(&declarations, &roc_host);
+    defer config.permissions.decref(&roc_host);
+    var policy: permissions.Policy = .{};
+    try std.testing.expect(policyFromConfig(config, &policy) == null);
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitCommand("git"));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitEnv("HOME"));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitPath("saves/slot1", true));
+    try std.testing.expectEqual(permissions.Admission.allow, policy.admitUdpPeer(permissions.parseIp4("10.0.0.2").?, 9000));
+
+    // A files root and a designation carry their paths the same way.
+    const root = testFilesRoot(.Declared, "saves", &roc_host);
+    defer root.decref(&roc_host);
+    try std.testing.expect(sliceWithin(filesRootRequest(&root, true).text, &root));
+
+    const drop = testDesignation(.Drop, "/t/a.png", &roc_host);
+    defer drop.decref(&roc_host);
+    try std.testing.expect(sliceWithin(designatedText(&drop), &drop));
+    const arg = testDesignation(.Arg, "a.csv", &roc_host);
+    defer arg.decref(&roc_host);
+    try std.testing.expect(sliceWithin(designatedText(&arg), &arg));
 }
 
 test "startup refuses an invalid declaration or an escaping output directory" {

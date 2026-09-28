@@ -195,6 +195,17 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
 
+      # The same unit tests with the optimizer on. A slice into a by-value copy
+      # of a Roc value -- a short string's bytes live inside the string -- reads
+      # correctly in Debug, where the dead stack is left alone, and goes wrong
+      # only once the optimizer reuses it. That shipped once because every local
+      # run used a Debug host. ReleaseSafe keeps the safety checks, so a failure
+      # here names itself. One Linux runner is enough: the defect is not
+      # platform-specific, and the step roughly doubles the Zig test time.
+      - name: Run Zig tests optimized (ReleaseSafe)
+        if: matrix.os == 'ubuntu-24.04'
+        run: zig build test -Droc-tests=false -Doptimize=ReleaseSafe
+
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
         run: |

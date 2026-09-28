@@ -48,7 +48,7 @@ init! = App.init(
 
 `gen_tone!` can fail with `SoundGenerationFailed` or `ResourceLimit` (the
 sound table is full), and `?` passes either error on. That is why both appear
-in `init!`'s error list, the second type argument of `App.Init`. When you add
+in ``init!``'s error list, the second type argument of `App.Init`. When you add
 a call with `?` that can fail in another way, add its errors to that list;
 the compiler tells you which are missing.
 

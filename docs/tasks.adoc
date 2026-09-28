@@ -67,7 +67,7 @@ top:
   message to the next model. When `NextLevelReady` arrives, the level
   advances.
 
-`Task.spawn!`'s first argument is the current `input`. The task does not read
+``Task.spawn!``'s first argument is the current `input`. The task does not read
 it. It is there so the compiler can check that the task returns your app's
 `Msg` type: the input's type, `App.Input(Msg)`, names that type, and the body
 must return a value of it. Pass the `input` your `update!` received.

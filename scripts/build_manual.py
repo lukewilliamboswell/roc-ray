@@ -294,12 +294,13 @@ def check_pdf(manual: Path, index_html: str) -> None:
     every `=>`, `->`, `...`, `--` or quote in an inline code span must appear in
     the PDF's text unchanged. Only a few characters either side are compared,
     because the PDF wraps long spans (at hyphens, inside table cells) where the
-    HTML does not.
+    HTML does not. The text is read in content-stream order (`-raw`): layout
+    order interleaves the lines of neighbouring table cells.
     """
     if shutil.which("pdftotext") is None:
         raise SystemExit("pdftotext is needed to check the PDF manual's code")
     text = subprocess.run(
-        ["pdftotext", "-enc", "UTF-8", str(manual), "-"], check=True, capture_output=True, text=True
+        ["pdftotext", "-raw", "-enc", "UTF-8", str(manual), "-"], check=True, capture_output=True, text=True
     ).stdout
     flat = re.sub(r"\s+", "", text)
     risky = re.compile(r"=>|->|<-|\.\.\.|--|'|\"")

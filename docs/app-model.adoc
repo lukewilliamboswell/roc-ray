@@ -87,7 +87,7 @@ beyond computing a value, such as drawing or opening a window. Its type uses
 The platform calls the three callbacks in a loop:
 
 .The order in which the platform calls an app
-[mermaid]
+[mermaid,alt="Flowchart: init! builds the first model, then update! and render! alternate; update! returning Err(Exit(code)) ends the app."]
 ....
 flowchart LR
     Init["init!<br/>builds the first model"] --> Update

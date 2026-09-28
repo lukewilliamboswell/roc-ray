@@ -27,7 +27,7 @@ mkdir -p dist
 roc build --opt=speed main.roc --output=dist/rocket
 ----
 
-`--opt=speed` asks for an optimised build, which is also `roc build`'s
+`--opt=speed` asks for an optimised build, which is also ``roc build``'s
 default. `--output` names the executable; its directory must already exist,
 or the build fails at the link step.
 

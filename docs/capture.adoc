@@ -11,9 +11,9 @@ endif::[]
 = Screenshots and recordings
 
 An app can save its own rendered output as PNG screenshots, PNG sequences,
-animated GIFs, or WebM video, and read pixels back. Combined with a hidden
-window and scripted input, that makes an app its own batch renderer or demo
-recorder. This chapter assumes <<app-model>> and <<tasks>>.
+animated GIFs, or WebM video, and read pixels back. With a hidden window and
+scripted input, an app can produce images or demo videos by itself, with
+nobody at the keyboard. This chapter assumes <<app-model>> and <<tasks>>.
 
 == The output directory
 
@@ -26,17 +26,17 @@ config = App.default.with_output_dir("captures")
 ----
 
 Captures are the app's own output, so writing them needs no declaration. In
-exchange the directory is confined: it must be relative to the working
+return, the directory is restricted: it must be relative to the working
 directory, with no `..`, and the app refuses to start with one that is not.
-Every capture path resolves beneath it, and a path that would escape it is
-refused rather than rewritten. The directory is created on first use.
+Every capture path is inside it, and a path that would leave it is refused
+rather than rewritten. The directory is created on first use.
 
 == Screenshots
 
 `io.capture().screenshot!(path)` writes one PNG of the next presented frame.
 It waits for that frame to be drawn, read back, and written, so it is legal
-only in a task -- not even in `init!`, which runs before any frame exists. To
-capture the first frame, spawn it on the first cycle:
+only in a task. It is not legal even in `init!`, which runs before any frame
+exists. To capture the first frame, spawn the task on the first cycle:
 
 [source,roc]
 ----
@@ -45,16 +45,16 @@ if input.time.cycle_count == 0 {
 }
 ----
 
-Here `Shot` is a variant of the app's `Msg` that carries the result, and `io`
+Here `Shot` is a variant of the app's `Msg` that holds the result, and `io`
 is the `App.Io` that `update!` received; the task captures it.
 
-Only one screenshot can be in flight at a time; a second one while the first
-is waiting answers `AlreadyPending`. A headless run has no framebuffer, so a
-screenshot there answers `Ok({})` without writing anything.
+Only one screenshot can be pending at a time. Asking for a second one while
+the first is waiting returns `AlreadyPending`. A headless run has no
+framebuffer, so a screenshot there returns `Ok({})` without writing anything.
 
 `io.capture().screenshot_texture!(target, path)` exports an offscreen
-`Draw.RenderTexture` instead (see <<drawing>>), at the texture's own size --
-useful for an image larger than the window. It keeps transparency, and it is
+`Draw.RenderTexture` instead (see <<drawing>>), at the texture's own size.
+This is useful for an image larger than the window. It keeps transparency, and it is
 legal in `init!` and tasks. {src}/examples/postcard_studio/main.roc[Postcard
 Studio] exports at twice the window size.
 
@@ -76,7 +76,7 @@ recording = Capture.default
 [cols="1,3",options="header"]
 |===
 |Setting |Choices
-|`with_format` |`Png` (numbered stills), `Gif`, or `WebM` (VP8). GIF and WebM are encoded incrementally, so memory stays bounded by one frame.
+|`with_format` |`Png` (numbered stills), `Gif`, or `WebM` (VP8). GIF and WebM are encoded one frame at a time, so they need memory for only one frame.
 |`with_scale` |`Full`, `Half`, `Quarter`, or `+Ratio(...)+`, applied after rendering; it shrinks the file without changing the window
 |`with_timing` |`FixedStep` (the default), which reports exactly one recorded frame's worth of time as each cycle's elapsed time, or `RealTime`, which reports the time that actually passed
 |`with_max_frames`, `with_every_nth` |How long to record, and how many frames to skip
@@ -106,7 +106,7 @@ also finishes when it reaches its frame limit or the app exits.
 
 Reading each frame back from the graphics card takes time, so a recorded run
 is slower and less even than a normal one. With `RealTime` timing, that
-stutter ends up in the file, because `input.time.elapsed_seconds` reports the
+unevenness appears in the recording, because `input.time.elapsed_seconds` reports the
 real, uneven time between cycles.
 
 With `FixedStep` timing, while the recording is active every cycle reports
@@ -132,8 +132,8 @@ hidden-window WebM batch render.
 == Scripted input
 
 `Keys.set_source!`, `Keys.set_text!`, and `Mouse.set_source!` let an app drive
-its own keyboard, typed text, and pointer. Scripted input travels the same path
-as real input, so a recorded demo exercises the app's ordinary code:
+its own keyboard, typed text, and pointer. Scripted input goes through the
+same path as real input, so a recorded demo runs the app's ordinary code:
 
 [source,roc]
 ----
@@ -156,8 +156,8 @@ without writing a file. The `source` is `Screen`, the last frame shown, or
 in `render!`.
 
 The host only keeps a copy of the screen once an app starts reading it, so the
-first `Screen` read of a run answers `Unavailable` and later reads succeed. A
-headless run has no pixels and always answers `Unavailable`.
+first `Screen` read of a run returns `Unavailable` and later reads succeed. A
+headless run has no pixels and always returns `Unavailable`.
 {src}/examples/input_inspector/main.roc[Input Inspector] uses one as an
 eyedropper.
 

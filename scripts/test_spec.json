@@ -163,6 +163,13 @@
             "events: KeyPressed(81)"
           ],
           "_note": "Two taps and two characters inside cycle 3 must reach the app as six ordered events -- the bits alone would show one press per key -- and the held Q on cycle 4 as a press event that also quits"
+        },
+        {
+          "name": "tapped-quit",
+          "frames": 1000000,
+          "keys": "3:A,6:Q~",
+          "timeout_seconds": 30,
+          "_note": "Q is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
         }
       ]
     },
@@ -192,17 +199,10 @@
           "frames": 20
         },
         {
-          "name": "serves-and-quits",
-          "frames": 1000000,
-          "keys": "3:W,4:W,5:S,8:SPACE,12:ESCAPE",
-          "timeout_seconds": 30
-        },
-        {
-          "name": "tapped-quit",
-          "frames": 1000000,
-          "keys": "3:W,6:ESCAPE~",
-          "timeout_seconds": 30,
-          "_note": "Escape is tapped inside cycle 6 and never held, so the run only ends if a press that began and ended between two polls reaches key_pressed"
+          "name": "serves-and-plays",
+          "frames": 40,
+          "keys": "3:W,4:W,5:S,8:SPACE",
+          "_note": "Escape is handled by the host's exit key, which a --host-keys script does not reach, so this run ends at its frame limit"
         }
       ]
     },
@@ -256,10 +256,10 @@
           "frames": 20
         },
         {
-          "name": "turns-and-quits",
-          "frames": 1000000,
-          "keys": "3:RIGHT,6:DOWN,9:LEFT,14:ESCAPE",
-          "timeout_seconds": 30
+          "name": "turns",
+          "frames": 40,
+          "keys": "3:RIGHT,6:DOWN,9:LEFT",
+          "_note": "Escape is handled by the host's exit key, which a --host-keys script does not reach, so this run ends at its frame limit"
         }
       ]
     },

@@ -184,19 +184,27 @@ code:
   border-width: [0, 0, 0, 2.5]
   border-radius: 0
   padding: [9, 12, 9, 13]
-  font-size: 8.5
-  line-height: 1.4
+  # M+ 1mn is a condensed face: at the body's 10pt it already reads small, and
+  # at 8.5pt blocks turned into fine print. 9.3pt keeps an 80-column line
+  # inside the text block.
+  font-size: 9.3
+  line-height: 1.42
   linenum:
     font-color: $brand-muted
 
 codespan:
   font-family: M+ 1mn
-  font-size: 0.92em
+  font-size: 0.95em
   font-color: $brand-ink
   background-color: $brand-fill-warm
   border-color: $brand-fill-warm
   border-width: 0.5
-  border-offset: 1.2
+  border-offset: 1
+
+# Callout numbers in code and in the list under it take the accent, not
+# the default theme's red.
+conum:
+  font-color: $brand-accent
 
 kbd:
   background-color: $brand-fill-light
@@ -249,6 +257,10 @@ example:
   padding: [12, 14, 2, 14]
 
 # ------------------------------------------------------------ admonitions
+#
+# The manual sets no `icons` attribute, so each admonition carries its word
+# (NOTE, TIP, ...) as its label. The label takes the kind's colour, matching
+# the rule colours in roc-ray.css; the ground and rule are shared.
 admonition:
   background-color: $brand-fill-warm
   border-color: $brand-border-light
@@ -263,8 +275,21 @@ admonition:
     font-style: bold
     font-color: $brand-accent
     text-transform: uppercase
+    # asciidoctor-pdf applies only the side padding to a text label and
+    # starts a top-aligned one above the body's padding, so the label is
+    # centred on the block instead.
     padding: [9, 10, 9, 12]
-    vertical-align: top
+    vertical-align: middle
+    note:
+      font-color: $brand-accent
+    tip:
+      font-color: #2F6B4F
+    warning:
+      font-color: #8A6A2A
+    important:
+      font-color: #B91C1C
+    caution:
+      font-color: #B91C1C
   icon:
     note:
       stroke-color: $brand-accent
@@ -344,6 +369,13 @@ toc:
   font-color: $brand-body
   indent: 14
   line-height: 1.45
+  # Parts outrank chapters: larger, in the accent, with space above them.
+  h1:
+    font-family: Space Grotesk
+    font-color: $brand-accent
+    font-size: 12
+    font-style: bold
+    text-transform: uppercase
   h2:
     font-family: Space Grotesk
     font-color: $brand-ink

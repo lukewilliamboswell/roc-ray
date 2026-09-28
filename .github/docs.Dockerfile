@@ -1,6 +1,6 @@
 FROM asciidoctor/docker-asciidoctor:1.100.0
 
-RUN apk add --no-cache chromium nodejs npm python3 \
+RUN apk add --no-cache chromium nodejs npm poppler-utils python3 \
     && npm install --global @mermaid-js/mermaid-cli@11.16.0 \
     && npm cache clean --force
 

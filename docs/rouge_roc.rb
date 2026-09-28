@@ -139,3 +139,19 @@ module Rouge
     end
   end
 end
+
+# Rouge's shell lexer only marks shell builtins, so a manual full of `roc
+# build ...` and `python3 scripts/...` commands rendered as plain text. Mark the
+# command word -- the first word of a line, or the first after `&&`, `||`, `|`
+# or `;` -- as a function name, which the theme colours like a Roc function.
+# Continuation lines that start with a flag keep the lexer's own treatment.
+Rouge::Lexers::Shell.prepend :basic do
+  command = %r{[A-Za-z_.\/~][\w.\/~+-]*}
+  rule %r/^([ \t]*)(#{command})(?=[ \t]|$)/ do
+    groups Rouge::Token::Tokens::Text::Whitespace, Rouge::Token::Tokens::Name::Function
+  end
+  rule %r/(&&|\|\||\||;)([ \t]*)(#{command})(?=[ \t]|$)/ do
+    groups Rouge::Token::Tokens::Operator, Rouge::Token::Tokens::Text::Whitespace,
+           Rouge::Token::Tokens::Name::Function
+  end
+end

@@ -31,6 +31,13 @@ jobs:
 
       # This build tracks the branch, not a release, and says so on its title
       # page rather than claiming the last published version.
+      #
+      # The build fails on what a reader would see going wrong: typographic
+      # replacements in inline code (HTML and PDF text), unresolved cross
+      # references, unhighlighted code, third-party requests, and, rendered in
+      # headless Chromium, Rouge tokens with their own background, text below
+      # WCAG AA contrast in either scheme, and sideways page scroll or buried
+      # content at phone and tablet widths (scripts/check_manual_render.cjs).
       - name: Build and check HTML and PDF
         env:
           DOCS_VERSION: ${{ github.event_name == 'pull_request' && format('pull request {0}', github.event.number) || github.ref_name }}

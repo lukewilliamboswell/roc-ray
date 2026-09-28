@@ -17,6 +17,39 @@
     "clusterBkg": "#FFFFFF",
     "clusterBorder": "#C8C8C4",
     "edgeLabelBackground": "#FFFFFF",
-    "titleColor": "#1A1A1A"
+    "titleColor": "#1A1A1A",
+    "actorBkg": "#EEF2F8",
+    "actorBorder": "#2B5EA7",
+    "actorTextColor": "#1A1A1A",
+    "actorLineColor": "#9DB4D6",
+    "signalColor": "#3A3A3A",
+    "signalTextColor": "#1A1A1A",
+    "labelBoxBkgColor": "#FFFFFF",
+    "labelBoxBorderColor": "#C8C8C4",
+    "labelTextColor": "#1A1A1A",
+    "loopTextColor": "#3A3A3A",
+    "noteBkgColor": "#FFF8E1",
+    "noteBorderColor": "#D9C27A",
+    "noteTextColor": "#1A1A1A"
+  },
+  "themeCSS": "text.messageText, text.loopText, text.loopText tspan { paint-order: stroke !important; stroke: #FAFAF7 !important; stroke-width: 10px !important; stroke-linejoin: round !important; }",
+  "sequence": {
+    "wrap": true,
+    "width": 170,
+    "actorMargin": 70,
+    "messageMargin": 42,
+    "noteMargin": 14,
+    "boxMargin": 12,
+    "boxTextMargin": 6,
+    "mirrorActors": true,
+    "messageFontSize": 15,
+    "noteFontSize": 14,
+    "actorFontSize": 15
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "padding": 14,
+    "nodeSpacing": 40,
+    "rankSpacing": 48
   }
 }

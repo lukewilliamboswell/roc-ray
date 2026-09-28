@@ -1,0 +1,133 @@
+<script>
+/*
+ * RocRay manual: contents navigation.
+ *
+ * - On a narrow screen the contents collapse into a bar that stays at the top
+ *   of the window and opens on demand, so the manual starts on the first
+ *   screen instead of after several thousand pixels of links.
+ * - On every screen the entry for the section being read is highlighted, and
+ *   the sidebar scrolls to keep it in view.
+ *
+ * Without JavaScript the contents stay expanded, in a box with its own scroll
+ * (see roc-ray.css). Nothing here loads anything.
+ */
+(function () {
+  "use strict";
+  var toc = document.getElementById("toc");
+  if (!toc) return;
+  var root = document.documentElement;
+  root.classList.add("js");
+
+  var header = document.getElementById("header");
+  // Asciidoctor puts the contents inside the header, which would confine a
+  // sticky bar to the header's height. Its fixed sidebar placement does not
+  // depend on where it sits in the document.
+  if (header && toc.parentNode === header) {
+    header.parentNode.insertBefore(toc, header.nextSibling);
+  }
+
+  var list = toc.querySelector(":scope > ul");
+  if (!list) return;
+  list.id = "toc-list";
+
+  var toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.id = "toc-toggle";
+  toggle.setAttribute("aria-controls", "toc-list");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.innerHTML =
+    '<span class="toc-toggle-label">Contents</span>' +
+    '<span class="toc-toggle-current"></span>' +
+    '<span class="toc-toggle-icon" aria-hidden="true"></span>';
+  toc.insertBefore(toggle, toc.firstChild);
+  var current = toggle.querySelector(".toc-toggle-current");
+
+  function setOpen(open) {
+    toc.classList.toggle("open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  toggle.addEventListener("click", function () {
+    setOpen(!toc.classList.contains("open"));
+    // Open at the section being read, not at the top of the list.
+    if (toc.classList.contains("open") && active) {
+      list.scrollTop += active.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientHeight / 3;
+    }
+  });
+  // Following a link or pressing Escape puts the bar away again.
+  list.addEventListener("click", function (event) {
+    if (event.target.closest("a")) setOpen(false);
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && toc.classList.contains("open")) {
+      setOpen(false);
+      toggle.focus();
+    }
+  });
+
+  // ------------------------------------------------------------ scrollspy
+  var entries = [];
+  Array.prototype.forEach.call(list.querySelectorAll("a[href^='#']"), function (link) {
+    var target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+    if (target) entries.push({ link: link, target: target });
+  });
+  if (!entries.length) return;
+
+  var active = null;
+  function sidebarShown() {
+    return getComputedStyle(toc).position === "fixed";
+  }
+  function keepInView(link) {
+    var box = toc.getBoundingClientRect();
+    var at = link.getBoundingClientRect();
+    var margin = 48;
+    // Once the entry nears an edge, bring it back to the middle so the
+    // sidebar moves in occasional steps rather than creeping line by line.
+    if (at.top < box.top + margin || at.bottom > box.bottom - margin) {
+      toc.scrollTop += at.top - box.top - (box.height - at.height) / 2;
+    }
+  }
+  function update() {
+    // The section being read is the last one whose heading has passed a line
+    // a quarter of the way down the window. Headings are in document order,
+    // so a binary search finds it.
+    var line = window.innerHeight * 0.25;
+    var lo = 0;
+    var hi = entries.length - 1;
+    var found = -1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (entries[mid].target.getBoundingClientRect().top <= line) {
+        found = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    var next = found >= 0 ? entries[found].link : null;
+    if (next === active) return;
+    if (active) {
+      active.classList.remove("active");
+      active.removeAttribute("aria-current");
+    }
+    active = next;
+    current.textContent = active ? active.textContent : "";
+    if (!active) return;
+    active.classList.add("active");
+    active.setAttribute("aria-current", "location");
+    if (sidebarShown()) keepInView(active);
+  }
+
+  var queued = false;
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(function () {
+      queued = false;
+      update();
+    });
+  }
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  update();
+})();
+</script>

@@ -31,8 +31,9 @@ explains why. Three consequences come up constantly:
   are released when your model stops referring to them. There is no `Unload*`
   to call.
 
-RocRay is 2D only. It has no `DrawModel`, `Camera3D`, meshes, or other 3D
-drawing, and no raw OpenGL (`rlgl`) calls. It also has no file-open dialog:
+RocRay draws in 2D today. 3D models, cameras, and lighting are planned but not
+yet available, so there is no `DrawModel`, `Camera3D`, meshes, or other 3D
+drawing yet. There are no raw OpenGL (`rlgl`) calls. It also has no file-open dialog:
 an app reads files the user drops on its window or names on the command line,
 or directories it declares (see <<files-and-assets>>).
 

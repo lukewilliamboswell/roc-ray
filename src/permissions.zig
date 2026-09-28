@@ -13,6 +13,10 @@
 //! - `out_of_scope`: the facility is declared, but not for this target. The
 //!   target -- a URL, a path, a peer, a variable name -- may be runtime data,
 //!   so this is a runtime outcome the effect reports as `PermissionDenied`.
+//! - `path_invalid`: the facility is declared, but the target is a path whose
+//!   text no declaration can cover -- one with a `..` component, with no
+//!   `files_any` declared. The effect reports it as `PathInvalid`, because the
+//!   path, not the grant, is what needs fixing.
 //! - `undeclared`: the source never declared the facility at all. That is
 //!   fixed by the source, so it is a programmer error, and the caller fails
 //!   the application with `fix` naming the declaration to add.
@@ -79,7 +83,7 @@ pub const Facility = enum {
 };
 
 /// How a policy answers one effect; see the module comment.
-pub const Admission = enum { allow, out_of_scope, undeclared };
+pub const Admission = enum { allow, out_of_scope, path_invalid, undeclared };
 
 /// Why a declaration was refused at startup; `describe` phrases each one.
 pub const ValidationError = error{
@@ -197,6 +201,14 @@ pub const Policy = struct {
         return false;
     }
 
+    /// Whether any declaration of this exact kind was made.
+    fn declaresKind(self: *const Policy, kind: Kind) bool {
+        for (self.entries[0..self.len]) |entry| {
+            if (entry.kind == kind) return true;
+        }
+        return false;
+    }
+
     /// Admit an HTTP request, or a redirect hop, to `uri`.
     pub fn admitHttp(self: *const Policy, uri: std.Uri) Admission {
         if (!self.declares(.http)) return .undeclared;
@@ -280,11 +292,12 @@ pub const Policy = struct {
     /// `working_directory` or by a relative `directory` it lies beneath; an
     /// absolute path by an absolute `directory` it lies beneath. A path with a
     /// `..` component is covered only by `files_any`, because lexically
-    /// it can name anything.
+    /// it can name anything; without one declared it is `path_invalid`.
     pub fn admitPath(self: *const Policy, path: []const u8, write: bool) Admission {
         if (!self.declares(.files)) return .undeclared;
         const absolute = isAbsolute(path);
         const has_parent = hasParentComponent(path);
+        if (has_parent and !self.declaresKind(.files_any)) return .path_invalid;
         for (self.entries[0..self.len]) |entry| {
             if (write and entry.mode != .read_write) continue;
             switch (entry.kind) {
@@ -581,8 +594,8 @@ test "the working directory covers relative paths without parent components" {
     try std.testing.expectEqual(Admission.allow, policy.admitWorkingDirectory(false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("assets/logo.png", true));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitWorkingDirectory(true));
-    try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("../secret", false));
-    try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("assets/../../secret", false));
+    try std.testing.expectEqual(Admission.path_invalid, policy.admitPath("../secret", false));
+    try std.testing.expectEqual(Admission.path_invalid, policy.admitPath("assets/../../secret", false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("/etc/passwd", false));
 }
 
@@ -594,7 +607,7 @@ test "directories cover what lies beneath them by component" {
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/srv/data/a.txt", true));
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/srv/data", false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("/srv/database/a.txt", false));
-    try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("/srv/data/../etc", false));
+    try std.testing.expectEqual(Admission.path_invalid, policy.admitPath("/srv/data/../etc", false));
     try std.testing.expectEqual(Admission.allow, policy.admitPath("./saves/slot1.json", false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("saves/slot1.json", true));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("other/slot1.json", false));
@@ -606,6 +619,9 @@ test "files_any covers every path in its mode" {
     try std.testing.expectEqual(Admission.allow, policy.admitPath("../x", false));
     try std.testing.expectEqual(Admission.allow, policy.admitPath("/etc/hosts", false));
     try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("/tmp/x", true));
+    // A `..` path under a read-only `files_any` is refused for its mode, not
+    // its shape: the declaration could cover it, but not for writing.
+    try std.testing.expectEqual(Admission.out_of_scope, policy.admitPath("../x", true));
 }
 
 test "directory declarations are validated" {

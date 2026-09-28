@@ -993,16 +993,21 @@ fn runBeneath(comptime label: []const u8, comptime work: anytype, args: anytype)
     return blocking.join();
 }
 
-/// A path a handle does not reach -- not plainly relative, meeting a link,
-/// or beneath a stub's empty root. Mirrored in `Files.roc` as
-/// `PermissionDenied`, and numbered past the write table.
+/// A handle that reaches nothing: a stub's empty root. Mirrored in
+/// `Files.roc` as `PermissionDenied`, and numbered past the write table.
 const READ_ERR_NOT_PERMITTED: u8 = 10;
+
+/// A path whose shape, or a link it meets, is refused: not plainly relative,
+/// a link on the way, or an existing link where a write would land. Mirrored
+/// in `Files.roc` as `PathInvalid`.
+const READ_ERR_PATH_INVALID: u8 = 11;
 
 /// Name a confined-resolution failure, deferring to `base` for the
 /// filesystem's own errors.
 fn beneathErrorCode(err: anyerror, comptime base: fn (anyerror) u8) u8 {
     return switch (err) {
-        error.Escapes => READ_ERR_NOT_PERMITTED,
+        error.PathInvalid => READ_ERR_PATH_INVALID,
+        error.NotGranted => READ_ERR_NOT_PERMITTED,
         else => base(err),
     };
 }
@@ -1092,6 +1097,7 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_UTF8 => .not_utf8,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1099,7 +1105,7 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
 /// A refused outcome is the host declining or the app leaving; anything else
 /// is the filesystem's answer.
 fn filesOutcome(code: u8) observatory.EffectOutcome {
-    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED) .refused else .runtime_error;
+    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED or code == READ_ERR_PATH_INVALID) .refused else .runtime_error;
 }
 
 fn hostedFilesReadText(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
@@ -1156,6 +1162,7 @@ fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1194,6 +1201,7 @@ fn filesListError(code: u8) abi.HostFiles_listErr {
         READ_ERR_TOO_LARGE => .too_large,
         READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1272,6 +1280,7 @@ fn filesMetadataError(code: u8) abi.HostFiles_metadataErr {
         READ_ERR_UNAVAILABLE => .unavailable,
         WRITE_ERR_ACCESS_REFUSED => .access_refused,
         READ_ERR_NOT_PERMITTED => .permission_denied,
+        READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
@@ -1330,6 +1339,7 @@ fn filesWriteResult(code: u8) abi.HostFiles_write_textResult {
         WRITE_ERR_ACCESS_REFUSED => abiTryErr(Result, Union.access_refused),
         WRITE_ERR_NO_SPACE => abiTryErr(Result, Union.no_space),
         READ_ERR_NOT_PERMITTED => abiTryErr(Result, Union.permission_denied),
+        READ_ERR_PATH_INVALID => abiTryErr(Result, Union.path_invalid),
         else => abiTryErr(Result, Union.write_failed),
     };
 }
@@ -2961,7 +2971,11 @@ fn hostedSqliteOpen(
         switch (runBeneath("sqlite.resolve", resolveSqlitePathBlocking, .{ allocator, root_arg.asSlice(), path_arg.asSlice(), create })) {
             .path => |path| resolved_path = path,
             .failed => |err| switch (err) {
-                error.Escapes => {
+                error.PathInvalid => {
+                    effect.setOutcome(.refused);
+                    return abiTryErr(Result, abiUnionNamed(abi.HostSqlite_openErr, "PathInvalid"));
+                },
+                error.NotGranted => {
                     effect.setOutcome(.refused);
                     return permissionDenied(Result);
                 },
@@ -6558,7 +6572,8 @@ fn isSafeStoreRelativePath(path: []const u8) bool {
 
 fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
     return switch (err) {
-        .permission_denied => "no declared permission covers the store's directory",
+        .permission_denied => "the handle the store was opened from reaches nothing",
+        .path_invalid => "the store's directory meets a symbolic link beneath its handle",
         .root_not_found => "root directory was not found",
         .root_not_directory => "root is not a directory",
         .root_unreadable => "root directory is not readable",
@@ -6576,7 +6591,8 @@ fn storeErrorDescription(err: abi.HostStore_openErr) []const u8 {
 
 fn storeOpenError(error_value: anyerror) abi.HostStore_openErr {
     return switch (error_value) {
-        error.Escapes => .permission_denied,
+        error.PathInvalid => .path_invalid,
+        error.NotGranted => .permission_denied,
         error.FileNotFound => .root_not_found,
         error.NotDir => .root_not_directory,
         error.AccessDenied => .root_unreadable,
@@ -6765,7 +6781,7 @@ test "a store opens beneath a handle's root and refuses a link on the way" {
     var installed = try tmp.dir.openDir(io, "installed", .{});
     defer installed.close(io);
     try installed.symLink(io, "../elsewhere", "linked", .{ .is_directory = true });
-    try std.testing.expectError(error.Escapes, openStoreDirectoryIn(io, root, "linked"));
+    try std.testing.expectError(error.PathInvalid, openStoreDirectoryIn(io, root, "linked"));
 }
 
 test "asset manifests compare declared identity without walking loose files" {
@@ -7066,7 +7082,7 @@ fn readStoreAssetLimited(allocator: std.mem.Allocator, store: *StoreResource, pa
     return switch (readDirFileWaiting(allocator, store.root, path, limit)) {
         .failed => |err| switch (err) {
             error.FileNotFound => .not_found,
-            error.Escapes => .path_invalid,
+            error.PathInvalid => .path_invalid,
             else => .failed,
         },
         .bytes => |bytes| .{ .bytes = bytes },
@@ -12431,9 +12447,14 @@ test "a parked read delivers bytes and releases its reservation either way" {
     const missing = readByteListWaiting(&roc_host, root, "definitely-not-here.txt", .read);
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
 
-    // A path the handle does not reach is refused before anything is opened.
+    // A path that is not plainly relative is refused before anything is
+    // opened, as a path problem rather than a missing grant.
     const escaping = readByteListWaiting(&roc_host, root, "../bytes.txt", .read);
-    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, escaping.err);
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, escaping.err);
+    // A stub handle's empty root reaches nothing: that is the missing grant.
+    const stub_read = readByteListWaiting(&roc_host, "", "bytes.txt", .read);
+    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, stub_read.err);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
     try std.testing.expectEqual(@as(usize, 0), missing.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
@@ -14323,6 +14344,36 @@ test "a write whose parent is a file is refused by name" {
     );
 }
 
+test "a refused path shape is PathInvalid in every Files union, and a stub root is PermissionDenied" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "elsewhere");
+    try tmp.dir.symLink(std.testing.io, "elsewhere", "linked_dir", .{ .is_directory = true });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "target.txt", .data = "x" });
+    try tmp.dir.symLink(std.testing.io, "target.txt", "linked_file", .{});
+
+    // An existing link at the write target, a link on the way, and a path
+    // that is not plainly relative are all the path's fault.
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "linked_file", "clobber"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "linked_dir/new.txt", "planted"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, writeBeneathIn(tmp.dir, std.testing.io, "../up.txt", "x"));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, statBeneathIn(tmp.dir, std.testing.io, "linked_dir/x").err);
+
+    // Each union names the two refusals apart.
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.path_invalid, filesReadTextError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_read_textErr.permission_denied, filesReadTextError(READ_ERR_NOT_PERMITTED));
+    try std.testing.expectEqual(abi.HostFiles_read_bytesErr.path_invalid, filesReadBytesError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_listErr.path_invalid, filesListError(READ_ERR_PATH_INVALID));
+    try std.testing.expectEqual(abi.HostFiles_metadataErr.path_invalid, filesMetadataError(READ_ERR_PATH_INVALID));
+    try expectPathInvalid(filesWriteResult(READ_ERR_PATH_INVALID));
+    try expectPermissionDenied(filesWriteResult(READ_ERR_NOT_PERMITTED));
+    try std.testing.expectEqual(READ_ERR_PATH_INVALID, beneathErrorCode(error.PathInvalid, readErrorCode));
+    try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, beneathErrorCode(error.NotGranted, readErrorCode));
+    try std.testing.expectEqual(abi.HostStore_openErr.path_invalid, storeOpenError(error.PathInvalid));
+    try std.testing.expectEqual(abi.HostStore_openErr.permission_denied, storeOpenError(error.NotGranted));
+}
+
 test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.FileNotFound));
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.NotDir));
@@ -14986,14 +15037,16 @@ var last_undeclared_use: ?UndeclaredUse = null;
 /// Answer whether an effect may go ahead under the declared policy.
 ///
 /// `out_of_scope` is a runtime outcome -- the target may be runtime data -- so
-/// the caller refuses with `PermissionDenied`. `undeclared` is fixed by the
+/// the caller refuses with `PermissionDenied`; `path_invalid` is refused too,
+/// and a caller whose result can say so reports it as `PathInvalid` by
+/// asking the policy first. `undeclared` is fixed by the
 /// application's source, so it is a programmer error and stops the app with
 /// the declaration that would permit the effect. Under `zig test` the
 /// violation is recorded rather than raised, as `enforcePhase` does.
 fn admitDeclared(operation: []const u8, facility: permissions.Facility, admission: permissions.Admission) bool {
     switch (admission) {
         .allow => return true,
-        .out_of_scope => return false,
+        .out_of_scope, .path_invalid => return false,
         .undeclared => {
             last_undeclared_use = .{ .operation = operation, .facility = facility };
             if (comptime builtin.is_test) return false;
@@ -15013,6 +15066,17 @@ fn refuseEffect(comptime Result: type, operation: []const u8, arguments: anytype
     effect.setOutcome(.refused);
     inline for (arguments) |argument| releaseDeniedArgument(argument);
     return permissionDenied(Result);
+}
+
+/// Refuse a gated effect over the shape of its path, as `refuseEffect` does,
+/// but answering `PathInvalid`.
+fn refusePathEffect(comptime Result: type, operation: []const u8, arguments: anytype) Result {
+    var effect = EffectScope.begin(operation, 0);
+    defer effect.end();
+    effect.setOutcome(.refused);
+    inline for (arguments) |argument| releaseDeniedArgument(argument);
+    const Error = @typeInfo(@TypeOf(Result.payload_err)).@"fn".return_type.?;
+    return abiTryErr(Result, abiUnionNamed(Error, "PathInvalid"));
 }
 
 /// Read one transported `Permission` as the policy's own declaration. The
@@ -15104,7 +15168,17 @@ fn admitPathEffect(operation: []const u8, authority: u64, path: []const u8, writ
 fn capsExportedFilesOpenRoot(authority: u64, root: FilesRoot, writable: bool) callconv(.c) abi.HostFiles_open_rootResult {
     const name = filesRootOperation(&root, writable);
     enforcePhase(name, during_wait);
-    const admitted = authorityIsLive(authority) and switch (root.tag) {
+    const live = authorityIsLive(authority);
+    // A declared path whose text no declaration can cover is the path's
+    // fault, not the grant's, so it answers `PathInvalid` rather than
+    // `PermissionDenied`. Only a live authority gets that far: a stub reaches
+    // nothing, whatever the path says.
+    if (live and root.tag == .Declared and
+        active_policy.admitPath(payloadIn(abi.RocStr, &root).asSlice(), writable) == .path_invalid)
+    {
+        return refusePathEffect(abi.HostFiles_open_rootResult, name, .{root});
+    }
+    const admitted = live and switch (root.tag) {
         // The app's own bundle, never writable.
         .BesideExecutable => !writable,
         .AppData, .AppConfig, .AppCache => requireAppId(name),
@@ -15343,6 +15417,9 @@ fn capsExportedTextStartupDefaultFontRaw(authority: u64) callconv(.c) abi.HostTe
     const name = "App.Io.default_font!";
     enforcePhase(name, during_startup);
     const path = startup_font_config.path;
+    // A path that is not plainly relative is `AssetPathInvalid` whatever the
+    // declarations say, so it is answered by the loader, not refused here.
+    if (authorityIsLive(authority) and path.len != 0 and !isSafeStoreRelativePath(path)) return exportedTextStartupDefaultFontRaw();
     const admitted = authorityIsLive(authority) and
         (path.len == 0 or admitPathEffect(name, authority, path, false));
     if (!admitted) return refuseEffect(abi.HostText_startup_default_fontResult, name, .{});
@@ -15363,6 +15440,16 @@ fn permissionDenied(comptime Result: type) Result {
     var err = std.mem.zeroes(Error);
     err.tag = .PermissionDenied;
     return abiTryErr(Result, err);
+}
+
+fn expectPathInvalid(result: anytype) !void {
+    try std.testing.expectEqual(.Err, result.tag);
+    const err = result.payload_err();
+    if (@typeInfo(@TypeOf(err)) == .@"enum") {
+        try std.testing.expectEqual(.path_invalid, err);
+    } else {
+        try std.testing.expectEqual(.PathInvalid, err.tag);
+    }
 }
 
 fn expectPermissionDenied(result: anytype) !void {
@@ -15503,8 +15590,11 @@ test "a target outside every declared scope is refused with PermissionDenied and
     const outside = "../outside-the-working-directory-and-long-enough";
 
     // A root outside every declaration is refused before anything is resolved.
-    try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, outside, &roc_host), false));
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "/etc/an-absolute-path-no-declaration-covers", &roc_host), false));
+    // A `..` path is no declaration's to cover without `FilesAny`: that is
+    // the path's shape, so it is `PathInvalid`, not `PermissionDenied`.
+    try expectPathInvalid(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, outside, &roc_host), false));
+    try expectPathInvalid(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "/srv/data/../and-a-long-enough-escape", &roc_host), true));
     // A read-only declaration does not admit a writable handle, even beneath it.
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.WorkingDirectory, "", &roc_host), true));
     try expectPermissionDenied(capsExportedFilesOpenRoot(live, testFilesRoot(.Declared, "inside-but-read-only-and-long-enough", &roc_host), true));
@@ -15525,7 +15615,11 @@ test "a target outside every declared scope is refused with PermissionDenied and
     } else {
         try expectPermissionDenied(capsExportedAppReadEnvPosix(live, abi.RocStr.fromSlice("AN_UNDECLARED_VARIABLE_WITH_A_LONG_NAME", &roc_host)));
     }
-    try expectPermissionDenied(capsExportedTextStartupDefaultFontRaw(live));
+    // The configured font path climbs out with `..`, which is the path's
+    // fault: the loader's own `AssetPathInvalid`, before any file is read.
+    const font = capsExportedTextStartupDefaultFontRaw(live);
+    try std.testing.expectEqual(.Err, font.tag);
+    try std.testing.expectEqual(abi.HostText_startup_default_fontErr.asset_path_invalid, font.payload_err());
     // Every facility above was declared, so none of these was a programmer error.
     try std.testing.expect(last_undeclared_use == null);
 }

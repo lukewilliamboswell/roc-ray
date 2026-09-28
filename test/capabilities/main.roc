@@ -17,6 +17,7 @@ import rr.Task
 ##
 ## - `--probe=scoped`: narrow declarations. Everything in scope succeeds or
 ##   fails for its own reasons; everything out of scope is `PermissionDenied`;
+##   a path whose shape is refused is `PathInvalid`, whatever it would reach;
 ##   the app's own resources need no declaration.
 ## - `--probe=undeclared-FACILITY`: no declarations. The one effect named must
 ##   stop the app with a message naming the declaration to add.
@@ -68,6 +69,14 @@ denied = |result| match result {
 	_ => Bool.False
 }
 
+## A path refused for its shape: `PathInvalid`, and never `PermissionDenied`,
+## which would send the reader looking for a declaration to add.
+invalid : Try(a, [PathInvalid, ..]) -> Bool
+invalid = |result| match result {
+	Err(PathInvalid) => Bool.True
+	_ => Bool.False
+}
+
 init! : App.Init(Model, [Failed(Str)])
 init! = App.init_for_args(
 	config,
@@ -115,17 +124,24 @@ scoped! = |io| {
 	}
 	work = io.files().working_directory!() ? |_| Failed("the declared working directory did not open")
 	# Declared facilities, targets outside their scopes: refused, nothing done.
-	# A path a handle does not reach is refused the same way.
 	outside =
 		denied(io.http().get_utf8!("http://127.0.0.1:1/"))
 			and denied(io.udp().bind!({ ip: "127.0.0.1", port: 40001 }))
 				and denied(io.commands().run!(Cmd.new("roc-ray-caps-command-must-not-run")))
 					and denied(io.env().read!("PATH"))
-						and denied(work.read_text!("../outside.txt"))
-							and denied(work.write_text!("/tmp/roc-ray-caps-must-not-exist.txt", "must never be written"))
-								and denied(io.files().open_dir_read!("/etc"))
+						and denied(io.files().open_dir_read!("/etc"))
 	if !outside {
 		return Err(Failed("an out-of-scope effect was admitted"))
+	}
+	# A path whose shape is refused is `PathInvalid`, wherever it would lead:
+	# a parent component, an absolute path given to a handle, and a declared
+	# directory that climbs out with `..`.
+	shapes =
+		invalid(work.read_text!("../outside.txt"))
+			and invalid(work.write_text!("/tmp/roc-ray-caps-must-not-exist.txt", "must never be written"))
+				and invalid(io.files().open_dir_read!("../outside"))
+	if !shapes {
+		return Err(Failed("a refused path shape was not PathInvalid"))
 	}
 	# Inside the scopes: not refused, whatever else happens.
 	inside =

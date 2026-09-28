@@ -21,8 +21,8 @@
 ## A store is opened from a `Files.ReadDir`, so it reaches exactly what that
 ## handle reaches: the bundle beside the executable needs no permission, and
 ## any other directory needs one. Asset paths are relative to the store; a path
-## that would escape it, or that meets a symbolic link, is refused rather than
-## rewritten.
+## that is not plainly relative, or that meets a symbolic link, is refused as
+## `AssetPathInvalid` rather than rewritten.
 ##
 ## Textures are platform-owned values, also named `Assets.Texture` and
 ## `Draw.Texture`. Releasing the final reference
@@ -99,8 +99,9 @@ Assets := [].{
 
 	## Why a store could not be opened.
 	##
-	## `PermissionDenied` is a directory the handle does not reach -- one that
-	## meets a symbolic link, or a stub handle. The next three are about the
+	## `PathInvalid` is a store directory whose path beneath the handle meets
+	## a symbolic link. `PermissionDenied` is a stub handle, which reaches
+	## nothing. The next three are about the
 	## directory itself: `RootNotFound` is nothing there, `RootNotDirectory` is
 	## something there that is not a directory, and `RootUnreadable` is a
 	## directory the process may not open.
@@ -116,7 +117,7 @@ Assets := [].{
 	## the expected one. `InvalidExpectedContentHash` is the expectation itself
 	## being unusable -- a `Sha256` string that is not 64 hexadecimal
 	## characters. `ResourceLimit` is the host's store table being full.
-	OpenError : [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit]
+	OpenError : [PermissionDenied, PathInvalid, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit]
 
 	## Open the directory a handle names as an asset store, checking its
 	## manifest if the policy requires one.
@@ -134,7 +135,7 @@ Assets := [].{
 	## A `Sha256` expectation compares against the manifest's declaration
 	## only. Nothing walks or hashes the loose files, so opening a store stays
 	## constant-time in the number of assets.
-	open! : Files.ReadDir, ManifestPolicy => Try(Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
+	open! : Files.ReadDir, ManifestPolicy => Try(Store, [PermissionDenied, PathInvalid, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
 	open! = |dir, manifest| perform_open!(dir, manifest)
 
 	## Image bytes accepted by raylib's in-memory image loader.
@@ -362,11 +363,12 @@ wrap_code = |wrap|
 	}
 
 ## Private implementation: the handle's authority opens the store.
-perform_open! : Files.ReadDir, Assets.ManifestPolicy => Try(Assets.Store, [PermissionDenied, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
+perform_open! : Files.ReadDir, Assets.ManifestPolicy => Try(Assets.Store, [PermissionDenied, PathInvalid, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
 perform_open! = |dir, manifest|
 	match Host.store_open!(dir.for_host().authority, store_open_args(dir, manifest)) {
 		Ok(store) => Ok(Assets.Store.(store))
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
 		Err(RootNotFound) => Err(RootNotFound)
 		Err(RootNotDirectory) => Err(RootNotDirectory)
 		Err(RootUnreadable) => Err(RootUnreadable)

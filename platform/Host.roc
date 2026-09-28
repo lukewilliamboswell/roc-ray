@@ -324,7 +324,7 @@ Host := [].{
 	}
 
 	## Failures while opening and validating an asset store.
-	StoreOpenError : [PermissionDenied, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
+	StoreOpenError : [PermissionDenied, PathInvalid, AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch]
 
 	## Open a confined asset store.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -528,8 +528,10 @@ Host := [].{
 	FilesRoot : [BesideExecutable, WorkingDirectory, Declared(Str), AppData, AppConfig, AppCache]
 
 	## Failures while resolving a root. `PermissionDenied` is a root no
-	## declaration covers.
-	FilesOpenError : [AccessRefused, NotADirectory, NotFound, OpenFailed, PermissionDenied, Unavailable]
+	## declaration covers; `PathInvalid` is a declared path whose shape no
+	## `Directory` or `WorkingDirectory` declaration can cover, such as one
+	## with a `..` component.
+	FilesOpenError : [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable]
 
 	## Resolve a root to the canonical absolute path a handle carries, creating
 	## it when it is writable and the app's own, or declared writable.
@@ -550,13 +552,13 @@ Host := [].{
 	files_designate! : Resource.Authority, FilesDesignation => Try(FilesDesignated, [PermissionDenied])
 
 	## Failures while reading a file as validated UTF-8.
-	FilesReadTextError : [PermissionDenied, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
+	FilesReadTextError : [PermissionDenied, PathInvalid, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while reading a file as bytes.
-	FilesReadBytesError : [PermissionDenied, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while listing one directory.
-	FilesListError : [PermissionDenied, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesListError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
 
 	## One `stat`. Modification time uses the normalized `Time.Timestamp` parts.
 	FilesMetadata : {
@@ -567,7 +569,7 @@ Host := [].{
 	}
 
 	## Failures while stating one path.
-	FilesMetadataError : [AccessRefused, NotFound, PermissionDenied, ReadFailed, Unavailable]
+	FilesMetadataError : [AccessRefused, NotFound, PathInvalid, PermissionDenied, ReadFailed, Unavailable]
 
 	## Read bounded, validated UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -589,7 +591,7 @@ Host := [].{
 	##
 	## A write fails for reasons a read cannot, so it has a union of its own
 	## rather than sharing one with `files_read_bytes!`.
-	FilesWriteError : [AccessRefused, NoSpace, NotFound, PermissionDenied, Unavailable, WriteFailed]
+	FilesWriteError : [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed]
 
 	## Replace a file with UTF-8.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -1016,7 +1018,7 @@ Host := [].{
 	SqliteFailure : { code : I64, message : Str }
 
 	## Failures while opening a connection.
-	SqliteOpenError : [PermissionDenied, SqliteErr(SqliteFailure), TooManyConnections]
+	SqliteOpenError : [PermissionDenied, PathInvalid, SqliteErr(SqliteFailure), TooManyConnections]
 
 	## Failures with nothing to report but the failure itself.
 	SqliteStatusError : [SqliteErr(SqliteFailure)]

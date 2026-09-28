@@ -139,10 +139,10 @@ check! = |io| {
 		}
 
 	# A database path is confined like any other: one that would leave the
-	# handle is refused before SQLite sees it.
+	# handle is refused as `PathInvalid` before SQLite sees it.
 	escaped =
 		match io.sqlite().open!(out, "../escaped.db") {
-			Err(PermissionDenied) => 2048
+			Err(PathInvalid) => 2048
 			_ => 0
 		}
 

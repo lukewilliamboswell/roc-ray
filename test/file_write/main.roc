@@ -79,8 +79,9 @@ check! = |io| {
 	refused = out.write_text!("text.txt/nope.txt", "x") == Err(NotFound)
 
 	# A path that would leave the handle is refused before anything is
-	# written, the same answer as any undeclared target.
-	escaped = out.write_text!("../escaped.txt", "x") == Err(PermissionDenied)
+	# written. Its shape is the problem, not a missing grant, so the answer
+	# is `PathInvalid` rather than `PermissionDenied`.
+	escaped = out.write_text!("../escaped.txt", "x") == Err(PathInvalid)
 
 	Checked(
 		score(wrote_text, 1)

@@ -22,8 +22,10 @@
 
 [.lead]
 Make 2D games, visual tools, and other interactive programs in Roc. You write
-the rules and say what to draw; RocRay opens the window, reads the keyboard
-and mouse, plays sound, and runs your code many times a second. This manual
+your game's logic in Roc: what happens when a key is pressed, how things move,
+and what to draw each frame. RocRay opens the window, reads the keyboard and
+mouse, plays sound, and calls your code once for every frame it draws, up to
+240 times a second by default. This manual
 assumes no Roc and no graphics experience. It takes you from installing the
 compiler to a small finished game, and then through each feature as your own
 app needs it.
@@ -58,8 +60,8 @@ your app to other people.
 Testing and investigating performance:: <<testing>> covers pure tests and
 unattended runs. <<observatory>> records what the host did, cycle by cycle,
 into a database you can query.
-Curious about the design:: <<architecture>> states the rules the guides
-introduce one at a time, and why RocRay chose them.
+Curious about the design:: <<architecture>> lists the design rules that the
+guides introduce one at a time, and explains why RocRay chose them.
 Contributing to RocRay:: Start with <<contributing>>. <<host-development>>
 covers changes to the native host, and <<maintaining>> covers dependencies,
 bundles, and releases.

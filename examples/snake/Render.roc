@@ -3,7 +3,7 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
-import Assets
+import GameAssets
 import Board
 import Game
 import Snake
@@ -11,7 +11,7 @@ import Snake
 Render := [].{
 
 	## Draws one complete Snake presentation frame from the resulting world.
-	draw! : Draw.Frame, Assets, Game.World, F32 => Try({}, [ScopeLimit])
+	draw! : Draw.Frame, GameAssets, Game.World, F32 => Try({}, [ScopeLimit])
 	draw! = |frame, assets, world, elapsed| {
 		frame.clear!(field_bottom)
 		draw_background!(frame)
@@ -31,7 +31,7 @@ draw_background! : Draw.Frame => {}
 draw_background! = |frame| frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: field_top, color_bottom: field_bottom })
 
 ## Draws the title, score, and keyboard controls around the board.
-draw_hud! : Draw.Frame, Assets, Game.World => {}
+draw_hud! : Draw.Frame, GameAssets, Game.World => {}
 draw_hud! = |frame, assets, world| {
 	assets.title.draw!(frame, { pos: { x: Board.origin.x, y: 26 }, color: snake_head })
 	Text.from("SCORE ${U64.to_str(world.score)}", assets.font).size(24).draw!(frame, { pos: { x: 800 - Board.origin.x, y: 30 }, color: hud_color, align: (Top, Right) })
@@ -103,7 +103,7 @@ draw_food_body! = |frame, food, elapsed| {
 }
 
 ## Draws the game-over panel and breathing restart prompt after a crash.
-draw_game_over! : Draw.Frame, Assets, Game.World, F32 => {}
+draw_game_over! : Draw.Frame, GameAssets, Game.World, F32 => {}
 draw_game_over! = |frame, assets, world, elapsed|
 	match world.state {
 		Playing => {}

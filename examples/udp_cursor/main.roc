@@ -12,7 +12,6 @@ import rr.Draw
 import rr.Task
 import rr.Text
 import rr.Udp
-import rr.Permission
 
 ## State retained between updates: the socket and peer address, whether a
 ## receive Task is active, the latest local and peer pointers, send/receive
@@ -74,7 +73,7 @@ init! = App.init_for_args(
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
 	# One listener at a time. It answered this cycle, or has never run, so
-	# start the next one; in between, datagrams wait in the kernel's buffer.
+	# start the next one; in between, datagrams wait in the operating system.
 	socket = model.socket
 	if !model.listening {
 		Task.spawn!(
@@ -99,11 +98,7 @@ update! = |model, input, _io| {
 	answered = !List.is_empty(input.messages)
 	next = List.fold(input.messages, { ..model, dropped }, apply_message)
 
-	if input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..next, listening: !answered, pointer })
-	}
+	Ok({ ..next, listening: !answered, pointer })
 }
 
 ## Fold one delivered message into the model.

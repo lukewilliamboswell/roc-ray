@@ -17,7 +17,6 @@ app [Model, program] {
 import rr.App
 import rr.Task
 import rr.Http
-import rr.Permission
 import rr.Url
 import rr.Math
 import rr.Color
@@ -85,7 +84,7 @@ init! = App.init_for_args(
 			elapsed: 0,
 			started_waiting: 0,
 			title: Text.from("Fetching while the frame keeps moving", font).size(26).prepare!()?,
-			subtitle: Text.from("Http.send! parks a coroutine on the socket; the frame loop never waits for it", font).size(15).prepare!()?,
+			subtitle: Text.from("Http.send! waits inside a task, so the window keeps drawing while it does", font).size(15).prepare!()?,
 			hint: Text.from("R  fetch again        ESC  quit", font).size(14).spacing(2.0).prepare!()?,
 		})
 	},
@@ -140,17 +139,13 @@ update! = |model, input, io| {
 		Task.spawn!(input, || fetch!(http, id, url))
 	}
 
-	if input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({
-			..model,
-			fetch,
-			elapsed,
-			state: if refetch Waiting else state,
-			started_waiting: if refetch elapsed else model.started_waiting,
-		})
-	}
+	Ok({
+		..model,
+		fetch,
+		elapsed,
+		state: if refetch Waiting else state,
+		started_waiting: if refetch elapsed else model.started_waiting,
+	})
 }
 
 ## One request, written top to bottom. Waiting here pauses this Task while the

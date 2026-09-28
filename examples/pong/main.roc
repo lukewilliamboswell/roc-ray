@@ -1,15 +1,16 @@
-## Play Pong against a computer-controlled right paddle.
+## Play Pong: you are the left paddle, and the computer plays the right one.
 ##
 ## Use W and S to move, Space to start a new match after game over, and Escape
 ## to quit. This example shows semantic controls, separate assets and world
 ## state, gameplay events, and seeded random serves that can be reproduced.
-## File structure:
+## The file reads top to bottom in this order:
 ##
-## - State: sounds and text plus the ball, paddles, scores, trail, and serve RNG
-## - Controls: W/S movement, Space restart, and Escape quit
+## - State: sounds and text, then the ball, paddles, scores, trail, and serve RNG
+## - Constants: sizes, speeds, and the palette
+## - Controls: W/S movement and Space for a new match
 ## - App wiring: loads assets, advances each cycle, and plays event sounds
 ## - Rendering: draws the neon court, scores, ball trail, and win banner
-## - Gameplay: pure rules that move paddles, bounce the ball, and report hits and points
+## - Gameplay: pure rules that serve, move paddles, bounce the ball, and report hits and points
 ## - Tests: checks key mapping, wall bounces, scoring, and match restart
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
@@ -29,7 +30,6 @@ Assets : {
 	hit_sound : Audio.Sound,
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
-	font : Text.Font,
 	hint : Text.Prepared,
 	digits : List(Text.Prepared),
 	win_lines : List(Text.Prepared),
@@ -67,21 +67,17 @@ World : {
 }
 
 ## The application owns both host resources and the complete changing world.
-Model := {
+Model : {
 	assets : Assets,
 	world : World,
 }
 
-## Gameplay sees intentions, not the keys currently bound to them.
+## Gameplay sees intentions, not the keys currently bound to them. There is no
+## quit control: `App.default` already closes the window on Escape.
 Controls : {
 	move : F32,
 	new_match_pressed : Bool,
-	quit_pressed : Bool,
 }
-
-## The match ends as soon as either score reaches the winning score.
-is_over : World -> Bool
-is_over = |world| world.left.score >= win_score or world.right.score >= win_score
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
 screen_w = 800.F32
@@ -114,6 +110,9 @@ trail_length = 14.U64
 
 trail_spacing = 11.F32
 
+# How much of the screen flash fades away per second.
+flash_fade_per_second = 2.4.F32
+
 # --- Palette: one dark field, two rival neons, one warm ball ---
 field_top = Color.from_hex_rgb(0x141a35)
 
@@ -127,66 +126,15 @@ ball_neon = Color.from_hex_rgb(0xffe7a3)
 
 hint_color = Color.from_hex_rgb(0x6d7aa8)
 
-# A random vertical serve speed in px/second, so each serve leaves at a
-# different angle instead of the same predictable line.
-# Drawing from the model's own generator rather than an effect keeps the serve
-# immediate: the ball leaves on the frame that scored, not the frame after.
-random_serve_vy : Random.State -> Random.Generation(F32)
-random_serve_vy = |state| {
-	drawn = Random.step(state, Random.bounded_i32(-160, 160))
-	{ value: I32.to_f32(drawn.value), state: drawn.state }
-}
-
-left_paddle : F32 -> Math.Rect
-left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
-
-right_paddle : F32 -> Math.Rect
-right_paddle = |y| Math.rect(screen_w - paddle_margin - paddle_w, y, paddle_w, paddle_h)
-
-ball_circle : F32, F32 -> Math.Circle
-ball_circle = |x, y| Math.circle({ x, y }, ball_r)
-
-# A fresh match: ball centred, scores zeroed, served in a random direction.
-new_match : World -> World
-new_match = |world| {
-	# Direction then speed, drawn in that order from one generator, so the
-	# sequence is the same every time a given seed replays.
-	direction = Random.step(world.rng, Random.bounded_i32(0, 1))
-	serve = random_serve_vy(direction.state)
-	{
-		..world,
-		ball: {
-			pos: { x: screen_w * 0.5, y: screen_h * 0.5 },
-			velocity: {
-				x: if direction.value == 0 (init_vx * -1) else init_vx,
-				y: serve.value,
-			},
-		},
-		rng: serve.state,
-		left: { paddle_y: 250, score: 0 },
-		right: { paddle_y: 250, score: 0 },
-		trail: [],
-		flash: { intensity: 0, color: ball_neon },
-	}
-}
+# --- Controls ---
 
 read_controls : Devices.Snapshot -> Controls
 read_controls = |devices| {
 	move: if devices.key_down(KeyW) -1 else if devices.key_down(KeyS) 1 else 0,
 	new_match_pressed: devices.key_pressed(KeySpace),
-	quit_pressed: devices.key_pressed(KeyEscape),
 }
 
-# The trail is sampled by distance, not by frame: at 240 frames a second a
-# per-frame trail would sit entirely inside the ball, and at 30 it would be a
-# dashed line. Recording only once the ball has moved `trail_spacing` pixels
-# gives the same comet at any frame rate.
-push_trail : List(Math.Vec2), Math.Vec2 -> List(Math.Vec2)
-push_trail = |trail, pos|
-	match List.first(trail) {
-		Ok(head) if Math.distance_squared(head, pos) < trail_spacing * trail_spacing => trail
-		_ => List.take_first(List.prepend(trail, pos), trail_length)
-	}
+# --- App wiring ---
 
 program = { init!, update!, render! }
 
@@ -196,22 +144,23 @@ init! = App.init(
 	|io| {
 		# Generate and prepare every host resource before the first cycle.
 		font = Draw.default_font!()
-		# Only scores 0..win_score can ever be shown, so the whole scoreboard is
-		# prepared here and a frame just picks the glyph it needs.
-		digits = List.map_try!(
-			List.map_with_index(List.repeat({}, win_score + 1), |_unit, index| U64.to_str(index)),
-			|glyph| Text.from(glyph, font).size(64).prepare!(),
-		)?
+		# Only scores 0 to win_score can ever be shown, so the whole scoreboard
+		# is prepared here and a frame just picks the glyph it needs.
+		# `0..=win_score` is a range: every number from 0 up to and including
+		# win_score.
+		var $digits = []
+		for score in 0..=win_score {
+			$digits = List.append($digits, Text.from(U64.to_str(score), font).size(64).prepare!()?)
+		}
 		assets = {
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
-			font: font,
 			hint: Text.from("W / S  move    SPACE  new match    ESC  quit", font).size(18).prepare!()?,
-			digits: digits,
+			digits: $digits,
 			win_lines: [
-				Text.from("LEFT PLAYER WINS", font).size(44).prepare!()?,
-				Text.from("RIGHT PLAYER WINS", font).size(44).prepare!()?,
+				Text.from("YOU WIN", font).size(44).prepare!()?,
+				Text.from("CPU WINS", font).size(44).prepare!()?,
 			],
 			restart_line: Text.from("PRESS SPACE FOR A NEW MATCH", font).size(20).prepare!()?,
 		}
@@ -246,14 +195,16 @@ play_event! = |assets, event|
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	controls = read_controls(program_input.devices)
+update! = |model, input, _io| {
+	controls = read_controls(input.devices)
 
-	# Seconds since the previous frame - the basis for all motion this frame.
-	dt = program_input.time.elapsed_seconds
+	# Seconds since the previous cycle: the basis for all motion. It is clamped
+	# because a stall (dragging the window, a breakpoint) can report a whole
+	# second or more, and one giant step would carry the ball through a paddle.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
 	(world, events) = if is_over(model.world) {
-		step_game_over(model.world, controls)
+		step_game_over(model.world, controls, dt)
 	} else {
 		step_playing(model.world, controls, dt)
 	}
@@ -264,11 +215,7 @@ update! = |model, program_input, _io| {
 		play_event!(model.assets, event)
 	}
 
-	if controls.quit_pressed {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, world })
-	}
+	Ok({ ..model, world })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
@@ -315,13 +262,15 @@ render! = |model, frame| {
 	Ok({})
 }
 
+# --- Rendering: helpers that `render!` calls ---
+
 # Soft dashes rather than one hard rule: the halfway point is marked without
 # competing with the paddles for attention.
 draw_center_line! : Draw.Frame => {}
 draw_center_line! = |frame| {
-	for dash in List.map_with_index(List.repeat({}, 15), |_unit, index| 12 + U64.to_f32(index) * 40) {
-		y = dash
-		frame.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: y, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
+	# `0..<15` is the numbers 0 to 14: one dash every 40 pixels down the court.
+	for index in 0.U64..<15 {
+		frame.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: 12 + U64.to_f32(index) * 40, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
 	}
 }
 
@@ -379,12 +328,77 @@ draw_scores! = |frame, assets, world| {
 	draw_score!(world.right.score, screen_w * 0.68, Color.with_alpha(right_neon, 220))
 }
 
+# --- Gameplay: pure rules with no effects ---
+
+## The match ends as soon as either score reaches the winning score.
+is_over : World -> Bool
+is_over = |world| world.left.score >= win_score or world.right.score >= win_score
+
+# A random vertical serve speed in px/second, so each serve leaves at a
+# different angle instead of the same predictable line.
+# Drawing from the model's own generator rather than an effect keeps the serve
+# immediate: the ball leaves on the cycle that scored, not the one after.
+random_serve_vy : Random.State -> Random.Generation(F32)
+random_serve_vy = |state| {
+	drawn = Random.step(state, Random.bounded_i32(-160, 160))
+	{ value: I32.to_f32(drawn.value), state: drawn.state }
+}
+
+left_paddle : F32 -> Math.Rect
+left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
+
+right_paddle : F32 -> Math.Rect
+right_paddle = |y| Math.rect(screen_w - paddle_margin - paddle_w, y, paddle_w, paddle_h)
+
+ball_circle : F32, F32 -> Math.Circle
+ball_circle = |x, y| Math.circle({ x, y }, ball_r)
+
+# A fresh match: ball centred, scores zeroed, served in a random direction.
+new_match : World -> World
+new_match = |world| {
+	# Direction then speed, drawn in that order from one generator, so the
+	# sequence is the same every time a given seed replays.
+	direction = Random.step(world.rng, Random.bounded_i32(0, 1))
+	serve = random_serve_vy(direction.state)
+	{
+		..world,
+		ball: {
+			pos: { x: screen_w * 0.5, y: screen_h * 0.5 },
+			velocity: {
+				x: if direction.value == 0 (init_vx * -1) else init_vx,
+				y: serve.value,
+			},
+		},
+		rng: serve.state,
+		left: { paddle_y: 250, score: 0 },
+		right: { paddle_y: 250, score: 0 },
+		trail: [],
+		flash: { intensity: 0, color: ball_neon },
+	}
+}
+
+# The trail is sampled by distance, not by frame: at 240 frames a second a
+# per-frame trail would sit entirely inside the ball, and at 30 it would be a
+# dashed line. Recording only once the ball has moved `trail_spacing` pixels
+# gives the same comet at any frame rate.
+push_trail : List(Math.Vec2), Math.Vec2 -> List(Math.Vec2)
+push_trail = |trail, pos|
+	match List.first(trail) {
+		Ok(head) if Math.distance_squared(head, pos) < trail_spacing * trail_spacing => trail
+		_ => List.take_first(List.prepend(trail, pos), trail_length)
+	}
+
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-step_game_over : World, Controls -> (World, List(GameEvent))
-step_game_over = |world, controls| {
-	next_world = if controls.new_match_pressed new_match(world) else { ..world, flash: { ..world.flash, intensity: F32.max(world.flash.intensity - 0.02, 0) } }
+step_game_over : World, Controls, F32 -> (World, List(GameEvent))
+step_game_over = |world, controls, dt| {
+	next_world = if controls.new_match_pressed new_match(world) else { ..world, flash: decay_flash(world.flash, dt) }
 	(next_world, [])
 }
+
+## The flash fades by `flash_fade_per_second` of full brightness each second,
+## so it lasts the same time at any frame rate.
+decay_flash : { intensity : F32, color : Color.Rgba }, F32 -> { intensity : F32, color : Color.Rgba }
+decay_flash = |flash, dt| { ..flash, intensity: F32.max(flash.intensity - dt * flash_fade_per_second, 0) }
 
 # --- Active play ---
 ## Play is a function of the sampled input and how much time to advance by, so
@@ -430,9 +444,8 @@ step_playing = |world, controls, dt| {
 	# --- Scoring: ball left the field on the left or right edge ---
 	out_left = nx - ball_r < 0
 	out_right = nx + ball_r > screen_w
-	# Draw randomness only when a new serve is actually needed.
-	# The generator only advances when a serve is actually needed, so an idle
-	# rally does not consume draws.
+	# The generator only advances when a new serve is needed, so an idle rally
+	# does not consume draws.
 	serve = if out_left or out_right random_serve_vy(world.rng) else { value: vy, state: world.rng }
 
 	final_ball = {
@@ -459,7 +472,7 @@ step_playing = |world, controls, dt| {
 		if scored 1.0
 		else if paddled 0.45
 		else if hit_top or hit_bottom 0.22
-		else F32.max(world.flash.intensity - dt * 2.4, 0)
+		else decay_flash(world.flash, dt).intensity
 	flash_color =
 		if out_right left_neon
 		else if out_left right_neon
@@ -494,6 +507,8 @@ step_playing = |world, controls, dt| {
 	)
 }
 
+# --- Tests ---
+
 ## Ordinary game data and neutral controls make the simulation directly
 ## testable without host resources or platform input.
 test_world : World
@@ -510,14 +525,14 @@ test_world = {
 }
 
 no_controls : Controls
-no_controls = { move: 0, new_match_pressed: Bool.False, quit_pressed: Bool.False }
+no_controls = { move: 0, new_match_pressed: Bool.False }
 
 expect !is_over(test_world)
 expect is_over({ ..test_world, right: { ..test_world.right, score: win_score } })
 
 ## Raw key bindings are translated once at the edge of the application.
 expect read_controls(Devices.none.with_key_down(KeyW)).move == -1
-expect read_controls(Devices.none.with_key_pressed(KeyEscape)).quit_pressed
+expect read_controls(Devices.none.with_key_pressed(KeySpace)).new_match_pressed
 
 ## The top wall reflects the ball and reports one event.
 expect {
@@ -543,7 +558,14 @@ expect {
 expect {
 	finished = { ..test_world, left: { ..test_world.left, score: win_score } }
 	new_match_controls = { ..no_controls, new_match_pressed: Bool.True }
-	(waiting_world, _) = step_game_over(finished, no_controls)
-	(restarted_world, _) = step_game_over(finished, new_match_controls)
+	(waiting_world, _) = step_game_over(finished, no_controls, 0.1)
+	(restarted_world, _) = step_game_over(finished, new_match_controls, 0.1)
 	waiting_world.left.score == win_score and restarted_world.left.score == 0
+}
+
+## The flash fades by time, not by cycle: two short steps fade it exactly as
+## far as one long one.
+expect {
+	flash = { intensity: 1, color: ball_neon }
+	F32.abs(decay_flash(decay_flash(flash, 0.1), 0.1).intensity - decay_flash(flash, 0.2).intensity) < 0.0001
 }

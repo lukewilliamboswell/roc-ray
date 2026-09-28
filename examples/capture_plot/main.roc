@@ -30,30 +30,37 @@ bar_count = 12.U64
 ## Frames recorded before the host finalizes the files and the app exits.
 recorded_frames = 75.U64
 
+## What to record, and how. `FixedStep` advances the app's clock by exactly
+## one frame's worth per recorded frame, so the video plays at the right speed
+## however long each frame took to encode.
+plot_recording : Capture.Recording
+plot_recording =
+	Capture.default
+		.with_path("plot.webm")
+		.with_format(WebM)
+		.with_fps(25)
+		.with_max_frames(recorded_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## A hidden window whose captures go into `captures/`.
+startup_config : App.Config
 startup_config = App.default
-	.with_title("RocRay Capture: Plot")
+	.with_title("RocRay Capture Plot")
 	.with_size({ width: 640, height: 360 })
 	.with_frame_pacing(Capped(60))
 	.with_visible(Bool.False)
 	.with_output_dir("captures")
-	.with_recording(
-		Capture.default
-			.with_path("plot.webm")
-			.with_format(WebM)
-			.with_fps(25)
-			.with_max_frames(recorded_frames)
-			.with_scale(Half)
-			.with_timing(FixedStep),
-	)
 
+## A configuration can describe a recording but never starts one; `init!`
+## starts it. `PermissionDenied` is in the error list only because
+## `Capture.Writer.start!` can return it; the `io` that `init!` receives always
+## has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit])
 init! = App.init(
 	startup_config,
 	|io| {
-		match startup_config.recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
-		}
+		io.capture().start!(plot_recording)?
 
 		font = Draw.default_font!()
 		Ok({
@@ -74,17 +81,17 @@ init! = App.init(
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
+update! = |model, input, _io| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. Match on that rather than on `Idle`:
 	# `Idle` is also what a run with no recording at all looks like -- a
 	# headless run is exactly that -- so treating it as done would exit on the
 	# first cycle having captured nothing and call it a success.
-	match program_input.capture {
+	match input.capture {
 		Finished(_) => Err(Exit(0))
 		Failed(_) => Err(Exit(1))
-		Idle => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-		Active(progress) => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds, frames: progress.frames })
+		Idle => Ok({ ..model, elapsed: model.elapsed + input.time.elapsed_seconds })
+		Active(progress) => Ok({ ..model, elapsed: model.elapsed + input.time.elapsed_seconds, frames: progress.frames })
 	}
 }
 

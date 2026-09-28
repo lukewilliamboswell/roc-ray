@@ -13,7 +13,6 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Files
 import rr.Random
 import rr.Sqlite
 import rr.Task
@@ -288,11 +287,8 @@ next_run = |state| {
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
+	devices = input.devices
 	folded = List.fold(input.messages, { ..model, elapsed: model.elapsed + input.time.elapsed_seconds }, apply_message)
-
-	if input.devices.key_pressed(KeyEscape) {
-		return Err(Exit(0))
-	}
 
 	# One database operation in flight at a time. A second would answer with a
 	# board that does not include the first, and the later reply would win.
@@ -300,13 +296,13 @@ update! = |model, input, _io| {
 		return Ok(folded)
 	}
 
-	if input.devices.key_pressed(KeySpace) {
+	if devices.key_pressed(KeySpace) {
 		run = next_run(folded.rng)
 		db = folded.db
 		insert = folded.insert
 		Task.spawn!(input, || record_run!(db, insert, run.name, run.score))
 		Ok({ ..folded, rng: run.state, status: Working, pending: Bool.True })
-	} else if input.devices.key_pressed(KeyR) {
+	} else if devices.key_pressed(KeyR) {
 		db = folded.db
 		Task.spawn!(input, || reset_board!(db))
 		Ok({ ..folded, status: Working, pending: Bool.True })

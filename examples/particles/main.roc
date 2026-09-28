@@ -1,7 +1,8 @@
 ## Animate a fountain of 4,000 coloured sprites.
 ##
 ## Move the pointer to steer the fountain, hold Space for a wider spray, and
-## press Escape to quit. Run with `--record-demo` to create the gallery GIF.
+## press Escape to quit. Run with `--record-demo` to write
+## `examples/gallery/particles.gif`.
 ## This example shows a frame-rate-independent particle update and drawing many
 ## copies of one texture in a single batch.
 app [Model, program] {
@@ -85,35 +86,50 @@ program = { init!, update!, render! }
 
 particle_count = 4000.U64
 
-demo_frames = 125.U64
-
-record_demo_flag : Str
+## Recording mode. `--record-demo` hides the window, moves the fountain along
+## `demo_emitter` instead of following the pointer, and writes a GIF for the
+## README gallery into `examples/gallery/`. The recording stops itself after
+## `demo_frames` frames, and `update!` exits when it has been written.
 record_demo_flag = "--record-demo"
 
+demo_frames = 125.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("particles.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Quarter)
+		.with_timing(FixedStep)
+
+## Selects an interactive window or a hidden one that records the demo.
 particles_config : List(Str) -> App.Config
 particles_config = |args| {
 	base = App.default
 		.with_title("RocRay Particles")
 		.with_size({ width: 800, height: 600 })
 		.with_frame_pacing(Capped(120))
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("particles.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Quarter)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
+
+## Where the demo's fountain sits on a given cycle: a slow figure-of-eight
+## across the top of the window.
+demo_emitter : U64 -> Math.Vec2
+demo_emitter = |cycle| {
+	phase = U64.to_f32(cycle) * 0.055
+	{ x: 400 + F32.sin(phase) * 170, y: 205 + F32.cos(phase * 0.7) * 45 }
+}
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
 
 sprite_source : Math.Rect
 sprite_source = Math.rect(0, 0, 8, 8)
@@ -152,13 +168,15 @@ initial_particles = List.map_with_index(
 	},
 )
 
+## `PermissionDenied` is in the error list only because `Capture.Writer.start!`
+## can return it; the `io` that `init!` receives always has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit, TextureGenerationFailed])
 init! = App.init_for_args(
 	particles_config,
 	|io| {
-		match particles_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		sprite = Assets.generate_color_texture!({ width: 8, height: 8, color: Color.white })?
@@ -167,25 +185,24 @@ init! = App.init_for_args(
 			sprite: sprite,
 			particles: initial_particles,
 			instances: List.map(initial_particles, Particle.to_instance),
-			hud: Text.from("4000 sprites, one hosted call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
-			demo: List.contains(io.args!(), record_demo_flag),
+			hud: Text.from("4000 sprites, one draw call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
+			demo,
 		})
 	},
 )
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = program_input.devices
-	# A long first frame or a resize stall must not teleport the fountain.
-	dt = F32.min(program_input.time.elapsed_seconds, 0.05)
-	spread = if model.demo or input.key_down(KeySpace) 1.9 else 0.7
-	pointer = input.mouse.position()
+update! = |model, input, _io| {
+	devices = input.devices
+	# A long first cycle or a resize stall must not teleport the fountain.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.05)
+	spread = if model.demo or devices.key_down(KeySpace) 1.9 else 0.7
+	pointer = devices.mouse.position()
 	emitter =
 		if model.demo {
-			phase = U64.to_f32(program_input.time.cycle_count) * 0.055
-			{ x: 400 + F32.sin(phase) * 170, y: 205 + F32.cos(phase * 0.7) * 45 }
+			demo_emitter(input.time.cycle_count)
 		} else if pointer.x == 0 and pointer.y == 0 {
-			{ x: I32.to_f32(program_input.window.size.width) / 2, y: I32.to_f32(program_input.window.size.height) / 3 }
+			{ x: I32.to_f32(input.window.size.width) / 2, y: I32.to_f32(input.window.size.height) / 3 }
 		} else {
 			pointer
 		}
@@ -194,28 +211,14 @@ update! = |model, program_input, _io| {
 	particles = List.map(model.particles, |particle| particle.step(emitter, spread, dt))
 	Trace.end!(step_zone)
 
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if input.key_pressed(KeyEscape) {
-			Err(Exit(0))
-		} else {
-			Ok({})
-		}
-
-	match exit {
-		Err(code) => Err(code)
-		Ok({}) => {
-			instance_zone = Trace.begin!("prepare particle instances")
-			instances = List.map(particles, Particle.to_instance)
-			Trace.end!(instance_zone)
-			Ok({ ..model, particles, instances })
-		}
+	if model.demo {
+		demo_finished(input.capture)?
 	}
+
+	instance_zone = Trace.begin!("prepare particle instances")
+	instances = List.map(particles, Particle.to_instance)
+	Trace.end!(instance_zone)
+	Ok({ ..model, particles, instances })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])

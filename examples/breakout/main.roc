@@ -1,12 +1,12 @@
 ## Breakout: clear the brick wall before losing all three balls.
 ##
 ## Use A/D or Left/Right to move, Space to launch or restart, and Escape to
-## quit. Pass `--record-demo` to create `examples/breakout/demo.gif`.
+## quit. Pass `--record-demo` to write `examples/gallery/breakout.gif`.
 ## File structure:
 ##
 ## - State (`Game.roc`): ball, paddle, remaining bricks, score, lives, and match
-## - Controls (`main.roc`): horizontal movement, launch/restart, and quit
-## - Assets (`Assets.roc`): sounds, font, and prepared interface text
+## - Controls (`main.roc`): horizontal movement and launch/restart
+## - Assets (`GameAssets.roc`): sounds, font, and prepared interface text
 ## - App wiring (`main.roc`): recording and event sounds
 ## - Rendering (`Render.roc`): cabinet, brick wall, HUD, bodies, and prompts
 ## - Gameplay (`Ball.roc`, `Paddle.roc`, `Bricks.roc`): motion and collisions
@@ -18,14 +18,14 @@ import rr.Capture
 import rr.Devices
 import rr.Draw
 import rr.Math
-import Assets
+import GameAssets
 import Ball
 import Game
 import Paddle
 import Render
 
 Model : {
-	assets : Assets,
+	assets : GameAssets,
 	world : Game.World,
 	demo : Bool,
 	elapsed : F32,
@@ -35,45 +35,44 @@ Controls : Game.Controls
 
 program = { init!, update!, render! }
 
+## Recording mode. `--record-demo` hides the window, plays the game from
+## `demo_controls` instead of the keyboard, and writes a GIF for the README
+## gallery into `examples/gallery/`. The recording stops itself after
+## `demo_frames` frames, and `update!` exits when it has been written.
 record_demo_flag = "--record-demo"
 
 demo_frames = 150.U64
 
-## Selects an interactive window or a hidden fixed-step GIF recording.
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("breakout.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## Selects an interactive window or a hidden one that records the demo.
 breakout_config : List(Str) -> App.Config
 breakout_config = |args| {
 	base = App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120))
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/breakout")
-			.with_recording(
-				Capture.default
-					.with_path("demo.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## Loads presentation assets and creates the first ready-to-launch world.
+##
+## `PermissionDenied` is in the error list only because `Capture.Writer.start!`
+## can return it; the `io` that `init!` receives always has permission to record.
 init! : App.Init(Model, [PermissionDenied, ResourceLimit, SoundGenerationFailed])
 init! = App.init_for_args(
 	breakout_config,
 	|io| {
-		match breakout_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
-		}
-
 		demo = List.contains(io.args!(), record_demo_flag)
-		Ok({ assets: Assets.load!()?, world: Game.new_world(), demo, elapsed: 0 })
+		if demo {
+			io.capture().start!(demo_recording)?
+		}
+		Ok({ assets: GameAssets.load!()?, world: Game.new_world(), demo, elapsed: 0 })
 	},
 )
 
@@ -85,7 +84,6 @@ read_controls = |devices| {
 	{
 		move: if left Left else if right Right else Still,
 		action_pressed: devices.key_pressed(KeySpace),
-		quit_pressed: devices.key_pressed(KeyEscape),
 	}
 }
 
@@ -100,12 +98,20 @@ demo_controls = |world| {
 			Playing => Bool.False
 			_ => Bool.True
 		},
-		quit_pressed: Bool.False,
 	}
 }
 
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
+
 ## Interprets one pure gameplay event as its corresponding sound effect.
-play_event! : Assets, Game.Event => {}
+play_event! : GameAssets, Game.Event => {}
 play_event! = |assets, event|
 	match event {
 		GameStarted => assets.sounds.start.playback().play!()
@@ -118,34 +124,25 @@ play_event! = |assets, event|
 
 Msg : []
 
-## Advances the world, plays its events, and handles quitting or recording end.
+## Advances the world and plays its events. In recording mode it also exits
+## once the recording is done. Escape needs no code here: `App.default` closes
+## the window when it is pressed.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	dt = program_input.time.elapsed_seconds
-	controls = if model.demo demo_controls(model.world) else read_controls(program_input.devices)
+update! = |model, input, _io| {
+	# Seconds since the previous cycle, clamped so a stall (dragging the
+	# window, a breakpoint) cannot carry the ball through a brick.
+	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
+	controls = if model.demo demo_controls(model.world) else read_controls(input.devices)
 	(world, events) = Game.update(model.world, controls, dt)
 
 	for event in events {
 		play_event!(model.assets, event)
 	}
 
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if controls.quit_pressed {
-			Err(Exit(0))
-		} else {
-			Ok({})
-		}
-
-	match exit {
-		Err(code) => Err(code)
-		Ok({}) => Ok({ ..model, world, elapsed: model.elapsed + dt })
+	if model.demo {
+		demo_finished(input.capture)?
 	}
+	Ok({ ..model, world, elapsed: model.elapsed + dt })
 }
 
 ## Delegates presentation of the retained world to the rendering module.
@@ -153,7 +150,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit])
 render! = |model, frame| Render.draw!(frame, model.assets, model.world, model.elapsed, model.demo)
 
 no_controls : Controls
-no_controls = { move: Still, action_pressed: Bool.False, quit_pressed: Bool.False }
+no_controls = { move: Still, action_pressed: Bool.False }
 
 expect read_controls(Devices.none.with_key_down(KeyLeft)).move == Left
 
@@ -176,3 +173,7 @@ expect {
 	(world, events) = Game.update({ ..playing, ball }, no_controls, 0)
 	world.state == GameOver and world.lives == 0 and List.len(events) == 1
 }
+
+## The demo keeps running while the recording is active, and ends with it.
+expect demo_finished(Active({ frames: 10, dropped: 0 })) == Ok({})
+expect demo_finished(Finished({ frames: 150, bytes: 4096 })) == Err(Exit(0))

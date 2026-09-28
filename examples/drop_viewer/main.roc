@@ -54,7 +54,7 @@ init! = App.init(
 		Ok({
 			font,
 			title: Text.from("Drop Viewer", font).size(28).prepare!()?,
-			subtitle: Text.from("A dropped path, read off the frame thread and decoded into a texture", font).size(15).prepare!()?,
+			subtitle: Text.from("A dropped file, read in a task and decoded into a texture", font).size(15).prepare!()?,
 			empty_hint: Text.from("Drop a PNG, JPEG, GIF, QOI or BMP file here", font).size(18).prepare!()?,
 			overflow_hint: Text.from("That drop carried more than 64 files; only the first 64 were delivered", font).size(16).prepare!()?,
 			footer: Text.from("Drag a file onto the window  |  ESC quits", font).size(14).prepare!()?,
@@ -71,21 +71,22 @@ update! = |model, input, io| {
 	# displays the result whose message arrives last.
 	# The user dropping a file is what lets the app read it: `accept_drop!`
 	# turns this cycle's dropped path into a handle on exactly that file,
-	# with no permission declared.
+	# with no permission declared. A path it refuses is reported, not dropped
+	# on the floor, so the status never waits for a read that was not started.
 	files = io.files()
-	List.for_each!(
-		input.dropped,
-		|drop|
-			match files.accept_drop!(drop.path) {
-				Ok(item) => Task.spawn!(input, || Opened(drop.path, drop.position, item.read_bytes!()))
-				Err(PermissionDenied) => {}
-			},
-	)
-
-	requested = match List.last(input.dropped) {
-		Ok(drop) => Reading(drop.path)
-		Err(_) => model.status
+	var $requested = model.status
+	for drop in input.dropped {
+		match files.accept_drop!(drop.path) {
+			Ok(item) => {
+				Task.spawn!(input, || Opened(drop.path, drop.position, item.read_bytes!()))
+				$requested = Reading(drop.path)
+			}
+			Err(PermissionDenied) => {
+				$requested = Refused("${drop.path}: file access was not granted")
+			}
+		}
 	}
+	requested = $requested
 
 	# Decoding is a host-state change, so it belongs here rather than in the
 	# task. `plan` decides what each message means without performing anything,
@@ -100,16 +101,12 @@ update! = |model, input, io| {
 			}
 		}
 
-	if input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({
-			..model,
-			status: next.status,
-			image: next.image,
-			partial_drop: if List.is_empty(input.dropped) model.partial_drop else input.dropped_overflow,
-		})
-	}
+	Ok({
+		..model,
+		status: next.status,
+		image: next.image,
+		partial_drop: if List.is_empty(input.dropped) model.partial_drop else input.dropped_overflow,
+	})
 }
 
 ## Converts one delivered read into the next status and an optional decode.

@@ -1,28 +1,26 @@
-## Watch a comet keep moving while a 1.2-second Task waits; the app exits after
-## the task finishes, or press Escape to quit. This example introduces Tasks as
-## work that may wait without pausing drawing, and Messages as the values
-## completed tasks deliver to a later Input.
+## Watch a comet keep moving while a 1.2-second Task waits. When the task
+## finishes, the window shows which cycle its message arrived on and stays open
+## until you press Escape. This example introduces Tasks as work that may wait
+## without pausing drawing, and Messages as the values completed tasks deliver
+## to a later Input.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
 import rr.Task
 import rr.Color
 import rr.Draw
-import rr.Stdout
 import rr.Text
 import rr.Trace
 
 ## State retained between updates: whether the Task is still waiting, the
-## current cycle and animation time, and prepared drawing resources. The Model
-## records the cycle reported by the Task's Message so the result can be shown
-## the next time `render!` draws.
+## current cycle and animation time, and prepared text. The Model records the
+## cycle the Task's Message arrived on, so `render!` can show it.
 Model : {
 	state : State,
 	cycle : U64,
 	elapsed : F32,
 	title : Text.Prepared,
 	hint : Text.Prepared,
-	font : Text.Font,
 }
 
 ## How far the app has got: waiting on the sleeper, or holding the cycle its
@@ -45,8 +43,7 @@ init! = App.init(
 			cycle: 0,
 			elapsed: 0,
 			title: Text.from("Sleeping on a task while the frame keeps moving", font).size(22).prepare!()?,
-			hint: Text.from("ESC quits - the app closes itself once the task answers", font).size(14).prepare!()?,
-			font,
+			hint: Text.from("ESC quits", font).size(14).prepare!()?,
 		})
 	},
 )
@@ -54,10 +51,10 @@ init! = App.init(
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, io| {
 	cycle = input.time.cycle_count
-	settled = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
+	state = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
 	if cycle == 0 {
-		# Spawned from inside `update!`: the task parks on its sleep before this
-		# frame is drawn, and `Woke` arrives on a later input.
+		# Spawned from inside `update!`: the task waits on its sleep while the
+		# app keeps drawing, and `Woke` arrives on a later input.
 		Task.spawn!(
 			input,
 			|| {
@@ -71,21 +68,13 @@ update! = |model, input, io| {
 		_ = io.stdout().line!(start_line)
 	}
 
-	match settled {
-		Woke({ arrived_on }) => {
-			# The line is queued here and written by the host's own thread, so
-			# exiting on the next expression does not race it out of the
-			# process: shutdown drains the queue.
-			_ = io.stdout().line!(report_line(arrived_on))
-			Err(Exit(0))
-		}
-		Waiting =>
-			if input.devices.key_pressed(KeyEscape) {
-				Err(Exit(0))
-			} else {
-				Ok({ ..model, state: settled, cycle, elapsed: model.elapsed + input.time.elapsed_seconds })
-			}
-		}
+	# Report once, on the cycle the message arrives. The line is queued here
+	# and written by the host, so `update!` never waits for the terminal.
+	if model.state == Waiting and state != Waiting {
+		_ = io.stdout().line!(report_line(cycle))
+	}
+
+	Ok({ ..model, state, cycle, elapsed: model.elapsed + input.time.elapsed_seconds })
 }
 
 ## What `update!` prints on the cycle it spawns the sleeper.
@@ -118,10 +107,22 @@ expect match apply_message(Waiting, Woke, 18) {
 ## message could not move it.
 expect apply_message(Woke({ arrived_on: 18 }), Woke, 25) == Woke({ arrived_on: 18 })
 
+## One full turn of a circle, in radians. The progress ring starts a quarter
+## turn back from the right, so it grows clockwise from twelve o'clock.
+full_turn = 6.2831855.F32
+
+quarter_turn = full_turn / 4
+
+## The radius of the orbit the comet travels and the ring the arc is drawn on.
+ring_radius = 150.F32
+
+## How many straight segments make a whole ring.
+ring_segments = 90.U64
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
-	# How much of the sleep has gone by, clamped so a slow frame cannot
-	# overshoot the ring. Purely a view value, so it is derived here.
+	# How much of the sleep has gone by, capped at a full ring once it is over.
+	# Purely a view value, so it is derived here.
 	progress = F32.min(model.elapsed * 1000 / U64.to_f32(sleep_millis), 1)
 	center = { x: 400.F32, y: 340.F32 }
 
@@ -129,26 +130,30 @@ render! = |model, frame| {
 	frame.circle_gradient!({ center, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 40), color_outer: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 0) })
 
 	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white })
-	frame.text_at!({ pos: { x: 40, y: 78 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
+	frame.text_at!({ pos: { x: 40, y: 78 }, text: "cycle ${U64.to_str(model.cycle)}", size: 20, color: Color.from_hex_rgb(0x88c0d0) })
 	frame.text_at!({ pos: { x: 40, y: 106 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
 	model.hint.draw!(frame, { pos: { x: 40, y: 552 }, color: Color.from_hex_rgb(0x6b7590) })
 
 	# The track, then the arc the sleeper has used up so far.
-	frame.circle!({ center, radius: 150, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
+	frame.circle!({ center, radius: ring_radius, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
 	draw_arc!(frame, center, progress, 0)
 
 	# A short trail of the orbiting comet: the same orbit sampled a few
-	# frames back, fading out behind the head.
+	# moments back, fading out behind the head.
 	draw_trail!(frame, center, model.elapsed, 8)
 	frame.circle!({ center: orbit(center, model.elapsed), radius: 14, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x88c0d0), Color.white, 3) })
 
 	Ok({})
 }
 
+## A point on the ring at `angle` radians.
+on_ring : { x : F32, y : F32 }, F32 -> { x : F32, y : F32 }
+on_ring = |center, angle| { x: center.x + ring_radius * F32.cos(angle), y: center.y + ring_radius * F32.sin(angle) }
+
 ## Where the comet is at a given moment. One function so the head and every
 ## trail sample are guaranteed to sit on the same orbit.
 orbit : { x : F32, y : F32 }, F32 -> { x : F32, y : F32 }
-orbit = |center, seconds| { x: center.x + 150 * F32.cos(seconds * 2), y: center.y + 150 * F32.sin(seconds * 2) }
+orbit = |center, seconds| on_ring(center, seconds * 2)
 
 draw_trail! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
 draw_trail! = |frame, center, seconds, remaining|
@@ -164,14 +169,14 @@ draw_trail! = |frame, center, seconds, remaining|
 ## more than `frame.line!`.
 draw_arc! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
 draw_arc! = |frame, center, progress, step|
-	if U64.to_f32(step) / 90 >= progress {
+	if U64.to_f32(step) / U64.to_f32(ring_segments) >= progress {
 		{}
 	} else {
-		a = -1.5707964 + 6.2831855 * U64.to_f32(step) / 90
-		b = -1.5707964 + 6.2831855 * U64.to_f32(step + 1) / 90
+		a = full_turn * U64.to_f32(step) / U64.to_f32(ring_segments) - quarter_turn
+		b = full_turn * U64.to_f32(step + 1) / U64.to_f32(ring_segments) - quarter_turn
 		frame.line!({
-			start: { x: center.x + 150 * F32.cos(a), y: center.y + 150 * F32.sin(a) },
-			end: { x: center.x + 150 * F32.cos(b), y: center.y + 150 * F32.sin(b) },
+			start: on_ring(center, a),
+			end: on_ring(center, b),
 			stroke: Draw.stroke(Color.from_hex_rgb(0xa3be8c), 5),
 		})
 		draw_arc!(frame, center, progress, step + 1)
@@ -180,6 +185,8 @@ draw_arc! = |frame, center, progress, step|
 describe : State -> Str
 describe = |state|
 	match state {
-		Waiting => Str.concat(Str.concat("task sleeping ", U64.to_str(sleep_millis)), " ms...")
-		Woke({ arrived_on }) => Str.concat(Str.concat("task finished: message arrived on cycle ", U64.to_str(arrived_on)), " (spawned on cycle 0)")
+		Waiting => "task sleeping ${U64.to_str(sleep_millis)} ms..."
+		Woke({ arrived_on }) => "task finished: message arrived on cycle ${U64.to_str(arrived_on)} (spawned on cycle 0)"
 	}
+
+expect describe(Woke({ arrived_on: 74 })) == "task finished: message arrived on cycle 74 (spawned on cycle 0)"

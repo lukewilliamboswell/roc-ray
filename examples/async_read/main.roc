@@ -4,7 +4,9 @@
 ##
 ## Files are read through a directory handle. The config declares the working
 ## directory, read-only, and `init!` opens it once and keeps the handle in the
-## model; every read names a path beneath it.
+## model; every read names a path beneath it. The two files it reads ship
+## beside it, `greeting.txt` and its own `main.roc`, so run it from the
+## directory that contains `examples/`.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst", roc: "nightly-2026-09-27-a3ce7f1" }
 
 import rr.App
@@ -14,7 +16,6 @@ import rr.Time
 import rr.Color
 import rr.Draw
 import rr.Text
-import rr.Permission
 
 ## The Model is the app state kept between calls to `update!`. It stores each
 ## operation's progress or result, animation time, and prepared labels needed
@@ -36,8 +37,8 @@ ReadState : [Waiting, Loaded(U64), Failed(Str)]
 ## keeps or releases its storage; no manual cleanup is needed.
 BytesState : [Waiting, Held(List(U8)), Failed(Str)]
 
-## A stat holds nothing: it answers with numbers, so the model keeps the answer
-## rather than a handle to it.
+## File details (kind, size, and when it was last changed) are plain values,
+## so the model keeps the line that describes them.
 MetaState : [Waiting, Described(Str), Failed(Str)]
 
 Msg : [
@@ -47,10 +48,10 @@ Msg : [
 ]
 
 small_path : Str
-small_path = "README.md"
+small_path = "examples/async_read/greeting.txt"
 
 large_path : Str
-large_path = "src/roc_platform_abi.zig"
+large_path = "examples/async_read/main.roc"
 
 program = { init!, update!, render! }
 
@@ -74,20 +75,16 @@ init! = App.init(
 )
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	resolved = List.fold(program_input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
-	if program_input.time.cycle_count == 0 {
+update! = |model, input, _io| {
+	resolved = List.fold(input.messages, { small: model.small, large: model.large, meta: model.meta }, apply_message)
+	if input.time.cycle_count == 0 {
 		repo = model.repo
-		Task.spawn!(program_input, || SmallReadFinished(repo.read_text!(small_path)))
-		Task.spawn!(program_input, || BytesReadFinished(repo.read_bytes!(large_path)))
-		Task.spawn!(program_input, || MetadataFinished(repo.metadata!(small_path)))
+		Task.spawn!(input, || SmallReadFinished(repo.read_text!(small_path)))
+		Task.spawn!(input, || BytesReadFinished(repo.read_bytes!(large_path)))
+		Task.spawn!(input, || MetadataFinished(repo.metadata!(small_path)))
 	}
 
-	if program_input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, small: resolved.small, large: resolved.large, meta: resolved.meta, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-	}
+	Ok({ ..model, small: resolved.small, large: resolved.large, meta: resolved.meta, elapsed: model.elapsed + input.time.elapsed_seconds })
 }
 
 apply_message : { small : ReadState, large : BytesState, meta : MetaState }, Msg -> { small : ReadState, large : BytesState, meta : MetaState }
@@ -306,7 +303,7 @@ describe_string : ReadState -> Str
 describe_string = |state|
 	match state {
 		Waiting => "reading..."
-		Loaded(bytes) => Str.concat(U64.to_str(bytes), " bytes copied into a Str")
+		Loaded(bytes) => "${U64.to_str(bytes)} bytes copied into a Str"
 		Failed(reason) => reason
 	}
 
@@ -314,7 +311,7 @@ describe_bytes : BytesState -> Str
 describe_bytes = |state|
 	match state {
 		Waiting => "reading..."
-		Held(bytes) => Str.concat(U64.to_str(List.len(bytes)), " ordinary bytes held by Roc ARC")
+		Held(bytes) => "${U64.to_str(List.len(bytes))} bytes kept in an ordinary List(U8)"
 		Failed(reason) => reason
 	}
 

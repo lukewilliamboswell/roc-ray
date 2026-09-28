@@ -6,6 +6,9 @@ import Paddle
 
 initial_lives = 3.U64
 
+## `Game` is a namespace. `[]` is an empty tag union, so no `Game` value can
+## ever exist; the type is here only so the block after it can hold the types
+## and functions other modules use as `Game.World`, `Game.update`, and so on.
 Game := [].{
 	State := [Ready, Playing, Won, GameOver].{
 		is_eq : _
@@ -14,7 +17,6 @@ Game := [].{
 	Controls : {
 		move : Paddle.Move,
 		action_pressed : Bool,
-		quit_pressed : Bool,
 	}
 
 	World : {

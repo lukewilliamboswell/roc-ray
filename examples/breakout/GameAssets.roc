@@ -3,7 +3,7 @@ import rr.Audio
 import rr.Draw
 import rr.Text
 
-Assets := {
+GameAssets := {
 	sounds : Sounds,
 	font : Text.Font,
 	title : Text.Prepared,
@@ -22,7 +22,7 @@ Assets := {
 	}
 
 	## Prepares all Breakout sounds, fonts, and text before the first frame.
-	load! : () => Try(Assets, [ResourceLimit, SoundGenerationFailed])
+	load! : () => Try(GameAssets, [ResourceLimit, SoundGenerationFailed])
 	load! = || {
 		font = Draw.default_font!()
 		Ok({

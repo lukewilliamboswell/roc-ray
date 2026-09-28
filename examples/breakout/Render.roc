@@ -3,16 +3,15 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
-import Assets
+import GameAssets
 import Ball
 import Bricks
 import Game
-import Paddle
 
 Render := [].{
 
 	## Draws one complete Breakout presentation frame from the resulting world.
-	draw! : Draw.Frame, Assets, Game.World, F32, Bool => Try({}, [ScopeLimit])
+	draw! : Draw.Frame, GameAssets, Game.World, F32, Bool => Try({}, [ScopeLimit])
 	draw! = |frame, assets, world, elapsed, demo| {
 		frame.clear!(field_bottom)
 		draw_background!(frame)
@@ -67,7 +66,7 @@ draw_bodies! = |frame, world| {
 }
 
 ## Draws the title, score, lives, boundary, controls hint, and optional FPS.
-draw_hud! : Draw.Frame, Assets, Game.World, Bool => {}
+draw_hud! : Draw.Frame, GameAssets, Game.World, Bool => {}
 draw_hud! = |frame, assets, world, demo| {
 	assets.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon })
 	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(world.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
@@ -82,7 +81,7 @@ prompt_alpha : F32 -> U8
 prompt_alpha = |elapsed| F32.to_u8_wrap(150 + 105 * (0.5 + 0.5 * F32.sin(elapsed * 3.4)))
 
 ## Draws the launch prompt or the appropriate finished-match banner.
-draw_state_overlay! : Draw.Frame, Assets, Game.World, F32 => {}
+draw_state_overlay! : Draw.Frame, GameAssets, Game.World, F32 => {}
 draw_state_overlay! = |frame, assets, world, elapsed|
 	match world.state {
 		Ready => assets.launch_line.draw!(frame, { pos: { x: 400, y: 350 }, color: Color.with_alpha(hud_color, prompt_alpha(elapsed)), align: (Middle, Center) })
@@ -92,7 +91,7 @@ draw_state_overlay! = |frame, assets, world, elapsed|
 	}
 
 ## Draws a won or game-over panel with its restart prompt.
-draw_banner! : Draw.Frame, Assets, Text.Prepared, Color.Rgba, F32 => {}
+draw_banner! : Draw.Frame, GameAssets, Text.Prepared, Color.Rgba, F32 => {}
 draw_banner! = |frame, assets, line, accent, elapsed| {
 	frame.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
 	line.draw!(frame, { pos: { x: 400, y: 318 }, color: accent, align: (Middle, Center) })

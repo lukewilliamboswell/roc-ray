@@ -10,8 +10,8 @@ endif::[]
 [#shipping]
 = Ship your game
 
-This chapter turns an app into something you can hand to someone else: one
-executable and its assets, zipped up, for each system you support. It covers
+This chapter shows how to package an app so you can give it to other people:
+one executable and its assets, in a zip file, for each system you support. It covers
 building the executable, where the app finds its assets and keeps its saves,
 and what the person you send it to may need to do. It assumes
 <<files-and-assets>>.
@@ -33,7 +33,7 @@ or the build fails at the link step.
 
 The executable is self-contained. Your app, the RocRay host, raylib, SQLite,
 and the video and GIF encoders are all linked into it, so there is no runtime
-to install and no library to ship beside it. It uses only what every desktop
+to install and no library to include next to it. It uses only what every desktop
 system already has:
 
 * the system's C library;
@@ -196,7 +196,7 @@ roc build --opt=speed --target=arm64mac main.roc --output=dist/rocket-macos-arm6
 ----
 
 Linux and macOS executables can be built from Linux; the platform bundle
-carries what the linker needs. ARM Linux is not supported.
+contains what the linker needs. ARM Linux is not supported.
 
 == Package a release
 
@@ -224,9 +224,9 @@ The executables RocRay builds are not signed with a publisher's certificate,
 so each system warns the first time someone runs one they downloaded.
 
 macOS::
-  Gatekeeper refuses to open a downloaded executable that Apple has not
-  notarized. The recipient can clear the download flag in a terminal, then
-  run the game:
+  Gatekeeper, the macOS security check, refuses to open a downloaded
+  executable that Apple has not notarized. The recipient can clear the
+  download flag in a terminal, then run the game:
 +
 [source,sh]
 ----
@@ -234,8 +234,8 @@ xattr -dr com.apple.quarantine rocket
 ./rocket/rocket
 ----
 +
-An Apple silicon executable carries the ad-hoc signature the system requires
-to run it at all. To avoid the warning, sign the executable with an Apple
+An Apple silicon executable already has the ad-hoc signature the system
+requires to run it at all. To avoid the warning, sign the executable with an Apple
 Developer ID and notarize it; RocRay does not do this for you.
 
 Windows::

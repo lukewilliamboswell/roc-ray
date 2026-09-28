@@ -183,6 +183,20 @@
       ]
     },
     {
+      "path": "examples/move_box",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "moves",
+          "frames": 30,
+          "keys": "3:RIGHT,4:RIGHT,5:DOWN,6:LEFT+UP"
+        }
+      ]
+    },
+    {
       "path": "examples/particles",
       "cases": [
         {
@@ -260,6 +274,20 @@
           "frames": 40,
           "keys": "3:RIGHT,6:DOWN,9:LEFT",
           "_note": "Escape is handled by the host's exit key, which a --host-keys script does not reach, so this run ends at its frame limit"
+        }
+      ]
+    },
+    {
+      "path": "examples/sprite_and_sound",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "hops-and-plays",
+          "frames": 40,
+          "keys": "3:SPACE,20:SPACE~"
         }
       ]
     },

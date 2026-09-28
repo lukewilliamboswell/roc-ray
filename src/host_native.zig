@@ -1497,7 +1497,7 @@ fn hostedFilesOpenRoot(roc_host: *RocHost, root: FilesRoot, writable: bool) call
     const request: RootRequest = switch (root.tag) {
         .BesideExecutable => .{ .kind = .beside_executable },
         .WorkingDirectory => .{ .kind = .working_directory },
-        .Declared => .{ .kind = .declared, .text = root.payload_declared().asSlice(), .create = writable },
+        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, &root).asSlice(), .create = writable },
         .AppData, .AppConfig, .AppCache => .{
             .kind = .app_storage,
             .storage = switch (root.tag) {
@@ -1563,12 +1563,12 @@ fn hostedFilesDesignate(roc_host: *RocHost, source: FilesDesignation) callconv(.
     defer if (owned) |bytes| allocator.free(bytes);
     const path: []const u8 = switch (source.tag) {
         .Drop => blk: {
-            const dropped = source.payload_drop().asSlice();
+            const dropped = payloadIn(abi.RocStr, &source).asSlice();
             if (!std.fs.path.isAbsolute(dropped) or !current_drops.contains(dropped)) break :blk "";
             break :blk dropped;
         },
         .Arg => blk: {
-            const arg = source.payload_arg().asSlice();
+            const arg = payloadIn(abi.RocStr, &source).asSlice();
             if (arg.len == 0 or !isLaunchArgument(arg)) break :blk "";
             if (std.fs.path.isAbsolute(arg)) break :blk arg;
             const cwd = std.process.currentPathAlloc(mainThreadIo(), allocator) catch break :blk "";
@@ -15017,26 +15017,33 @@ fn refuseEffect(comptime Result: type, operation: []const u8, arguments: anytype
 
 /// Read one transported `Permission` as the policy's own declaration. The
 /// slices borrow the config's strings, which outlive the call to `add`.
+/// A tag union's payload in place, where the generated `payload_*` accessors
+/// return a copy. A small `RocStr` keeps its bytes inside itself, so a slice
+/// taken from such a copy dangles as soon as the copy goes out of scope.
+fn payloadIn(comptime T: type, value: anytype) *const T {
+    return @ptrCast(@alignCast(&value.payload));
+}
+
 fn declarationFromConfig(declaration: *const abi.App_config_for_hostPermissions) permissions.Declaration {
     return switch (declaration.tag) {
-        .HttpOrigin => .{ .http_origin = declaration.payload_http_origin().asSlice() },
+        .HttpOrigin => .{ .http_origin = payloadIn(abi.RocStr, declaration).asSlice() },
         .HttpAny => .http_any,
         .UdpBind => .{ .udp_bind = declaration.payload_udp_bind() },
         .UdpPeer => blk: {
-            const peer = declaration.payload_udp_peer();
+            const peer = payloadIn(@TypeOf(declaration.payload_udp_peer()), declaration);
             break :blk .{ .udp_peer = .{ .address = peer.address.asSlice(), .port = peer.port } };
         },
         .UdpLoopback => .udp_loopback,
         .UdpAny => .udp_any,
-        .Command => .{ .command = declaration.payload_command().asSlice() },
+        .Command => .{ .command = payloadIn(abi.RocStr, declaration).asSlice() },
         .CommandAny => .command_any,
-        .EnvVar => .{ .env_var = declaration.payload_env_var().asSlice() },
+        .EnvVar => .{ .env_var = payloadIn(abi.RocStr, declaration).asSlice() },
         .EnvAny => .env_any,
         .ClipboardRead => .clipboard_read,
         .ClipboardWrite => .clipboard_write,
         .WorkingDirectory => .{ .working_directory = directoryMode(declaration.payload_working_directory()) },
         .Directory => blk: {
-            const directory = declaration.payload_directory();
+            const directory = payloadIn(@TypeOf(declaration.payload_directory()), declaration);
             break :blk .{ .directory = .{ .path = directory.path.asSlice(), .mode = directoryMode(directory.mode) } };
         },
         .FilesAny => .{ .files_any = directoryMode(declaration.payload_files_any()) },
@@ -15102,7 +15109,7 @@ fn capsExportedFilesOpenRoot(authority: u64, root: FilesRoot, writable: bool) ca
         .BesideExecutable => !writable,
         .AppData, .AppConfig, .AppCache => requireAppId(name),
         .WorkingDirectory => admitDeclared(name, .files, active_policy.admitWorkingDirectory(writable)),
-        .Declared => admitDeclared(name, .files, active_policy.admitPath(root.payload_declared().asSlice(), writable)),
+        .Declared => admitDeclared(name, .files, active_policy.admitPath(payloadIn(abi.RocStr, &root).asSlice(), writable)),
     };
     if (!admitted) return refuseEffect(abi.HostFiles_open_rootResult, name, .{root});
     return hostedFilesOpenRoot(activeHost(), root, writable);

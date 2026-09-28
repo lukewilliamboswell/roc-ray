@@ -116,6 +116,15 @@ pub fn openParent(io: std.Io, root: Dir, path: []const u8, create: bool) !Parent
 pub fn openFile(io: std.Io, root: Dir, path: []const u8) !File {
     const parent = try openParent(io, root, path, false);
     defer parent.dir.close(io);
+    if (@import("builtin").os.tag == .windows) {
+        // Zig opens a no-follow file for overlapped I/O on Windows, and an
+        // ordinary read of that handle fails. So refuse a reparse point by
+        // stat instead, then open normally. The parents were already walked
+        // without following, so only this last name is checked this way.
+        const found = try parent.dir.statFile(io, parent.name, .{ .follow_symlinks = false });
+        if (found.kind == .sym_link) return error.Escapes;
+        return parent.dir.openFile(io, parent.name, .{});
+    }
     return parent.dir.openFile(io, parent.name, .{ .follow_symlinks = false, .resolve_beneath = true }) catch |err|
         return linkIsEscape(io, parent.dir, parent.name, err);
 }

@@ -71,10 +71,10 @@ render! = |model, frame| {
 Replace `BUNDLE-URL` and `COMPILER` as <<smallest-app>> describes. Press
 Escape or close the window to quit.
 
-The app's header, `app [Model, program]`, hands two things to the platform:
+The app's header, `app [Model, program]`, gives two things to the platform:
 the type of its state, `Model`, and `program`, a
 {langref}/records.md[record] of its three callbacks. `Msg` is the type of
-the messages its background work sends back; this app starts none, so it is
+the messages its tasks send back; this app starts no tasks, so `Msg` is
 the empty {langref}/tag-unions.md[tag union] `[]`.
 
 A name ending in `!` is an _effectful function_: calling it can do something
@@ -91,7 +91,7 @@ The host calls the three callbacks in a loop:
 ....
 flowchart LR
     Init["init!<br/>builds the first model"] --> Update
-    Update["update!<br/>folds one input into the next model"] --> Render
+    Update["update!<br/>uses one input to make the next model"] --> Render
     Render["render!<br/>draws that model"] --> Update
     Update -- "Err(Exit(code))" --> Stop([app exits])
 ....
@@ -198,15 +198,15 @@ Here `initial_model` stands for whatever first model your app builds.
 The function `init!` runs receives `App.Io`, the app's access to host services
 (files, the network, printing, and so on). `init!` is the one place an app may
 wait for the outside world _without_ a task: loading a texture or reading a
-file there simply holds startup until the answer arrives, before the first
+file there simply delays startup until the result is ready, before the first
 frame is drawn.
 
-A few effects are legal only in `init!`, because they are facts about the
-start of the run:
+A few effects are legal only in `init!`, because they return information that
+is fixed when the app starts:
 
 * `io.args!()` returns the command line, with the host's own `+--host-*+`
   switches removed. Keep what you need from it in the model.
-* `io.entropy!()` draws a number from the operating system to seed a random
+* `io.entropy!()` gets a random number from the operating system to seed a random
   generator (see <<input-randomness>>).
 * `io.default_font!()` returns the font configured with `with_default_font`.
 * `io.env().read!(name)` reads a declared environment variable.
@@ -228,7 +228,7 @@ that `init!` had. It returns `Ok` with the next model, or `Err(Exit(code))` to
 stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
 `model` with some fields replaced; see {langref}/records.md[Records].
 
-`App.Input` is everything the host observed for this cycle:
+`App.Input` contains everything the host collected for this cycle:
 
 [cols="1,3",options="header"]
 |===
@@ -243,10 +243,9 @@ stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
 
 `update!` may call host effects directly: play a sound, resize the window,
 print a line, start a recording. Those happen immediately, in the order they
-are written. What `update!` must _not_ do is wait. An effect that can wait on
-the outside world -- reading a file, sending a request, sleeping -- is refused
-in `update!`. Start that work as a _task_ instead, and its result arrives in a
-later input. <<tasks>> shows how.
+are written. What `update!` must _not_ do is wait. An effect that can wait --
+reading a file, sending a request, sleeping -- is refused in `update!`. Run it
+in a _task_ instead, and its result arrives in a later input. <<tasks>> shows how.
 
 == render!: draw the model
 
@@ -270,7 +269,7 @@ Because `render!` gets no input, anything that moves on screen must be read
 from the model. An animation keeps its clock in the model, advanced in
 `update!` from `input.time.elapsed_seconds`.
 
-== Where each kind of work goes
+== Where each kind of code goes
 
 One rule covers almost every case:
 
@@ -299,7 +298,7 @@ it:
   ends at once, and `update!` never sees it happen.
 
 An app that has something to finish first -- saving the game, for example --
-asks to be told instead, with `with_close_request(Deliver)`. The window then
+can ask to be notified instead, with `with_close_request(Deliver)`. The window then
 stays open, and the next input has `input.window.close_requested` set to
 `Bool.True` for one cycle. A request is never lost. The app decides when to
 end by returning `Err(Exit(code))`:
@@ -314,7 +313,7 @@ update! = |model, input, _io| {
         # The save finished, successfully or not: now end the app.
         Err(Exit(0))
     } else if input.window.close_requested and !model.saving {
-        # Write the save file on a task, and keep running until it answers.
+        # Write the save file on a task, and keep running until it finishes.
         saves = model.saves
         text = encode_save(model)
         Task.spawn!(input, || Saved(saves.write_text!("save.txt", text)))
@@ -350,8 +349,8 @@ writes `Msg : []`. One that loads a level might write:
 Msg : [LevelLoaded(Try(Str, Files.ReadTextError))]
 ----
 
-Finished tasks' messages arrive in `input.messages`, and `update!` folds them
-into the model, usually with a pure helper:
+Finished tasks' messages arrive in `input.messages`. `update!` applies each
+one to the model in turn, usually with `List.fold` and a pure helper:
 
 [source,roc]
 ----
@@ -363,9 +362,9 @@ Ok(List.fold(input.messages, model, apply_message))
 == Keep the decisions pure
 
 `update!` is effectful, so `roc test` cannot call it. Keep the decisions it
-makes -- which message changes what, whether to quit, what work to start -- in
-pure functions that take the model and input, and let `update!` perform what
-they decide. Those functions are ordinary Roc and can be tested with `expect`.
+makes -- which message changes what, whether to quit, which tasks to start --
+in pure functions that take the model and input, and let `update!` carry out
+what they decide. Those functions are ordinary Roc and can be tested with `expect`.
 <<testing>> shows how to build inputs and resources for such tests.
 
 == Why it is shaped this way
@@ -385,15 +384,15 @@ while (!WindowShouldClose()) {
 
 RocRay's loop is the same loop: `update!` is `UpdateGame`, and `render!` is
 `DrawGame`. What RocRay adds are a few rules about what each part may do. Each
-rule buys something:
+rule has a benefit:
 
 * *Nothing waits in `update!` or `render!`.* In the C loop, one careless
-  `fopen` or HTTP request in the middle of a level makes the game hitch for as
+  `fopen` or HTTP request in the middle of a level makes the game freeze for as
   long as the disk or network takes. In RocRay that call is refused, so a
   cycle can only be as slow as your own code and the drawing it asks for.
   Waiting happens on a task, and the loop keeps going.
-* *Everything that changes arrives in the input.* Keys, time, finished work,
-  and window events all reach `update!` as data. A test can build an input by
+* *Everything that changes arrives in the input.* Keys, time, finished tasks,
+  and window events all arrive in `update!` as data. A test can build an input by
   hand, a headless run can script one, and a recording can reproduce one. The
   same model and the same inputs lead to the same decisions.
 * *`render!` only draws.* A frame shows exactly the model `update!` produced,
@@ -403,8 +402,8 @@ rule buys something:
 * *Tasks run one at a time, on the same thread as your callbacks.* Nothing
   runs in parallel with your code, so there are no locks, no data races, and
   no half-updated model.
-* *Decisions live in pure functions.* Rules that do not touch the host can be
-  tested with `expect`, without a window, a GPU, or a sound card.
+* *Decisions are made in pure functions.* Code that does not call the host can
+  be tested with `expect`, without a window, a GPU, or a sound card.
 
 Roc's type system cannot express "this function may be called from
 `update!` but not from `render!`", so these rules are checked when the app
@@ -429,18 +428,18 @@ phases it is legal in, in its API documentation, using one of a few rules:
 |Kind of effect |Legal in
 |Changes host state (plays a sound, resizes the window, uploads a texture, starts a recording, reads the clock with `Time.now!`) or queues output (printing) |`init!`, `update!`, and tasks; refused in `render!`
 |Draws |`render!` only
-|Waits on the outside world (files, network, databases, programs, sleeping, loading a resource from disk) |`init!`, where it holds startup, and tasks, where it pauses only that task; refused in `update!` and `render!`
+|Waits on the outside world (files, network, databases, programs, sleeping, loading a resource from disk) |`init!`, where it delays startup, and tasks, where it pauses only that task; refused in `update!` and `render!`
 |Takes a screenshot of the next frame |Tasks only, since it waits for a frame that `init!` runs before
 |Starts a task |`update!` and tasks
 |Ends the app with `io.exit!(code)` |`init!`, `update!`, and tasks
 |Reads a startup fact (`io.args!`, `io.entropy!`, `io.default_font!`, `io.env().read!`) |`init!` only
-|Answers a constant-time question the host already knows the answer to: `Window.scale!`, `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, `Music.time_played!` |Every callback, `render!` included
+|Reads a value the host already has, in constant time: `Window.scale!`, `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, `Music.time_played!` |Every callback, `render!` included
 |Diagnostic annotations for <<observatory>> |Every callback and tasks
 |===
 
 `render!` is deliberately narrow. It must draw exactly the model `update!`
-produced, so that a frame, a screenshot, or a recording is a faithful picture
-of what the app decided. An effect that changes the world or reads something
+produced, so that a frame, a screenshot, or a recording is an exact picture
+of what the app decided. An effect that changes host state or reads something
 that differs from run to run -- the clock, a file -- would break that, so it
 is refused in `render!` even when it does not wait. The few queries in the
 table above are allowed because they cannot change what happens next, and

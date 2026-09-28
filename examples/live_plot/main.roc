@@ -2,8 +2,8 @@
 ##
 ## Run this app from the directory you want to inspect. Use the wheel to scroll,
 ## Shift-wheel to zoom, drag to pan, R to return to new results, N to change the
-## horizontal scale, and Escape to quit. Run with `--record-demo` to create the
-## gallery GIF from built-in sample data. This larger example uses Tasks for
+## horizontal scale, and Escape to quit. Run with `--record-demo` to write
+## `examples/gallery/live_plot.gif` from built-in sample data. This larger example uses Tasks for
 ## file work, limits how much work and data it keeps at once, and draws many
 ## points efficiently.
 app [Model, program] {
@@ -22,7 +22,6 @@ import rr.Draw
 import rr.Math
 import rr.Task
 import rr.Text
-import rr.Permission
 
 ## Walk a source tree and plot every line while it is still being discovered.
 ##
@@ -490,39 +489,48 @@ expect WorkQueue.new().completed() == WorkQueue.new()
 
 program = { init!, update!, render! }
 
-demo_frames = 150.U64
-
-record_demo_flag : Str
+## Recording mode. `--record-demo` hides the window, feeds the plot the
+## built-in `demo_paths` through `demo_message` instead of walking the disk,
+## and writes a GIF for the README gallery into `examples/gallery/`. The
+## recording stops itself after `demo_frames` frames, and `update!` exits when
+## it has been written.
 record_demo_flag = "--record-demo"
 
+demo_frames = 150.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("live_plot.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## Declares the working directory, read-only, then selects an interactive
+## window or a hidden one that records the demo.
 live_plot_config : List(Str) -> App.Config
 live_plot_config = |args| {
 	base = App.default
-		.with_title("A tree, streamed - RocRay live plot")
+		.with_title("RocRay Live Plot")
 		.with_size({ width: 1240, height: 860 })
 		.with_min_size({ width: 980, height: 640 })
 		.with_resizable(Bool.True)
 		.with_frame_pacing(VSync)
 	# The plot walks and reads the directory it was launched from.
 		.with_permission(WorkingDirectory(ReadOnly))
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("live_plot.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
 
 ## A small built-in tree for reproducible capture. Each file still enters as a
 ## `FileRead` message and goes through the ordinary bounded parser.
@@ -1610,9 +1618,9 @@ init! : App.Init(Model, _)
 init! = App.init_for_args(
 	live_plot_config,
 	|io| {
-		match live_plot_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
@@ -1641,7 +1649,7 @@ init! = App.init_for_args(
 
 		tree = io.files().working_directory_read!() ? |_| WorkingDirectoryUnavailable
 		Ok({
-			demo: List.contains(io.args!(), record_demo_flag),
+			demo,
 			tree,
 			glow: glow,
 			queue: WorkQueue.new(),
@@ -1682,15 +1690,15 @@ sprite_of : Model -> Draw.Texture
 sprite_of = |model| model.glow.texture()
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
+update! = |model, input, _io| {
 	update_zone = Trace.begin!("update live plot")
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
 	#    deal more work while it is at it.
-	received = List.fold(program_input.messages, model, receive)
+	received = List.fold(input.messages, model, receive)
 	settled_model =
 		if model.demo {
-			match demo_message(program_input.time.cycle_count) {
+			match demo_message(input.time.cycle_count) {
 				Ok(message) => {
 					with_file = { ..received, walk: { ..received.walk, files_found: received.walk.files_found + 1 } }
 					receive(with_file, message)
@@ -1703,7 +1711,7 @@ update! = |model, program_input, _io| {
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
 	primed =
-		if !model.demo and program_input.time.cycle_count == 0 {
+		if !model.demo and input.time.cycle_count == 0 {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
@@ -1723,7 +1731,7 @@ update! = |model, program_input, _io| {
 	# 4. The view is pure state too, so a headless run scrolls the same way an
 	#    interactive one does.
 	view_zone = Trace.begin!("update plot view")
-	viewed = look(parsed, program_input)
+	viewed = look(parsed, input)
 	Trace.end!(view_zone)
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
@@ -1748,28 +1756,14 @@ update! = |model, program_input, _io| {
 		}
 
 	for work in ready.starting {
-		start_work!(model.tree, program_input, work)
+		start_work!(model.tree, input, work)
 	}
 
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if program_input.devices.key_pressed(KeyEscape) {
-			Err(Exit(0))
-		} else {
-			Ok({})
-		}
-
-	result = match exit {
-		Err(code) => Err(code)
-		Ok({}) => Ok({ ..refetched, queue: ready.queue })
-	}
+	# Decided before the zone closes, so an exit still ends the trace zone.
+	finished = if model.demo demo_finished(input.capture) else Ok({})
 	Trace.end!(update_zone)
-	result
+	finished?
+	Ok({ ..refetched, queue: ready.queue })
 }
 
 ## Fold one completion into the model.
@@ -1834,17 +1828,17 @@ receive = |model, message|
 
 ## Advance the camera, the clocks and the throughput samples.
 look : Model, App.Input(Msg) -> Model
-look = |model, program_input| {
-	input = program_input.devices
-	screen = { x: I32.to_f32(program_input.window.size.width), y: I32.to_f32(program_input.window.size.height) }
+look = |model, input| {
+	devices = input.devices
+	screen = { x: I32.to_f32(input.window.size.width), y: I32.to_f32(input.window.size.height) }
 	area = plot_area(screen)
 
-	wheel = input.mouse.wheel_delta().y
-	zooming = input.key_down(KeyLeftShift) or input.key_down(KeyRightShift)
-	dragging = input.mouse.button_down(Left)
-	refit = input.key_pressed(KeyR)
+	wheel = devices.mouse.wheel_delta().y
+	zooming = devices.key_down(KeyLeftShift) or devices.key_down(KeyRightShift)
+	dragging = devices.mouse.button_down(Left)
+	refit = devices.key_pressed(KeyR)
 
-	delta = F32.min(program_input.time.elapsed_seconds, 0.05)
+	delta = Math.clamp(input.time.elapsed_seconds, 0, 0.05)
 	advanced = model.sweep + delta
 	opened = F32.min(model.entrance + delta / entrance_seconds, 1)
 
@@ -1862,12 +1856,12 @@ look = |model, program_input| {
 	# point in the middle of the plot rather than sliding it.
 	base = model.camera.with_offset(Math.center(area))
 	zoomed = if zooming {
-		zoom_at(base, input.mouse.position(), wheel)
+		zoom_at(base, devices.mouse.position(), wheel)
 	} else {
 		scroll_by(base, wheel)
 	}
 	panned = if dragging {
-		pan(zoomed, input.mouse.delta())
+		pan(zoomed, devices.mouse.delta())
 	} else {
 		zoomed
 	}
@@ -1883,7 +1877,7 @@ look = |model, program_input| {
 			panned.with_target({ x: panned.target().x, y: clamp_scroll(panned.target().y, model.lanes, area, panned.zoom()) })
 		}
 
-	mode = if input.key_pressed(KeyN) {
+	mode = if devices.key_pressed(KeyN) {
 		other_mode(model.x_mode)
 	} else {
 		model.x_mode
@@ -2295,7 +2289,7 @@ draw_head! = |frame, model|
 		}
 	}
 
-## A slow highlight crossing the plot, driven by `program_input.time` alone, so the frame
+## A slow highlight crossing the plot, driven by `input.time` alone, so the frame
 ## has something moving in it whether or not data is still arriving.
 draw_sweep! : Draw.Frame, Model, Math.Rect => {}
 draw_sweep! = |frame, model, area| {

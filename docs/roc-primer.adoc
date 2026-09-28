@@ -82,10 +82,12 @@ name alone. `{ x, y }` means `{ x: x, y: y }`:
 include::tutorial/primer.roc[tag=pun,indent=0]
 ----
 
-CAUTION: This shorthand needs at least two fields. `{ score }` on its own is a
-block that evaluates to `score`, not a record.
+CAUTION: `{ score }` on its own is a block that evaluates to `score`, not a
+record. A trailing comma makes it a record: `{ score, }`.
 
-Write a one-field record in full:
+For a record with one field, add the trailing comma, or write the field in
+full. `roc fmt` puts a record with a trailing comma on separate lines, one
+field per line:
 
 [source,roc]
 ----
@@ -261,7 +263,7 @@ include::tutorial/primer.roc[tag=methods,indent=0]
 
 `App.default` is an `App.Config`, so `.with_title("Paddle")` calls the
 `with_title` method of `App.Config`, which returns a new config; the next
-`+.with_size(...)+` is called on that one. `42.U64.to_str()` and
+`+.with_size(...)+` is called on that one. `(42.U64).to_str()` and
 `U64.to_str(42)` are the same call.
 
 The same holds for the platform's effects: `+frame.circle!(...)+` calls the

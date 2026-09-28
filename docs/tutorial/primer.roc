@@ -33,8 +33,11 @@ render! = |model, frame| {
 
 # tag::values[]
 speed = 480.F32
+
 title = "Paddle"
+
 lives = 3.U64
+
 # end::values[]
 
 # tag::block[]
@@ -43,6 +46,7 @@ area = {
 	height = 600.F32
 	width * height
 }
+
 # end::block[]
 
 # tag::records[]
@@ -51,14 +55,21 @@ paddle = { x: 340.F32, y: 560.F32, width: 120.F32 }
 paddle_x = paddle.x
 
 moved = { ..paddle, x: paddle.x + 10 }
+
 # end::records[]
 
 # tag::pun[]
 make_point = |x, y| { x, y }
+
 # end::pun[]
 
 # tag::single-field[]
-make_score = |score| { score: score }
+make_score = |score| {
+	score,
+}
+
+make_score_in_full = |score| { score: score }
+
 # end::single-field[]
 
 # tag::alias[]
@@ -66,6 +77,7 @@ Point : { x : F32, y : F32 }
 
 origin : Point
 origin = { x: 0, y: 0 }
+
 # end::alias[]
 
 # tag::nominal[]
@@ -73,6 +85,7 @@ Lives := U64.{
 	lose_one : Lives -> Lives
 	lose_one = |Lives.(count)| Lives.(count - 1)
 }
+
 # end::nominal[]
 
 # tag::tags[]
@@ -85,6 +98,7 @@ points_for = |event|
 		BallLost => 0
 		Nothing => 0
 	}
+
 # end::tags[]
 
 # tag::payloads[]
@@ -96,6 +110,7 @@ area_of = |shape|
 		Circle(radius) => 3.14159 * radius * radius
 		Box(width, height) => width * height
 	}
+
 # end::payloads[]
 
 # tag::if[]
@@ -108,6 +123,7 @@ direction_for = |left_down, right_down|
 	} else {
 		0
 	}
+
 # end::if[]
 
 # tag::functions[]
@@ -116,6 +132,7 @@ double = |x| x * 2
 
 clamp_speed : F32, F32 -> F32
 clamp_speed = |value, limit| if value > limit limit else value
+
 # end::functions[]
 
 # tag::effectful[]
@@ -125,6 +142,7 @@ play_for! = |event, hit_sound|
 		PaddleHit => hit_sound.play!()
 		_ => {}
 	}
+
 # end::effectful[]
 
 # tag::try[]
@@ -136,6 +154,7 @@ make_sounds! = |{}| {
 	miss = Audio.gen_tone!({ freq: 160, ms: 300 })?
 	Ok({ hit, miss })
 }
+
 # end::try[]
 
 # tag::tuples[]
@@ -146,12 +165,13 @@ tens_digit = {
 	(tens, _ones) = split_score(42)
 	tens
 }
+
 # end::tuples[]
 
 # tag::methods[]
 config = App.default.with_title("Paddle").with_size({ width: 800, height: 600 })
 
-score_text = 42.U64.to_str()
+score_text = (42.U64).to_str()
 
 same_text = U64.to_str(42)
 # end::methods[]

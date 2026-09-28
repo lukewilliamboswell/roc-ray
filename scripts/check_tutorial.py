@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Check, test, build and headlessly run every app the manual's tutorial shows.
+"""Format-check, check, test, build and headlessly run every tutorial app.
 
 The manual includes these files verbatim (docs/tutorial/*.roc), so a snippet
-that stops compiling fails here rather than in a reader's terminal.
+that stops compiling fails here rather than in a reader's terminal, and one
+`roc fmt` would change fails too, since readers copy what the manual shows.
 
 Each file names the working-tree platform by a relative path, which is enough
 for `roc check` and `roc test`. Building needs the platform's native linker
@@ -61,7 +62,7 @@ def stage(app: Path, packages: local_bundles.ServedPackages) -> Path:
 
 
 def check(app: Path, packages: local_bundles.ServedPackages, roc: str) -> bool:
-    if not (run([roc, "check", str(app)]) and run([roc, "test", str(app)])):
+    if not (run([roc, "fmt", "--check", str(app)]) and run([roc, "check", str(app)]) and run([roc, "test", str(app)])):
         return False
     staged = stage(app, packages)
     executable = staged.with_suffix(".exe" if local_bundles.IS_WINDOWS else "")

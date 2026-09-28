@@ -41,12 +41,10 @@ larger examples show what else it can do:
 
 ## Try it
 
-1. Install the Roc compiler named in the notes of the
-   [0.10.0-rc6 release](https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0-rc6),
-   as [Getting started](docs/getting-started.adoc#install) describes.
-2. Download that release's
-   [example starter](https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/examples-0.10.0-rc6.zip)
-   and unzip it.
+1. Open the [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
+   and install the Roc compiler its notes name, as
+   [Getting started](docs/getting-started.adoc#install) describes.
+2. Download that release's `examples-<version>.zip` and unzip it.
 3. Open a terminal in the extracted directory, the one containing `examples/`,
    and run:
 

@@ -25,19 +25,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Download the starter linked by the README
+      # The README sends readers to the latest release and its examples zip,
+      # so this checks exactly that: whatever GitHub currently marks latest.
+      - name: Download the latest release's examples
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           import io
+          import json
           import os
           from pathlib import Path
           import re
+          import subprocess
           import urllib.request
           import zipfile
 
-          readme = Path("README.md").read_text()
-          url = re.search(r"https://github.com/lukewilliamboswell/roc-ray/releases/download/[^/\s)]+/examples-[^/\s)]+\.zip", readme).group()
+          latest = json.loads(subprocess.check_output(
+              ["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/releases/latest"], text=True))
+          zips = [asset["browser_download_url"] for asset in latest["assets"]
+                  if re.fullmatch(r"examples-.+\.zip", asset["name"])]
+          if len(zips) != 1:
+              raise SystemExit(f"latest release {latest['tag_name']} has {len(zips)} examples zips; "
+                               "the README tells readers to download one")
+          url = zips[0]
+          print(f"latest release {latest['tag_name']}: {url}")
           root = Path(os.environ["RUNNER_TEMP"]) / "public-starter"
           with urllib.request.urlopen(url, timeout=60) as response:
               data = response.read()

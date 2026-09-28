@@ -96,8 +96,7 @@ example in one step. Arguments after `--` go to the app.
 
 To check the platform's own Roc code, run `roc check platform/main.roc`.
 `scripts/all_tests.py`, described below, checks and runs every example against
-a bundled copy of the platform, as a release ships it. The published starter
-keeps its own pin.
+a bundled copy of the platform, as a release ships it.
 
 The host reserves switches beginning `--host-` for unattended runs;
 <<reference-switches>> lists them all. The windowed sweep described below
@@ -199,10 +198,11 @@ test suite. See <<observatory-methodology>>.
 
 === How the apps find the platform
 
-Development checks use the compiler declared in the platform headers.
-They rebind both the platform URL and compiler pin in temporary app copies;
-public example headers and released starters retain their own compiler requirements.
-Release candidates and starters are pinned to the release compiler and exact bundle.
+Development checks use the compiler declared in the platform headers. They
+point temporary copies of each app at a bundle of the working tree and pin that
+compiler; the checked-in files are never rewritten. A release's examples zip is
+pinned to the release's compiler and bundle, and the "Published quickstart" CI
+job runs the latest release's zip unchanged.
 
 Every development app stage resolves the platform over localhost. `scripts/bundle.sh`
 bundles the platform API and native inputs into a scratch directory,

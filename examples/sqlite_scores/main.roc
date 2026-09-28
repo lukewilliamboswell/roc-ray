@@ -13,7 +13,6 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Files
 import rr.Random
 import rr.Sqlite
 import rr.Task

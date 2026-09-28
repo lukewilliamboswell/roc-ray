@@ -15,7 +15,6 @@ import rr.Devices
 import rr.Window
 import rr.Keys
 import rr.Mouse
-import rr.Gamepad
 import rr.App
 import rr.Capture
 

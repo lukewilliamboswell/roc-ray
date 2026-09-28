@@ -73,7 +73,7 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" != "branch" ]]; then
-            echo "Release workflow must be run from a branch so generated docs can be opened as a follow-up PR."
+            echo "Release workflow must be run from a branch, normally main."
             exit 1
           fi
 

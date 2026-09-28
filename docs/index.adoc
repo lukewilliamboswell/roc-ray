@@ -9,7 +9,7 @@
 :toclevels: 3
 :sectnums:
 :sectanchors:
-:icons: font
+:!icons:
 :source-highlighter: rouge
 :imagesdir: images
 // Links into the repository. The manual is published away from the source

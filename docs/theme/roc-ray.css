@@ -19,6 +19,10 @@
  * pages, and the stylesheet is embedded in each page, so these relative URLs
  * resolve both on a server and from disk. Every stack names real fallbacks so
  * a missing file degrades instead of breaking.
+ *
+ * Only the 400 and 700 faces are bundled, so every `font-weight` in this sheet
+ * is 400 or 700. Any other value makes the browser synthesise or round a
+ * weight, differently in each engine.
  */
 @font-face {
   font-family: "Space Grotesk";
@@ -240,7 +244,7 @@ hr {
   font-size: 2.4rem;
   line-height: 1.15;
   letter-spacing: -0.015em;
-  font-weight: 650;
+  font-weight: 700;
   margin: 0 0 0.5rem;
   color: var(--ink);
 }
@@ -267,7 +271,7 @@ hr {
 
 #toctitle {
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -303,15 +307,30 @@ hr {
 
 #toc .sectlevel1 > li > a {
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 700;
 }
+
+/* Parts (Getting started, Guides, ...) group chapters. They read as small
+   capitals labels with space above, so they rank above a chapter without
+   competing with it for weight. */
+#toc .sectlevel0 > li > a {
+  margin-top: 1.1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+#toc .sectlevel0 > li:first-child > a { margin-top: 0; }
+
+#toc .sectlevel0 > li > ul { padding-left: 0; }
 
 #toc a.active,
 #toc li.active > a {
   color: var(--accent-strong);
   border-left-color: var(--accent);
   background: var(--accent-wash);
-  font-weight: 600;
 }
 
 /* Left-hand sidebar arrangement (toc=left). */
@@ -332,12 +351,24 @@ hr {
     scrollbar-width: thin;
   }
 
+  /* The column centres in the space beside the sidebar. On a very wide
+     screen that splits the spare width evenly instead of leaving it all on
+     the right; running prose keeps its own measure inside the column. */
   body.toc2 #header,
   body.toc2 #content,
-  body.toc2 #footer { margin-left: 0; }
+  body.toc2 #footer { margin-inline: auto; }
+
+  /* The collapsed-contents bar exists for narrow screens only. */
+  #toc-toggle { display: none; }
 }
 
-/* Narrow screens: the TOC becomes a quiet block at the top of the page. */
+/*
+ * Narrow screens. The contents would otherwise be a block several thousand
+ * pixels tall ahead of the first paragraph. With JavaScript (docinfo-footer.html
+ * adds `.js` to the root) they collapse into a bar that stays at the top of
+ * the window and opens as a panel with its own scroll. Without it they stay
+ * expanded but capped, so the manual still starts on the first screen.
+ */
 @media screen and (max-width: 61.999rem) {
   body.toc2 { padding-left: 0; }
 
@@ -346,12 +377,102 @@ hr {
     width: auto;
     max-width: 62rem;
     height: auto;
-    margin: 1.5rem auto 0;
-    padding: 1.25rem 1.5rem;
+    margin: 1.5rem 1rem 0;
+    padding: 1rem 1.25rem;
     background: var(--bg-sunken);
     border: 1px solid var(--rule);
     border-radius: var(--radius);
   }
+
+  html:not(.js) #toc.toc2 > ul {
+    max-height: 45vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .js #toc.toc2 {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    margin: 1rem 0 0;
+    padding: 0 1rem;
+    border-width: 1px 0;
+    border-radius: 0;
+    background: var(--bg-sunken);
+  }
+
+  .js #toc.toc2 #toctitle { display: none; }
+  .js #toc.toc2 > ul { display: none; }
+
+  .js #toc.toc2.open > ul {
+    display: block;
+    max-height: calc(100vh - 3.5rem);
+    max-height: calc(100dvh - 3.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.25rem 0 1rem 0.6rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  /* Anchored headings land below the sticky bar. */
+  html.js { scroll-padding-top: 3.75rem; }
+
+  #toc-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    width: 100%;
+    min-height: 2.75rem;
+    margin: 0;
+    padding: 0.7rem 0;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.9375rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  #toc-toggle .toc-toggle-label {
+    flex: none;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  #toc-toggle .toc-toggle-current {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink-soft);
+  }
+
+  #toc-toggle .toc-toggle-icon {
+    flex: none;
+    align-self: center;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.2rem;
+    border-right: 2px solid var(--ink-muted);
+    border-bottom: 2px solid var(--ink-muted);
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform 120ms ease;
+  }
+
+  #toc.open #toc-toggle .toc-toggle-icon { transform: translateY(25%) rotate(225deg); }
+
+  #header,
+  #content,
+  #footer { padding-inline: 1rem; }
+
+  #header { padding-top: 2rem; }
+  #header > h1 { font-size: clamp(1.75rem, 7vw, 2.4rem); }
+  #content { padding-top: 1.5rem; }
 }
 
 #toc:not(.toc2) {
@@ -368,7 +489,7 @@ hr {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   color: var(--ink);
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.01em;
   margin: 2.25rem 0 0.75rem;
@@ -450,7 +571,7 @@ p { margin: 0 0 1.1rem; }
 
 #content .sectionbody > :last-child { margin-bottom: 0; }
 
-strong, b { font-weight: 650; }
+strong, b { font-weight: 700; }
 
 em, i { font-style: italic; }
 
@@ -466,7 +587,7 @@ mark {
 /* Block titles (the `.Title` line above a block). */
 #content .title {
   font-size: 0.9375rem;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--ink-soft);
   margin: 0 0 0.4rem;
   line-height: 1.4;
@@ -523,7 +644,7 @@ mark {
 #content dl { margin: 0 0 1.4rem; }
 
 #content dt {
-  font-weight: 650;
+  font-weight: 700;
   color: var(--ink);
   margin-top: 1rem;
 }
@@ -541,7 +662,7 @@ mark {
 
 /* Horizontal description lists. */
 #content table.hdlist > tbody > tr > td { padding: 0.3rem 1rem 0.3rem 0; vertical-align: top; }
-#content td.hdlist1 { font-weight: 650; }
+#content td.hdlist1 { font-weight: 700; }
 
 /* ------------------------------------------------------------------ code */
 
@@ -560,6 +681,9 @@ code, kbd, pre, samp, tt, var {
   padding: 0.1em 0.34em;
   white-space: break-spaces;
   word-break: break-word;
+  /* A chip that wraps keeps its border on both halves. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 a :not(pre) > code,
@@ -620,12 +744,40 @@ kbd {
   font-family: var(--font-text);
   font-size: 0.72rem;
   font-style: normal;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 #content .conum[data-value]::after { content: attr(data-value); }
 #content .conum[data-value] * { color: inherit; }
 #content .conum[data-value] + b { display: none; }
+
+/* The list under a block: each item is numbered with the same disc. */
+#content .colist > ol {
+  list-style: none;
+  counter-reset: conum;
+  padding-left: 2rem;
+}
+
+#content .colist > ol > li {
+  position: relative;
+  counter-increment: conum;
+}
+
+#content .colist > ol > li::before {
+  content: counter(conum);
+  position: absolute;
+  left: -2rem;
+  top: 0.3em;
+  min-width: 1.4em;
+  height: 1.4em;
+  line-height: 1.4em;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
 
 #content .colist > table { border: 0; }
 #content .colist td { padding: 0.25rem 0.6rem 0.25rem 0; border: 0; vertical-align: top; }
@@ -665,7 +817,7 @@ kbd {
 #content pre.rouge .kp,
 #content pre.rouge .kr,
 #content pre.rouge .kt,
-#content pre.rouge .ow { color: #8a4b7d; font-weight: 600; }
+#content pre.rouge .ow { color: #8a4b7d; font-weight: 700; }
 
 #content pre.rouge .nf,
 #content pre.rouge .nb,
@@ -715,9 +867,9 @@ kbd {
 #content pre.rouge .gd { color: var(--important); }
 #content pre.rouge .gi { color: var(--tip); }
 #content pre.rouge .ge { font-style: italic; }
-#content pre.rouge .gs { font-weight: 650; }
+#content pre.rouge .gs { font-weight: 700; }
 #content pre.rouge .gh,
-#content pre.rouge .gu { color: var(--ink-muted); font-weight: 650; }
+#content pre.rouge .gu { color: var(--ink-muted); font-weight: 700; }
 #content pre.rouge .hll { background: var(--accent-wash); }
 
 /* Line numbers, when a block asks for them. */
@@ -800,7 +952,7 @@ kbd {
 
 #content table.tableblock > thead > tr > th {
   text-align: left;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--ink);
   font-size: 0.8125rem;
   letter-spacing: 0.04em;
@@ -836,9 +988,37 @@ kbd {
 #content td.valign-middle { vertical-align: middle; }
 #content td.valign-bottom { vertical-align: bottom; }
 
-/* A wide table scrolls inside its own block rather than the page. */
-#content .tableblock.stretch,
-#content .tableblock { overflow-x: auto; }
+/*
+ * A wide table scrolls inside its own block rather than the page. The HTML
+ * converter in manual_extensions.rb wraps every table in `.table-scroll`,
+ * because a `<table>` cannot scroll its own overflow and keep its layout.
+ * Long code in a cell may break anywhere, so a four-column table of type
+ * names usually fits a phone without scrolling at all.
+ */
+#content .table-scroll {
+  overflow-x: auto;
+  margin: 0 0 1.4rem;
+  scrollbar-width: thin;
+}
+
+#content .table-scroll > table.tableblock { margin: 0; }
+
+#content td.tableblock code,
+#content th.tableblock code { overflow-wrap: anywhere; }
+
+/* On a phone every column is narrow; give the text the room the padding took. */
+@media screen and (max-width: 40rem) {
+  #content table.tableblock {
+    font-size: 0.875rem;
+    hyphens: auto;
+  }
+
+  #content table.tableblock > thead > tr > th,
+  #content table.tableblock > tbody > tr > td,
+  #content table.tableblock > tfoot > tr > td { padding: 0.5rem 0.55rem; }
+
+  #content table.tableblock > * > tr > :first-child { padding-left: 0; }
+}
 
 /* ----------------------------------------------------------- admonitions */
 /*
@@ -861,7 +1041,8 @@ kbd {
 #content .admonitionblock td.icon {
   width: 1px;
   white-space: nowrap;
-  padding: 0.9rem 0 0.9rem 1rem;
+  /* The small-capitals label sits on the first line of the body text. */
+  padding: 1.1rem 0 0.9rem 1rem;
   color: var(--admon, var(--ink-muted));
   font-size: 0.75rem;
   font-weight: 700;
@@ -959,7 +1140,7 @@ kbd {
 
 #content details > summary {
   cursor: pointer;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--ink-soft);
 }
 
@@ -983,25 +1164,36 @@ kbd {
 #content .imageblock.text-center > .content { text-align: center; }
 
 /*
- * Mermaid diagrams render to SVG on a transparent ground. In dark mode the
- * generated palette stays light, so the diagram keeps a paper panel behind it
- * in both schemes instead of becoming unreadable.
+ * Mermaid diagrams render to SVG. scripts/build_manual.py gives each SVG its
+ * natural size (from its viewBox) and embeds the text face it was laid out
+ * with, so a diagram shows at that size and shrinks only to fit the column.
+ * (A fixed cap shrank the wide sequence diagram's labels to about 6px.) Each
+ * diagram links to its SVG, so a reader on a narrow screen can open it at full
+ * size. The plate stays light in both schemes because Mermaid draws in the
+ * light palette; a dark ground would leave its edge labels unreadable.
  */
-/* A diagram is a figure, not a banner. `width: 100%` stretched a tall
-   flowchart to the full column and made every node enormous, so the natural
-   size is capped and centred instead. The plate stays light in both schemes
-   because Mermaid draws the diagram in the light palette; a dark ground would
-   leave its edge labels unreadable. */
 #content .imageblock img[src*="diag-mermaid"],
 #content .imageblock object[data*="diag-mermaid"] {
   display: block;
   margin-inline: auto;
-  max-width: min(100%, 34rem);
+  width: auto;
+  max-width: 100%;
   height: auto;
   background: #faf9f6;
   padding: 1.25rem;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
+}
+
+#content .imageblock a.image {
+  display: block;
+  border: 0;
+}
+
+#content .imageblock a.image:focus-visible { outline-offset: 4px; }
+
+@media screen and (max-width: 40rem) {
+  #content .imageblock img[src*="diag-mermaid"] { padding: 0.5rem; }
 }
 
 #content .literalblock.output pre { color: var(--ink-muted); }

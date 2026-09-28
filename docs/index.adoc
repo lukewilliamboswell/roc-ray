@@ -18,14 +18,15 @@
 :src: {repo}/blob/main
 :tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-ray/
+:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
 
 [.lead]
-RocRay is a Roc platform for games, visual tools, and other interactive
-programs that draw a frame at a time. Your app keeps its own state and rules;
-RocRay supplies drawing, audio, keyboard and mouse input, windows, recording,
-files, and networking. This manual takes an app from its first window, through
-the features it will reach for as it grows, to the design that holds them
-together.
+Make 2D games, visual tools, and other interactive programs in Roc. You write
+the rules and say what to draw; RocRay opens the window, reads the keyboard
+and mouse, plays sound, and runs your code many times a second. This manual
+assumes no Roc and no graphics experience. It takes you from installing the
+compiler to a small finished game, and then through each feature as your own
+app needs it.
 
 ifdef::backend-html5[]
 {api}[Browse the API reference] ·
@@ -35,27 +36,43 @@ endif::[]
 [discrete]
 == Choose a path
 
-New to RocRay:: Read <<overview>>, then follow <<getting-started>> to run an
-example and write the smallest app. <<examples>> suggests what to read next.
-Building an app:: Read <<app-model>> first. It introduces `init!`, `update!`
-and `render!`, which every later guide builds on. Then read the guides for the
-features you need, in any order: <<input>>, <<drawing>>, <<tasks>>, and so on.
-Before your app touches a file, the network, or another program, read
-<<permissions>>.
-Testing and investigating performance:: <<testing>> covers the pure tests and
-unattended runs an app can use. <<observatory>> records what the host did,
-cycle by cycle, into a database you can query.
-Curious about the design:: <<architecture>> explains the rules the guides
+New to RocRay:: Follow these in order.
++
+. <<overview>>: what RocRay is for, and how an app is put together.
+. <<install>> and <<run-an-example>>: set up the compiler and see an app run.
+. <<roc-primer>>: the Roc you need, if the language is new to you.
+. <<smallest-app>>: write and run your first program.
+. <<first-game>>: grow it, step by step, into a small game.
+. <<app-model>>, then the other guides as your app needs them.
+. <<shipping>>: give your finished app to other people.
++
+<<glossary>> explains any unfamiliar term along the way.
+
+Coming from raylib:: Read <<overview>>, then <<coming-from-raylib>>, which maps
+raylib's functions and habits onto RocRay. <<roc-primer>> covers the language.
+Building an app:: Read <<app-model>> first; every later guide builds on it.
+Then read the guides for the features you need, in any order: <<input>>,
+<<drawing>>, <<tasks>>, and so on. Before your app touches a file, the
+network, or another program, read <<permissions>>. <<shipping>> covers giving
+your app to other people.
+Testing and investigating performance:: <<testing>> covers pure tests and
+unattended runs. <<observatory>> records what the host did, cycle by cycle,
+into a database you can query.
+Curious about the design:: <<architecture>> states the rules the guides
 introduce one at a time, and why RocRay chose them.
 Contributing to RocRay:: Start with <<contributing>>. <<host-development>>
 covers changes to the native host, and <<maintaining>> covers dependencies,
 bundles, and releases.
 
-= Getting started
+= Start here
 
 include::overview.adoc[leveloffset=+1]
 
 include::getting-started.adoc[leveloffset=+1]
+
+include::roc-primer.adoc[leveloffset=+1]
+
+include::first-game.adoc[leveloffset=+1]
 
 include::examples.adoc[leveloffset=+1]
 
@@ -85,9 +102,15 @@ include::testing.adoc[leveloffset=+1]
 
 include::observatory.adoc[leveloffset=+1]
 
+include::shipping.adoc[leveloffset=+1]
+
 = Reference
 
 include::reference.adoc[leveloffset=+1]
+
+include::glossary.adoc[leveloffset=+1]
+
+include::coming-from-raylib.adoc[leveloffset=+1]
 
 include::architecture.adoc[leveloffset=+1]
 

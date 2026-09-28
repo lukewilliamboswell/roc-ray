@@ -1,0 +1,135 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-ray
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-ray/
+endif::[]
+
+[#glossary]
+= Glossary
+
+The words this manual uses with a specific meaning, in alphabetical order.
+<<architecture>> defines the ones about the application contract precisely.
+For Roc's own terms, such as _record_, _tag union_, and _method_, see
+<<roc-primer>>.
+
+[[glossary-blend-mode]]Blend mode::
+How a new drawing combines with what is already on the screen. Normal
+drawing covers what is below it, in proportion to its transparency; additive
+blending adds colours together, so overlapping light looks brighter. Choose one
+for a group of drawing calls with `frame.with_blend_mode!`. See <<drawing>>.
+
+[[glossary-bundle]]Bundle::
+The single file a RocRay release publishes the platform as, downloaded by URL
+from an app's header. A release publishes a default bundle for every supported
+system and a Wayland bundle for Linux. See <<install>>.
+
+[[glossary-declaration]]Declaration, permission::
+A `Permission` value an app adds to its startup settings to reach something
+beyond its own window, such as a web service or a directory. The declaration
+is the grant: an app can reach only what its source declares. See
+<<permissions>>.
+
+[[glossary-delta-time]]Delta time::
+The time between one host cycle and the next, which RocRay supplies as
+`input.time.elapsed_seconds`. Multiply a speed by it to move things at the
+same rate whatever the frame rate. It is the raw measured time, so a game
+clamps it or advances in fixed simulation steps. See <<first-game-step2>>.
+
+[[glossary-effect]]Effect::
+A call from your app into the host that does something: draws, plays a sound,
+changes the window, reads a file. Effects are effectful functions, whose names
+end in `!`. Each one is legal only in certain phases.
+
+[[glossary-frame]]Frame::
+One picture drawn by `render!` and shown on the screen. Also the `Draw.Frame`
+value `render!` receives, through which all drawing happens. Normally each
+host cycle draws one frame. "Frames per second" counts these.
+
+[[glossary-framebuffer]]Framebuffer::
+The grid of pixels the window's picture is drawn into. On a high-DPI display
+it has more pixels than the window has logical units.
+
+[[glossary-handle]]Handle::
+A value that stands for something the host holds for your app, such as a
+texture, a sound, a font, or a directory. Only the platform can create one,
+so holding a handle is what grants access to its resource. Keep handles in the
+model; the host releases a resource when the last handle to it goes away. See
+<<files-and-assets>>.
+
+[[glossary-host]]Host::
+The native program, inside the bundle, that runs your app. It opens the
+window, samples input, calls `init!`, `update!` and `render!`, and carries out
+effects.
+
+[[glossary-host-cycle]]Host cycle::
+One pass of the host's loop: gather input, call `update!` once with it, and
+then usually call `render!` to draw one frame. A headless or minimized run can
+skip the drawing, but never calls `update!` twice with the same input. See
+<<app-model>>.
+
+[[glossary-input]]Input::
+The `App.Input` value `update!` receives: everything the host observed for one
+host cycle, including the keyboard and mouse, the window's size, the elapsed
+time, and the messages of tasks that finished. See <<input>>.
+
+[[glossary-logical-units]]Logical units, high DPI::
+Positions and sizes in RocRay are in logical units, which match mouse
+coordinates and are the same on every display. A high-DPI display, such as a
+Retina screen, packs more pixels into each logical unit, so a window 800 units
+wide can have a framebuffer 1600 pixels wide. `Window.scale!()` reports the
+ratio. See <<input>>.
+
+[[glossary-message]]Message::
+The value a task returns when it finishes. It arrives in a later host cycle,
+in `input.messages`, and exactly one `update!` receives it. An app lists the
+kinds of message it can receive in its `Msg` type. See <<tasks>>.
+
+[[glossary-model]]Model::
+Your app's state: everything it remembers from one host cycle to the next.
+`init!` creates it, `update!` returns the next one, and `render!` draws it.
+The host keeps it between calls but never looks inside.
+
+[[glossary-phase]]Phase::
+Which of your app's functions the host is currently running: `init!`,
+`update!`, `render!`, or a task. Every effect states the phases it is legal
+in, and calling one in the wrong phase stops the app with a message saying
+where it belongs. See <<phases>>.
+
+[[glossary-platform]]Platform::
+The part of a Roc program that you do not write, which supplies everything
+that touches the outside world. RocRay is a platform; your app is the Roc code
+that runs on it.
+
+[[glossary-render-texture]]Render texture::
+A texture you can draw into, instead of the window. Draw a scene into one,
+then draw the result on screen, scaled, tinted, or through a shader. See
+<<drawing>>.
+
+[[glossary-shader]]Shader::
+A small program that runs on the graphics card to compute the colour of each
+pixel, used for effects such as blur or colour grading. See <<drawing>>.
+
+[[glossary-simulation-step]]Simulation step::
+One advance of your game's world by a fixed amount of time, run as many times
+as your `update!` chooses. A game that needs exact, repeatable results runs
+fixed simulation steps inside each host cycle rather than one variable-length
+step. It is your app's idea, not something the platform calls.
+
+[[glossary-task]]Task::
+Work that may have to wait, such as reading a file or fetching a web page,
+started with `Task.spawn!` from `update!`. It runs alongside the app, which
+keeps updating and drawing, and returns exactly one message when it finishes.
+See <<tasks>>.
+
+[[glossary-texture]]Texture::
+An image stored on the graphics card, ready to draw. Load or generate textures
+once, keep them in the model, and draw them each frame. See <<drawing>>.
+
+[[glossary-waiting-effect]]Waiting effect::
+An effect that can wait on the outside world, such as reading a file,
+sending a network request, or sleeping. It is legal in `init!`, where it holds
+startup, and in a task, where it pauses only that task. It is refused in
+`update!` and `render!`, so a slow disk or network can never freeze a frame.

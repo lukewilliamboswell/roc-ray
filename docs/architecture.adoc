@@ -28,11 +28,11 @@ target should not by itself require an architecture change.
 
 == Product definition
 
-RocRay is a focused Roc application platform for games, visualizations,
-creative tools, explainers, and other interactive or frame-oriented programs.
-It supplies graphics, audio, input, window or surface management, capture, and
-selected access to external systems through a disciplined boundary between a
-Roc application and a host runtime.
+RocRay is a Roc application platform for smaller graphical programs: games,
+visualizations, creative tools, explainers, and other interactive or
+frame-oriented programs. It supplies graphics, audio, input, window or surface
+management, capture, and selected access to external systems through a strict,
+clearly defined boundary between a Roc application and a host runtime.
 
 RocRay is deliberately smaller than a game engine or application framework.
 The application owns its model and domain rules. Libraries and application
@@ -106,10 +106,10 @@ so _task_ predicts the right behavior.
 * A _message_ is conventionally a value delivered into a state machine's inbox
 rather than a call. RocRay messages arrive on `Input.messages` in the order
 their tasks finished and are consumed by exactly one `update!`, which is the
-intuition the word already carries.
+meaning the word already suggests.
 * A _phase_ names a stage of execution in which a different set of operations
 is legal. `Context` is avoided for this role because framework contexts
-usually carry capabilities or services, whereas a RocRay phase is host state
+usually hold capabilities or services, whereas a RocRay phase is host state
 the application never holds.
 * A _step_ conventionally suggests advancing a simulation. Game loops often
 distinguish variable-rate frame processing from fixed-rate physics steps, as
@@ -207,7 +207,7 @@ into the next model, calls host effects directly, and starts tasks. It
 returns the next model, or `Err(Exit(code))` to stop the application.
 * `render!` receives the resulting model and a `Draw.Frame`. It may issue
 drawing commands and frame-scoped draw-state changes, but it cannot change
-the model or reach general host work.
+the model or perform general host work.
 
 Conceptually, the host drives this cycle:
 
@@ -262,7 +262,7 @@ application policy.
 The platform cannot prevent application code from taking too long. It can and
 does prevent `update!` and `render!` from becoming blocking I/O entry points:
 every effect that can wait is refused in those phases. Work that waits belongs
-on a task and answers on a later cycle.
+on a task and reports its result on a later cycle.
 
 === Ending the application
 
@@ -276,7 +276,7 @@ directly, before any `update!` sees the press. A scripted press ends it the
 same way as a hardware one.
 * The user asks the window to close, with its close button or the operating
 system's quit command. This is a _close request_, and startup configuration
-decides who answers it. Under `Exit`, the default, the host ends the
+decides who handles it. Under `Exit`, the default, the host ends the
 application before the next input. Under `Deliver`, the host keeps the
 surface open and reports the request as an interval event in the next
 `App.Input`; the application ends when `update!` returns `Err(Exit(code))`.
@@ -285,7 +285,7 @@ one.
 
 Ending is shutdown (invariant 7): live tasks are cancelled, and a message
 that has not reached an `Input` by the last cycle is never delivered. Work
-that must finish before the application ends — a save, say — is therefore
+that must finish before the application ends, such as a save, is therefore
 the application's to wait for: it chooses `Deliver`, starts the work on a
 task when the request arrives, and returns `Err(Exit(code))` once the task's
 message does. The exit key does not wait; an application that needs every
@@ -317,24 +317,24 @@ bytes to a bounded queue does not wait; when the queue is full it says so.
 tasks run at once; each owns a stack, which is what the bound is really
 bounding. A spawn past that limit is queued and started in submission order
 as a slot frees. `Task.spawn!` has no failure to report, so a refusal would
-have to be a silently dropped closure that never answers.
+have to be a silently dropped closure that never reports back.
 . *Scheduling is cooperative.* A task yields only at a waiting effect. Long
 pure computation inside a task holds the frame exactly as it would inside
-`update!`; the platform buys overlap for waiting, not for computing.
+`update!`; the platform provides overlap for waiting, not for computing.
 . *Shutdown cancels and drains.* No `Input` exists after the last cycle, so
 nothing produced afterwards can be delivered. Live tasks are cancelled,
 closures that never started are dropped, and staged messages are released
-rather than leaked. A task parked on the event loop -- a socket, a timer --
-returns at once on the cancelled path. A task parked on work already
-running on a host worker -- a file write, an image encode, a database
-query -- cannot be unwound from outside: that work is bounded by the
+rather than leaked. A task parked on the event loop, such as on a socket or
+a timer, returns at once on the cancelled path. A task parked on work already
+running on a host worker, such as a file write, an image encode, or a
+database query, cannot be unwound from outside: that work is bounded by the
 payload it was admitted with, and the host either lets it finish or
 interrupts it through the facility's own mechanism before tearing tasks
 down. Queued effects are drained before the process exits, bounded by
 each queue's capacity. Forced process termination is outside this
 guarantee.
 . *A phase violation is a programmer error.* Every effect declares the
-phases it is legal in. Reaching one from another phase fails immediately,
+phases it is legal in. Calling one from another phase fails immediately,
 naming the effect, the phase it was called from, and where it belongs.
 . *Rendering draws and may annotate diagnostics.* `render!` cannot change
 the model, change operational host state, or start work. Its only
@@ -387,10 +387,10 @@ edge or a message is not equivalent.
 
 The `devices` snapshot is where the two kinds meet, and its fields are
 classified as follows. On the desktop host the interval events are recorded by
-the host's own callbacks, chained behind raylib's on the window: raylib keeps
-levels, not queues -- its key and mouse-button callbacks store the latest
+the host's own callbacks, chained behind raylib's on the window. raylib keeps
+levels, not queues: its key and mouse-button callbacks store the latest
 action, its scroll callback overwrites the wheel, and its character queue holds
-sixteen per poll -- so anything that happened between two polls would collapse
+sixteen per poll. So anything that happened between two polls would collapse
 into whatever came last. Recording at the callback is what makes the guarantee
 below hold independently of frame timing.
 
@@ -409,7 +409,7 @@ below hold independently of frame timing.
 The guarantee this gives an application is that every key, mouse-button,
 scroll and character event that reaches the process is delivered in the next
 `Input`, in order, with count and (for clicks) position preserved up to the
-stated capacity, or reported as overflow -- never silently lost -- with a
+stated capacity, or reported as overflow and never silently lost, with a
 latency of at most one cycle. `events` is the authoritative record; the
 packed bits, the wheel sum and `text_input` are coalesced conveniences
 derived alongside it, and they keep recording when the list is full, so the
@@ -417,14 +417,15 @@ coalesced view is complete even on an interval whose list overflowed. A key
 tapped between two cycles is pressed and released in one input and held in
 neither; a button released and pressed again between two cycles is released
 and pressed in one input and held in both; two taps are two pairs of events
-and one pair of bits. Gamepad buttons carry no such guarantee and say so.
+and one pair of bits. Gamepad buttons have no such guarantee, and their
+documentation says so.
 
 A scripted keyboard (`Keys.set_source!`, `--host-keys`) is the same derivation
 over a scripted level, with a scripted tap recorded as an edge inside the
 cycle, so a headless or windowed test can state the between-polls case that a
-level per cycle could never express. Scripted input feeds `events` too -- a
-tap as a press and a release, a held-set change as the edge it implies, typed
-text as characters in script order -- and hardware events are shut out
+level per cycle could never express. Scripted input feeds `events` too: a
+tap as a press and a release, a held-set change as the edge it implies, and
+typed text as characters in script order. Hardware events are shut out
 entirely, device by device, while a script is that device's source.
 
 `App.Input(msg)` is also the type witness that ties a task's message to the
@@ -438,16 +439,16 @@ The `window` sample is classified the same way. Its size, focus, and
 minimization are state samples: the latest value at the cycle boundary.
 `close_requested` is an interval event: true on the one input after a close
 request arrived, only under `Deliver`, with every request in the interval
-coalesced into one and none discarded. Under `Exit` the host answers the
-request itself, so no input carries it.
+coalesced into one and none discarded. Under `Exit` the host handles the
+request itself, so no input contains it.
 
 Continuously changing sources have two valid shapes. Ambient sources such as
 device input are sampled or buffered into `Input`. Demand-driven sources such
 as a socket or database cursor can instead expose a repeated waiting effect
 inside a task. Because a task delivers one message, a waiting effect on a
-continuous source answers with a bounded batch -- everything that had arrived
-by the time it woke, up to a stated cap -- rather than one item; a one-item
-answer would cap the source at one item per cycle. Neither shape invokes
+continuous source returns a bounded batch rather than one item: everything
+that had arrived by the time it woke, up to a stated cap. A one-item result
+would limit the source to one item per cycle. Neither shape invokes
 application code from a background thread.
 
 === Effects
@@ -455,17 +456,20 @@ application code from a background thread.
 An effect is a direct host call. There are three kinds, distinguished by
 whether the call can wait and by where the work is done.
 
-A _synchronous_ effect — setting the cursor, resizing the window, playing a
-sound, uploading pixels, starting a recording, reading the clock — changes host
-state or answers a question in program order at the point it is written, from
+A _synchronous_ effect, such as setting the cursor, resizing the window,
+playing a sound, uploading pixels, starting a recording, or reading the clock,
+changes host state or returns a value in program order at the point it is
+written, from
 `init!`, `update!`, or a task. It does not wait, and it is not available to
 `render!`, which draws.
 
-A _waiting_ effect — a file read, a request, a query, a receive, a sleep — may
+A _waiting_ effect, such as a file read, a request, a query, a receive, or a
+sleep, may
 wait on the outside world. It is legal in `init!`, where it blocks startup
 deliberately, and on a task, where it parks that task.
 
-A _queued_ effect — writing to standard output, sending a datagram — hands a
+A _queued_ effect, such as writing to standard output or sending a datagram,
+hands a
 bounded payload to a queue the host owns and returns at once. The host drains
 that queue off the frame thread, on bytes it owns and never on a Roc value.
 Order within one queue is preserved, a payload is queued whole or not at all,
@@ -473,9 +477,9 @@ and saturation is a typed result rather than a wait or a silent drop. The
 eventual outcome of the drained work is not observable from the call; an
 application that must act on that outcome uses a waiting form from a task. It
 is legal in `init!`, `update!`, and a task. A queued effect is how a
-"fire and forget" facility — a log sink, a metrics feed, streamed audio, a
-datagram — reaches the outside world without giving a frame something to wait
-on.
+"fire and forget" facility (a log sink, a metrics feed, streamed audio, a
+datagram) sends data to the outside world without giving a frame something to
+wait on.
 
 An effect's verb states the strength of its guarantee. `Set` is reserved for a
 state change the capability profile promises to apply; a window-manager hint,
@@ -485,8 +489,8 @@ effect returns a typed result or the condition appears in a later `App.Input`.
 
 Invoking an effect and observing a physical outcome are different guarantees.
 Device effects can be subject to documented backend behavior, but a condition
-the model must distinguish must be observable — as a returned value or as
-input — rather than silently absorbed.
+the model must distinguish must be observable, as a returned value or as
+input, rather than silently absorbed.
 
 === Tasks
 
@@ -506,17 +510,18 @@ a task promises is its message: on a later cycle, after every task that
 finished before it.
 
 This is what makes a multi-step operation readable: inside a task, a waiting
-effect returns its answer, so a load-then-parse-then-fetch sequence is
+effect returns its result, so a load-then-parse-then-fetch sequence is
 straight-line code with ordinary error propagation rather than a state machine
 spread across message variants.
 
-Tasks buy overlap for waiting only. They are not a general concurrency
+Tasks provide overlap for waiting only. They are not a general concurrency
 facility: the application never observes two of its own callbacks running at
 once, never needs a lock, and never has to reason about a partially updated
-model. The cost of that simplicity is invariant 6 — a task that computes
+model. The cost of that simplicity is invariant 6: a task that computes
 without waiting holds the frame.
 
-Because a task cannot touch the model, the only thing it can say is its message.
+Because a task cannot touch the model, the only thing it can report is its
+message.
 An operation whose outcome must change application policy therefore returns
 that outcome in the message; a task that returns nothing useful is a task whose
 completion the model cannot account for.
@@ -570,7 +575,7 @@ frame-phase effect.
 
 Capabilities can outlive the callback that supplied them, so possession of a
 value is not authority to use it in every phase. The host therefore tracks
-which callback it is inside — `init!`, `update!`, `render!`, a task, or none —
+which callback it is inside (`init!`, `update!`, `render!`, a task, or none)
 and checks every hosted operation against the set of phases that operation
 declares. The sets are few, and are stated as rules rather than as a list of
 functions:
@@ -585,16 +590,17 @@ recording storage and cannot expose admission or operational state.
 * Anything that *waits* is legal only in `init!`, where it blocks startup
 deliberately, and on a task, where it parks that task.
 * *Starting a task* is legal in `update!` and in another task. It is refused
-in `init!`, which never sees the answering input, and in `render!`.
+in `init!`, which never sees an input for the message to arrive on, and in
+`render!`.
 * A few genuinely *constant-time queries* with nothing to allocate and no I/O
 to do are legal in any callback. Anything that copies, allocates, writes, or
-reaches a driver does not belong in that set.
+calls into a driver does not belong in that set.
 
-This runtime guard replaces a type-level purity guarantee. It buys direct,
+This runtime guard replaces a type-level purity guarantee. It gives direct,
 readable effect calls and straight-line tasks; it costs a class of error that
 the compiler does not catch. The trade is deliberate, and it is why
 violations fail loudly and immediately, in application vocabulary, naming the
-effect, the phase it was reached from, and the phase it belongs in.
+effect, the phase it was called from, and the phase it belongs in.
 
 A waiting effect saves and clears the phase across its park and restores it on
 resume, because the host loop runs in between and enters phases of its own. A
@@ -603,7 +609,8 @@ task therefore always observes its own phase, however many cycles it waited.
 There is no phase-free escape hatch. A read needed by model logic is input, an
 effect, or a task message. A read meaningful only for drawing belongs to
 `Draw.Frame`. Startup-only facts belong to startup. A fact `init!` needs that
-the world supplies — the clock, entropy, arguments — is an effect, because
+the world supplies, such as the clock, entropy, or arguments, is an effect,
+because
 `init!` receives no `Input`; an input field alone would leave startup without
 it. Implementation cost does not decide semantic placement.
 
@@ -687,7 +694,7 @@ A limit is not merely an implementation constant: its exact value may change,
 but its unit and saturation semantics are part of the public contract when
 applications can observe them. Task saturation is expressed as delayed start in
 submission order, never as a dropped closure, because a dropped closure is an
-answer that never comes. An effect that cannot proceed returns a typed outcome;
+message that never comes. An effect that cannot proceed returns a typed outcome;
 saturation is not represented as a silent no-op.
 
 Batching is preferred where it reduces boundary crossings without hiding
@@ -702,8 +709,8 @@ the relevant fact comes from.
 
 A programmer error violates an invariant determined entirely by the submitted
 value, its types, the current phase, and the live capabilities already held by
-the application — calling an effect from the wrong phase, supplying internally
-inconsistent dimensions, using a capability for the wrong operation. Prefer
+the application: calling an effect from the wrong phase, supplying internally
+inconsistent dimensions, or using a capability for the wrong operation. Prefer
 types and constructors that make such values unrepresentable. Remaining
 violations fail the application promptly, with a message written in the
 application's own vocabulary rather than the host's.
@@ -768,7 +775,7 @@ retain or reconcile an application scene tree. The host retains only the
 backend state and resources needed to execute the current ordered draw stream.
 
 Frame and nested target scopes define where a draw lands. The active surface
-may answer for its own dimensions and other geometry needed to interpret draw
+may report its own dimensions and other geometry needed to interpret draw
 coordinates. Application layout and interaction decisions still use the
 corresponding `App.Input` data, so rendering does not become a second update.
 
@@ -803,7 +810,7 @@ widens its authority. Captured services remain valid for the application
 lifetime; phase restrictions apply independently of possession.
 
 There is no arbitrary native-call facility. Effectful closures exist for
-exactly one purpose — the body of a task — and a task runs on the frame thread
+exactly one purpose, the body of a task, and a task runs on the frame thread
 under the same phase guard as every other application code. No API accepts a
 closure the host will run at an unspecified time, on an unspecified thread, or
 outside a phase. New host work is represented by a typed effect, waiting
@@ -811,19 +818,19 @@ effect, input field, render operation, or host authority.
 
 === What authority protects against
 
-Authority policy exists to bound what application code can reach, not to
+Authority policy exists to limit what application code can access, not to
 contain a hostile native binary. A RocRay application has no foreign-function
 facility: everything it does outside pure computation goes through a hosted
-effect, so the platform's API is the whole of its reach. That makes three
+effect, so the platform's API is everything it can access. That makes three
 threats addressable:
 
 * a compromised or careless dependency inside a trusted application, which can
-reach only what the application hands it;
-* a confused deputy, where runtime data — a save name, a dropped path, a
-network reply — steers an effect somewhere the application never meant to
-go;
-* source code the operator has not audited, which can reach no further than
-what that source visibly declares.
+access only what the application passes to it;
+* a confused deputy, where runtime data, such as a save name, a dropped path,
+or a network reply, steers an effect somewhere the application never meant
+to go;
+* source code the operator has not audited, which can access only what that
+source visibly declares.
 
 Policy does not defend against a malicious shipped executable, whose author
 controls the host as well as the application; it is not an operating-system
@@ -853,32 +860,32 @@ exactly that file or directory. A drop is converted during the `update!`
 that observed it; a dropped path held past that cycle is only a string. An
 argument is converted only if it is byte-identical to one the host received.
 There is no application-drawn or platform-drawn chooser.
-. *Declared reach.* Network origins and peers, directories beyond the
+. *Declared access.* Network origins and peers, directories beyond the
 application's own, the working directory, subprocess executables,
 environment variables, and clipboard reads and writes. The application
 declares each in its startup `Config`, scoped as narrowly as the facility
-allows — an HTTP origin, a UDP port or peer, an executable name, a variable
+allows: an HTTP origin, a UDP port or peer, an executable name, a variable
 name, a directory and whether it may be written. Each facility also has one
 explicit unscoped declaration, spelled so that it is conspicuous in review.
 
 === Declarations are the grant
 
 There are no launch flags, interactive prompts, install-time approvals, or
-revocation. What the source declares is what the host grants, so the reach of
-an application is read from its configuration and changed only by changing
-source. A declaration may depend on application arguments; every alternative
+revocation. What the source declares is what the host grants, so what an
+application can access is read from its configuration and changed only by
+changing source. A declaration may depend on application arguments; every alternative
 is still written in the source.
 
 The host validates declarations at startup, before initialization runs, into a
-fixed-capacity policy. A malformed declaration — an origin that does not parse,
-an unsafe output directory, an invalid application identifier, more
-declarations than the policy holds — fails startup and names the entry.
+fixed-capacity policy. A malformed declaration fails startup and names the
+entry: an origin that does not parse, an unsafe output directory, an invalid
+application identifier, or more declarations than the policy holds.
 
 Using a facility the application never declared is a programmer error: the
 fact is fixed by the source, so the host fails immediately, naming the effect
-and the declaration that would permit it. Reaching outside a declared scope is
-a runtime outcome, because the target — a URL, a path, a peer, a variable name
-— may be runtime data; the effect returns typed `PermissionDenied` before
+and the declaration that would permit it. Targeting something outside a
+declared scope is a runtime outcome, because the target (a URL, a path, a
+peer, a variable name) may be runtime data; the effect returns typed `PermissionDenied` before
 admitting work or touching the external system. `PermissionDenied` means only
 that no grant covers the target: outside every declared scope, a resource-free
 stub, a drop that is not current, an argument the operator did not pass. A
@@ -929,8 +936,8 @@ future platform scheduler. What each must supply is a way to run a task's
 suspended stack and resume it later without moving Roc code to another thread.
 
 Each released target declares a capability profile. A target may implement a
-strict subset of facilities — for example, a browser need not expose native
-subprocesses or unrestricted files — but every included facility preserves its
+strict subset of facilities (for example, a browser need not expose native
+subprocesses or unrestricted files), but every included facility preserves its
 documented semantics. A structurally unsupported facility is absent at build
 time or excluded by selecting a narrower platform bundle; a native bundle
 otherwise carries every facility, including the libraries behind them, and
@@ -979,8 +986,8 @@ names and locations of checks may change, but the verification layers do not:
 testable: `App.Input.for_tests` builds a neutral input with per-field
 `with_*` methods, and every host resource has a resource-free `stub`, so a
 model full of assets can be written down in an `expect`. Applications are
-expected to keep a pure core — which message to fold in, whether to quit,
-what work to start — and let `update!` perform its decisions.
+expected to keep a pure core that decides which message to fold in, whether
+to quit, and what work to start, and to let `update!` perform its decisions.
 * *Compile-fail fixtures* prove that applications cannot import transport
 modules, manufacture capabilities, or name a removed API.
 * *Host tests* cover phase enforcement, typed resource identity,
@@ -992,8 +999,8 @@ payload, which is what keeps the `msg`-witness rule honest. Another spawns
 far more tasks than may run at once and fails unless all of them are started
 and accounted for, which is what keeps the cap a queue rather than a refusal.
 * *Headless runs of every example* exercise startup, cycling, task delivery,
-and shutdown without a display. `ROC_RAY_TRACE_TASKS` adds a per-task trace —
-spawn, queue, park, resume, finish, deliver — so a run can assert on
+and shutdown without a display. `ROC_RAY_TRACE_TASKS` adds a per-task trace
+(spawn, queue, park, resume, finish, deliver), so a run can assert on
 scheduling behavior and not only on the final state.
 * *Graphical smoke tests* verify representative pixels and nested render
 scopes on a real rendering backend.
@@ -1011,7 +1018,7 @@ RocRay does not provide:
 or mandatory asset build pipeline;
 * concurrent application callbacks, parallel execution of Roc code, or blocking
 I/O inside `update!` or `render!`;
-* a general asynchronous Roc runtime — tasks overlap waiting, not computation,
+* a general asynchronous Roc runtime: tasks overlap waiting, not computation,
 and are not offered as a way to use more than one core;
 * hidden mutable application state in the host;
 * public transport tickets, native pointers, untyped resource IDs, arbitrary

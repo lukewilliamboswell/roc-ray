@@ -121,6 +121,7 @@ Roc compiler version nightly-<date>-<commit>
 If the terminal says it cannot find `roc`, the folder is not on your `PATH` in
 this terminal; open a new one, or check the path you added.
 
+[#system-requirements]
 === What your computer needs
 
 macOS:: Nothing else.
@@ -237,10 +238,10 @@ each an `F32` (a 32-bit floating-point number).
 
 `Msg : []`:: Apps that wait for slow work, such as reading a file, receive the
 results later as _messages_. `Msg` lists the kinds of message this app can
-receive. The empty list `[]` means it receives none.
+receive. The empty tag union `[]` means it receives none.
 
 `program = { init!, update!, render! }`:: The record of three functions the
-platform calls. The header's `[Model, program]` hands this record and the
+host calls. The header's `[Model, program]` hands this record and the
 `Model` type to the platform.
 
 `init! : App.Init(Model, [])`:: `init!` runs once, at startup. `App.init`
@@ -250,14 +251,14 @@ the settings are the defaults with a different title, and the function returns
 the errors that function can return: none.
 
 `+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])+`:: The
-platform calls `update!` over and over while the app runs. Each call receives
+host calls `update!` over and over while the app runs. Each call receives
 the current model, an `App.Input` describing what happened since the last
 call, and an `App.Io` for reaching the outside world. It returns the next
 model wrapped in `Ok`, or `Err(Exit(code))` to quit with that exit code. This
 one ignores the old model and returns a new one holding the mouse position.
 
 `+render! : Model, Draw.Frame => Try({}, [Exit(I64)])+`:: After each `update!`,
-the platform calls `render!` to draw the new model. Everything it draws goes
+the host calls `render!` to draw the new model. Everything it draws goes
 through `frame`. It returns `Ok({})` when it has finished drawing. It can also
 return `Err(Exit(code))`, like `update!`; a bigger app uses that when a drawing
 step it depends on fails.
@@ -267,7 +268,7 @@ does something outside itself, such as drawing or reading the keyboard.
 <<roc-primer>> explains this and the rest of the syntax.
 
 You do not need to check for Escape yourself. The default settings quit on
-Escape; <<app-model>> shows how to change that.
+Escape; <<app-model-closing>> shows how to change that.
 
 == Where to go next
 

@@ -85,7 +85,7 @@ in `init!`:
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "..." }
+app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
 
 import rr.App
 import rr.Assets
@@ -151,27 +151,12 @@ cd my-game
 roc main.roc
 ----
 
-The same holds for a built app: `roc build main.roc` writes an executable
-named `main` into the current directory, and `./main` run from `my-game`
-finds `assets` the same way.
+A built app finds `assets` the same way when you run it from `my-game`.
 
-When you ship a built game, you usually want its assets to travel with the
-executable rather than depend on where the player starts it. For that, place
-`assets` next to the executable and open it with
-`io.files().beside_executable!()`, which needs no declaration:
-
-[source,roc]
-----
-bundle = io.files().beside_executable!()?
-store = Assets.open!(bundle.subdir("assets")?, IgnoreManifest)?
-----
-
-This does not work under `roc main.roc`: `roc` builds the executable into its
-own cache directory and runs it from there, so nothing you put beside
-`main.roc` is beside the executable. Use the working-directory declaration
-while you develop, and switch when you package the game. <<files-and-assets>>
-covers both, and <<permissions>> covers `WorkingDirectory(ReadOnly)`, a
-broader declaration that covers every path under the working directory.
+This is the setup to use while you develop. When you give the game to other
+people, its assets travel beside the executable instead, and the game opens
+them with `io.files().beside_executable!()`, which needs no declaration.
+<<shipping>> shows one `init!` that does both.
 
 `load_texture!` reads PNG (recommended), JPEG, BMP, GIF (the first frame),
 and QOI images, and chooses the decoder by the file's extension.

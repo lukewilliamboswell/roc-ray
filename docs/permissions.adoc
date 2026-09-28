@@ -173,7 +173,7 @@ The target is outside every declaration::
   command-line argument the app was not launched with. A followed HTTP
   redirect is checked like the request that caused it.
 
-The path's shape is refused::
+The path's shape, or a link on its way, is refused::
   An effect that takes a path beneath a handle returns `PathInvalid` for a
   path that is not plainly relative -- empty, absolute, with a drive letter
   or a backslash, or with an empty, `.`, or `..` component -- and for one

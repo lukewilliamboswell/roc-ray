@@ -297,7 +297,8 @@ Audio := [].{
 	## `PathInvalid`, `NotFound` and `ReadFailed` mean what they mean for
 	## `Assets.load_texture!`; `SoundLoadFailed` is bytes raylib would not
 	## decode. The format is taken from the extension, and `.wav`, `.ogg`,
-	## `.mp3`, `.qoa` and `.flac` are the ones it reads.
+	## `.mp3` and `.qoa` are the ones it reads; any other extension is
+	## `SoundLoadFailed`.
 	load_sound! : Assets.Store, Str => Try(Sound, [PathInvalid, NotFound, ReadFailed, SoundLoadFailed, ResourceLimit])
 	load_sound! = |store, path| perform_load_sound!(store, path)
 
@@ -309,8 +310,8 @@ Audio := [].{
 	## frame thread and the host keeps those bytes for as long as the stream
 	## exists, releasing them with the final reference to the `Music`.
 	## `MusicLoadFailed` is bytes raylib would not decode; the format is taken
-	## from the extension, and `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm`
-	## and `.mod` are the ones it reads.
+	## from the extension, and `.wav`, `.ogg`, `.mp3`, `.qoa`, `.xm` and
+	## `.mod` are the ones it reads; any other extension is `MusicLoadFailed`.
 	load_music! : Assets.Store, Str => Try(Music, [PathInvalid, NotFound, ReadFailed, MusicLoadFailed, ResourceLimit])
 	load_music! = |store, path| perform_load_music!(store, path)
 

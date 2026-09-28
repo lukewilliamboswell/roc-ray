@@ -22,7 +22,7 @@
 ## handle reaches: the bundle beside the executable needs no permission, and
 ## any other directory needs one. Asset paths are relative to the store; a path
 ## that is not plainly relative, or that meets a symbolic link, is refused as
-## `AssetPathInvalid` rather than rewritten.
+## `PathInvalid` rather than rewritten.
 ##
 ## Textures are platform-owned values, also named `Assets.Texture` and
 ## `Draw.Texture`. Releasing the final reference
@@ -138,8 +138,10 @@ Assets := [].{
 	open! : Files.ReadDir, ManifestPolicy => Try(Store, [PermissionDenied, PathInvalid, RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit])
 	open! = |dir, manifest| perform_open!(dir, manifest)
 
-	## Image bytes accepted by raylib's in-memory image loader.
-	ImageFormat := [Png, Jpeg, Bmp, Tga, Gif, Qoi]
+	## Image formats the bundled raylib decodes: PNG, JPEG, BMP, GIF (its first
+	## frame), and QOI. `load_texture!` reads the same five, by the file's
+	## extension: `.png`, `.jpg` or `.jpeg`, `.bmp`, `.gif`, and `.qoi`.
+	ImageFormat := [Png, Jpeg, Bmp, Gif, Qoi]
 
 	## An authored image embedded with a compile-time file import, tagged with
 	## its format. The format is stated rather than sniffed, so a mislabelled
@@ -204,7 +206,8 @@ Assets := [].{
 	## NUL, or a lexical `..` escape, and is answered before any file I/O.
 	## `NotFound` is no such file under the store, `ReadFailed` is a file that
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
-	## would not decode as an image.
+	## would not decode as an image, including any file whose extension is not
+	## one of the `ImageFormat` ones.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit])
 	load_texture! = |Store.(store), path|
 	# closed error union to open error union
@@ -337,7 +340,6 @@ image_format_code = |format|
 		Png => 0
 		Jpeg => 1
 		Bmp => 2
-		Tga => 3
 		Gif => 4
 		Qoi => 5
 	}

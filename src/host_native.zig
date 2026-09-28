@@ -6549,7 +6549,7 @@ fn imageFileType(format: u8) ?[*:0]const u8 {
         0 => ".png",
         1 => ".jpg",
         2 => ".bmp",
-        3 => ".tga",
+        // 3 was TGA, which the bundled raylib is built without.
         4 => ".gif",
         5 => ".qoi",
         else => null,
@@ -7130,12 +7130,19 @@ fn hostedTextureLoadStoreRaw(host: *RocHost, args: abi.HostTexture_load_storeArg
     return abiTryOk(Result, abi.Texture{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) });
 }
 
+test "only the image formats the bundled raylib decodes are offered" {
+    try std.testing.expect(imageFileTypeFromPath("a.png") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.JPEG") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.qoi") != null);
+    try std.testing.expect(imageFileTypeFromPath("a.tga") == null);
+    try std.testing.expect(imageFileType(3) == null);
+}
+
 fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
     const extension = std.fs.path.extension(path);
     if (std.ascii.eqlIgnoreCase(extension, ".png")) return imageFileType(0);
     if (std.ascii.eqlIgnoreCase(extension, ".jpg") or std.ascii.eqlIgnoreCase(extension, ".jpeg")) return imageFileType(1);
     if (std.ascii.eqlIgnoreCase(extension, ".bmp")) return imageFileType(2);
-    if (std.ascii.eqlIgnoreCase(extension, ".tga")) return imageFileType(3);
     if (std.ascii.eqlIgnoreCase(extension, ".gif")) return imageFileType(4);
     if (std.ascii.eqlIgnoreCase(extension, ".qoi")) return imageFileType(5);
     return null;
@@ -9473,7 +9480,6 @@ fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
     if (std.ascii.eqlIgnoreCase(extension, ".ogg")) return ".ogg";
     if (std.ascii.eqlIgnoreCase(extension, ".mp3")) return ".mp3";
     if (std.ascii.eqlIgnoreCase(extension, ".qoa")) return ".qoa";
-    if (std.ascii.eqlIgnoreCase(extension, ".flac")) return ".flac";
     if (module_music) {
         if (std.ascii.eqlIgnoreCase(extension, ".xm")) return ".xm";
         if (std.ascii.eqlIgnoreCase(extension, ".mod")) return ".mod";
@@ -9637,6 +9643,9 @@ test "an extension raylib cannot decode is refused, and module music is music on
     try std.testing.expect(audioFileTypeFromPath("track.ogg", false) != null);
     try std.testing.expect(audioFileTypeFromPath("track.OGG", false) != null);
     try std.testing.expect(audioFileTypeFromPath("track.aiff", true) == null);
+    // The bundled raylib has no FLAC decoder, so the extension is refused
+    // here rather than advertised and failed inside the decoder.
+    try std.testing.expect(audioFileTypeFromPath("track.flac", true) == null);
     try std.testing.expect(audioFileTypeFromPath("track", true) == null);
     // `.xm` and `.mod` stream but never decode into a `Sound`.
     try std.testing.expect(audioFileTypeFromPath("theme.xm", true) != null);

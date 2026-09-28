@@ -1,10 +1,10 @@
 ## Internal host transport for validated startup configuration.
 ##
-## `App` owns the application-facing `Config` and its receivers. This module
+## `App` owns the application-facing `Config` and its methods. This module
 ## holds only the flattening to the native ABI record, and is deliberately
 ## omitted from the platform's `exposes` list so an app cannot reach it.
 ##
-## It reads a Config through `App`'s public receivers rather than its fields:
+## It reads a Config through `App`'s public methods rather than its fields:
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
@@ -65,6 +65,7 @@ AppHostConfig : {
 	vsync : Bool,
 	cursor_visible : Bool,
 	exit_key_code : I32,
+	deliver_close_request : Bool,
 	visible : Bool,
 	output_dir : Str,
 	record_enabled : Bool,
@@ -87,7 +88,7 @@ AppHostConfig : {
 AppConfig := [].{
 
 	## Flatten validated choices to the stable native ABI record. This is a
-	## module function, not a Config receiver, and AppConfig is not exposed.
+	## module function, not a Config method, and AppConfig is not exposed.
 	HostConfig : AppHostConfig
 
 	to_host : {}, App.Config -> HostConfig
@@ -109,6 +110,7 @@ AppConfig := [].{
 			vsync: pacing.vsync,
 			cursor_visible: Mouse.cursor_mode_code(cfg.cursor_mode()) == 0,
 			exit_key_code: Keys.exit_key_code(cfg.exit_key()),
+			deliver_close_request: cfg.close_request() == Deliver,
 			visible: cfg.visible(),
 			output_dir: cfg.output_dir(),
 			record_enabled: record.enabled,
@@ -206,6 +208,8 @@ expect {
 expect AppConfig.to_host({}, App.default).exit_key_code == 256
 expect AppConfig.to_host({}, App.default.with_exit_key(NoExitKey)).exit_key_code == 0
 expect AppConfig.to_host({}, App.default.with_exit_key(ExitKey(KeyQ))).exit_key_code == 81
+expect !(AppConfig.to_host({}, App.default).deliver_close_request)
+expect AppConfig.to_host({}, App.default.with_close_request(Deliver)).deliver_close_request
 expect AppConfig.to_host({}, App.default).visible
 expect !(AppConfig.to_host({}, App.default.with_visible(Bool.False)).visible)
 expect AppConfig.to_host({}, App.default).output_dir == "."

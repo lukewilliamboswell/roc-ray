@@ -7538,7 +7538,7 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.HostDraw_frame_size {
     const effect = EffectScope.begin("Draw.Frame.size!", 0);
     defer effect.end();
     if (render_texture_lease_count > 0) return render_target_sizes[render_texture_lease_count - 1];
-    const window = windowState();
+    const window = windowState(false);
     return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
 }
 
@@ -10085,6 +10085,9 @@ const RuntimeOptions = struct {
     text_script: ?[]const u8 = null,
     /// Scripted file drops, in the `--host-drops` syntax below.
     drop_script: ?[]const u8 = null,
+    /// Cycles on which the user asks the window to close, in the
+    /// `--host-close` syntax below: comma-separated cycle numbers.
+    close_script: ?[]const u8 = null,
     debug_allocator: bool = false,
     record_stats: bool = false,
     stats_output: ?[]const u8 = null,
@@ -10502,11 +10505,13 @@ test "a drop past the per-cycle cap is reported rather than silently truncated" 
 }
 
 /// Sample the window for one cycle: logical drawing size, focus, minimization.
+/// Whether the user asked to close is the cycle's own interval event, taken by
+/// the loop and passed in; `Draw.Frame.size!` has none and passes false.
 ///
 /// A headless run never opens a window, so every field is a fixed constant
 /// rather than a raylib query -- `--host-headless` output has to be reproducible run
 /// to run, and asking a window that does not exist would not be.
-fn windowState() WindowSnapshot {
+fn windowState(close_requested: bool) WindowSnapshot {
     // `headlessMode()`, not `active_headless`: unit tests reach this through
     // `Draw.Frame.size!`, and the test binary does not link raylib.
     if (headlessMode()) {
@@ -10514,20 +10519,73 @@ fn windowState() WindowSnapshot {
             .size = .{ .width = headless_screen_width, .height = headless_screen_height },
             .focused = HEADLESS_WINDOW_FOCUSED,
             .minimized = HEADLESS_WINDOW_MINIMIZED,
+            .close_requested = close_requested,
         };
     }
     return .{
         .size = .{ .width = raylib.getScreenWidth(), .height = raylib.getScreenHeight() },
         .focused = raylib.isWindowFocused(),
         .minimized = raylib.isWindowMinimized(),
+        .close_requested = close_requested,
     };
+}
+
+/// Whether a `--host-close` script asks the window to close on `cycle`.
+///
+/// The script is comma-separated cycle numbers, already validated by the
+/// parser. It stands in for the user clicking the close button between the
+/// previous cycle and this one, in a headless or hidden run.
+fn scriptedCloseRequest(script: ?[]const u8, cycle: u64) bool {
+    const text = script orelse return false;
+    var entries = std.mem.splitScalar(u8, text, ',');
+    while (entries.next()) |entry| {
+        const at = std.fmt.parseUnsigned(u64, entry, 10) catch continue;
+        if (at == cycle) return true;
+    }
+    return false;
+}
+
+/// Whether `script` is a `--host-close` script: one or more cycle numbers,
+/// separated by commas.
+fn validCloseScript(script: []const u8) bool {
+    if (script.len == 0) return false;
+    var entries = std.mem.splitScalar(u8, script, ',');
+    while (entries.next()) |entry| {
+        _ = std.fmt.parseUnsigned(u64, entry, 10) catch return false;
+    }
+    return true;
+}
+
+test "a close script names the cycles a request arrives on" {
+    try std.testing.expect(validCloseScript("3"));
+    try std.testing.expect(validCloseScript("3,7,40"));
+    try std.testing.expect(!validCloseScript(""));
+    try std.testing.expect(!validCloseScript("3,"));
+    try std.testing.expect(!validCloseScript("three"));
+    try std.testing.expect(!validCloseScript("-1"));
+    try std.testing.expect(scriptedCloseRequest("3,7", 3));
+    try std.testing.expect(scriptedCloseRequest("3,7", 7));
+    try std.testing.expect(!scriptedCloseRequest("3,7", 4));
+    try std.testing.expect(!scriptedCloseRequest(null, 3));
+}
+
+test "the sampled window carries the cycle's close request and nothing else changes" {
+    const previous = active_headless;
+    active_headless = true;
+    defer active_headless = previous;
+    const quiet = windowState(false);
+    const asked = windowState(true);
+    try std.testing.expect(!quiet.close_requested);
+    try std.testing.expect(asked.close_requested);
+    try std.testing.expectEqual(quiet.size.width, asked.size.width);
+    try std.testing.expectEqual(quiet.focused, asked.focused);
 }
 
 fn printUsage() void {
     std.debug.print(
         \\usage: app [--host-headless] [--host-headless-frames=N] [--host-frames=N]
         \\           [--host-hidden] [--host-keys=SCRIPT] [--host-text=SCRIPT]
-        \\           [--host-drops=SCRIPT]
+        \\           [--host-drops=SCRIPT] [--host-close=CYCLE[,CYCLE...]]
         \\           [--host-debug-allocator] [--host-stats-record]
         \\           [--host-stats-output=PATH]
         \\           [--host-stats-detail=summary|standard|full]
@@ -10541,6 +10599,8 @@ fn printUsage() void {
         \\                      of holding it, e.g. "3:ESCAPE~"
         \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
         \\  --host-drops=SCRIPT  drop files on given cycles, e.g. "2:/tmp/a.png,2:/tmp/b.png"
+        \\  --host-close=CYCLES  ask the window to close on given cycles, e.g. "30" or
+        \\                      "30,90", as the close button would
         \\  --host-stats-record  record host statistics to an .rrstats database
         \\  --host-stats-output=PATH  choose the recording path (also enables recording)
         \\  --host-stats-detail=LEVEL  summary, standard (default), or full
@@ -10864,6 +10924,13 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
                 return error.InvalidArgument;
             };
             options.drop_script = value;
+        } else if (std.mem.startsWith(u8, arg, "--host-close=")) {
+            const value = arg["--host-close=".len..];
+            if (!validCloseScript(value)) {
+                std.debug.print("invalid --host-close cycles: {s}\n", .{value});
+                return error.InvalidArgument;
+            }
+            options.close_script = value;
         } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--host-stats-record")) {
@@ -10941,6 +11008,7 @@ test "runtime options carry the windowed sweep switches" {
         @constCast("--host-hidden"),
         @constCast("--host-keys=3:S"),
         @constCast("--host-text=4:ab"),
+        @constCast("--host-close=9,12"),
     };
     const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
     defer options.deinit(std.testing.allocator);
@@ -10950,6 +11018,7 @@ test "runtime options carry the windowed sweep switches" {
     try std.testing.expect(options.hidden);
     try std.testing.expectEqualStrings("3:S", options.key_script.?);
     try std.testing.expectEqualStrings("4:ab", options.text_script.?);
+    try std.testing.expectEqualStrings("9,12", options.close_script.?);
     try std.testing.expectEqual(@as(usize, 1), options.app_args.len);
 }
 
@@ -11005,6 +11074,9 @@ test "runtime options reject malformed reserved host switches" {
 
     var bad_keys = [_][*:0]u8{ @constCast("app"), @constCast("--host-keys=3") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, bad_keys.len, &bad_keys));
+
+    var bad_close = [_][*:0]u8{ @constCast("app"), @constCast("--host-close=soon") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, bad_close.len, &bad_close));
 
     var zero_frames = [_][*:0]u8{ @constCast("app"), @constCast("--host-headless-frames=0") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, zero_frames.len, &zero_frames));
@@ -13612,6 +13684,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         nonNegativeCInt(app_config.min_height),
     );
     raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
+    // Under `Deliver` the close button reports to `update!` instead of ending
+    // the loop. The exit key is unaffected: raylib raises the close flag for
+    // it directly, so it still ends the loop below.
+    if (app_config.deliver_close_request and !raylib.deliverCloseRequests()) {
+        std.log.warn("no GLFW window to watch for close requests; the close button will end the app", .{});
+    }
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
     if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
     active_mouse_cursor_code = 255;
@@ -13688,6 +13766,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
+        // A scripted request stands in for the close button. Under `Exit` it
+        // ends the loop here, before this cycle's input, exactly where a real
+        // click would have ended it; under `Deliver` it rides the input.
+        const scripted_close = scriptedCloseRequest(options.close_script, cycle_count);
+        if (scripted_close and !app_config.deliver_close_request) break;
         observatory_cycle = cycle_count;
         observatory_draw_calls = 0;
         observatory_cycle_counts = .{};
@@ -13770,9 +13853,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // the phase guard.
         const stats_update_start = observatoryMeasurementStart();
         recordStructuralLatency(0, structural_input_id, 0, structural_input_ns, "input_to_update");
+        // Taken every cycle, so a request is reported on exactly one input.
+        const close_requested = raylib.takeCloseRequest() or scripted_close;
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = windowState(close_requested),
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = now_ns,
@@ -13853,7 +13938,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     return finalExitCode(exit_code);
 }
 
-fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
+fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64, close_script: ?[]const u8) c_int {
     beginAppLifetime();
     resetHeadlessRuntime(app_config);
     defer deinitResources();
@@ -13913,6 +13998,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     reportStartupAllocStats();
     while (cycle_count < frames) : (cycle_count += 1) {
+        // There is no window to close, so a `--host-close` script is the only
+        // request there is: under `Exit` it ends the run before this cycle's
+        // input, and under `Deliver` it rides the input.
+        const close_requested = scriptedCloseRequest(close_script, cycle_count);
+        if (close_requested and !app_config.deliver_close_request) break;
         observatory_cycle = cycle_count;
         observatory_draw_calls = 0;
         observatory_cycle_counts = .{};
@@ -13973,7 +14063,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         const headless_dropped = scriptedDropsSnapshot(roc_host, cycle_count);
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
-            .window = windowState(),
+            .window = windowState(close_requested),
             .time = .{
                 .cycle_count = cycle_count,
                 .simulation_nanos = timestamp_nanos,
@@ -14199,7 +14289,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     raylib.setInputQueueObserver(if (active_observatory != null) observeInputQueue else null);
     defer raylib.setInputQueueObserver(null);
     const app_exit_code = if (options.headless)
-        runHeadlessApp(&roc_host, app_config, options.headless_frames)
+        runHeadlessApp(&roc_host, app_config, options.headless_frames, options.close_script)
     else
         runNormalApp(&roc_host, allocator, app_config, options);
 

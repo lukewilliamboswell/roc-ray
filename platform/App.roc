@@ -33,8 +33,15 @@
 ## the order the tasks finished. A task cannot read or write the model, so its
 ## message is the only thing it can say. See `Task`.
 ##
+## The app ends when `update!` returns `Err(Exit(code))`, when the exit key is
+## pressed, or when the user closes the window. By default the host closes the
+## window itself. An app with work to finish first -- a save, say -- chooses
+## `App.Config.with_close_request(Deliver)`: the request then arrives as
+## `input.window.close_requested`, the window stays open, and the app exits when
+## it is ready, typically once the message of the task it started arrives.
+##
 ## For pure tests, build input with `App.Input.for_tests({})` and its `with_*`
-## receivers. Host resource types provide inert `stub` values for constructing
+## methods. Host resource types provide inert `stub` values for constructing
 ## models; stubs cannot test loading or resource lifetime.
 import Host
 import Resource
@@ -144,7 +151,7 @@ App := [].{
 		## for the rest.
 		##
 		## Pass a structural record written out here. Use `fields` when reading an
-		## existing input and the `with_*` receivers when changing one field.
+		## existing input and the `with_*` methods when changing one field.
 		from_fields : {
 			devices : Devices.Snapshot,
 			window : Window.Snapshot,
@@ -159,10 +166,10 @@ App := [].{
 		## A neutral input for testing an app's pure update logic from an `expect`.
 		##
 		## Nothing is pressed, the window is an ordinary focused
-		## `default_test_size`, the clock reads zero on its first cycle, no
-		## messages arrived, and nothing is recording. Customize it with the
-		## `with_*` receivers, which is what makes a test say only the one thing
-		## it is about:
+		## `default_test_size` nobody has asked to close, the clock reads zero on
+		## its first cycle, no messages arrived, and nothing is recording.
+		## Customize it with the `with_*` methods, which is what makes a test say
+		## only the one thing it is about:
 		##
 		## ```roc
 		## expect
@@ -185,7 +192,7 @@ App := [].{
 			Input.(
 				{
 					devices: Devices.none,
-					window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+					window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False },
 					time: Time.first_cycle,
 					messages: [],
 					capture: Idle,
@@ -198,7 +205,12 @@ App := [].{
 		with_devices : Input(msg), Devices.Snapshot -> Input(msg)
 		with_devices = |Input.(sampled), devices| Input.({ ..sampled, devices: devices })
 
-		## Replace this input's sampled window geometry and visibility.
+		## Replace this input's sampled window geometry and visibility, and
+		## whether the user asked the window to close:
+		##
+		## ```roc
+		## closing = input.with_window({ ..input.window, close_requested: Bool.True })
+		## ```
 		with_window : Input(msg), Window.Snapshot -> Input(msg)
 		with_window = |Input.(sampled), window| Input.({ ..sampled, window: window })
 
@@ -250,8 +262,21 @@ App := [].{
 	## are one type, and a value passes between the two spellings freely.
 	ExitKey : Keys.ExitKey
 
+	## What happens when the user asks the window to close, with its close
+	## button or the system's quit command.
+	##
+	## - `Exit`, the default: the host closes the window and the app ends
+	##   before the next `update!`. Live tasks are cancelled and their messages
+	##   are never delivered.
+	## - `Deliver`: the host keeps the window open and reports the request as
+	##   `input.window.close_requested` on the next cycle. The app ends when
+	##   `update!` returns `Err(Exit(code))`, so it can finish a save first.
+	##
+	## The exit key is separate from both; see `ExitKey`.
+	CloseRequest : [Exit, Deliver]
+
 	## Validated startup configuration. Its fields cannot be updated directly;
-	## use its receiver updates so startup invariants are preserved.
+	## use its `with_*` methods so startup invariants are preserved.
 	Config :: {
 		title : Str,
 		width : I32,
@@ -263,6 +288,7 @@ App := [].{
 		fullscreen : Bool,
 		cursor : Mouse.CursorMode,
 		exit_key : Keys.ExitKey,
+		close_request : CloseRequest,
 		visible : Bool,
 		output_dir : Str,
 		recording : AppRecording,
@@ -300,9 +326,37 @@ App := [].{
 		with_frame_pacing = |cfg, value| { ..cfg, frame_pacing: normalize_pacing(value) }
 
 		## Return a config with a different exit key. `NoExitKey` stops any key
-		## from closing the window; the window close button still works.
+		## from closing the window; the window close button still works, as
+		## `with_close_request` says.
 		with_exit_key : Config, ExitKey -> Config
 		with_exit_key = |cfg, value| { ..cfg, exit_key: value }
+
+		## Choose what the window's close button does: `Exit` (the default)
+		## ends the app, and `Deliver` reports the request to `update!` and
+		## leaves ending the app to it.
+		##
+		## ```roc
+		## config = App.default.with_close_request(Deliver)
+		##
+		## update! = |model, input, io| {
+		##     if input.window.close_requested and !model.saving {
+		##         saves = model.saves
+		##         Task.spawn!(input, || Saved(saves.write_text!("save.json", encode(model))))
+		##         Ok({ ..model, saving: Bool.True })
+		##     } else if model.saving and List.len(input.messages) > 0 {
+		##         Err(Exit(0))
+		##     } else {
+		##         Ok(model)
+		##     }
+		## }
+		## ```
+		##
+		## Under `Deliver` an app that never exits cannot be closed with the
+		## button, so return `Err(Exit(code))` once the request is handled.
+		## `--host-close=CYCLE` makes a request on a given cycle in a
+		## headless or hidden run, so a test can script it.
+		with_close_request : Config, CloseRequest -> Config
+		with_close_request = |cfg, value| { ..cfg, close_request: value }
 
 		## Return a config with a different initial cursor mode.
 		with_cursor_mode : Config, Mouse.CursorMode -> Config
@@ -418,6 +472,10 @@ App := [].{
 		## Inspect the selected exit key.
 		exit_key : Config -> ExitKey
 		exit_key = |cfg| cfg.exit_key
+
+		## Inspect what the window's close button does.
+		close_request : Config -> CloseRequest
+		close_request = |cfg| cfg.close_request
 
 		## Inspect whether the window is shown at startup.
 		visible : Config -> Bool
@@ -662,6 +720,7 @@ App := [].{
 		fullscreen: Bool.False,
 		cursor: Visible,
 		exit_key: ExitKey(KeyEscape),
+		close_request: Exit,
 		visible: Bool.True,
 		output_dir: ".",
 		recording: NoRecording,
@@ -726,6 +785,10 @@ expect App.default.with_exit_key(NoExitKey).exit_key() != ExitKey(KeyEscape)
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() == ExitKey(Raw(256))
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(Raw(257))
 expect App.default.with_exit_key(ExitKey(Raw(256))).exit_key() != ExitKey(KeyEscape)
+expect App.default.close_request() == Exit
+expect App.default.with_close_request(Deliver).close_request() == Deliver
+expect App.default.with_close_request(Deliver).close_request() != Exit
+expect App.default.with_close_request(Deliver).with_close_request(Exit).close_request() == Exit
 expect App.default.with_resizable(Bool.True).resizable()
 expect App.default.with_fullscreen(Bool.True).fullscreen()
 expect App.default.visible()
@@ -778,7 +841,7 @@ expect neutral_input.capture == Idle
 expect neutral_input.dropped == []
 expect !(neutral_input.dropped_overflow)
 expect neutral_input.time == Time.first_cycle
-expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False }
+expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False }
 expect !(neutral_input.devices.key_pressed(KeyEscape))
 expect !(neutral_input.devices.mouse.button_down(Left))
 expect neutral_input.devices.gamepad(One) == Disconnected
@@ -791,7 +854,12 @@ expect neutral_input.with_devices(Devices.none.with_key_pressed(KeySpace)).devic
 expect neutral_input.with_messages([Tick, Tick]).messages == [Tick, Tick]
 expect neutral_input.with_message(Tick).with_message(Tick).messages == [Tick, Tick]
 expect neutral_input.with_time({ ..Time.first_cycle, cycle_count: 7, elapsed_seconds: 0.25 }).time.cycle_count == 7
-expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True }).window.size == { width: 320, height: 240 }
+expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True, close_requested: Bool.False }).window.size == { width: 320, height: 240 }
+
+## A close request is expressible in a pure test, so the decision an app makes
+## about it can be tested without a window.
+expect neutral_input.with_window({ ..neutral_input.window, close_requested: Bool.True }).window.close_requested
+expect neutral_input.with_window({ ..neutral_input.window, close_requested: Bool.True }).window.size == App.default_test_size
 expect neutral_input.with_capture(Active({ frames: 3, dropped: 0 })).capture == Active({ frames: 3, dropped: 0 })
 expect neutral_input.with_messages([Tick]).window == neutral_input.window
 expect neutral_input.with_dropped([dropped_png]).dropped == [dropped_png]
@@ -805,7 +873,7 @@ expect neutral_input.with_capture(Finished({ frames: 30, bytes: 4096 })).time ==
 expect
 	App.Input.from_fields({
 		devices: Devices.none.with_key_pressed(KeyEscape),
-		window: { size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True },
+		window: { size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True, close_requested: Bool.False },
 		time: Time.first_cycle,
 		messages: [Tick],
 		capture: Idle,
@@ -819,7 +887,7 @@ expect
 expect
 	App.Input.from_fields({
 		devices: Devices.none,
-		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False },
 		time: Time.first_cycle,
 		messages: [],
 		capture: Idle,

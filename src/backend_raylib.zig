@@ -913,6 +913,102 @@ pub fn installInputEventCallbacks() bool {
     return true;
 }
 
+// ---- Window close requests ----
+//
+// GLFW raises a window's close flag when the user clicks its close button (or
+// the system asks the app to quit), and then calls the window's close
+// callback. raylib installs none: it reads the flag once per poll and ends the
+// loop, which is `CloseRequest.Exit`. Under `Deliver` the host installs one
+// that records the request and lowers the flag again, so raylib never sees it
+// and the app decides when to stop.
+//
+// The exit key takes a different path -- raylib's own key callback raises the
+// flag directly, without a close callback -- so it still ends the loop in
+// either mode, as its own configuration says.
+
+const GlfwWindowCloseFn = ?*const fn (?*GlfwWindow) callconv(.c) void;
+extern fn glfwSetWindowCloseCallback(window: ?*GlfwWindow, callback: GlfwWindowCloseFn) GlfwWindowCloseFn;
+extern fn glfwSetWindowShouldClose(window: ?*GlfwWindow, value: c_int) void;
+
+/// Whatever close callback was on the window before the host's, forwarded.
+var previous_close_callback: GlfwWindowCloseFn = null;
+var close_hook_installed: bool = false;
+/// A request since the last `takeCloseRequest`. Several between two polls are
+/// one request: what the app is told is that the user wants to close.
+var close_request_pending: bool = false;
+
+/// How the callback lowers the flag. GLFW's own once installed; a no-op
+/// before that, so a test can drive the callback without a window.
+var lower_close_flag: *const fn (?*GlfwWindow, c_int) callconv(.c) void = &keepCloseFlag;
+
+fn keepCloseFlag(_: ?*GlfwWindow, _: c_int) callconv(.c) void {}
+
+fn hostWindowCloseCallback(window: ?*GlfwWindow) callconv(.c) void {
+    if (previous_close_callback) |forward| forward(window);
+    close_request_pending = true;
+    lower_close_flag(window, 0);
+}
+
+/// Keep the window open when the user asks to close it, and record the
+/// request for `takeCloseRequest` instead. Returns false when there is no
+/// GLFW window to hook, in which case the close button ends the loop as it
+/// does under `Exit`. Idempotent.
+pub fn deliverCloseRequests() bool {
+    if (close_hook_installed) return true;
+    const window = glfwGetCurrentContext() orelse return false;
+    previous_close_callback = glfwSetWindowCloseCallback(window, hostWindowCloseCallback);
+    lower_close_flag = &glfwSetWindowShouldClose;
+    close_hook_installed = true;
+    close_request_pending = false;
+    return true;
+}
+
+/// Whether the user asked the window to close since the last call. Taking it
+/// clears it, so each request is reported on exactly one cycle.
+pub fn takeCloseRequest() bool {
+    const pending = close_request_pending;
+    close_request_pending = false;
+    return pending;
+}
+
+fn forgetCloseRequestHook() void {
+    close_hook_installed = false;
+    previous_close_callback = null;
+    lower_close_flag = &keepCloseFlag;
+    close_request_pending = false;
+}
+
+test "a close request is recorded once, however many arrive, and the flag is lowered" {
+    defer forgetCloseRequestHook();
+    const Lowered = struct {
+        var calls: usize = 0;
+        var value: c_int = 1;
+        var forwarded: usize = 0;
+        fn lower(_: ?*GlfwWindow, v: c_int) callconv(.c) void {
+            calls += 1;
+            value = v;
+        }
+        fn previous(_: ?*GlfwWindow) callconv(.c) void {
+            forwarded += 1;
+        }
+    };
+    lower_close_flag = &Lowered.lower;
+    previous_close_callback = Lowered.previous;
+
+    try std.testing.expect(!takeCloseRequest());
+    hostWindowCloseCallback(null);
+    hostWindowCloseCallback(null);
+    try std.testing.expectEqual(@as(usize, 2), Lowered.calls);
+    try std.testing.expectEqual(@as(c_int, 0), Lowered.value);
+    try std.testing.expectEqual(@as(usize, 2), Lowered.forwarded);
+    // Two clicks between polls are one request, reported once.
+    try std.testing.expect(takeCloseRequest());
+    try std.testing.expect(!takeCloseRequest());
+    // A later click is a new request, never lost.
+    hostWindowCloseCallback(null);
+    try std.testing.expect(takeCloseRequest());
+}
+
 /// Forget the callbacks along with the window they were installed on.
 fn forgetInputEventCallbacks() void {
     input_callbacks_installed = false;
@@ -2264,6 +2360,7 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible
 /// Close the window. The input callbacks chained on it go with it.
 pub fn closeWindow() void {
     forgetInputEventCallbacks();
+    forgetCloseRequestHook();
     rl.CloseWindow();
 }
 

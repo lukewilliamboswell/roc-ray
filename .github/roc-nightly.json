@@ -33,6 +33,7 @@
     "test/asset_store_compile.roc",
     "test/capabilities/main.roc",
     "test/cli_args/main.roc",
+    "test/close_request/main.roc",
     "test/cmd/main.roc",
     "test/compile_fail/app_config_module.roc",
     "test/compile_fail/app_config_to_host.roc",

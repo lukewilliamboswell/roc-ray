@@ -11,13 +11,13 @@ endif::[]
 = Contributing to RocRay
 
 RocRay is a usable, intentionally small Roc platform for native interactive
-apps. Contributions should help app authors make things with less friction
-while keeping the programming model understandable.
+apps. Contributions should help app authors make things more easily, while
+keeping the programming model easy to understand.
 
 Good contributions include bug fixes, documentation, realistic examples,
 compiler compatibility work, performance improvements, and focused raylib
-capabilities that compose with the existing API. RocRay is not aiming to grow
-the editor, scene graph, or subsystem sprawl of a large engine. Open an issue
+capabilities that work well with the existing API. RocRay does not aim to add
+an editor, a scene graph, or the many subsystems of a large engine. Open an issue
 before a broad API change or a substantial new subsystem so its shape can be
 discussed first.
 
@@ -70,7 +70,7 @@ procedure in <<maintaining-link-inputs>>.
 
 The `main` branch holds development source, including examples of APIs that
 have not been released yet. Each example's header names a released platform
-bundle, so `roc examples/cave_climb/main.roc` -- and `roc check` on it -- uses
+bundle, so `roc examples/cave_climb/main.roc`, and `roc check` on it, use
 that release, not your working tree. Run an example through the runner
 instead, from the repository root:
 
@@ -104,7 +104,7 @@ drives the examples with these:
   `LEFT` or `SPACE`, or a raw key code. A `~` suffix, as in `3:ESCAPE~`, taps
   the key within the cycle: pressed and released in one input, which is how a
   key that went down and up between two polls looks. The suffix is `~`
-  because it is inert unquoted in cmd, PowerShell, bash, and zsh alike.
+  because it needs no quoting in cmd, PowerShell, bash, or zsh.
 * `--host-drops=2:/tmp/a.png` and `--host-close=5` script a file drop and a
   close request.
 * `--host-headless` and `--host-headless-frames=N` select the stub backend
@@ -170,11 +170,11 @@ scripts/all_tests.py --only pong,snake
 
 It checks formatting and types, runs Roc tests, builds the apps and exercises
 both their headless paths and, in the windowed sweep, the real raylib backend:
-every example is run against a real (hidden) window for a bounded number of
+every example is run against a real (hidden) window for a fixed number of
 frames, with the cases in `scripts/test_spec.json` scripting keys and typed text
 into the examples with key-driven features and asserting the output, the exit
-code and the files they write. Add a case there when you add an example -- the
-spec is validated against `examples/`, so a missing one fails the run. Pass
+code and the files they write. Add a case there when you add an example. The
+spec is checked against `examples/`, so a missing case fails the run. Pass
 `--skip-windowed` when there is no display; on Linux use `xvfb-run -a`. `--only`
 takes example names (repeatable, or comma separated) and is the way to iterate
 on one example without waiting for the rest. It is an exact match, so renaming
@@ -191,7 +191,7 @@ The JSON and Markdown reports are written under `zig-out/`. Timing is not a CI
 pass/fail threshold; deterministic recorder invariants remain in the ordinary
 test suite. See <<observatory-methodology>>.
 
-=== How the apps reach the platform
+=== How the apps find the platform
 
 Development checks use the compiler declared in the platform headers.
 They rebind both the platform URL and compiler pin in temporary app copies;
@@ -205,17 +205,17 @@ copied to a scratch directory with its header pointed at the served bundle.
 Examples are checked and built in the same dependency shape they ship in.
 No tracked file is rewritten, including when a run is interrupted.
 
-Built executables land in the scratch directory rather than beside each
+Built executables are written to the scratch directory rather than beside each
 `main.roc`; pass `--copy-executables` if you want them in place, and use
 `scripts/run-example.py` to run one interactively.
 
 Roc caches packages by content hash, so re-bundling changed sources produces a
 new hash and a stale reference is not expressible. The port is derived from the
-checkout path so the hashes stay put between runs and the cache is reused; edits
+checkout path so the hashes stay the same between runs and the cache is reused; edits
 to `platform/` each leave another extracted copy (~90 MB for the
 platform) under `~/.cache/roc/packages`, so delete that directory when it grows.
 
-Run `python3 scripts/local_bundles.py --serve` to hold the bundles up on
+Run `python3 scripts/local_bundles.py --serve` to serve the bundles on
 localhost yourself, for instance to build a separate app or package against the
 same URLs.
 
@@ -284,7 +284,7 @@ resources.
 
 Keyboard, mouse, gamepad and text state is sampled into `Devices.Snapshot`,
 window geometry into `Window.Snapshot`, and timing into `Time.Cycle`; one
-`App.Input` carries all three. Prefer pure queries over repeated host calls.
+`App.Input` contains all three. Prefer pure queries over repeated host calls.
 Views such as a connected gamepad belong to that snapshot and should be queried
 immediately rather than stored in the model.
 
@@ -306,7 +306,7 @@ only on the platform to name every RocRay API value.
 
 Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
-when the work can be paid once.
+when the work can be done once.
 
 *The package describes, the app performs.* Reusable packages keep their own
 domain types and explicit data interfaces. A package can describe required
@@ -364,8 +364,8 @@ Document each method where its type is declared.
 
 The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
 opened with `+```roc+`. It does not take markdown headings, bullet lists,
-`+**bold**+`, or four-space indented code: each of those reaches the page as
-literal text. Write examples in fences and structure a long module comment with
+`+**bold**+`, or four-space indented code: each of those appears on the page
+as literal text. Write examples in fences and structure a long module comment with
 short paragraphs.
 
 Build and validate the reference locally:

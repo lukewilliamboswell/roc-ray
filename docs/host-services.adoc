@@ -10,7 +10,7 @@ endif::[]
 [#host-services]
 = Printing, programs, environment, and clipboard
 
-This chapter covers the smaller services an app reaches through `App.Io`:
+This chapter covers the smaller services an app accesses through `App.Io`:
 printing to the terminal, reading environment variables, running other
 programs, and the system clipboard. It assumes <<app-model>> and
 <<permissions>>.
@@ -26,8 +26,8 @@ _ = io.stdout().line!("level ${U64.to_str(model.level)} complete")
 ----
 
 Each writer has `line!`, `write!`, and `write_bytes!`. A write copies the
-whole payload into a 256 KiB queue the host owns and returns at once; a host
-thread writes it out, so printing never stalls a frame. The result says
+whole payload into a 256 KiB queue inside the host and returns at once; a
+host thread writes it out, so printing never delays a frame. The result says
 whether the payload was accepted: `TooLarge` for a payload bigger than the
 queue, `BufferFull` when there is not enough free space right now. Nothing is
 partially queued. Accepted writes keep their order and are flushed when the
@@ -47,8 +47,8 @@ token = io.env().read!("API_TOKEN")?
 ----
 
 `read!` returns `NotFound` for an unset variable and `PermissionDenied` for a
-name the app did not declare. It is legal only in `init!`: the environment is
-a startup fact. `EnvAny` permits reading any variable.
+name the app did not declare. It is legal only in `init!`, because the
+environment is read once, at startup. `EnvAny` permits reading any variable.
 
 == Running programs
 
@@ -75,7 +75,8 @@ commands = io.commands()
 Task.spawn!(input, || encode!(commands, "in.mov"))
 ----
 
-`run!` waits while the child runs, so it belongs in a task (or `init!`).
+`run!` waits while the child process runs, so it belongs in a task (or
+`init!`).
 
 * A non-zero exit code is a completed run and arrives as `Ok(output)`. `Err`
   means there was no exit status: the program could not start, timed out, or
@@ -86,7 +87,8 @@ Task.spawn!(input, || encode!(commands, "in.mov"))
   standard error are captured. Standard input is closed.
 * The child inherits the app's user, working directory, and, unless
   `with_clear_envs` is used, its environment.
-* When the app exits normally, children the host still manages are terminated.
+* When the app exits normally, child processes that the host still manages
+  are terminated.
 
 The program must be declared with `Command`, named exactly as the app names it
 to `Cmd.new`. A child process has all of the user's authority, and no

@@ -2,7 +2,7 @@
 ##
 ## `App` owns the application-facing `Config` and its methods. This module
 ## holds only the flattening to the native ABI record, and is deliberately
-## omitted from the platform's `exposes` list so an app cannot reach it.
+## omitted from the platform's `exposes` list so an app cannot import it.
 ##
 ## It reads a Config through `App`'s public methods rather than its fields:
 ## a `::` nominal is opaque outside the module that declares it.

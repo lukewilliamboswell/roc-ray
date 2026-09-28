@@ -31,15 +31,15 @@ window, calls your code, and carries out what your code asks for.
 [#install]
 == Install the Roc compiler
 
-Roc is a young language, and RocRay follows its newest compiler. Each RocRay
-release is built and tested with one exact Roc _nightly_ build of the
-compiler, and the release notes name it on a line that reads
+Roc is a young language that is still changing. Each RocRay release is built
+and tested with one specific _nightly_ build of the Roc compiler, and the
+release notes name that build on a line that reads
 `Supported compiler: nightly-<date>-<commit>`. Install exactly that one.
 
 . Open the {repo}/releases[RocRay releases page] and choose the newest release
   whose name is a version number, such as `0.10.0`. The page also lists
   dependency releases, such as "macOS linker interfaces"; skip those.
-. Note the compiler its notes name after "Supported compiler".
+. In that release's notes, note the compiler name after "Supported compiler".
 . Open the https://github.com/roc-lang/nightlies/releases[Roc nightlies page]
   and find the release with exactly that name.
 . Download the file for your computer. The date and commit in its name match
@@ -155,11 +155,11 @@ roc examples/hello_world/main.roc
 
 `roc` with a file name compiles the app and runs it. The first time, it also
 downloads the RocRay bundle, which takes a few seconds; later runs use the
-copy the compiler keeps.
+copy the compiler saved.
 
 A window opens with a panel and a circle that follows the pointer. Hold the
 left mouse button to change its colour, and press Escape to quit. Every
-RocRay app quits on Escape unless it chooses otherwise.
+RocRay app quits on Escape unless the app turns this off.
 
 Run examples from the extracted folder, as shown. The examples that load
 images or sounds find them by paths relative to that folder.
@@ -241,7 +241,7 @@ results later as _messages_. `Msg` lists the kinds of message this app can
 receive. The empty tag union `[]` means it receives none.
 
 `program = { init!, update!, render! }`:: The record of three functions the
-host calls. The header's `[Model, program]` hands this record and the
+host calls. The header's `[Model, program]` gives this record and the
 `Model` type to the platform.
 
 `init! : App.Init(Model, [])`:: `init!` runs once, at startup. `App.init`
@@ -253,7 +253,8 @@ the errors that function can return: none.
 `+update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])+`:: The
 host calls `update!` over and over while the app runs. Each call receives
 the current model, an `App.Input` describing what happened since the last
-call, and an `App.Io` for reaching the outside world. It returns the next
+call, and an `App.Io`, which the app uses to ask the host for things such as
+sound or files. It returns the next
 model wrapped in `Ok`, or `Err(Exit(code))` to quit with that exit code. This
 one ignores the old model and returns a new one holding the mouse position.
 
@@ -264,7 +265,8 @@ return `Err(Exit(code))`, like `update!`; a bigger app uses that when a drawing
 step it depends on fails.
 
 The `!` at the end of a name, and the `+=>+` in its type, mark a function that
-does something outside itself, such as drawing or reading the keyboard.
+has _effects_: besides returning a value, it does something, such as drawing
+or reading the keyboard.
 <<roc-primer>> explains this and the rest of the syntax.
 
 You do not need to check for Escape yourself. The default settings quit on

@@ -4,10 +4,18 @@ Make 2D games, visual tools, and interactive apps in
 [Roc](https://www.roc-lang.org/), powered by
 [raylib](https://www.raylib.com/).
 
-RocRay is a focused app platform, not a game engine. Your app keeps its own
-state and rules; RocRay provides drawing, sound, keyboard, mouse and gamepad
-input, the window, recording, files, and networking. It runs on macOS (Intel
-and Apple silicon), Linux x86-64, and Windows x86-64.
+RocRay is for smaller graphical programs, such as games, visualizations, and
+interactive tools. It is not meant to compete with large, purpose-built game
+engines: it has no editor, scene graph, physics engine, or asset pipeline.
+Your app keeps its own state and makes every decision itself; RocRay provides
+drawing, sound, keyboard, mouse and gamepad input, the window, recording,
+files, and networking. It runs on macOS (Intel and Apple silicon), Linux
+x86-64, and Windows x86-64.
+
+RocRay draws in 2D today. 3D models, cameras, and lighting are planned but not
+yet available. RocRay is not a GUI toolkit: for desktop applications built
+from widgets such as buttons, text fields, and layouts, see
+[roc-gui](https://github.com/lukewilliamboswell/roc-gui).
 
 Start with [Hello World](examples/hello_world/main.roc),
 [Pong](examples/pong/main.roc), and [Snake](examples/snake/main.roc). These
@@ -15,7 +23,7 @@ larger examples show what else it can do:
 
 <table>
   <tr>
-    <td align="center"><a href="examples/breakout/main.roc"><img src="examples/gallery/breakout.webp" alt="Breakout gameplay" width="260"><br><strong>Breakout</strong></a><br>Arcade rules, sounds made in code, recording</td>
+    <td align="center"><a href="examples/breakout/main.roc"><img src="examples/gallery/breakout.webp" alt="Breakout gameplay" width="260"><br><strong>Breakout</strong></a><br>Arcade gameplay, sounds made in code, recording</td>
     <td align="center"><a href="examples/generated_assets/main.roc"><img src="examples/gallery/generated_assets.webp" alt="Painting in Pixel Workshop" width="260"><br><strong>Pixel Workshop</strong></a><br>Drawing pixels and creating sounds in code</td>
     <td align="center"><a href="examples/responsive_ui/main.roc"><img src="examples/gallery/responsive_ui.webp" alt="Navigating the responsive settings interface" width="260"><br><strong>Responsive Settings</strong></a><br>Keyboard, mouse, resizing, display scaling</td>
   </tr>
@@ -79,11 +87,11 @@ render! = |model, frame| {
 }
 ```
 
-`init!` creates the starting state, `update!` turns each moment's input into
-the next state, and `render!` draws it. Work that waits, such as reading a
-file or fetching a URL, runs as a task and reports back to a later `update!`.
-What an app reaches beyond its own window -- the network, a directory, another
-program -- is declared in its startup settings.
+`init!` creates the starting state, `update!` uses each host cycle's input to
+compute the next state, and `render!` draws it. Anything that waits, such as
+reading a file or fetching a URL, runs as a task, and its result arrives in a
+later `update!`. Anything the app accesses beyond its own window, such as the
+network, a directory, or another program, is declared in its startup settings.
 
 ## Documentation
 
@@ -99,7 +107,7 @@ published as a website and a PDF. Its chapters are the AsciiDoc files in
   learning path
 - Guides: [the app model](docs/app-model.adoc), [input](docs/input.adoc),
   [drawing](docs/drawing.adoc), [tasks](docs/tasks.adoc),
-  [declaring what an app reaches](docs/permissions.adoc),
+  [permissions](docs/permissions.adoc),
   [files and assets](docs/files-and-assets.adoc), [audio](docs/audio.adoc),
   [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
   [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)
@@ -110,6 +118,6 @@ published as a website and a PDF. Its chapters are the AsciiDoc files in
 - [Release notes](docs/releases/) and the
   [releases page](https://github.com/lukewilliamboswell/roc-ray/releases)
 
-RocRay follows Roc's newest compiler closely, and its API may still change as
-the language evolves. Bug reports, documentation improvements, and focused new
+RocRay tracks recent nightly builds of the Roc compiler. Because Roc is still
+changing, RocRay's API may also change. Bug reports, documentation improvements, and focused new
 capabilities are welcome.

@@ -106,11 +106,11 @@ Cmd := {
 	## environment name this operating system cannot represent -- one that is
 	## empty, or contains `=` or a NUL.
 	##
-	## `Timeout` carries what the child had written before the
+	## `Timeout` holds what the child had written before the
 	## deadline killed it, because a program that hangs after printing why is
 	## the ordinary case. `StdoutLimitExceeded` and `StderrLimitExceeded` are
 	## refusals rather than truncations: half a stream decodes into wrong data
-	## rather than into an error, so nothing is handed back.
+	## rather than into an error, so nothing is returned.
 	##
 	## `Busy` is the host already running as many children as it will run at
 	## once; nothing was started, and the same command run later can succeed.
@@ -130,7 +130,7 @@ Cmd := {
 	## Thirty seconds.
 	##
 	## Long enough for a real encode of a short clip, short enough that a task
-	## parked on a program that will never answer is eventually collected. A
+	## parked on a program that will never finish is eventually collected. A
 	## command that genuinely takes longer says so with `with_timeout_ms`.
 	default_timeout_ms : U64
 	default_timeout_ms = 30_000

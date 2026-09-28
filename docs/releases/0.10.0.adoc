@@ -24,7 +24,7 @@ render! = |model, host, frame| {
 }
 ----
 
-This was easy to start with, but it caused problems as apps grew. Game rules and drawing were mixed together, so the rules were hard to test without a window. Any effect could be called while a frame was being drawn. A file read in the middle of `render!` froze the animation until the disk answered.
+This was easy to start with, but it caused problems as apps grew. Game logic and drawing were mixed together, so the logic was hard to test without a window. Any effect could be called while a frame was being drawn. A file read in the middle of `render!` froze the animation until the read finished.
 
 In 0.10.0 each callback has one job:
 
@@ -48,7 +48,7 @@ render! = |model, frame| {
 
 * *`update!` is the only place the model changes.* Once per host cycle it receives an `App.Input`, which holds the devices snapshot (keys, mouse, gamepads), timing, window state, dropped files and the messages from finished tasks. It can call host effects directly, such as playing a sound or resizing the window. Returning `Err(Exit(code))` ends the app. `App.default` still ends the app when Escape is pressed, so the 0.9 check is no longer needed; `with_exit_key` chooses another key or none.
 * *`render!` only draws.* It receives the updated model and a `Draw.Frame`, and returns `{}`, not a model. Drawing is only allowed here, and state-changing effects are refused here, so a frame always shows the model that `update!` just produced.
-* *Rules can be tested without a window.* Input and host resources have pure constructors, so the decisions inside `update!` can be checked with `expect`:
+* *Game logic can be tested without a window.* Input and host resources have pure constructors, so the decisions inside `update!` can be checked with `expect`:
 +
 [source,roc]
 ----
@@ -60,9 +60,9 @@ expect read_controls(Devices.none.with_key_down(KeyS)).move == 1
 
 The examples were rewritten to show this structure. https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/pong/main.roc[Pong] is a good place to start: it turns keys into semantic controls, advances a pure `World`, and plays sounds from the events that step reports.
 
-== Work that waits runs on a task
+== Slow operations run on a task
 
-Reading a file, fetching a URL or querying a database can take longer than a frame. In 0.10.0 that work runs on a *task*. A task is an effectful closure started with `Task.spawn!`. When it waits, only the task pauses; the app keeps updating and drawing. When the closure returns, its value arrives as a message on a later `input.messages`:
+Reading a file, fetching a URL or querying a database can take longer than a frame. In 0.10.0 such operations run on a *task*. A task is an effectful closure started with `Task.spawn!`. When it waits, only the task pauses; the app keeps updating and drawing. When the closure returns, its value arrives as a message on a later `input.messages`:
 
 [source,roc]
 ----
@@ -77,21 +77,21 @@ update! = |model, input, _io| {
 }
 ----
 
-Inside a task, a waiting effect simply returns its answer. A job with several steps, such as loading a file, parsing it, then fetching a URL it names, is ordinary top-to-bottom code with `?`. It does not need to be split across message variants. The https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/sqlite_scores/main.roc[SQLite Scores] example writes a score and reads the board back in one task, so the model always gets what the database actually holds.
+Inside a task, a waiting effect simply returns its result. A job with several steps, such as loading a file, parsing it, then fetching a URL it names, is ordinary top-to-bottom code with `?`. It does not need to be split across message variants. The https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/sqlite_scores/main.roc[SQLite Scores] example writes a score and reads the board back in one task, so the model always gets what the database actually holds.
 
 Some design decisions to be aware of:
 
-* *Tasks run on the frame thread.* Each task has its own stack, but only one piece of Roc code runs at a time. Roc values carry reference counts, so sharing them between threads is unsafe. Host worker threads do the actual I/O and only handle bytes the host owns. Your code never needs a lock and never sees a half-updated model. The trade-off is that a task doing heavy computation without waiting still delays the frame, just as it would in `update!`. Tasks let slow I/O overlap with frames; they do not add parallel computation.
+* *Tasks run on the frame thread.* Each task has its own stack, but only one piece of Roc code runs at a time. Roc values have reference counts, so sharing them between threads is unsafe. Host worker threads do the actual I/O and only handle bytes the host owns. Your code never needs a lock and never sees a half-updated model. The trade-off is that a task doing heavy computation without waiting still delays the frame, just as it would in `update!`. Tasks let slow I/O continue while frames are drawn; they do not add parallel computation.
 * *Each task delivers exactly one message.* Messages arrive in the order tasks finish. A finished task's message is never dropped while the app is running.
 * *Spawning never fails.* Up to 32 tasks run at once. Extra spawns are queued and started in order as slots free up. When the app exits, running tasks are cancelled and queued ones are dropped.
 * *`Task.spawn!` takes the current `input`* as its first argument. It is not read. It is there so the compiler can check that the closure returns your app's `Msg` type.
-* *Waiting effects are checked at runtime.* An effect that can wait is refused in `update!` and `render!`. Calling one there stops the app with a message naming the effect, the callback it was called from, and where it belongs. The compiler cannot catch this, so the platform checks it at runtime instead. In exchange, effects are ordinary function calls rather than values you build and hand to the host. Every effect's documentation lists where it is allowed.
+* *Waiting effects are checked at runtime.* An effect that can wait is refused in `update!` and `render!`. Calling one there stops the app with a message naming the effect, the callback it was called from, and where it belongs. The compiler cannot catch this, so the platform checks it at runtime instead. In exchange, effects are ordinary function calls rather than values you build and pass to the host. Every effect's documentation lists where it is allowed.
 
 If you tried the release candidates, you may remember a different design. We first tried Elm's approach: a pure `update` that returned command values for the host to perform. It worked, but any job with several steps turned into a state machine spread across messages. After https://github.com/obust[@obust] reviewed that API, we replaced it with the effectful `update!` and tasks described above.
 
-== Apps declare what they reach
+== Apps declare what they can access
 
-External services are now reached through `App.Io`. `init!` and every `update!` receive it, and you select a service from it:
+External services are now accessed through `App.Io`. `init!` and every `update!` receive it, and you select a service from it:
 
 [source,roc]
 ----
@@ -101,11 +101,11 @@ response = io.http().send!(request)?
 
 The available services are `files`, `http`, `udp`, `sqlite`, `commands`, `stdout`, `stderr`, `clipboard`, `env` and `capture`. A service value can be passed to a helper or captured by a task, so each piece of code only receives the access it needs.
 
-The command line is a startup fact. `io.args!()` returns it and is legal only in `init!`: keep what the app needs from it in the model. To choose the window configuration or the declarations from the command line, use `App.init_for_args`, which passes the arguments to a pure function that returns the config.
+The command line is fixed at startup. `io.args!()` returns it and is legal only in `init!`: keep what the app needs from it in the model. To choose the window configuration or the declarations from the command line, use `App.init_for_args`, which passes the arguments to a pure function that returns the config.
 
-*Files are reached through directory handles, never ambient paths.* `io.files()` hands out a `Files.Dir` (writable) or `Files.ReadDir` for the app's private data, config and cache directories (named by `+App.default.with_app_id(...)+`), the directory beside the executable, the working directory, or a declared directory. A handle is an ordinary value to keep in the model. Paths given to it are relative, may not contain `..`, and may not pass through a symbolic link; a path that breaks these rules returns `PathInvalid`. A file the user drops on the window, or names on the command line, becomes a handle on just that file through `io.files().accept_drop!` or `from_arg!`, with no permission declared. Asset stores open from a `ReadDir` (`Assets.open!(dir, IgnoreManifest)`), sounds, music and TMX maps load from a store like textures do, and SQLite opens a database beneath a `Dir` (`io.sqlite().open!(dir, "scores.db")`) with `ATTACH` disabled.
+*Files are accessed through directory handles, never ambient paths.* `io.files()` provides a `Files.Dir` (writable) or `Files.ReadDir` for the app's private data, config and cache directories (named by `+App.default.with_app_id(...)+`), the directory beside the executable, the working directory, or a declared directory. A handle is an ordinary value to keep in the model. Paths given to it are relative, may not contain `..`, and may not pass through a symbolic link; a path that breaks these rules returns `PathInvalid`. A file the user drops on the window, or names on the command line, becomes a handle on just that file through `io.files().accept_drop!` or `from_arg!`, with no permission declared. Asset stores open from a `ReadDir` (`Assets.open!(dir, IgnoreManifest)`), sounds, music and TMX maps load from a store like textures do, and SQLite opens a database beneath a `Dir` (`io.sqlite().open!(dir, "scores.db")`) with `ATTACH` disabled.
 
-*What an app reaches beyond its own resources is declared in its startup config.* The declaration is the grant, and it is scoped as narrowly as each facility allows:
+*What an app can access beyond its own resources is declared in its startup config.* The declaration itself is the permission, and it is scoped as narrowly as each facility allows:
 
 [source,roc]
 ----
@@ -116,19 +116,19 @@ config =
     .with_permission(EnvVar("API_TOKEN"))
 ----
 
-Declarations cover HTTP origins, UDP ports and peers (or `UdpLoopback`), programs, environment variables, directories (read-only or read-write, or the working directory), and clipboard reads and writes. Each facility also has one deliberately conspicuous unscoped form: `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`, `FilesAny`.
+Declarations cover HTTP origins, UDP ports and peers (or `UdpLoopback`), programs, environment variables, directories (read-only or read-write, or the working directory), and clipboard reads and writes. Each facility also has one unscoped form, named to be easy to spot: `HttpAny`, `UdpAny`, `CommandAny`, `EnvAny`, `FilesAny`.
 
 * A target no declaration covers, such as a URL on another origin or a directory outside the declared ones, returns `PermissionDenied` without doing anything. An HTTP redirect is checked the same way.
 * Using a facility the app never declared at all stops the app, with a message naming the declaration to add.
 * A malformed declaration stops the app before `init!` runs.
 
-There are no launch flags for any of this: what an app can reach is read from its source.
+There are no launch flags for any of this: what an app can access is visible in its source.
 
 The app's own resources need no declaration: drawing, input, window control, audio playback, generated resources, clocks, timers, entropy, stdout and stderr, captures under the configured output directory (which must be relative and stay beneath the working directory), a store of assets beside the executable, and in-memory SQLite. `dbg`, `expect` and crash output are printed as they always were.
 
-*This is not an OS sandbox.* It bounds what Roc code in the app can do, because that code can only act through the platform; it does not contain a malicious native binary.
+*This is not an OS sandbox.* It limits what Roc code in the app can do, because that code can only act through the platform; it does not protect against a malicious native binary.
 
-*If your app loads textures, sounds, fonts or maps from disk*, a packaged app reads them from beside its executable with `io.files().beside_executable!()`, which needs no declaration. While developing, declare the source directory they live in, usually `Directory("assets", ReadOnly)`. The manual's "Ship your game" chapter shows one `init!` that does both.
+*If your app loads textures, sounds, fonts or maps from disk*, a packaged app reads them from beside its executable with `io.files().beside_executable!()`, which needs no declaration. While developing, declare the source directory they are in, usually `Directory("assets", ReadOnly)`. The manual's "Ship your game" chapter shows one `init!` that does both.
 
 Each kind of refusal has its own error:
 
@@ -139,17 +139,17 @@ Each kind of refusal has its own error:
 == New capabilities
 
 * *Files:* `read_text!`, `read_bytes!`, `list!`, `metadata!`, `write_text!` and `write_bytes!`. Large reads are handed to Roc without an extra copy.
-* *HTTP client:* `send!`, `send_with!`, `send_json!`, `get!` and `get_utf8!`, with timeouts and a response size cap. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/http_fetch/main.roc[`http_fetch`].
+* *HTTP client:* `send!`, `send_with!`, `send_json!`, `get!` and `get_utf8!`, with timeouts and a response size limit. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/http_fetch/main.roc[`http_fetch`].
 * *UDP:* `bind!`, `send!` (queued, returns immediately) and `receive!`, which waits inside a task and returns every datagram that arrived, in a batch. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/udp_cursor/main.roc[`udp_cursor`].
 * *SQLite:* a bundled SQLite 3.50.4 with typed database and statement handles, and pure row decoders.
 * *Subprocesses:* `Cmd` requires a timeout and output limits. A nonzero exit code is returned as data, and child processes are killed when the app exits.
-* *Standard output and error:* `+io.stdout().line!(...)+` can be called from `update!`. Writes go into a bounded host buffer and are flushed on another thread, so printing never stalls a frame. A full buffer is reported as a result, not a silent drop.
+* *Standard output and error:* `+io.stdout().line!(...)+` can be called from `update!`. Writes go into a host buffer of limited size and are flushed on another thread, so printing never delays a frame. A full buffer is reported as a result, not a silent drop.
 * *Time and randomness:* `Time.now!` returns a UTC `Time.Timestamp`. `io.entropy!()` returns real OS entropy, which can seed a pure `Random` generator stored in the model. After seeding, an entire run can be replayed from that one number.
 * *Screenshots and recordings:* apps can capture themselves as PNG screenshots, PNG sequences, animated GIFs or VP8/WebM video. Fixed-step timing produces byte-identical recordings across runs. A hidden window renders on the GPU with nothing shown on screen, so an app can run as a batch job. Scripted mouse and keyboard input (`Mouse.set_source!`, `Keys.set_source!`, `Keys.set_text!`) goes through the same path as real input, so recorded UI demos use the app's normal code. `io.capture().screenshot_texture!` exports an off-screen render target at any size, and `Capture.pixel_at!` and `Capture.read_region!` read pixels back.
 * *Window:* minimum size, a configurable exit key, clipboard access, display scale, monitor list, and drag-and-drop (`input.dropped`). Window sizing and placement use `suggest_*` names, because the window manager may ignore the request.
 * *Close requests:* clicking the window's close button ends the app, as before. With `App.default.with_close_request(Deliver)`, the window stays open and `update!` sees `input.window.close_requested`, so the app can save its work and then exit. A request is never lost. `--host-close=CYCLE[,CYCLE...]` scripts them in tests.
 * *Text and fonts:* `Text.Font` includes its metrics, so `+font.measure(...)+` is a pure function that layout code and packages can call. `Text.from(str, font).size(n).prepare!()` lays out text once for repeated drawing. `App.Config.with_default_font` loads one font file for the whole app at startup; like any file the app reads, its path must be covered by a declaration.
-* *Asset stores:* `Assets.open!(dir, IgnoreManifest)` opens the directory a `Files.ReadDir` names and refuses paths that escape it. With `RequireManifest`, opening a store checks that its manifest declares the expected asset set, versions and content hash; the asset files themselves are not hashed.
+* *Asset stores:* `Assets.open!(dir, IgnoreManifest)` opens the directory a `Files.ReadDir` names and refuses paths that leave it. With `RequireManifest`, opening a store checks that its manifest declares the expected asset set, versions and content hash; the asset files themselves are not hashed.
 * *Batched drawing:* `frame.texture_instances!` draws thousands of sprites in one call. See https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/examples/particles/main.roc[`particles`].
 
 == Input events are no longer lost between frames
@@ -201,9 +201,9 @@ program = { init!, update!, render! }
 |`+frame.text!({ ..., font, align })+` |`frame.text_at!({ pos, text, size, color })`, or `Text.from(str, font).size(n).draw!(frame, { pos, color, align: (Top, Center) })`
 |===
 
-*Load files in `init!` or a task.* Loading textures, sounds, music, shaders and TMX maps from disk now waits, so it is only allowed in `init!` (which holds startup until it finishes) or in a task. Creating resources from bytes you already have (`*_from_bytes!`, `gen_*`, generated textures) still works in `update!`.
+*Load files in `init!` or a task.* Loading textures, sounds, music, shaders and TMX maps from disk now waits, so it is only allowed in `init!` (which delays startup until it finishes) or in a task. Creating resources from bytes you already have (`*_from_bytes!`, `gen_*`, generated textures) still works in `update!`.
 
-*Declare what your app reaches* with `+.with_permission(...)+` on its config if it reads assets or files from disk, uses the network, runs programs, reads environment variables, or uses the clipboard. A target outside the declarations returns `PermissionDenied`, and your error handling may need to cover that case.
+*Declare what your app accesses* with `+.with_permission(...)+` on its config if it reads assets or files from disk, uses the network, runs programs, reads environment variables, or uses the clipboard. A target outside the declarations returns `PermissionDenied`, and your error handling may need to cover that case.
 
 *Remove `..` from return-position tag unions.* The supported compiler treats tag unions in return position as open automatically, and reports an explicit `..` there as a redundant-open-union warning, which fails `roc check`. Write `Try(Model, [Exit(I64)])` instead of `Try(Model, [Exit(I64), ..])`.
 
@@ -223,7 +223,7 @@ The https://github.com/lukewilliamboswell/roc-ray/tree/0.10.0/examples[examples]
 
 * The API docs are one site for the whole platform, and every effect lists the callbacks it is allowed in.
 * Each release includes an examples zip whose headers already point at that release's bundles.
-* The examples were redesigned. Larger games such as Top Down and Cave Climb are split into focused modules with pure, testable rules.
+* The examples were redesigned. Larger games such as Top Down and Cave Climb are split into focused modules with pure, testable game logic.
 * CI now runs every example against the real raylib backend in a hidden window on Linux and Windows, in addition to the headless runs on every OS.
 * Native dependencies (raylib, libvpx, SQLite and the macOS linker interfaces) are built by a separate workflow that publishes attested archives. Builds install the archives pinned by digest in `link-inputs.lock.json`, and releases verify their attestations, instead of compiling those dependencies.
 

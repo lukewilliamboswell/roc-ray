@@ -18,8 +18,8 @@
 ## }
 ## ```
 ##
-## A store is opened from a `Files.ReadDir`, so it reaches exactly what that
-## handle reaches: the bundle beside the executable needs no permission, and
+## A store is opened from a `Files.ReadDir`, so it can access exactly what
+## that handle can access: the bundle beside the executable needs no permission, and
 ## any other directory needs one. Asset paths are relative to the store; a path
 ## that is not plainly relative, or that meets a symbolic link, is refused as
 ## `PathInvalid` rather than rewritten.
@@ -88,7 +88,7 @@ Assets := [].{
 
 	## How closely a manifest's declared content has to match. `AnyContent`
 	## deliberately leaves it unconstrained, which is what a directory of loose
-	## files under development wants. `Sha256` carries the 64-character
+	## files under development wants. `Sha256` holds the 64-character
 	## hexadecimal digest the manifest must declare.
 	ContentExpectation := [AnyContent, Sha256(Str)]
 
@@ -100,8 +100,8 @@ Assets := [].{
 	## Why a store could not be opened.
 	##
 	## `PathInvalid` is a store directory whose path beneath the handle meets
-	## a symbolic link. `PermissionDenied` is a stub handle, which reaches
-	## nothing. The next three are about the
+	## a symbolic link. `PermissionDenied` is a stub handle, which gives no
+	## access. The next three are about the
 	## directory itself: `RootNotFound` is nothing there, `RootNotDirectory` is
 	## something there that is not a directory, and `RootUnreadable` is a
 	## directory the process may not open.
@@ -130,7 +130,7 @@ Assets := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`. Opening the directory and
 	## reading the manifest are filesystem work, so the host does both off the
-	## frame thread and answers when they are done.
+	## frame thread and returns when they are done.
 	##
 	## A `Sha256` expectation compares against the manifest's declaration
 	## only. Nothing walks or hashes the loose files, so opening a store stays
@@ -203,7 +203,7 @@ Assets := [].{
 	## bytes on a task and call `texture_from_bytes!` from `update!`.
 	##
 	## `path` must be relative; `PathInvalid` is an absolute path, one holding a
-	## NUL, or a lexical `..` escape, and is answered before any file I/O.
+	## NUL, or a lexical `..` escape, and is returned before any file I/O.
 	## `NotFound` is no such file under the store, `ReadFailed` is a file that
 	## is there and could not be read, and `TextureLoadFailed` is bytes raylib
 	## would not decode as an image, including any file whose extension is not

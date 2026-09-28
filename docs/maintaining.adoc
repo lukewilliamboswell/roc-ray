@@ -38,7 +38,7 @@ locks.
 [#maintaining-macos]
 == macOS linker interfaces
 
-RocRay owns a reviewed catalog for the minimal macOS linker interfaces it
+RocRay maintains a reviewed catalog for the minimal macOS linker interfaces it
 needs. A normal build downloads the release pinned in `dependencies.lock.json`,
 checks its size, SHA-256 digest, identity, and complete file inventory, then
 materializes it under the ignored `platform/targets/macos-sysroot/` directory:
@@ -85,10 +85,10 @@ every target by the linker-input producer (`zig build link-inputs`, recipes in
 `link_inputs.zig`), so there is no configure step and no per-OS build runner in
 the loop:
 
-* `vendor/msf_gif/` -- a single-header GIF encoder (MIT or public domain). Built
+* `vendor/msf_gif/`: a single-header GIF encoder (MIT or public domain). Built
 freestanding like the host; the handful of libc declarations it needs come
 from the `shim/` directory beside it.
-* `vendor/libvpx/` -- the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
+* `vendor/libvpx/`: the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
 C only: libvpx writes some of its SIMD as compiler intrinsics, which `zig cc`
 compiles, and the rest as NASM/GAS assembly, which Zig cannot assemble. The
 intrinsics are vendored, the assembly is not, so no assembler is needed to
@@ -96,9 +96,9 @@ build or to re-vendor. Because the ISA is fixed at compile time (there is no
 runtime CPU detection), the generated headers are per architecture:
 `config/x86_64/` for the three x86-64 targets, `config/arm64/` for arm64mac.
 `vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
-`config/README.md` explains what it produces -- that is the one thing to run
-when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
-* `vendor/sqlite/` -- the SQLite amalgamation (public domain), behind `Sqlite`.
+`config/README.md` explains what it produces. That script is the one thing to
+run when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
+* `vendor/sqlite/`: the SQLite amalgamation (public domain), behind `Sqlite`.
 One source file and no configure step, so upgrading is a two-file copy;
 `vendor/sqlite/README.md` pins the version and SHA-256 and explains the
 compile flags that are decisions rather than tuning. `SQLITE_THREADSAFE=1`,
@@ -174,7 +174,7 @@ the API reference for the release to Pages, and opens a follow-up PR that
 updates the example bundle URLs. Do not manually publish an untested local bundle as
 a release artifact.
 
-Besides the bundles, every GitHub release carries:
+Besides the bundles, every GitHub release includes:
 
 * `examples-<version>.zip`: every example, its header pointing at this
   release's default bundle, so an unzipped copy builds with no checkout;
@@ -195,8 +195,8 @@ Write the notes for a release in `docs/releases/<version>.adoc` and add it to
 release workflow converts the same file to Markdown for the GitHub release
 page, then appends the bundle URLs, the supported compiler, and links to the
 examples archive and the docs. The conversion accepts the subset of AsciiDoc
-the notes need -- section titles, paragraphs, lists, `[source]` blocks, tables,
-links, and inline emphasis -- and fails on anything else rather than publishing
+the notes need (section titles, paragraphs, lists, `[source]` blocks, tables,
+links, and inline emphasis), and fails on anything else rather than publishing
 it garbled. Check a draft with:
 
 [source,bash]
@@ -213,7 +213,7 @@ release workflow's `publish-docs` job: this manual at the site's root, built by
 `scripts/build_docs.py` generates under `api/`.
 `scripts/release_helpers.py assemble-pages` lays the site out, redirects the
 old `manual/` address to the root, and gives it a 404 page that sends readers
-of an earlier version to the releases page. Each release carries its own copy
+of an earlier version to the releases page. Each release has its own copy
 of both as attached assets, so nothing generated is committed and old versions
 never accumulate on the site.
 The `docs` workflow builds the manual as HTML and PDF on every pull request and
@@ -223,8 +223,8 @@ reviewed before it is released.
 [#maintaining-nightly]
 == Roc nightly updates
 
-RocRay follows the Roc nightly compiler closely, and every development Roc root
-pins the same nightly. `platform/main.roc` holds the development pin; every
+RocRay tracks recent nightly builds of the Roc compiler, and every development
+Roc root pins the same nightly. `platform/main.roc` holds the development pin; every
 other tracked root that pins a compiler (the Wayland header, the examples, the
 test probes) must name the same one. The automated updater rewrites exactly the
 roots listed under `compiler_roots` in `.github/roc-nightly.json`, and
@@ -235,8 +235,8 @@ published starter's compiler, named in `README.md`, is deliberately separate;
 the "Published quickstart" CI job checks it unchanged.
 
 The repository checks for a new nightly once daily at 13:40 UTC, about four
-hours after the upstream 09:00 UTC build. Late publication can wait until the
-next day. `.github/roc-nightly.json` also selects the validation workflows,
+hours after the upstream 09:00 UTC build. If a nightly is published late, the
+update waits until the next day. `.github/roc-nightly.json` also selects the validation workflows,
 including their validation-only release paths. The controller, its tests, and
 job permissions are maintained in
 https://github.com/lukewilliamboswell/roc-automation[roc-automation]. The

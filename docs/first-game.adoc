@@ -61,7 +61,7 @@ true while the left arrow key is held. `direction` becomes `-1`, `1`, or `0`.
 host cycle, such as `0.016` at 60 cycles a second. Multiplying the paddle's
 speed by it turns "480 units per second" into "how far to move this cycle".
 The paddle then moves at the same speed on a fast computer that runs 240 host
-cycles a second and on a slow one that manages 30. Move things by time, never
+cycles a second and on a slow one that runs only 30. Move things by time, never
 by a fixed amount per cycle.
 
 Run it and hold an arrow key. The paddle moves, and it keeps going straight
@@ -84,9 +84,9 @@ paddle's left edge stays between `0` and `screen_width - paddle_width`.
 
 The elapsed time is clamped too, to at most `max_dt`, a twentieth of a second.
 `elapsed_seconds` is the real time since the previous host cycle. Usually that
-is a small fraction of a second, but when the computer stalls, or you drag the
-window, one cycle can report half a second or more. A game that moves by that
-much in one go makes things jump: a fast ball can pass straight through the
+is a small fraction of a second, but when the computer is briefly busy with
+something else, or you drag the window, one cycle can report half a second or
+more. A game that moves by that much in one step makes things jump: a fast ball can pass straight through the
 paddle without ever touching it. With the clamp, the game slows down briefly
 instead. <<input-frame-timing>> shows a fixed-step alternative for games that
 must advance exactly the same way every time.
@@ -133,11 +133,11 @@ down, `move_ball` sends it back up, a little faster each time (`speed_up`).
 `PaddleHit`, `BallLost`, and `Nothing`. It returns the new ball and the event
 together, as a tuple.
 
-`advance` is the whole game's rule for one host cycle: move the paddle, move
+`advance` holds all of the game logic for one host cycle: move the paddle, move
 the ball, then count the event. A hit adds a point and a miss resets the
 score. Like `move_paddle` and `move_ball`, `advance` is pure, and `update!`
 just calls it. `update!` does not use the event yet, and the `_` at the start
-of `_event` tells the compiler that on purpose.
+of `_event` tells the compiler that the value is unused on purpose.
 
 `frame.text_at!` draws a string with the built-in font. The string is built
 with `+${...}+`, and `model.score.to_str()` turns the score into text.
@@ -161,7 +161,7 @@ happens, the app stops at startup and prints which one.
 
 `update!` now uses the event `advance` returns. It plays the matching sound
 with `play!`, which starts the sound and returns at once. Playing a sound is
-an _effect_: a call into the host. `update!` may call an effect that answers
+an _effect_: a call into the host. `update!` may call an effect that returns
 at once, like this one. An effect that has to wait, such as reading a file,
 belongs in a _task_ instead; <<tasks>> explains why.
 
@@ -187,7 +187,7 @@ mouse in full.
 `next.lives - 1` never goes below zero. A `U64` cannot hold a negative number,
 and subtracting past zero stops the app.
 
-At the end of the file are four tests. Because the game's rules are pure
+At the end of the file are four tests. Because the game logic is in pure
 functions, a test can call them directly, with any situation you like. Run the
 tests with:
 

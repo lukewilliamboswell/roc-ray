@@ -1,4 +1,4 @@
-## What an app may reach beyond its own resources.
+## What an app may access beyond its own resources.
 ##
 ## Some things every app has without asking: its window, input, clocks,
 ## standard output and error, captures under its output directory, and the
@@ -14,8 +14,8 @@
 ##     .with_permission(EnvVar("WEATHER_TOKEN"))
 ## ```
 ##
-## There is no launch flag that widens this, so what an app can reach is read
-## from its source and changed only by changing its source.
+## There is no launch flag that widens this, so what an app can access is
+## visible in its source and changed only by changing its source.
 ##
 ## Declare each facility as narrowly as it allows. An origin, a port, a program
 ## name, a variable name, or a directory is a scope: an effect whose target
@@ -31,8 +31,8 @@
 ## declaration -- a directory with `..`, a peer that is not an IPv4 address --
 ## stops the app before `init!`.
 ##
-## A declaration is platform policy, not an operating-system sandbox: it bounds
-## what Roc code in the app can reach, because that code has no way to reach
+## A declaration is platform policy, not an operating-system sandbox: it limits
+## what Roc code in the app can access, because that code has no way to access
 ## anything except through the platform.
 import Url
 

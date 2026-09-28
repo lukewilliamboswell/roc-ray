@@ -37,7 +37,8 @@
 ## A `Dir` can write; a `ReadDir` cannot, and `Dir.read_only` narrows one to
 ## the other. `subdir` narrows either to a directory beneath it. A handle is an
 ## ordinary value: keep it in the model, pass it to a helper, capture it in a
-## task. Whoever holds it can reach what is beneath it and nothing else.
+## task. Code that has the handle can access what is inside that directory,
+## and nothing else.
 ##
 ## A path given to a handle is plainly relative: no leading `/`, no drive, no
 ## backslash, and no empty, `.`, or `..` component. Symbolic links beneath a
@@ -72,8 +73,8 @@ Files := [].{
 	## Why `read_text!` produced no UTF-8 string.
 	##
 	## `PathInvalid` is a path that is not plainly relative, or that meets a
-	## symbolic link. `PermissionDenied` is a stub handle, which reaches
-	## nothing. `NotFound` is no file at that path. `TooLarge` is a file past
+	## symbolic link. `PermissionDenied` is a stub handle, which gives no
+	## access. `NotFound` is no file at that path. `TooLarge` is a file past
 	## `read_text!`'s 64 kibibyte ceiling, which is a refusal rather than a
 	## failure: nothing went wrong and the file is there. `NotUtf8` is a file
 	## that was read and is not valid UTF-8, reported rather than delivered as
@@ -147,7 +148,7 @@ Files := [].{
 	##
 	## `PermissionDenied` is a directory no declaration covers. `PathInvalid`
 	## is a declared path with a `..` component, which only `FilesAny` can
-	## cover; only `open_dir!` and `open_dir_read!` answer it. `NotFound` is
+	## cover; only `open_dir!` and `open_dir_read!` return it. `NotFound` is
 	## a read-only directory that is not there -- a writable one is created --
 	## and `NotADirectory` is a path that is there and is a file.
 	## `AccessRefused` is the operating system refusing to open it, and
@@ -189,7 +190,7 @@ Files := [].{
 		##
 		## Nothing is copied, so the list owns host-backed storage; at most 32
 		## such allocations are live at once, and a read made while all 32 are
-		## held answers `Busy` without touching the disk. Retaining a sublist
+		## held returns `Busy` without touching the disk. Retaining a sublist
 		## retains the whole allocation, which `List.release_excess_capacity`
 		## releases by copying out the part worth keeping.
 		##
@@ -298,12 +299,12 @@ Files := [].{
 	}
 
 	## One file or directory the user chose for the app: dropped on its window,
-	## or named as an argument when it was launched. The choosing is the
-	## granting, so no permission is declared, and the handle reaches exactly
-	## that item and nothing beside it.
+	## or named as an argument when it was launched. The user's choice counts
+	## as permission, so none is declared, and the handle gives access to
+	## exactly that item and nothing beside it.
 	##
 	## Read it as a file with `read_text!`, `read_bytes!`, and `metadata!`, or,
-	## when it is a directory, reach beneath it with `dir`.
+	## when it is a directory, open what is inside it with `dir`.
 	Designated :: { authority : Resource.Authority, path : Str, parent : Str, name : Str }.{
 
 		## Resource-free handle for pure tests. Every effect through it is
@@ -571,7 +572,7 @@ lifted = |result|
 ##
 ## Truncated input -- a kind byte with no terminator after it -- ends the
 ## listing rather than being guessed at. The host writes the terminator, so
-## that cannot happen; answering with the entries that were whole is what keeps
+## that cannot happen; returning the entries that were whole is what keeps
 ## this total.
 decode_listing : List(U8) -> List(Files.Entry)
 decode_listing = |bytes| decode_entries(bytes, 0, [])

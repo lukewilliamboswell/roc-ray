@@ -18,8 +18,10 @@ clipping, blending, shaders, and offscreen drawing. It assumes <<app-model>>.
 
 Drawing in RocRay is _immediate_: each frame, `render!` draws the whole scene
 from the model, in order, starting from a cleared window. Nothing drawn is
-remembered between frames, so there are no objects to create, move, or delete
--- to move something, change the model and draw it somewhere else next time.
+remembered between frames, so there are no objects to create, move, or
+delete. To move something, change the model and draw it somewhere else next
+time. This keeps the screen in step with the model: what you see is always
+drawn from the current state, never from an object you forgot to update.
 
 Every drawing effect takes the frame and is legal only in `render!`:
 
@@ -48,7 +50,7 @@ thickness)`.
 Coordinates are in logical window units: x grows to the right, y grows
 downward, `{ x: 0, y: 0 }` is the top-left corner, and they match mouse
 positions. On a high-DPI display one logical unit may cover several physical
-pixels; RocRay scales for you (see <<input-window>>). `frame.size!()` answers
+pixels; RocRay scales for you (see <<input-window>>). `frame.size!()` returns
 the size of the surface being drawn to.
 
 == Colours
@@ -127,7 +129,7 @@ render! = |model, frame| {
 Step by step:
 
 . `with_permission(Directory("assets", ReadOnly))` declares that the app may
-  read the `assets` directory. A RocRay app reaches no files it has not
+  read the `assets` directory. A RocRay app cannot access files it has not
   declared; <<permissions>> explains why.
 . `io.files().open_dir_read!("assets")` opens that directory. The path is
   relative, so it is found in the _working directory_: the directory you run
@@ -154,7 +156,7 @@ roc main.roc
 A built app finds `assets` the same way when you run it from `my-game`.
 
 This is the setup to use while you develop. When you give the game to other
-people, its assets travel beside the executable instead, and the game opens
+people, its assets are placed next to the executable instead, and the game opens
 them with `io.files().beside_executable!()`, which needs no declaration.
 <<shipping>> shows one `init!` that does both.
 
@@ -169,7 +171,8 @@ configuration record whose fields choose the part of the texture to draw
 (`source`), where and how big to draw it (`dest`), the point it rotates about
 (`origin`), a `rotation` in degrees, and a colour `tint`.
 
-The `Sprite` module wraps that in a friendlier shape, and adds helpers for
+The `Sprite` module offers an easier way to build that record, and adds
+helpers for
 _sprite sheets_: one image holding many frames of animation in a grid.
 `Sprite.sheet_frame` picks one cell of the grid, and `Sprite.Animation` tracks
 which cell to show:
@@ -188,16 +191,17 @@ Here `model.walk` starts as `Sprite.animation({ frame_count: 4, fps: 8 })`.
 
 Textures are released automatically when the last reference to them goes
 away; there is no `unload` to call. Creating or changing a texture from
-pixels the app holds -- `Assets.texture_from_bytes!`,
-`Assets.generate_color_texture!`, `Assets.update_texture!` -- is legal in
-`init!`, `update!`, and tasks.
+pixels the app holds is legal in `init!`, `update!`, and tasks. The effects
+that do this are `Assets.texture_from_bytes!`,
+`Assets.generate_color_texture!`, and `Assets.update_texture!`.
 
 === Use sprite sheets and atlases
 
-An app can hold at most 128 textures at once; loading one more answers
+An app can hold at most 128 textures at once; loading one more returns
 `ResourceLimit`. That is plenty when related images share one file: put a
 character's animation frames in one sprite sheet, and a level's tiles or a
-game's small images in one _atlas_ (a single image packing many), then draw
+game's small images in one _atlas_ (a single image that contains many smaller
+ones), then draw
 parts of it with `source`. One texture is also cheaper to draw from than many.
 
 The other resource tables are bounded the same way: 128 sounds, 16 music
@@ -205,8 +209,9 @@ tracks, 32 fonts, 32 render textures, 32 shaders, and 256 prepared texts.
 
 === Drawing many sprites at once
 
-Each `texture!` call crosses from Roc to the host, and that crossing, not the
-drawing itself, is what limits how many sprites a frame can afford.
+Each `texture!` call is a separate call from Roc into the host. The cost of
+these calls, not the drawing itself, limits how many sprites a frame can draw
+in time.
 `frame.texture_instances!(texture, instances)` draws a whole list of instances
 of one texture in a single call:
 
@@ -254,7 +259,8 @@ ReadOnly)`. `Draw.font_from_bytes!` builds a font from bytes the app already
 holds, and `Draw.load_store_font!` loads a TTF or OTF file from an asset
 store.
 
-A `Text.Font` carries its metrics with it, so measuring text is a pure
+A `Text.Font` includes its metrics (the size of each character), so measuring
+text is a pure
 function that layout code can call anywhere, including in tests:
 
 [source,roc]
@@ -267,7 +273,7 @@ size = font.measure({ text: "Score", size: 24, spacing: Text.default_spacing })
 Some drawing modes apply to a group of drawing calls: everything drawn inside
 the group is affected, and nothing after it. Each is a method that takes a
 function, runs it with the mode active, and restores the previous state
-however the function ends -- including when it returns an error:
+however the function ends, including when it returns an error:
 
 [cols="1,3",options="header"]
 |===
@@ -279,7 +285,8 @@ however the function ends -- including when it returns an error:
 |`frame.with_render_texture!(target, draw)` |Draws into an offscreen texture instead of the window
 |===
 
-A _blend mode_ decides what happens where a new colour lands on an old one.
+A _blend mode_ decides what happens where a new colour is drawn over an old
+one.
 The default, `Draw.alpha_blend`, lays translucent colours over what is below.
 `Draw.additive_blend` adds the colours together, which makes overlapping
 glows and sparks brighter, and `Draw.multiplied_blend` darkens, like a
@@ -326,9 +333,9 @@ of the frame. `Draw.RenderTexture.load!({ width, height })` creates one, and
 `Draw.Shader.from_source!` compiles a shader from GLSL source text; both are
 legal in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a
 shader from an asset store and waits, so it belongs in `init!` or a task.
-Shader uniforms -- the values an app passes in, such as a time or a colour --
-are typed handles resolved once and kept, so a setter of the wrong type does
-not compile.
+A shader _uniform_ is a value the app passes to the shader, such as a time or
+a colour. The app looks up each uniform once and keeps the typed handle it
+gets back, so a setter of the wrong type does not compile.
 
 See {src}/examples/post_process/main.roc[Post Process] for render textures,
 blend scopes, shaders, and cached uniform locations, and

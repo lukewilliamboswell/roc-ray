@@ -10,15 +10,15 @@ endif::[]
 [#input]
 = Input, time, and the window
 
-Each host cycle, `update!` receives an `App.Input` describing what the
-host observed since the previous cycle. This chapter covers the keyboard,
+Each host cycle, `update!` receives an `App.Input` describing what
+happened since the previous cycle. This chapter covers the keyboard,
 mouse, gamepads, typed text, time, the window, and dropped files. It assumes
 <<app-model>>.
 
 == Two kinds of information
 
-Input carries two different kinds of fact, and the difference matters when
-you read it:
+An input contains two different kinds of information, and the difference
+matters when you read it:
 
 * A _state sample_ is the latest value at the moment the cycle began: whether
   a key is held, where the pointer is, how far a gamepad stick is pushed.
@@ -27,8 +27,8 @@ you read it:
 
 A key tapped quickly between two cycles is never held at a cycle boundary, but
 the press and the release still arrive as events. RocRay records keyboard,
-mouse-button, wheel, and text events as the window system delivers them, so an
-event that reaches the app is in the next input, never silently lost.
+mouse-button, wheel, and text events as the window system delivers them, so
+every such event appears in the next input; none is silently lost.
 
 == The keyboard
 
@@ -46,10 +46,10 @@ Keys are tags such as `KeySpace`, `KeyW`, `KeyLeft`, and `KeyEnter`; the
 `Keys` page of the {api}[API reference] lists them all.
 
 `key_pressed` and `key_released` mean "at least once since the previous
-input". Several presses of the same key in one interval collapse into one
-answer. When the count or the order matters -- a double tap, text editing where
-a keystroke lands between two characters -- read `devices.events` instead
-(see <<input-events>>).
+input". Several presses of the same key in one interval count as one. When the
+count or the order matters, read `devices.events` instead (see
+<<input-events>>). A double tap is one example. Text editing is another,
+where a key press can come between two typed characters.
 
 By default, Escape is the _exit key_: it ends the app before `update!` sees
 the press, so you do not check for it yourself. An app that wants Escape for
@@ -88,8 +88,9 @@ legal in `init!`, `update!`, and tasks.
 
 The host samples up to four gamepads once per cycle. They are named
 `One`, `Two`, `Three`, and `Four`, following the operating system's numbering;
-a single controller is almost always `One`. Ask the snapshot for one; it
-answers `Connected(pad)` with a view you can query, or `Disconnected`:
+a single controller is almost always `One`. `input.devices.gamepad(id)`
+returns `Connected(pad)`, where `pad` is a view you can query, or
+`Disconnected`:
 
 [source,roc]
 ----
@@ -99,23 +100,25 @@ stick = match input.devices.gamepad(One) {
 }
 ----
 
-Buttons use layout-neutral names -- `FaceDown` is the bottom face button,
-whatever its label says -- so `pad.button_pressed(FaceDown)` is "jump" on
-any controller.
+Buttons use layout-neutral names: `FaceDown` is the bottom face button,
+whatever its label says. So `pad.button_pressed(FaceDown)` is "jump" on any
+controller.
 
 Gamepad buttons are state samples only. The host compares this cycle's
-sample with the previous one to answer `button_pressed` and
+sample with the previous one to compute `button_pressed` and
 `button_released`, so a press _and_ release that both happen between two
 samples is not seen. At 60 cycles a second, that is a tap shorter than about
-17 milliseconds, which is rare for a deliberate press but real for fast
-button-mashing or when the frame rate drops. Treat a held button, not a single
-edge, as the input for anything that must never be missed. Gamepads never
+17 milliseconds. This is rare for a deliberate press, but it can happen when a
+player presses a button very rapidly, or when the frame rate drops. For
+anything that must never be missed, use a held button, not a single press or
+release. Gamepads never
 appear in `devices.events`.
 
 [#input-events]
 == The ordered event record
 
-`devices.events` lists every key edge, click, wheel notch, and typed character
+`devices.events` lists every key press and release, click, wheel notch, and
+typed character
 since the previous input, in the order they arrived, across all of those
 sources:
 
@@ -131,10 +134,10 @@ Event : [
 ]
 ----
 
-Each click carries the pointer position where it landed. The list holds up to
-256 events per input; if more arrive, the rest are discarded and
-`devices.events_overflow` is set. The coalesced answers (`key_pressed`, the
-wheel sum, `text_input`) keep recording even when the list is full.
+Each click includes the pointer position where it happened. The list holds up
+to 256 events per input; if more arrive, the rest are discarded and
+`devices.events_overflow` is set. The combined values (`key_pressed`, the
+wheel sum, `text_input`) are still updated when the list is full.
 
 [#input-time]
 == Time
@@ -177,9 +180,10 @@ and tasks. Use `input.time`, not the wall clock, for animation and movement.
 `elapsed_seconds` is the real time between two cycles, and it varies. A
 cycle is usually a few milliseconds, but the operating system decides: while
 the user drags the window, or while you pause the app in a debugger, no
-cycles run, and the next cycle reports everything that passed -- possibly
-several seconds. The host reports that value as it is, without limiting
-it, so a naive `position + velocity * dt` can jump a player through a wall.
+cycles run, and the next cycle reports all the time that passed, possibly
+several seconds. The host reports that value as it is, without limiting it,
+because only the app knows how it should handle a long pause. So a simple
+`position + velocity * dt` can move a player straight through a wall.
 
 The simplest protection is to clamp the elapsed time before you use it, so
 one cycle never advances the game by more than a limit you choose. Paddle in
@@ -192,16 +196,22 @@ dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 
 Physics and collision work best with a _fixed step_: the game always advances
 by exactly the same small amount, say 1/60 of a second, and runs as many of
-those steps each cycle as the elapsed time pays for. Leftover time is kept in
-the model for the next cycle. Each of those advances is a _simulation step_,
-and one host cycle may run zero, one, or several of them:
+those steps each cycle as fit in the elapsed time. Because every step is the
+same size, the result does not depend on how fast the computer is or how
+uneven the cycles are: the same input always moves things the same way, and
+no single step is large enough to carry an object through a wall.
+
+Leftover time is kept in the model for the next cycle. Each of those advances
+is a _simulation step_, and one host cycle may run zero, one, or several of
+them:
 
 [source,roc]
 ----
 step_seconds : F32
 step_seconds = 1 / 60
 
-## Run as many whole steps as the banked time pays for, and bank the rest.
+## Run as many whole steps as fit in `banked`, the time saved so far,
+## and return the time left over.
 run_steps : World, F32 -> (World, F32)
 run_steps = |world, banked| {
     if banked < step_seconds {
@@ -217,7 +227,8 @@ dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
 Ok({ ..model, world: world, accumulator: accumulator })
 ----
 
-Here `World` is the part of your model the rules act on, and `simulate` is
+Here `World` is the part of your model that the game logic updates, and
+`simulate` is
 your own pure function that advances it by one step.
 {src}/examples/snake/Game.roc[Snake] moves its snake this way. <<architecture>>
 explains the difference between a host cycle and a simulation step.
@@ -232,8 +243,8 @@ too.
 [#input-randomness]
 === Randomness
 
-Keep a `Random.State` in the model and draw from it with pure generators, so a
-run can be reproduced from its seed. Seed it once in `init!`, from
+Keep a `Random.State` in the model and take random values from it with pure
+generators, so a run can be reproduced from its seed. Seed it once in `init!`, from
 `io.entropy!()` for a run that should vary, or from a constant for one that
 must reproduce:
 
@@ -243,8 +254,8 @@ must reproduce:
 rng = Random.seed(U64.to_u32_wrap(io.entropy!()))
 ----
 
-Each draw returns a value and the next state. Keep the state, or the next
-draw repeats the last one:
+Each call to `Random.step` returns a value and the next state. Keep the
+state, or the next call returns the same value again:
 
 [source,roc]
 ----
@@ -281,8 +292,8 @@ Window effects are legal in `init!`, `update!`, and tasks:
 * `Window.suggest_size!`, `Window.suggest_min_size!`,
   `Window.suggest_position!`, and `Window.suggest_monitor!` ask the window
   manager for new geometry. They are named `suggest` because the window
-  manager may alter or ignore the request; the next input's `window` field is
-  authoritative.
+  manager may change or ignore the request; the next input's `window` field
+  shows the actual result.
 * `Window.set_target_fps!` changes the frame-rate cap; see below.
 * `Window.monitors!()` lists the connected monitors.
 
@@ -312,7 +323,8 @@ When the user drops files on the window, `input.dropped` lists them for that
 cycle, each with its path and the pointer position where it landed, and
 `input.dropped_overflow` is set if more arrived than the host keeps.
 
-A dropped path is an observation, not access. To read the file, turn the path
+A dropped path is only information; it does not give the app access to the
+file. To read the file, turn the path
 into a handle in the same `update!` that received it; see
 <<files-designated>>.
 

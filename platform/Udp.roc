@@ -105,7 +105,7 @@ Udp := [].{
 	## Why a datagram was not handed to the kernel.
 	##
 	## `WouldBlock` is the send buffer being full: the datagram was not sent,
-	## and the app is producing faster than the link can carry. `TooLarge` is a
+	## and the app is sending faster than the network link can transmit. `TooLarge` is a
 	## payload over `max_datagram_bytes`, refused rather than truncated,
 	## because a truncated datagram decodes into wrong data. None of these mean
 	## the peer received anything, and no code means it did -- UDP does not
@@ -120,7 +120,7 @@ Udp := [].{
 	## second task trying to receive on a socket that already has one parked.
 	ReceiveError : [Timeout, AlreadyReceiving, ReceiveFailed, Unavailable]
 
-	## The largest payload one datagram may carry: 65535 bytes of IPv4 packet
+	## The largest payload one datagram may hold: 65535 bytes of IPv4 packet
 	## less the 20-byte IP header and the 8-byte UDP header. A send over this
 	## is `TooLarge`.
 	##
@@ -176,7 +176,7 @@ Udp := [].{
 			}
 		}
 
-		## Wait for datagrams, and answer with every one that was ready.
+		## Wait for datagrams, and return every one that was ready.
 		##
 		## Parks until the first datagram arrives or `timeout_ms` expires, then
 		## returns it together with whatever else is already buffered, in

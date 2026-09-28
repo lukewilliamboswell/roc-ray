@@ -33,14 +33,14 @@ system and a Wayland bundle for Linux. See <<install>>.
 [[glossary-close-request]]Close request::
 The user asking the window to close, with its close button or the system's
 quit command. By default the app ends at once. With
-`with_close_request(Deliver)`, the request reaches `update!` as
+`with_close_request(Deliver)`, the request arrives in `update!` as
 `input.window.close_requested`, and the app decides when to end. See
 <<app-model-closing>>.
 
 [[glossary-declaration]]Declaration, permission::
-A `Permission` value an app adds to its startup settings to reach something
+A `Permission` value an app adds to its startup settings to access something
 beyond its own window, such as a web service or a directory. The declaration
-is the grant: an app can reach only what its source declares. See
+itself is the permission: an app can access only what its source declares. See
 <<permissions>>.
 
 [[glossary-delta-time]]Delta time::
@@ -72,7 +72,7 @@ it has more pixels than the window has logical units.
 [[glossary-handle]]Handle::
 A value that stands for something the host holds for your app, such as a
 texture, a sound, a font, or a directory. Only the host can create one,
-so holding a handle is what grants access to its resource. Keep handles in the
+so having a handle is what gives access to its resource. Keep handles in the
 model; the host releases a resource when the last handle to it goes away. See
 <<files-and-assets>>.
 
@@ -93,12 +93,12 @@ skip the drawing, but never calls `update!` twice with the same input. See
 <<app-model>>.
 
 [[glossary-input]]Input::
-The `App.Input` value `update!` receives: everything the host observed for one
-host cycle, including the keyboard and mouse, the window's size, the elapsed
+The `App.Input` value `update!` receives: everything the host collected for
+one host cycle, including the keyboard and mouse, the window's size, the elapsed
 time, and the messages of tasks that finished. See <<input>>.
 
 [[glossary-interval-event]]Interval event, state sample::
-The two kinds of fact in an `App.Input`. A _state sample_ is the latest value
+The two kinds of information in an `App.Input`. A _state sample_ is the latest value
 when the host cycle began, such as whether a key is held. An _interval event_
 is something that happened since the previous input, such as a key press. See
 <<input>>.
@@ -106,7 +106,7 @@ is something that happened since the previous input, such as a key press. See
 [[glossary-logical-units]]Logical units, high DPI::
 Positions and sizes in RocRay are in logical units, which match mouse
 coordinates and are the same on every display. A high-DPI display, such as a
-Retina screen, packs more pixels into each logical unit, so a window 800 units
+Retina screen, has more pixels in each logical unit, so a window 800 units
 wide can have a framebuffer 1600 pixels wide. `Window.scale!()` reports the
 ratio on each axis. See <<input-window>>.
 
@@ -132,7 +132,8 @@ that touches the outside world. RocRay is a platform; your app is the Roc code
 that runs on it.
 
 [[glossary-queued-effect]]Queued effect::
-An effect that hands its bytes to a bounded host queue and returns at once,
+An effect that puts its bytes in a host queue of limited size and returns at
+once,
 such as printing a line or sending a UDP datagram. It reports a full queue as
 a result instead of waiting. See <<tasks>>.
 
@@ -152,8 +153,8 @@ fixed simulation steps inside each host cycle rather than one variable-length
 step. It is your app's idea, not something the host calls.
 
 [[glossary-task]]Task::
-Work that may have to wait, such as reading a file or fetching a web page,
-started with `Task.spawn!` from `update!`. It runs alongside the app, which
+A piece of code that may have to wait, such as for reading a file or fetching
+a web page, started with `Task.spawn!` from `update!`. It runs alongside the app, which
 keeps updating and drawing, and returns exactly one message when it finishes.
 See <<tasks>>.
 
@@ -163,6 +164,7 @@ once, keep them in the model, and draw them each frame. See <<drawing>>.
 
 [[glossary-waiting-effect]]Waiting effect::
 An effect that can wait on the outside world, such as reading a file,
-sending a network request, or sleeping. It is legal in `init!`, where it holds
-startup, and in a task, where it pauses only that task. It is refused in
+sending a network request, or sleeping. It is legal in `init!`, where it
+delays startup, and in a task, where it pauses only that task. The manual
+calls this pause _parking_ the task. It is refused in
 `update!` and `render!`, so a slow disk or network can never freeze a frame.

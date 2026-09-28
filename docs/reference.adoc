@@ -43,9 +43,9 @@ A built app accepts these switches. They all begin with `--host-`; the host
 removes them before the app reads its arguments, and an unrecognised
 `--host-` switch stops the app. `--host-help` prints a summary.
 
-The scripting switches -- `--host-keys`, `--host-text`, `--host-drops`, and
-`--host-close` -- feed the same input path as the real window, so a test or a
-recorded demo exercises the app's ordinary code.
+The scripting switches (`--host-keys`, `--host-text`, `--host-drops`, and
+`--host-close`) feed the same input path as the real window, so a test or a
+recorded demo runs the app's ordinary code.
 
 [cols="2,3",options="header"]
 |===
@@ -78,9 +78,11 @@ recorded demo exercises the app's ordinary code.
 
 == Limits
 
-These bounds are part of the platform's behaviour. Each is documented, with
-what happens when it is reached, on the corresponding page of the API
-reference.
+These limits are part of the platform's behaviour. The host limits everything
+it keeps, so an app can never make it use an unlimited amount of memory, and
+reaching a limit gives the app a result it can handle. Each limit is
+documented, with what happens when it is reached, on the corresponding page of
+the API reference.
 
 === Input and tasks
 
@@ -138,5 +140,5 @@ frees its place for another.
 * <<permissions>> lists every `Permission`, what it permits, and every error a
   refusal returns.
 * <<phases>> lists which kinds of effect are legal in which callbacks.
-* <<architecture>> defines the vocabulary -- host cycle, task, message,
-  phase, waiting effect -- precisely.
+* <<architecture>> defines the vocabulary precisely: host cycle, task,
+  message, phase, and waiting effect.

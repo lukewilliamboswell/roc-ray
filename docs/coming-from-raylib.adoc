@@ -18,9 +18,9 @@ assumes <<app-model>>.
 
 == What is different
 
-The shape of a raylib program is a loop you write. In RocRay the host owns
+The shape of a raylib program is a loop you write. In RocRay the host runs
 the loop, and you supply `init!`, `update!`, and `render!`; <<app-model>>
-explains why. Three consequences come up constantly:
+explains why. Three differences matter most:
 
 * *Each call has a place.* Drawing happens in `render!`. Anything that reads
   a file or otherwise waits happens in `init!` or a task. Everything else
@@ -31,10 +31,11 @@ explains why. Three consequences come up constantly:
   are released when your model stops referring to them. There is no `Unload*`
   to call.
 
-RocRay is 2D only. It has no `DrawModel`, `Camera3D`, meshes, or other 3D
-drawing, and no raw OpenGL (`rlgl`) calls. It also has no file-open dialog:
-an app reads files the user drops on its window or names on the command line,
-or directories it declares (see <<files-and-assets>>).
+RocRay draws in 2D today. 3D models, cameras, and lighting are planned but not
+yet available, so there is no `DrawModel`, `Camera3D`, meshes, or other 3D
+drawing yet. There are no raw OpenGL (`rlgl`) calls, and there is no
+file-open dialog: an app reads files the user drops on its window or names on
+the command line, or directories it declares (see <<files-and-assets>>).
 
 == Call by call
 
@@ -132,8 +133,8 @@ a fixed step for stable physics.
 
 Roc has no garbage collector. Memory is managed by _reference counting_: a
 value is freed the moment nothing refers to it, so there are no collection
-pauses in the middle of a level. When a value has only one reference -- as
-your model does while `update!` runs -- Roc changes it in place instead of
+pauses in the middle of a level. When a value has only one reference, as
+your model does while `update!` runs, Roc changes it in place instead of
 copying it, so updating a large list of entities every cycle does not copy the
 list.
 
@@ -146,8 +147,8 @@ How you run the app matters a lot:
   release.
 
 As a rough guide, on a desktop Linux machine the
-{src}/examples/particles/main.roc[Particles] example -- 4,000 sprites, each
-moved every cycle and drawn in one batch -- spends about 0.07 ms per cycle in
+{src}/examples/particles/main.roc[Particles] example (4,000 sprites, each
+moved every cycle and drawn in one batch) spends about 0.07 ms per cycle in
 `update!` when built with `roc build`, against about 0.5 ms under
 `roc main.roc`. Drawing all 4,000 sprites takes about 0.3 to 0.4 ms of each
 frame. Your numbers will differ, but that is the scale: a 60 frames per second
@@ -155,8 +156,8 @@ game has 16.7 ms per frame.
 
 Two things commonly make a RocRay game slow:
 
-* *Many separate draw calls.* Each `frame.texture!` call crosses from Roc to
-  the host. For hundreds or thousands of sprites of one texture, build a list
+* *Many separate draw calls.* Each `frame.texture!` call is a separate call
+  from Roc into the host. For hundreds or thousands of sprites of one texture, build a list
   and draw it with one `frame.texture_instances!` call (see <<drawing>>).
 * *Allocating every cycle.* Building new lists or strings every cycle is
   cheap in small amounts but adds up. Prepare text once with `Text.prepare!`,

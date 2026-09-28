@@ -64,7 +64,7 @@ Text := [].{
 	##
 	## A builder is a plain description, so building and measuring one costs
 	## nothing and it can be assembled anywhere. `draw!` and `prepare!` are the
-	## operations that reach the host.
+	## operations that call the host.
 	Builder :: {
 		content : Str,
 		size : F32,
@@ -156,10 +156,10 @@ Text := [].{
 
 		## Resource-free prepared text for pure tests.
 		##
-		## Prepared text carries more than a handle: the host measured it once
+		## Prepared text holds more than a handle: the host measured it once
 		## while preparing it, and the value keeps that size. A stub has no
 		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
-		## answers `{ width: 0, height: 0 }` and every alignment therefore
+		## returns `{ width: 0, height: 0 }` and every alignment therefore
 		## resolves to the placement point itself. Copy this value with the
 		## bounds a test needs, the way the platform's
 		## `Texture.stub` is copied with dimensions.
@@ -275,7 +275,7 @@ default_placement = { pos: { x: 0, y: 0 }, color: Color.white }
 expect default_placement.align == (Top, Left)
 
 ## Prepared text keeps the size the host measured while preparing it, and the
-## stub has no measurement to keep. Zeroed bounds are the honest answer: they
+## stub has no measurement to keep. Zeroed bounds are the honest result: they
 ## say the value was never measured rather than inventing a size for it.
 expect Text.Prepared.stub.bounds() == { width: 0, height: 0 }
 

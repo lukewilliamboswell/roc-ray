@@ -314,6 +314,33 @@ pub const Policy = struct {
         return .out_of_scope;
     }
 
+    /// The directories whose declarations admit `path`, so the host can open
+    /// the path beneath one of them without following a link out of it.
+    /// Coverage is decided from the text, and a link inside a declared
+    /// directory could otherwise lead anywhere. Null when `FilesAny` admits
+    /// the path, which grants every destination. An empty root stands for the
+    /// working directory.
+    pub fn coveringRoots(self: *const Policy, path: []const u8, write: bool, out: *[capacity][]const u8) ?[]const []const u8 {
+        const absolute = isAbsolute(path);
+        var count: usize = 0;
+        for (self.entries[0..self.len]) |entry| {
+            if (write and entry.mode != .read_write) continue;
+            switch (entry.kind) {
+                .files_any => return null,
+                .working_directory => if (!absolute) {
+                    out[count] = "";
+                    count += 1;
+                },
+                .directory => if (isAbsolute(entry.text) == absolute and isBeneath(entry.text, path)) {
+                    out[count] = entry.text;
+                    count += 1;
+                },
+                else => {},
+            }
+        }
+        return out[0..count];
+    }
+
     /// Whether the working directory is declared readable (in any mode).
     pub fn admitWorkingDirectory(self: *const Policy, write: bool) Admission {
         if (!self.declares(.files)) return .undeclared;
@@ -477,6 +504,55 @@ fn isBeneath(root: []const u8, path: []const u8) bool {
         if (!std.mem.eql(u8, root_part, path_part)) return false;
     }
     return true;
+}
+
+/// The components of `path` past those of `root`, joined with `/`, for a path
+/// `isBeneath` already admitted: the part to walk beneath the opened root.
+/// Empty when the path names the root itself. The caller frees it.
+pub fn remainderBeneath(allocator: std.mem.Allocator, root: []const u8, path: []const u8) ![]u8 {
+    var root_parts = std.mem.tokenizeAny(u8, root, "/\\");
+    var path_parts = std.mem.tokenizeAny(u8, path, "/\\");
+    while (nextComponent(&root_parts)) |_| _ = nextComponent(&path_parts);
+    var rest: std.ArrayList(u8) = .empty;
+    errdefer rest.deinit(allocator);
+    while (nextComponent(&path_parts)) |part| {
+        if (rest.items.len != 0) try rest.append(allocator, '/');
+        try rest.appendSlice(allocator, part);
+    }
+    return rest.toOwnedSlice(allocator);
+}
+
+test "a path's remainder beneath the directory that covers it" {
+    const allocator = std.testing.allocator;
+    const cases = [_]struct { root: []const u8, path: []const u8, rest: []const u8 }{
+        .{ .root = "/srv/data", .path = "/srv/data/levels/one", .rest = "levels/one" },
+        .{ .root = "/srv/data/", .path = "/srv/./data//levels", .rest = "levels" },
+        .{ .root = "/srv/data", .path = "/srv/data", .rest = "" },
+        .{ .root = "", .path = "assets/sprites", .rest = "assets/sprites" },
+        .{ .root = "assets", .path = "assets\\sprites", .rest = "sprites" },
+    };
+    for (cases) |case| {
+        const rest = try remainderBeneath(allocator, case.root, case.path);
+        defer allocator.free(rest);
+        try std.testing.expectEqualStrings(case.rest, rest);
+    }
+}
+
+test "the roots covering a path, and FilesAny covering everything" {
+    var policy: Policy = .{};
+    try policy.add(.{ .directory = .{ .path = "/srv/data", .mode = .read_only } });
+    try policy.add(.{ .directory = .{ .path = "/srv/data/levels", .mode = .read_write } });
+    try policy.add(.{ .working_directory = .read_only });
+    var out: [capacity][]const u8 = undefined;
+    const read = policy.coveringRoots("/srv/data/levels/one", false, &out).?;
+    try std.testing.expectEqual(@as(usize, 2), read.len);
+    const write = policy.coveringRoots("/srv/data/levels/one", true, &out).?;
+    try std.testing.expectEqual(@as(usize, 1), write.len);
+    try std.testing.expectEqualStrings("/srv/data/levels", write[0]);
+    const relative = policy.coveringRoots("assets", false, &out).?;
+    try std.testing.expectEqualStrings("", relative[0]);
+    try policy.add(.{ .files_any = .read_only });
+    try std.testing.expectEqual(@as(?[]const []const u8, null), policy.coveringRoots("/anywhere", false, &out));
 }
 
 fn nextComponent(parts: *std.mem.TokenIterator(u8, .any)) ?[]const u8 {

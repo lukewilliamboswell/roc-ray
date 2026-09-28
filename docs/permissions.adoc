@@ -179,7 +179,11 @@ The path's shape is refused::
   or a backslash, or with an empty, `.`, or `..` component -- and for one
   that passes through a symbolic link (on Windows, a reparse point) or writes
   to one. These are refused on every system, whether or not the path would
-  lead outside the handle.
+  lead outside the handle. The same holds for `open_dir!` and
+  `open_dir_read!`: past the declared directory, the path is opened one
+  component at a time, and a symbolic link on the way is `PathInvalid`, so a
+  link inside a declared directory cannot lead a handle outside it. The
+  declared directory itself is taken as named, links and all.
 
 The operating system refuses::
   A declaration grants what RocRay allows; the operating system can still say

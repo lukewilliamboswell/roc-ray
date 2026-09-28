@@ -412,9 +412,12 @@ Files := [].{
 		##
 		## A path no declaration covers is `PermissionDenied`. A path with a
 		## `..` component is `PathInvalid` unless `FilesAny` covers it, because
-		## its text alone does not say where it leads. The directory the path
-		## names is the grant, however the filesystem spells it, so links on the
-		## way to it are followed; links beneath the handle never are.
+		## its text alone does not say where it leads. The declared directory is
+		## taken as named, links and all; past it, the path is opened one
+		## component at a time, and a symbolic link on the way is `PathInvalid`,
+		## so a link inside a declared directory cannot lead the handle outside
+		## it. Under `FilesAny`, links are followed. Links beneath the handle
+		## never are.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.

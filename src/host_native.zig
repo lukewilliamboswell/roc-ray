@@ -1456,6 +1456,13 @@ const RootRequest = struct {
     /// The declared path, or the app id for private storage.
     text: []const u8 = "",
     create: bool = false,
+    /// For a declared path, the directories whose declarations admit it,
+    /// copied from the policy on the frame thread. The path is opened beneath
+    /// one of them without following a link, because coverage was decided
+    /// from the text alone. Unused when `FilesAny` admits the path.
+    covers: [permissions.capacity][]const u8 = undefined,
+    cover_count: usize = 0,
+    confined: bool = false,
 };
 
 fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootResolution {
@@ -1479,6 +1486,7 @@ fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootR
         },
     } catch |err| return .{ .failed = openRootErrorCode(err) };
     defer allocator.free(named);
+    if (request.kind == .declared and request.confined) return resolveDeclaredBlocking(io, allocator, &request);
     if (request.create) std.Io.Dir.cwd().createDirPath(io, named) catch |err| return .{ .failed = openRootErrorCode(err) };
     // Canonical, so a handle's root does not change meaning if the working
     // directory does, and so a directory is what it names.
@@ -1492,6 +1500,52 @@ fn resolveRootBlocking(allocator: std.mem.Allocator, request: RootRequest) RootR
     return .{ .path = canonical };
 }
 
+/// Open a declared path beneath a directory whose declaration admits it: the
+/// declared directory is canonicalized as named, and the rest of the path is
+/// walked beneath it without following a link, creating directories only
+/// there. A link on the way is `PathInvalid`, so a link inside a declared
+/// directory cannot root a handle outside it.
+fn resolveDeclaredBlocking(io: std.Io, allocator: std.mem.Allocator, request: *const RootRequest) RootResolution {
+    var failure: ?abi.HostFiles_open_rootErr = null;
+    for (request.covers[0..request.cover_count]) |root_text| {
+        const resolution = resolveBeneathCover(io, allocator, request, root_text) catch |err| {
+            if (failure == null) failure = switch (err) {
+                error.PathInvalid => .path_invalid,
+                else => openRootErrorCode(err),
+            };
+            continue;
+        };
+        return .{ .path = resolution };
+    }
+    return .{ .failed = failure orelse .permission_denied };
+}
+
+fn resolveBeneathCover(io: std.Io, allocator: std.mem.Allocator, request: *const RootRequest, root_text: []const u8) ![:0]u8 {
+    const named_root = if (root_text.len == 0)
+        try std.process.currentPathAlloc(io, allocator)
+    else if (std.fs.path.isAbsolute(root_text))
+        try allocator.dupe(u8, root_text)
+    else blk: {
+        const cwd = try std.process.currentPathAlloc(io, allocator);
+        defer allocator.free(cwd);
+        break :blk try std.fs.path.join(allocator, &.{ cwd, root_text });
+    };
+    defer allocator.free(named_root);
+    if (request.create) try std.Io.Dir.cwd().createDirPath(io, named_root);
+    const canonical_root = try std.Io.Dir.realPathFileAbsoluteAlloc(io, named_root, allocator);
+    defer allocator.free(canonical_root);
+    const rest = try permissions.remainderBeneath(allocator, root_text, request.text);
+    defer allocator.free(rest);
+    var root_dir = try std.Io.Dir.openDirAbsolute(io, canonical_root, .{});
+    defer root_dir.close(io);
+    var dir = try confined_path.openDir(io, root_dir, rest, .{ .create = request.create });
+    dir.close(io);
+    return if (rest.len == 0)
+        allocator.dupeZ(u8, canonical_root)
+    else
+        std.fs.path.joinZ(allocator, &.{ canonical_root, rest });
+}
+
 /// What a root names, read from the transported root in place: a declared
 /// path short enough to live inside its `RocStr` is only valid where the root
 /// itself is, so the slice must not come from a `payload_*()` copy.
@@ -1499,7 +1553,14 @@ fn filesRootRequest(root: *const FilesRoot, writable: bool) RootRequest {
     return switch (root.tag) {
         .BesideExecutable => .{ .kind = .beside_executable },
         .WorkingDirectory => .{ .kind = .working_directory },
-        .Declared => .{ .kind = .declared, .text = payloadIn(abi.RocStr, root).asSlice(), .create = writable },
+        .Declared => blk: {
+            var request: RootRequest = .{ .kind = .declared, .text = payloadIn(abi.RocStr, root).asSlice(), .create = writable };
+            if (active_policy.coveringRoots(request.text, writable, &request.covers)) |covers| {
+                request.cover_count = covers.len;
+                request.confined = true;
+            }
+            break :blk request;
+        },
         .AppData, .AppConfig, .AppCache => .{
             .kind = .app_storage,
             .storage = switch (root.tag) {
@@ -6801,6 +6862,59 @@ test "a store opens beneath a handle's root and refuses a link on the way" {
     defer installed.close(io);
     try installed.symLink(io, "../elsewhere", "linked", .{ .is_directory = true });
     try std.testing.expectError(error.PathInvalid, openStoreDirectoryIn(io, root, "linked"));
+}
+
+test "a declared directory roots a handle only beneath itself, never through a link" {
+    if (builtin.os.tag == .windows) return;
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "declared/levels");
+    try tmp.dir.createDirPath(io, "elsewhere");
+    var declared_dir = try tmp.dir.openDir(io, "declared", .{});
+    defer declared_dir.close(io);
+    try declared_dir.symLink(io, "../elsewhere", "out", .{ .is_directory = true });
+    const declared = try tmp.dir.realPathFileAlloc(io, "declared", allocator);
+    defer allocator.free(declared);
+
+    const previous = active_policy;
+    defer active_policy = previous;
+    active_policy = .{};
+    try active_policy.add(.{ .directory = .{ .path = declared, .mode = .read_write } });
+
+    const Case = struct { path: []const u8, create: bool };
+    const resolve = struct {
+        fn run(case: Case) RootResolution {
+            var request: RootRequest = .{ .kind = .declared, .text = case.path, .create = case.create };
+            const covers = active_policy.coveringRoots(case.path, case.create, &request.covers).?;
+            request.cover_count = covers.len;
+            request.confined = true;
+            return resolveRootBlocking(std.testing.allocator, request);
+        }
+    }.run;
+
+    // A real directory beneath the declaration opens, and a missing one is made there.
+    const levels = try std.fs.path.join(allocator, &.{ declared, "levels" });
+    defer allocator.free(levels);
+    const opened = resolve(.{ .path = levels, .create = false });
+    try std.testing.expect(opened == .path);
+    allocator.free(opened.path);
+    const fresh = try std.fs.path.join(allocator, &.{ declared, "saves/slot1" });
+    defer allocator.free(fresh);
+    const made = resolve(.{ .path = fresh, .create = true });
+    try std.testing.expect(made == .path);
+    allocator.free(made.path);
+
+    // The declaration covers "declared/out" by its text, but the link leads
+    // outside, so the handle is refused and nothing is made through it.
+    const through = try std.fs.path.join(allocator, &.{ declared, "out" });
+    defer allocator.free(through);
+    try std.testing.expectEqual(RootResolution{ .failed = .path_invalid }, resolve(.{ .path = through, .create = false }));
+    const beyond = try std.fs.path.join(allocator, &.{ declared, "out/new" });
+    defer allocator.free(beyond);
+    try std.testing.expectEqual(RootResolution{ .failed = .path_invalid }, resolve(.{ .path = beyond, .create = true }));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "elsewhere/new", .{}));
 }
 
 test "asset manifests compare declared identity without walking loose files" {

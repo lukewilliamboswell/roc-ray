@@ -24,7 +24,7 @@ GameAssets := {
 		Ok({
 			font,
 			title: Text.from("SNAKE", font).size(30).spacing(6).prepare!()?,
-			hint: Text.from("ARROWS / WASD  turn    SPACE  restart    ESC  quit", font).size(17).prepare!()?,
+			hint: Text.from("ARROWS / WASD  turn    SPACE  restart    ESCAPE  quit", font).size(17).prepare!()?,
 			over_title: Text.from("GAME OVER", font).size(40).prepare!()?,
 			over_hint: Text.from("PRESS SPACE TO PLAY AGAIN", font).size(19).prepare!()?,
 			sounds: {

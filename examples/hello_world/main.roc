@@ -11,7 +11,7 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## State kept between updates: prepared text that can be reused, plus the
+## State kept between host cycles: prepared text that can be reused, plus the
 ## latest pointer position, button state, and elapsed time needed to draw the
 ## next frame.
 Model : {
@@ -36,8 +36,8 @@ title_size = 38.F32
 
 program = { init!, update!, render! }
 
-## `App.default` already closes the window when you press Escape, so this app
-## never checks for Escape itself.
+## `App.default` already ends the app when you press Escape, so this app never
+## checks for Escape itself.
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
@@ -48,7 +48,7 @@ init! = App.init(
 		font = Draw.default_font!()
 		Ok({
 			title: Text.from(title_text, font).size(title_size).prepare!()?,
-			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
+			help: Text.from("Move the pointer  -  hold to turn red  -  Escape quits", font).size(18).prepare!()?,
 			title_width: font.measure({ text: title_text, size: title_size, spacing: Text.default_spacing }).width,
 			pointer: { x: 400, y: 300 },
 			accent_on: Bool.False,

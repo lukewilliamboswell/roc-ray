@@ -1,7 +1,8 @@
-## A small pixel-painting app made entirely from generated graphics and sound.
+## Pixel Workshop: a small pixel-painting app made entirely from generated
+## graphics and sound.
 ##
 ## Drag to paint, press 1-4 to choose a colour, C to reset, and Escape to quit.
-## Run with `--record-demo` to create the gallery GIF automatically. This
+## Run with `--record-demo` to write `examples/gallery/generated_assets.gif`. This
 ## example shows generated assets, updating part of a texture, and keeping
 ## drawing data separate from the effects that upload pixels and play sound.
 app [Model, program] {
@@ -38,7 +39,7 @@ Model : {
 	mouse : Math.Vec2,
 	demo : Bool,
 	demo_frame : U64,
-	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
+	ui : { title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared },
 }
 
 program = { init!, update!, render! }
@@ -57,32 +58,39 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
 
-demo_frames = 100.U64
-
-record_demo_flag : Str
+## Recording mode. `--record-demo` hides the window, paints from `demo_input`
+## instead of the mouse and keyboard, and writes a GIF for the README gallery
+## into `examples/gallery/`. The recording stops itself after `demo_frames`
+## frames, and `update!` exits when it has been written.
 record_demo_flag = "--record-demo"
 
+demo_frames = 100.U64
+
+demo_recording : Capture.Recording
+demo_recording =
+	Capture.default
+		.with_path("generated_assets.gif")
+		.with_format(Gif)
+		.with_fps(25)
+		.with_max_frames(demo_frames)
+		.with_scale(Half)
+		.with_timing(FixedStep)
+
+## Selects an interactive window or a hidden one that records the demo.
 generated_assets_config : List(Str) -> App.Config
 generated_assets_config = |args| {
 	base = App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))
-
-	if List.contains(args, record_demo_flag) {
-		base
-			.with_visible(Bool.False)
-			.with_output_dir("examples/gallery")
-			.with_recording(
-				Capture.default
-					.with_path("generated_assets.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(demo_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
-			)
-	} else {
-		base
-	}
+	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
+
+## A demo run is over once its recording has been written, or has failed.
+demo_finished : Capture.Status -> Try({}, [Exit(I64)])
+demo_finished = |status|
+	match status {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		_ => Ok({})
+	}
 
 ## The brush is quiet next to the tone it is generated from. Named once, because
 ## every `Play` edit has to state it: a `Playback` carries volume, pitch, and pan
@@ -114,13 +122,15 @@ initial_pixels = List.map_with_index(
 	},
 )
 
+## `PermissionDenied` is in the error list only because `Capture.Writer.start!`
+## can return it; the `io` that `init!` receives always has permission to record.
 init! : App.Init(Model, [PermissionDenied, PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init_for_args(
 	generated_assets_config,
 	|io| {
-		match generated_assets_config(io.args!()).recording() {
-			NoRecording => {}
-			Record(recording) => io.capture().start!(recording)?
+		demo = List.contains(io.args!(), record_demo_flag)
+		if demo {
+			io.capture().start!(demo_recording)?
 		}
 
 		font = Draw.default_font!()
@@ -137,13 +147,13 @@ init! = App.init_for_args(
 			palette: 1,
 			last_cell: Idle,
 			mouse: { x: 0, y: 0 },
-			demo: List.contains(io.args!(), record_demo_flag),
+			demo,
 			demo_frame: 0,
-			ui: Box.box({
+			ui: {
 				title: Text.from("Pixel Workshop", font).size(26).prepare!()?,
 				help: Text.from("Drag to paint  |  1-4 pick a colour  |  C restores the design  |  ESC quits", font).size(14).prepare!()?,
 				palette: Text.from("Palette", font).size(22).prepare!()?,
-			}),
+			},
 		})
 	},
 )
@@ -322,15 +332,15 @@ perform_edit! = |texture, edit| {
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |model, program_input, _io| {
-	input = if model.demo demo_input(model.demo_frame) else program_input.devices
+update! = |model, input, _io| {
+	devices = if model.demo demo_input(model.demo_frame) else input.devices
 
-	next = update_editor(model, input)
+	next = update_editor(model, devices)
 	for edit in next.edits {
 		perform_edit!(next.model.texture, edit)
 	}
 
-	mouse = input.mouse.position()
+	mouse = devices.mouse.position()
 	Mouse.set_cursor!(
 		match cell_at(mouse) {
 			Ok(_) => Crosshair
@@ -338,28 +348,15 @@ update! = |model, program_input, _io| {
 		},
 	)
 
-	exit =
-		if model.demo {
-			match program_input.capture {
-				Finished(_) => Err(Exit(0))
-				Failed(_) => Err(Exit(1))
-				_ => Ok({})
-			}
-		} else if input.key_pressed(KeyEscape) {
-			Err(Exit(0))
-		} else {
-			Ok({})
-		}
-
-	match exit {
-		Err(code) => Err(code)
-		Ok({}) => Ok({ ..next.model, mouse, demo_frame: model.demo_frame + 1 })
+	if model.demo {
+		demo_finished(input.capture)?
 	}
+	Ok({ ..next.model, mouse, demo_frame: model.demo_frame + 1 })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
-	ui = Box.unbox(model.ui)
+	ui = model.ui
 
 	frame.clear!(theme.bg)
 	ui.title.draw!(frame, { pos: { x: canvas_x, y: 12 }, color: theme.ink })

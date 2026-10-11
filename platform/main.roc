@@ -222,7 +222,7 @@ platform ""
 		x64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
 		arm64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
 		x64v1glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
-		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "sqlite3.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app] },
+		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "sqlite3.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app, "ucrtbase.lib", "kernel32.lib", "ntdll.lib"] },
 	}
 
 import Draw

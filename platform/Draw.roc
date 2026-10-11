@@ -672,7 +672,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Resource.Handle.stub)
+		stub = Shader.(Resource.Handle.stub({}))
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default

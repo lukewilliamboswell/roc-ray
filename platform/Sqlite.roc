@@ -275,7 +275,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(Resource.Handle.stub)
+		stub = Db.(Resource.Handle.stub({}))
 	}
 
 	## One row of a result, with its column names.
@@ -452,7 +452,7 @@ Sqlite := [].{
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(Resource.Handle.stub)
+		stub = Stmt.(Resource.Handle.stub({}))
 	}
 
 	## Describe an error code, for a log line or an error screen.

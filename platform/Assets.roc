@@ -73,7 +73,7 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(Resource.Handle.stub)
+		stub = Store.(Resource.Handle.stub({}))
 
 		## Internal bridge for platform operations that also use an asset store.
 		for_host : Store -> Resource.Store

@@ -1399,5 +1399,5 @@ expect {
 expect {
 	decoded : Try(Url, [InvalidJson(Str)])
 	decoded = Json.parse("\"not a url\"")
-	decoded == Err(Json.invalid_json)
+	decoded == Err(Json.invalid_json({}))
 }

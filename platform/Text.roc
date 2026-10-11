@@ -190,7 +190,7 @@ Text := [].{
 		stub : Prepared
 		stub = Prepared.(
 			{
-				resource: Resource.Handle.stub,
+				resource: Resource.Handle.stub({}),
 				measured: { width: 0, height: 0 },
 			},
 		)

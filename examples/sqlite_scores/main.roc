@@ -78,7 +78,7 @@ runner_names = ["ada", "grace", "alan", "edsger", "barbara", "ken", "donald", "m
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [ResourceLimit, ..])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("RocRay SQLite Scores")

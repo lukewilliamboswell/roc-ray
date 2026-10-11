@@ -124,7 +124,7 @@ init! = App.init(
 					subtitle,
 					hint,
 				})
-			}
+		}
 	},
 )
 
@@ -216,7 +216,7 @@ record_run! = |db, insert, name, score| {
 				Ok(rows) => Refreshed(rows)
 				Err(reason) => Failed(reason)
 			}
-		}
+	}
 }
 
 ## Wipe every run, then read the board back.
@@ -234,7 +234,7 @@ reset_board! = |db| {
 				Ok(rows) => Refreshed(rows)
 				Err(reason) => Failed(reason)
 			}
-		}
+	}
 }
 
 ## Fractional seconds since the Unix epoch, which is what the REAL column

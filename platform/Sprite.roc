@@ -13,7 +13,6 @@ import Draw
 import Math
 
 Sprite := {
-
 	## The texture the sprite samples.
 	texture : Assets.Texture,
 

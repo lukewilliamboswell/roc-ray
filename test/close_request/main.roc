@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-10-09-258ab27" }
+app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Task
@@ -68,10 +68,13 @@ update! = |model, input, io| {
 	if model.mode == "exit" {
 		if cycle == 0 {
 			# Never answers: the host must cancel it at shutdown, not wait.
-			Task.spawn!(input, || {
-				Task.sleep!(60_000)
-				Forever
-			})
+			Task.spawn!(
+				input,
+				|| {
+					Task.sleep!(60_000)
+					Forever
+				},
+			)
 		}
 		if cycle >= 3 or input.window.close_requested {
 			Err(Exit(3))
@@ -87,10 +90,13 @@ update! = |model, input, io| {
 		} else if input.window.close_requested and requests == [3, 5] {
 			# Parks, so the message arrives on a later cycle, with the window
 			# still open.
-			Task.spawn!(input, || {
-				Task.sleep!(50)
-				Saved(cycle)
-			})
+			Task.spawn!(
+				input,
+				|| {
+					Task.sleep!(50)
+					Saved(cycle)
+				},
+			)
 			Ok({ ..model, requests: requests, saving: Bool.True })
 		} else if cycle > 150 {
 			Err(Exit(4))

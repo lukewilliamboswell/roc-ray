@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-10-09-258ab27" }
+app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Devices
@@ -66,7 +66,7 @@ update! = |model, program_input, _io| {
 			} else {
 				Ok({ ..model, outcome })
 			}
-		}
+	}
 }
 
 ## Drive the keyboard for the cycle after this one.

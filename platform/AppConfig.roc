@@ -51,7 +51,7 @@ capture_scale_ratio = |value|
 			} else {
 				{ numerator: r.numerator, denominator: r.denominator }
 			}
-		}
+	}
 
 AppHostConfig : {
 	title : Str,

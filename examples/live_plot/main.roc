@@ -443,7 +443,6 @@ BestLine : {
 }
 
 Msg : [
-
 	## The path travels with the result on purpose. The task that produced it is
 	## gone by the time the message arrives, so this message is all the app has
 	## to work from -- to attribute the result, and to rebuild the work if it
@@ -853,7 +852,7 @@ grow_run = |runs, added|
 				Ok(grown) => grown
 				Err(_) => runs
 			}
-		}
+	}
 
 # ---------------------------------------------------------------------------
 # Incremental parsing
@@ -974,7 +973,7 @@ advance = |model|
 				Ok(arrival) => open_scan(model, arrival)
 				Err(_) => model
 			}
-		}
+	}
 
 ## Give a delivered file a lane and start scanning it.
 ##
@@ -1009,7 +1008,7 @@ open_scan = |model, arrival| {
 						lines: lane.lines,
 					}
 				}
-			}
+		}
 
 	fresh = {
 		path: arrival.path,
@@ -1031,7 +1030,7 @@ open_scan = |model, arrival| {
 					Ok(reset) => reset
 					Err(_) => model.lanes
 				}
-			}
+		}
 
 	started = {
 		..model,
@@ -1392,7 +1391,7 @@ target_scale = |mode, lane|
 				Ready => normalised_scale(lane.lines)
 				_ => normalised_scale(estimated_lines(lane.bytes))
 			}
-		}
+	}
 
 scale_of : Model, U64 -> F32
 scale_of = |model, index|
@@ -1939,7 +1938,7 @@ request_refetch = |model|
 					}
 				}
 			}
-		}
+	}
 
 ## The first visible lane that is finished but has no points left.
 first_evicted : Model, Visible -> Try(U64, [None])
@@ -1963,7 +1962,7 @@ scan_for_evicted = |model, at, last|
 
 					_ => scan_for_evicted(model, at + 1, last)
 				}
-			}
+		}
 	}
 
 # ---------------------------------------------------------------------------
@@ -2532,7 +2531,7 @@ draw_gutter! = |frame, model| {
 								area: area,
 							},
 						)
-					}
+				}
 			}
 			Ok({})
 		},

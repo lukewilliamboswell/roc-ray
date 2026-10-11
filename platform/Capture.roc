@@ -60,7 +60,7 @@ capture_scale_ratio = |value|
 			} else {
 				{ numerator: r.numerator, denominator: r.denominator }
 			}
-		}
+	}
 
 # TODO(follow up): Restore derived equality when Roc handles it through type aliases
 # without looping during compilation (nightly-2026-09-18-1d982dc).

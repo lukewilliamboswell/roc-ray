@@ -487,7 +487,6 @@ Tilemap :: {
 	## Whether a world-space circle overlaps any configured solid tile.
 	circle_touches_solid : Tilemap, Math.Circle -> Bool
 	circle_touches_solid = |map, circle| {
-
 		## Expand very slightly so a circle exactly tangent to a neighbouring cell
 		## still tests that cell despite the culling range's half-open semantics.
 		extent = circle.radius + 0.0001
@@ -1024,7 +1023,6 @@ draw_selection_in! = |map, _frame, selector_kind, selector_value, range|
 
 transformed_corner : Math.Rect, Math.Vec2, TilemapFlip -> Math.Vec2
 transformed_corner = |dest, corner, flip| {
-
 	## Tiled applies the anti-diagonal transform before horizontal/vertical flips.
 	diagonal = if flip.diagonal { x: 1 - corner.y, y: 1 - corner.x } else corner
 	x = if flip.horizontal 1 - diagonal.x else diagonal.x
@@ -1191,7 +1189,7 @@ expect {
 ## Private authority-taking implementations.
 perform_load_tmx! : Assets.Store, Str => Try(TilemapRawMap, [PathInvalid, NotFound, ReadFailed, ParseFailed, Unsupported])
 perform_load_tmx! = |store, path|
-# closed error union to open error union
+	# closed error union to open error union
 	match Host.tilemap_load_tmx!({ store: store.for_host(), path }) {
 		Ok(map) => Ok(map)
 		Err(PathInvalid) => Err(PathInvalid)

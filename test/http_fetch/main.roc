@@ -1,7 +1,7 @@
 app [Model, program] {
-	rr: platform "../../platform/main.roc",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	roc: "nightly-2026-10-09-258ab27",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App
@@ -118,7 +118,7 @@ update! = |model, input, io| {
 			} else {
 				Ok(next)
 			}
-		}
+	}
 }
 
 ## The whole exchange, written as if it were synchronous. It is not: the host
@@ -160,8 +160,8 @@ judge = |current, message, expectation|
 					} else {
 						Passed
 					}
-				}
-		}
+			}
+	}
 
 ## Name a send failure without depending on how the platform renders it.
 describe : [PermissionDenied, InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str

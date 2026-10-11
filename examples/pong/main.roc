@@ -407,7 +407,6 @@ decay_flash = |flash, dt| { ..flash, intensity: F32.max(flash.intensity - dt * f
 ## one field from.
 step_playing : World, Controls, F32 -> (World, List(GameEvent))
 step_playing = |world, controls, dt| {
-
 	# --- Left paddle: semantic player movement ---
 	left_y = Math.clamp(world.left.paddle_y + controls.move * paddle_speed * dt, 0, screen_h - paddle_h)
 

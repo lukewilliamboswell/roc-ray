@@ -261,7 +261,7 @@ update_editor = |model, input| {
 						}
 					}
 				}
-			}
+		}
 	} else {
 		{ model: { ..base, last_cell: Idle }, edits: [] }
 	}

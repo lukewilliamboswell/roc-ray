@@ -965,7 +965,7 @@ app_set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cu
 
 app_default_font! : App.Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 app_default_font! = |App.Io.(authority)|
-# closed error union to open error union
+	# closed error union to open error union
 	match Host.text_startup_default_font!(authority) {
 		Ok(font) => Ok(font)
 		Err(PermissionDenied) => Err(PermissionDenied)

@@ -19,7 +19,6 @@ import rr.Text
 ## repeatable demo is running. Keeping the render texture here lets `render!`
 ## draw the same full-resolution postcard before showing its smaller preview.
 Model : {
-
 	## Prepared at the poster's size, because that is where they are drawn: the
 	## window sees them through the same downscale as everything else.
 	card : { title : Text.Prepared, subtitle : Text.Prepared },

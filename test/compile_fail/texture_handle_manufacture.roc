@@ -1,6 +1,6 @@
 app [Model, program] {
-	rr: platform "../../platform/main.roc",
 	roc: "nightly-2026-10-09-258ab27",
+	rr: platform "../../platform/main.roc",
 }
 
 # A texture's resource identity is private to the host. Applications can copy a

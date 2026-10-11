@@ -42,7 +42,6 @@ Devices := [].{
 	## `input.key_pressed(KeyW)`, `input.mouse.position()`,
 	## `input.gamepad(One)`.
 	Snapshot := {
-
 		## Packed per-key state, one byte per raylib key code. Each byte stores
 		## a held bit, which is a state sample, and pressed and released bits,
 		## which are interval events: set when at least one press (release) of

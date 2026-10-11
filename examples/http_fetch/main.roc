@@ -9,8 +9,8 @@
 ## origin this run fetches from, and the host refuses every other: a redirect
 ## to a different origin arrives as `PermissionDenied`.
 app [Model, program] {
-	rr: platform "../../platform/main.roc",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
+	rr: platform "../../platform/main.roc",
 }
 
 import rr.App
@@ -314,7 +314,7 @@ headline = |state|
 				["HTTP ${U16.to_str(status)}", "${U64.to_str(bytes)} bytes", "${U64.to_str(waited_ms)} ms"],
 				"    ",
 			)
-		}
+	}
 
 ## Green when a response arrived, red when it did not, amber while waiting.
 ## One colour drives the card's accent bar, its status line and its indicator,

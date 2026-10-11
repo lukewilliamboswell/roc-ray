@@ -1,6 +1,6 @@
 app [Model, program] {
-	rr: platform "../platform/main.roc",
 	roc: "nightly-2026-10-09-258ab27",
+	rr: platform "../platform/main.roc",
 }
 
 import rr.App
@@ -19,14 +19,12 @@ init! = App.init(
 		bundle = io.files().beside_executable!()?
 		store = Assets.open!(
 			bundle.subdir("assets")?,
-			RequireManifest(
-				{
-					asset_set: "test-assets",
-					schema: 1,
-					content_version: 1,
-					content: Sha256("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
-				},
-			),
+			RequireManifest({
+				asset_set: "test-assets",
+				schema: 1,
+				content_version: 1,
+				content: Sha256("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+			}),
 		)?
 		texture = Assets.load_texture!(store, "textures/example.png")?
 		font = Draw.load_store_font!(store, { path: "fonts/example.ttf", size: 20 })?

@@ -73,7 +73,7 @@ Assets := [].{
 		## `expect` build that model. Do not use it to test asset resolution or
 		## resource lifetime.
 		stub : Store
-		stub = Store.(Resource.Handle.stub)
+		stub = Store.(Resource.Handle.stub({}))
 
 		## Internal bridge for platform operations that also use an asset store.
 		for_host : Store -> Resource.Store
@@ -210,7 +210,7 @@ Assets := [].{
 	## one of the `ImageFormat` ones.
 	load_texture! : Store, Str => Try(Texture, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit])
 	load_texture! = |Store.(store), path|
-	# closed error union to open error union
+		# closed error union to open error union
 		match Host.texture_load_store!({ store, path }) {
 			Ok(texture) => Ok(texture)
 			Err(PathInvalid) => Err(PathInvalid)
@@ -225,7 +225,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	texture_from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit])
 	texture_from_bytes! = |cfg|
-	# closed error union to open error union
+		# closed error union to open error union
 		match Host.texture_load_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes }) {
 			Ok(texture) => Ok(texture)
 			Err(TextureLoadFailed) => Err(TextureLoadFailed)
@@ -238,7 +238,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit])
 	generate_color_texture! = |cfg|
-	# closed error union to open error union
+		# closed error union to open error union
 		match Host.texture_generate_color!(cfg) {
 			Ok(texture) => Ok(texture)
 			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
@@ -250,7 +250,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit])
 	generate_checked_texture! = |cfg|
-	# closed error union to open error union
+		# closed error union to open error union
 		match Host.texture_generate_checked!(cfg) {
 			Ok(texture) => Ok(texture)
 			Err(TextureGenerationFailed) => Err(TextureGenerationFailed)
@@ -263,9 +263,9 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch])
 	update_texture! = |texture, pixels|
-	# closed error union to open error union. The public API does not yet
-	# distinguish a handle that is not an app-owned texture from a pixel
-	# count that does not match, so both report the mismatch.
+		# closed error union to open error union. The public API does not yet
+		# distinguish a handle that is not an app-owned texture from a pixel
+		# count that does not match, so both report the mismatch.
 		match Host.texture_update!({ texture, pixels }) {
 			Ok({}) => Ok({})
 			Err(NotMutable) => Err(PixelCountMismatch)
@@ -277,7 +277,7 @@ Assets := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds])
 	update_texture_region! = |texture, region|
-	# closed error union to open error union, as `update_texture!` does.
+		# closed error union to open error union, as `update_texture!` does.
 		match Host.texture_update_region!({
 			texture,
 			x: region.x,

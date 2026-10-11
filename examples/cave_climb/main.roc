@@ -462,7 +462,7 @@ laser_probe_hit = |level, enemies, player, probe, phase, can_hit_player| {
 					Ok(hit) => HitMirror(hit)
 					Err(_) => if solid_probe(level, probe) HitSolid(probe) else HitNone(probe)
 				}
-			}
+		}
 	}
 }
 

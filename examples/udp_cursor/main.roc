@@ -122,8 +122,8 @@ apply_message = |model, message|
 							received: model.received + List.len(datagrams),
 						}
 					}
-				}
-		}
+			}
+	}
 
 ## Two big-endian `U16`s. Negative or off-screen coordinates clamp rather than
 ## wrap, so a pointer dragged off the window edge stops at it.

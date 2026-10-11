@@ -98,7 +98,7 @@ Audio := [].{
 		## Put it in a model to test the app's pure update logic from an
 		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
-		stub = Sound.(Resource.Handle.stub)
+		stub = Sound.(Resource.Handle.stub({}))
 	}
 
 	## A sound together with the settings it should be played at.
@@ -222,7 +222,7 @@ Audio := [].{
 		## update logic from an `expect`. Do not use it to test playback or
 		## resource lifetime.
 		stub : Music
-		stub = Music.(Resource.Handle.stub)
+		stub = Music.(Resource.Handle.stub({}))
 	}
 
 	## Procedural waveform used by `gen_sound!`.

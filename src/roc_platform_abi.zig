@@ -55,9 +55,11 @@ pub const RocBox = ?*anyopaque;
 /// linker symbols declared below (`roc_alloc`, hosted symbols, and provided entrypoints).
 pub const RocHost = extern struct {
     env: *anyopaque,
-    roc_alloc: *const fn (*RocHost, usize, usize) callconv(.c) ?*anyopaque,
+    /// Never returns null; see `roc_alloc` below.
+    roc_alloc: *const fn (*RocHost, usize, usize) callconv(.c) *anyopaque,
     roc_dealloc: *const fn (*RocHost, *anyopaque, usize) callconv(.c) void,
-    roc_realloc: *const fn (*RocHost, *anyopaque, usize, usize) callconv(.c) ?*anyopaque,
+    /// Never returns null; see `roc_realloc` below.
+    roc_realloc: *const fn (*RocHost, *anyopaque, usize, usize) callconv(.c) *anyopaque,
     roc_dbg: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
     roc_expect_failed: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
     roc_crashed: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
@@ -6547,21 +6549,21 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostTexture_generate_colorResultTag = enum(u8) {
+pub const HostTexture_generate_checkedResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostTexture_generate_colorResultPayload = extern union {
+pub const HostTexture_generate_checkedResultPayload = extern union {
     err: ResourceLimitOrTextureGenerationFailed,
     ok: Texture,
 };
 
 /// Tag union: Try
-pub const HostTexture_generate_colorResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostTexture_generate_checkedResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
-    tag: HostTexture_generate_colorResultTag,
+    tag: HostTexture_generate_checkedResultTag,
     pub fn payload_err(self: *const @This()) ResourceLimitOrTextureGenerationFailed {
         const ptr: *const ResourceLimitOrTextureGenerationFailed = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
@@ -6572,16 +6574,16 @@ pub const HostTexture_generate_colorResult = if (@sizeOf(usize) == 4) extern str
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostTexture_generate_colorResult(self, roc_host);
+        decrefHostTexture_generate_checkedResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostTexture_generate_colorResult(self, amount);
+        increfHostTexture_generate_checkedResult(self, amount);
     }
 } else extern struct {
-    payload: HostTexture_generate_colorResultPayload,
-    tag: HostTexture_generate_colorResultTag,
+    payload: HostTexture_generate_checkedResultPayload,
+    tag: HostTexture_generate_checkedResultTag,
     pub fn payload_err(self: *const @This()) ResourceLimitOrTextureGenerationFailed {
         return self.payload.err;
     }
@@ -6590,25 +6592,25 @@ pub const HostTexture_generate_colorResult = if (@sizeOf(usize) == 4) extern str
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostTexture_generate_colorResult(self, roc_host);
+        decrefHostTexture_generate_checkedResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostTexture_generate_colorResult(self, amount);
+        increfHostTexture_generate_checkedResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_generate_colorResult) != 24) @compileError("HostTexture_generate_colorResult size mismatch");
-        if (@alignOf(HostTexture_generate_colorResult) != 8) @compileError("HostTexture_generate_colorResult alignment mismatch");
-        if (@offsetOf(HostTexture_generate_colorResult, "tag") != 16) @compileError("HostTexture_generate_colorResult tag offset mismatch");
+        if (@sizeOf(HostTexture_generate_checkedResult) != 24) @compileError("HostTexture_generate_checkedResult size mismatch");
+        if (@alignOf(HostTexture_generate_checkedResult) != 8) @compileError("HostTexture_generate_checkedResult alignment mismatch");
+        if (@offsetOf(HostTexture_generate_checkedResult, "tag") != 16) @compileError("HostTexture_generate_checkedResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_generate_colorResult) != 16) @compileError("HostTexture_generate_colorResult size mismatch");
-        if (@alignOf(HostTexture_generate_colorResult) != 4) @compileError("HostTexture_generate_colorResult alignment mismatch");
-        if (@offsetOf(HostTexture_generate_colorResult, "tag") != 12) @compileError("HostTexture_generate_colorResult tag offset mismatch");
+        if (@sizeOf(HostTexture_generate_checkedResult) != 16) @compileError("HostTexture_generate_checkedResult size mismatch");
+        if (@alignOf(HostTexture_generate_checkedResult) != 4) @compileError("HostTexture_generate_checkedResult alignment mismatch");
+        if (@offsetOf(HostTexture_generate_checkedResult, "tag") != 12) @compileError("HostTexture_generate_checkedResult tag offset mismatch");
     }
 }
 
@@ -7649,21 +7651,21 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostAudio_gen_toneResultTag = enum(u8) {
+pub const HostAudio_gen_soundResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostAudio_gen_toneResultPayload = extern union {
+pub const HostAudio_gen_soundResultPayload = extern union {
     err: ResourceLimitOrSoundGenerationFailed,
     ok: *u64,
 };
 
 /// Tag union: Try
-pub const HostAudio_gen_toneResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostAudio_gen_soundResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(4),
-    tag: HostAudio_gen_toneResultTag,
+    tag: HostAudio_gen_soundResultTag,
     pub fn payload_err(self: *const @This()) ResourceLimitOrSoundGenerationFailed {
         const ptr: *const ResourceLimitOrSoundGenerationFailed = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
@@ -7674,16 +7676,16 @@ pub const HostAudio_gen_toneResult = if (@sizeOf(usize) == 4) extern struct {
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostAudio_gen_toneResult(self, roc_host);
+        decrefHostAudio_gen_soundResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostAudio_gen_toneResult(self, amount);
+        increfHostAudio_gen_soundResult(self, amount);
     }
 } else extern struct {
-    payload: HostAudio_gen_toneResultPayload,
-    tag: HostAudio_gen_toneResultTag,
+    payload: HostAudio_gen_soundResultPayload,
+    tag: HostAudio_gen_soundResultTag,
     pub fn payload_err(self: *const @This()) ResourceLimitOrSoundGenerationFailed {
         return self.payload.err;
     }
@@ -7692,25 +7694,25 @@ pub const HostAudio_gen_toneResult = if (@sizeOf(usize) == 4) extern struct {
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostAudio_gen_toneResult(self, roc_host);
+        decrefHostAudio_gen_soundResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostAudio_gen_toneResult(self, amount);
+        increfHostAudio_gen_soundResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_gen_toneResult) != 16) @compileError("HostAudio_gen_toneResult size mismatch");
-        if (@alignOf(HostAudio_gen_toneResult) != 8) @compileError("HostAudio_gen_toneResult alignment mismatch");
-        if (@offsetOf(HostAudio_gen_toneResult, "tag") != 8) @compileError("HostAudio_gen_toneResult tag offset mismatch");
+        if (@sizeOf(HostAudio_gen_soundResult) != 16) @compileError("HostAudio_gen_soundResult size mismatch");
+        if (@alignOf(HostAudio_gen_soundResult) != 8) @compileError("HostAudio_gen_soundResult alignment mismatch");
+        if (@offsetOf(HostAudio_gen_soundResult, "tag") != 8) @compileError("HostAudio_gen_soundResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_gen_toneResult) != 8) @compileError("HostAudio_gen_toneResult size mismatch");
-        if (@alignOf(HostAudio_gen_toneResult) != 4) @compileError("HostAudio_gen_toneResult alignment mismatch");
-        if (@offsetOf(HostAudio_gen_toneResult, "tag") != 4) @compileError("HostAudio_gen_toneResult tag offset mismatch");
+        if (@sizeOf(HostAudio_gen_soundResult) != 8) @compileError("HostAudio_gen_soundResult size mismatch");
+        if (@alignOf(HostAudio_gen_soundResult) != 4) @compileError("HostAudio_gen_soundResult alignment mismatch");
+        if (@offsetOf(HostAudio_gen_soundResult, "tag") != 4) @compileError("HostAudio_gen_soundResult tag offset mismatch");
     }
 }
 
@@ -8625,61 +8627,61 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostFiles_write_textResultTag = enum(u8) {
+pub const HostFiles_write_bytesResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostFiles_write_textResultPayload = extern union {
+pub const HostFiles_write_bytesResultPayload = extern union {
     err: AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed,
     ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const HostFiles_write_textResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostFiles_write_bytesResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [1]u8 align(1),
-    tag: HostFiles_write_textResultTag,
+    tag: HostFiles_write_bytesResultTag,
     pub fn payload_err(self: *const @This()) AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed {
         const ptr: *const AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostFiles_write_textResult(self, roc_host);
+        decrefHostFiles_write_bytesResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostFiles_write_textResult(self, amount);
+        increfHostFiles_write_bytesResult(self, amount);
     }
 } else extern struct {
-    payload: HostFiles_write_textResultPayload,
-    tag: HostFiles_write_textResultTag,
+    payload: HostFiles_write_bytesResultPayload,
+    tag: HostFiles_write_bytesResultTag,
     pub fn payload_err(self: *const @This()) AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed {
         return self.payload.err;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostFiles_write_textResult(self, roc_host);
+        decrefHostFiles_write_bytesResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostFiles_write_textResult(self, amount);
+        increfHostFiles_write_bytesResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostFiles_write_textResult) != 2) @compileError("HostFiles_write_textResult size mismatch");
-        if (@alignOf(HostFiles_write_textResult) != 1) @compileError("HostFiles_write_textResult alignment mismatch");
-        if (@offsetOf(HostFiles_write_textResult, "tag") != 1) @compileError("HostFiles_write_textResult tag offset mismatch");
+        if (@sizeOf(HostFiles_write_bytesResult) != 2) @compileError("HostFiles_write_bytesResult size mismatch");
+        if (@alignOf(HostFiles_write_bytesResult) != 1) @compileError("HostFiles_write_bytesResult alignment mismatch");
+        if (@offsetOf(HostFiles_write_bytesResult, "tag") != 1) @compileError("HostFiles_write_bytesResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostFiles_write_textResult) != 2) @compileError("HostFiles_write_textResult size mismatch");
-        if (@alignOf(HostFiles_write_textResult) != 1) @compileError("HostFiles_write_textResult alignment mismatch");
-        if (@offsetOf(HostFiles_write_textResult, "tag") != 1) @compileError("HostFiles_write_textResult tag offset mismatch");
+        if (@sizeOf(HostFiles_write_bytesResult) != 2) @compileError("HostFiles_write_bytesResult size mismatch");
+        if (@alignOf(HostFiles_write_bytesResult) != 1) @compileError("HostFiles_write_bytesResult alignment mismatch");
+        if (@offsetOf(HostFiles_write_bytesResult, "tag") != 1) @compileError("HostFiles_write_bytesResult tag offset mismatch");
     }
 }
 
@@ -8987,61 +8989,61 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostStdio_write_textResultTag = enum(u8) {
+pub const HostStdio_write_bytesResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostStdio_write_textResultPayload = extern union {
+pub const HostStdio_write_bytesResultPayload = extern union {
     err: BufferFullOrPermissionDeniedOrTooLargeOrUnavailable,
     ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const HostStdio_write_textResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostStdio_write_bytesResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [1]u8 align(1),
-    tag: HostStdio_write_textResultTag,
+    tag: HostStdio_write_bytesResultTag,
     pub fn payload_err(self: *const @This()) BufferFullOrPermissionDeniedOrTooLargeOrUnavailable {
         const ptr: *const BufferFullOrPermissionDeniedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostStdio_write_textResult(self, roc_host);
+        decrefHostStdio_write_bytesResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostStdio_write_textResult(self, amount);
+        increfHostStdio_write_bytesResult(self, amount);
     }
 } else extern struct {
-    payload: HostStdio_write_textResultPayload,
-    tag: HostStdio_write_textResultTag,
+    payload: HostStdio_write_bytesResultPayload,
+    tag: HostStdio_write_bytesResultTag,
     pub fn payload_err(self: *const @This()) BufferFullOrPermissionDeniedOrTooLargeOrUnavailable {
         return self.payload.err;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostStdio_write_textResult(self, roc_host);
+        decrefHostStdio_write_bytesResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostStdio_write_textResult(self, amount);
+        increfHostStdio_write_bytesResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostStdio_write_textResult) != 2) @compileError("HostStdio_write_textResult size mismatch");
-        if (@alignOf(HostStdio_write_textResult) != 1) @compileError("HostStdio_write_textResult alignment mismatch");
-        if (@offsetOf(HostStdio_write_textResult, "tag") != 1) @compileError("HostStdio_write_textResult tag offset mismatch");
+        if (@sizeOf(HostStdio_write_bytesResult) != 2) @compileError("HostStdio_write_bytesResult size mismatch");
+        if (@alignOf(HostStdio_write_bytesResult) != 1) @compileError("HostStdio_write_bytesResult alignment mismatch");
+        if (@offsetOf(HostStdio_write_bytesResult, "tag") != 1) @compileError("HostStdio_write_bytesResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostStdio_write_textResult) != 2) @compileError("HostStdio_write_textResult size mismatch");
-        if (@alignOf(HostStdio_write_textResult) != 1) @compileError("HostStdio_write_textResult alignment mismatch");
-        if (@offsetOf(HostStdio_write_textResult, "tag") != 1) @compileError("HostStdio_write_textResult tag offset mismatch");
+        if (@sizeOf(HostStdio_write_bytesResult) != 2) @compileError("HostStdio_write_bytesResult size mismatch");
+        if (@alignOf(HostStdio_write_bytesResult) != 1) @compileError("HostStdio_write_bytesResult alignment mismatch");
+        if (@offsetOf(HostStdio_write_bytesResult, "tag") != 1) @compileError("HostStdio_write_bytesResult tag offset mismatch");
     }
 }
 
@@ -10022,21 +10024,21 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostSqlite_run_stmtResultTag = enum(u8) {
+pub const HostSqlite_run_onceResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostSqlite_run_stmtResultPayload = extern union {
+pub const HostSqlite_run_onceResultPayload = extern union {
     err: MultipleStatementsOrResultTooLargeOrSqliteErr,
     ok: __AnonStruct_566a76c01f44ee92,
 };
 
 /// Tag union: Try
-pub const HostSqlite_run_stmtResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostSqlite_run_onceResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [72]u8 align(8),
-    tag: HostSqlite_run_stmtResultTag,
+    tag: HostSqlite_run_onceResultTag,
     pub fn payload_err(self: *const @This()) MultipleStatementsOrResultTooLargeOrSqliteErr {
         const ptr: *const MultipleStatementsOrResultTooLargeOrSqliteErr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
@@ -10047,16 +10049,16 @@ pub const HostSqlite_run_stmtResult = if (@sizeOf(usize) == 4) extern struct {
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostSqlite_run_stmtResult(self, roc_host);
+        decrefHostSqlite_run_onceResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostSqlite_run_stmtResult(self, amount);
+        increfHostSqlite_run_onceResult(self, amount);
     }
 } else extern struct {
-    payload: HostSqlite_run_stmtResultPayload,
-    tag: HostSqlite_run_stmtResultTag,
+    payload: HostSqlite_run_onceResultPayload,
+    tag: HostSqlite_run_onceResultTag,
     pub fn payload_err(self: *const @This()) MultipleStatementsOrResultTooLargeOrSqliteErr {
         return self.payload.err;
     }
@@ -10065,25 +10067,25 @@ pub const HostSqlite_run_stmtResult = if (@sizeOf(usize) == 4) extern struct {
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostSqlite_run_stmtResult(self, roc_host);
+        decrefHostSqlite_run_onceResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostSqlite_run_stmtResult(self, amount);
+        increfHostSqlite_run_onceResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostSqlite_run_stmtResult) != 112) @compileError("HostSqlite_run_stmtResult size mismatch");
-        if (@alignOf(HostSqlite_run_stmtResult) != 8) @compileError("HostSqlite_run_stmtResult alignment mismatch");
-        if (@offsetOf(HostSqlite_run_stmtResult, "tag") != 104) @compileError("HostSqlite_run_stmtResult tag offset mismatch");
+        if (@sizeOf(HostSqlite_run_onceResult) != 112) @compileError("HostSqlite_run_onceResult size mismatch");
+        if (@alignOf(HostSqlite_run_onceResult) != 8) @compileError("HostSqlite_run_onceResult alignment mismatch");
+        if (@offsetOf(HostSqlite_run_onceResult, "tag") != 104) @compileError("HostSqlite_run_onceResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostSqlite_run_stmtResult) != 80) @compileError("HostSqlite_run_stmtResult size mismatch");
-        if (@alignOf(HostSqlite_run_stmtResult) != 8) @compileError("HostSqlite_run_stmtResult alignment mismatch");
-        if (@offsetOf(HostSqlite_run_stmtResult, "tag") != 72) @compileError("HostSqlite_run_stmtResult tag offset mismatch");
+        if (@sizeOf(HostSqlite_run_onceResult) != 80) @compileError("HostSqlite_run_onceResult size mismatch");
+        if (@alignOf(HostSqlite_run_onceResult) != 8) @compileError("HostSqlite_run_onceResult alignment mismatch");
+        if (@offsetOf(HostSqlite_run_onceResult, "tag") != 72) @compileError("HostSqlite_run_onceResult tag offset mismatch");
     }
 }
 
@@ -10149,61 +10151,61 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const HostDraw_begin_scissorResultTag = enum(u8) {
+pub const HostDraw_begin_blendResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const HostDraw_begin_scissorResultPayload = extern union {
+pub const HostDraw_begin_blendResultPayload = extern union {
     err: ScopeLimitOrScopeUnavailable,
     ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const HostDraw_begin_scissorResult = if (@sizeOf(usize) == 4) extern struct {
+pub const HostDraw_begin_blendResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [1]u8 align(1),
-    tag: HostDraw_begin_scissorResultTag,
+    tag: HostDraw_begin_blendResultTag,
     pub fn payload_err(self: *const @This()) ScopeLimitOrScopeUnavailable {
         const ptr: *const ScopeLimitOrScopeUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostDraw_begin_scissorResult(self, roc_host);
+        decrefHostDraw_begin_blendResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostDraw_begin_scissorResult(self, amount);
+        increfHostDraw_begin_blendResult(self, amount);
     }
 } else extern struct {
-    payload: HostDraw_begin_scissorResultPayload,
-    tag: HostDraw_begin_scissorResultTag,
+    payload: HostDraw_begin_blendResultPayload,
+    tag: HostDraw_begin_blendResultTag,
     pub fn payload_err(self: *const @This()) ScopeLimitOrScopeUnavailable {
         return self.payload.err;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefHostDraw_begin_scissorResult(self, roc_host);
+        decrefHostDraw_begin_blendResult(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfHostDraw_begin_scissorResult(self, amount);
+        increfHostDraw_begin_blendResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_begin_scissorResult) != 2) @compileError("HostDraw_begin_scissorResult size mismatch");
-        if (@alignOf(HostDraw_begin_scissorResult) != 1) @compileError("HostDraw_begin_scissorResult alignment mismatch");
-        if (@offsetOf(HostDraw_begin_scissorResult, "tag") != 1) @compileError("HostDraw_begin_scissorResult tag offset mismatch");
+        if (@sizeOf(HostDraw_begin_blendResult) != 2) @compileError("HostDraw_begin_blendResult size mismatch");
+        if (@alignOf(HostDraw_begin_blendResult) != 1) @compileError("HostDraw_begin_blendResult alignment mismatch");
+        if (@offsetOf(HostDraw_begin_blendResult, "tag") != 1) @compileError("HostDraw_begin_blendResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_begin_scissorResult) != 2) @compileError("HostDraw_begin_scissorResult size mismatch");
-        if (@alignOf(HostDraw_begin_scissorResult) != 1) @compileError("HostDraw_begin_scissorResult alignment mismatch");
-        if (@offsetOf(HostDraw_begin_scissorResult, "tag") != 1) @compileError("HostDraw_begin_scissorResult tag offset mismatch");
+        if (@sizeOf(HostDraw_begin_blendResult) != 2) @compileError("HostDraw_begin_blendResult size mismatch");
+        if (@alignOf(HostDraw_begin_blendResult) != 1) @compileError("HostDraw_begin_blendResult alignment mismatch");
+        if (@offsetOf(HostDraw_begin_blendResult, "tag") != 1) @compileError("HostDraw_begin_blendResult tag offset mismatch");
     }
 }
 
@@ -11006,72 +11008,6 @@ comptime {
 }
 
 /// Tag discriminant for Try.
-pub const Update_for_hostResultTag = enum(u8) {
-    Err = 0,
-    Ok = 1,
-};
-
-/// Payload union for Try.
-pub const Update_for_hostResultPayload = extern union {
-    err: i64,
-    ok: RocBox,
-};
-
-/// Tag union: Try
-pub const Update_for_hostResult = if (@sizeOf(usize) == 4) extern struct {
-    payload: [8]u8 align(8),
-    tag: Update_for_hostResultTag,
-    pub fn payload_err(self: *const @This()) i64 {
-        const ptr: *const i64 = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    pub fn payload_ok(self: *const @This()) RocBox {
-        const ptr: *const RocBox = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefUpdate_for_hostResult(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfUpdate_for_hostResult(self, amount);
-    }
-} else extern struct {
-    payload: Update_for_hostResultPayload,
-    tag: Update_for_hostResultTag,
-    pub fn payload_err(self: *const @This()) i64 {
-        return self.payload.err;
-    }
-    pub fn payload_ok(self: *const @This()) RocBox {
-        return self.payload.ok;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefUpdate_for_hostResult(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfUpdate_for_hostResult(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Update_for_hostResult) != 16) @compileError("Update_for_hostResult size mismatch");
-        if (@alignOf(Update_for_hostResult) != 8) @compileError("Update_for_hostResult alignment mismatch");
-        if (@offsetOf(Update_for_hostResult, "tag") != 8) @compileError("Update_for_hostResult tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(Update_for_hostResult) != 16) @compileError("Update_for_hostResult size mismatch");
-        if (@alignOf(Update_for_hostResult) != 8) @compileError("Update_for_hostResult alignment mismatch");
-        if (@offsetOf(Update_for_hostResult, "tag") != 8) @compileError("Update_for_hostResult tag offset mismatch");
-    }
-}
-
-/// Tag discriminant for Try.
 pub const Render_for_hostResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -11137,24 +11073,69 @@ comptime {
     }
 }
 
-/// Return type record for Host.text_default_font!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const HostText_default_fontRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    metrics: __AnonStruct_2bfb89334ad27c35,
-    handle: *u64,
+/// Tag discriminant for Try.
+pub const Update_for_hostResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const Update_for_hostResultPayload = extern union {
+    err: i64,
+    ok: RocBox,
+};
+
+/// Tag union: Try
+pub const Update_for_hostResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [8]u8 align(8),
+    tag: Update_for_hostResultTag,
+    pub fn payload_err(self: *const @This()) i64 {
+        const ptr: *const i64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) RocBox {
+        const ptr: *const RocBox = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefUpdate_for_hostResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfUpdate_for_hostResult(self, amount);
+    }
 } else extern struct {
-    metrics: __AnonStruct_2bfb89334ad27c35,
-    handle: *u64,
+    payload: Update_for_hostResultPayload,
+    tag: Update_for_hostResultTag,
+    pub fn payload_err(self: *const @This()) i64 {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) RocBox {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefUpdate_for_hostResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfUpdate_for_hostResult(self, amount);
+    }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostText_default_fontRetRecord) != 48) @compileError("HostText_default_fontRetRecord size mismatch");
-        if (@alignOf(HostText_default_fontRetRecord) != 8) @compileError("HostText_default_fontRetRecord alignment mismatch");
+        if (@sizeOf(Update_for_hostResult) != 16) @compileError("Update_for_hostResult size mismatch");
+        if (@alignOf(Update_for_hostResult) != 8) @compileError("Update_for_hostResult alignment mismatch");
+        if (@offsetOf(Update_for_hostResult, "tag") != 8) @compileError("Update_for_hostResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostText_default_fontRetRecord) != 40) @compileError("HostText_default_fontRetRecord size mismatch");
-        if (@alignOf(HostText_default_fontRetRecord) != 8) @compileError("HostText_default_fontRetRecord alignment mismatch");
+        if (@sizeOf(Update_for_hostResult) != 16) @compileError("Update_for_hostResult size mismatch");
+        if (@alignOf(Update_for_hostResult) != 8) @compileError("Update_for_hostResult alignment mismatch");
+        if (@offsetOf(Update_for_hostResult, "tag") != 8) @compileError("Update_for_hostResult tag offset mismatch");
     }
 }
 
@@ -11179,24 +11160,24 @@ comptime {
     }
 }
 
-/// Return type record for Host.window_scale_dpi!
+/// Return type record for Host.text_default_font!
 /// Fields ordered by compiler-emitted ABI offsets.
-pub const HostWindow_scale_dpiRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    x: f32,
-    y: f32,
+pub const HostText_default_fontRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    metrics: __AnonStruct_2bfb89334ad27c35,
+    handle: *u64,
 } else extern struct {
-    x: f32,
-    y: f32,
+    metrics: __AnonStruct_2bfb89334ad27c35,
+    handle: *u64,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
-        if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
+        if (@sizeOf(HostText_default_fontRetRecord) != 48) @compileError("HostText_default_fontRetRecord size mismatch");
+        if (@alignOf(HostText_default_fontRetRecord) != 8) @compileError("HostText_default_fontRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
-        if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
+        if (@sizeOf(HostText_default_fontRetRecord) != 40) @compileError("HostText_default_fontRetRecord size mismatch");
+        if (@alignOf(HostText_default_fontRetRecord) != 8) @compileError("HostText_default_fontRetRecord alignment mismatch");
     }
 }
 
@@ -11221,375 +11202,49 @@ comptime {
     }
 }
 
-/// Arguments for Host.store_open!
-/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Return type record for Host.window_scale_dpi!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const HostWindow_scale_dpiRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    x: f32,
+    y: f32,
+} else extern struct {
+    x: f32,
+    y: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
+        if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostWindow_scale_dpiRetRecord) != 8) @compileError("HostWindow_scale_dpiRetRecord size mismatch");
+        if (@alignOf(HostWindow_scale_dpiRetRecord) != 4) @compileError("HostWindow_scale_dpiRetRecord alignment mismatch");
+    }
+}
+
+/// Arguments for Host.app_exit!
+/// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostStore_openArgs = extern struct {
+pub const HostApp_exitArgs = extern struct {
+    arg0: i32,
+};
+
+/// Arguments for Host.app_read_env!
+/// Roc signature: Resource.Authority, Str => Try(Str, [NotFound, PermissionDenied])
+/// Refcounted fields are owned by the hosted function.
+pub const HostApp_read_envArgs = extern struct {
     arg0: u64,
-    arg1: __AnonStruct_3a568cb37b91deaf,
+    arg1: RocStr,
 };
 
-/// Arguments for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Arguments for Host.app_report_error!
+/// Roc signature: Str, Str => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostTexture_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
-    path: RocStr,
-    store: *u64,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
-} else extern struct {
-    path: RocStr,
-    store: *u64,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
+pub const HostApp_report_errorArgs = extern struct {
+    arg0: RocStr,
+    arg1: RocStr,
 };
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_storeArgs) != 32) @compileError("HostTexture_load_storeArgs size mismatch");
-        if (@alignOf(HostTexture_load_storeArgs) != 8) @compileError("HostTexture_load_storeArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_storeArgs) != 16) @compileError("HostTexture_load_storeArgs size mismatch");
-        if (@alignOf(HostTexture_load_storeArgs) != 4) @compileError("HostTexture_load_storeArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_load_bytes!
-/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_load_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
-    bytes: RocListWith(u8, false),
-    format: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.bytes.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.bytes.incref(amount);
-    }
-} else extern struct {
-    bytes: RocListWith(u8, false),
-    format: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.bytes.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.bytes.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_bytesArgs) != 32) @compileError("HostTexture_load_bytesArgs size mismatch");
-        if (@alignOf(HostTexture_load_bytesArgs) != 8) @compileError("HostTexture_load_bytesArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_bytesArgs) != 16) @compileError("HostTexture_load_bytesArgs size mismatch");
-        if (@alignOf(HostTexture_load_bytesArgs) != 4) @compileError("HostTexture_load_bytesArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_generate_color!
-/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_generate_colorArgs = if (@sizeOf(usize) == 4) extern struct {
-    height: i32,
-    width: i32,
-    color: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.color.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.color.incref(amount);
-    }
-} else extern struct {
-    height: i32,
-    width: i32,
-    color: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.color.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.color.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_generate_colorArgs) != 12) @compileError("HostTexture_generate_colorArgs size mismatch");
-        if (@alignOf(HostTexture_generate_colorArgs) != 4) @compileError("HostTexture_generate_colorArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_generate_colorArgs) != 12) @compileError("HostTexture_generate_colorArgs size mismatch");
-        if (@alignOf(HostTexture_generate_colorArgs) != 4) @compileError("HostTexture_generate_colorArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_generate_checked!
-/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_generate_checkedArgs = if (@sizeOf(usize) == 4) extern struct {
-    checks_x: i32,
-    checks_y: i32,
-    height: i32,
-    width: i32,
-    color_a: ColorRgba,
-    color_b: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.color_a.decref(roc_host);
-        value.color_b.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.color_a.incref(amount);
-        value.color_b.incref(amount);
-    }
-} else extern struct {
-    checks_x: i32,
-    checks_y: i32,
-    height: i32,
-    width: i32,
-    color_a: ColorRgba,
-    color_b: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.color_a.decref(roc_host);
-        value.color_b.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.color_a.incref(amount);
-        value.color_b.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_generate_checkedArgs) != 24) @compileError("HostTexture_generate_checkedArgs size mismatch");
-        if (@alignOf(HostTexture_generate_checkedArgs) != 4) @compileError("HostTexture_generate_checkedArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_generate_checkedArgs) != 24) @compileError("HostTexture_generate_checkedArgs size mismatch");
-        if (@alignOf(HostTexture_generate_checkedArgs) != 4) @compileError("HostTexture_generate_checkedArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_update!
-/// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => Try({}, [NotMutable, PixelCountMismatch])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_updateArgs = if (@sizeOf(usize) == 4) extern struct {
-    pixels: RocListWith(ColorRgba, false),
-    texture: Texture,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.pixels.decref(roc_host);
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.pixels.incref(amount);
-        value.texture.incref(amount);
-    }
-} else extern struct {
-    pixels: RocListWith(ColorRgba, false),
-    texture: Texture,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.pixels.decref(roc_host);
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.pixels.incref(amount);
-        value.texture.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_updateArgs) != 40) @compileError("HostTexture_updateArgs size mismatch");
-        if (@alignOf(HostTexture_updateArgs) != 8) @compileError("HostTexture_updateArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_updateArgs) != 24) @compileError("HostTexture_updateArgs size mismatch");
-        if (@alignOf(HostTexture_updateArgs) != 4) @compileError("HostTexture_updateArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_update_region!
-/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => Try({}, [NotMutable, PixelCountMismatch, RegionOutOfBounds])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_update_regionArgs = if (@sizeOf(usize) == 4) extern struct {
-    pixels: RocListWith(ColorRgba, false),
-    texture: Texture,
-    height: i32,
-    width: i32,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.pixels.decref(roc_host);
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.pixels.incref(amount);
-        value.texture.incref(amount);
-    }
-} else extern struct {
-    pixels: RocListWith(ColorRgba, false),
-    texture: Texture,
-    height: i32,
-    width: i32,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.pixels.decref(roc_host);
-        value.texture.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.pixels.incref(amount);
-        value.texture.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_update_regionArgs) != 56) @compileError("HostTexture_update_regionArgs size mismatch");
-        if (@alignOf(HostTexture_update_regionArgs) != 8) @compileError("HostTexture_update_regionArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_update_regionArgs) != 40) @compileError("HostTexture_update_regionArgs size mismatch");
-        if (@alignOf(HostTexture_update_regionArgs) != 4) @compileError("HostTexture_update_regionArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.texture_set_filter!
-/// Roc signature: Texture, U8 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_set_filterArgs = extern struct {
-    arg0: Texture,
-    arg1: u8,
-};
-
-/// Arguments for Host.texture_set_wrap!
-/// Roc signature: Texture, U8 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_set_wrapArgs = extern struct {
-    arg0: Texture,
-    arg1: u8,
-};
-
-/// Arguments for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_gen_toneArgs = if (@sizeOf(usize) == 4) extern struct {
-    freq: f32,
-    ms: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    freq: f32,
-    ms: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_gen_toneArgs) != 8) @compileError("HostAudio_gen_toneArgs size mismatch");
-        if (@alignOf(HostAudio_gen_toneArgs) != 4) @compileError("HostAudio_gen_toneArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_gen_toneArgs) != 8) @compileError("HostAudio_gen_toneArgs size mismatch");
-        if (@alignOf(HostAudio_gen_toneArgs) != 4) @compileError("HostAudio_gen_toneArgs alignment mismatch");
-    }
-}
 
 /// Arguments for Host.audio_gen_sound!
 /// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
@@ -11653,53 +11308,67 @@ comptime {
     }
 }
 
-/// Arguments for Host.audio_load_sound!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
+/// Arguments for Host.audio_gen_tone!
+/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
 /// Refcounted fields are owned by the hosted function.
-pub const HostAudio_load_soundArgs = if (@sizeOf(usize) == 4) extern struct {
-    path: RocStr,
-    store: *u64,
+pub const HostAudio_gen_toneArgs = if (@sizeOf(usize) == 4) extern struct {
+    freq: f32,
+    ms: i32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+        _ = value;
+        _ = roc_host;
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
+        _ = value;
+        _ = amount;
     }
 } else extern struct {
-    path: RocStr,
-    store: *u64,
+    freq: f32,
+    ms: i32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+        _ = value;
+        _ = roc_host;
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
+        _ = value;
+        _ = amount;
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostAudio_load_soundArgs) != 32) @compileError("HostAudio_load_soundArgs size mismatch");
-        if (@alignOf(HostAudio_load_soundArgs) != 8) @compileError("HostAudio_load_soundArgs alignment mismatch");
+        if (@sizeOf(HostAudio_gen_toneArgs) != 8) @compileError("HostAudio_gen_toneArgs size mismatch");
+        if (@alignOf(HostAudio_gen_toneArgs) != 4) @compileError("HostAudio_gen_toneArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostAudio_load_soundArgs) != 16) @compileError("HostAudio_load_soundArgs size mismatch");
-        if (@alignOf(HostAudio_load_soundArgs) != 4) @compileError("HostAudio_load_soundArgs alignment mismatch");
+        if (@sizeOf(HostAudio_gen_toneArgs) != 8) @compileError("HostAudio_gen_toneArgs size mismatch");
+        if (@alignOf(HostAudio_gen_toneArgs) != 4) @compileError("HostAudio_gen_toneArgs alignment mismatch");
     }
 }
+
+/// Arguments for Host.audio_is_music_playing!
+/// Roc signature: Resource.Handle([MusicResource]) => Bool
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_is_music_playingArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_is_sound_playing!
+/// Roc signature: Resource.Handle([SoundResource]) => Bool
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_is_sound_playingArgs = extern struct {
+    arg0: *u64,
+};
 
 /// Arguments for Host.audio_load_music!
 /// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
@@ -11749,139 +11418,53 @@ comptime {
     }
 }
 
-/// Arguments for Host.audio_play_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Arguments for Host.audio_load_sound!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
 /// Refcounted fields are owned by the hosted function.
-pub const HostAudio_play_soundArgs = extern struct {
-    arg0: *u64,
+pub const HostAudio_load_soundArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
 };
 
-/// Arguments for Host.audio_stop_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_stop_soundArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_pause_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_pause_soundArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_resume_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_resume_soundArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_is_sound_playing!
-/// Roc signature: Resource.Handle([SoundResource]) => Bool
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_is_sound_playingArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_set_sound_volume!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_sound_volumeArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_set_sound_pitch!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_sound_pitchArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_set_sound_pan!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_sound_panArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_play_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_play_musicArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_stop_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_stop_musicArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_pause_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_pause_musicArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_resume_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_resume_musicArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_set_music_volume!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_music_volumeArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_set_music_pitch!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_music_pitchArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_set_music_pan!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_music_panArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
-
-/// Arguments for Host.audio_set_music_looping!
-/// Roc signature: Resource.Handle([MusicResource]), Bool => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_set_music_loopingArgs = extern struct {
-    arg0: *u64,
-    arg1: bool,
-};
-
-/// Arguments for Host.audio_is_music_playing!
-/// Roc signature: Resource.Handle([MusicResource]) => Bool
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_is_music_playingArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.audio_seek_music!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostAudio_seek_musicArgs = extern struct {
-    arg0: *u64,
-    arg1: f32,
-};
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostAudio_load_soundArgs) != 32) @compileError("HostAudio_load_soundArgs size mismatch");
+        if (@alignOf(HostAudio_load_soundArgs) != 8) @compileError("HostAudio_load_soundArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostAudio_load_soundArgs) != 16) @compileError("HostAudio_load_soundArgs size mismatch");
+        if (@alignOf(HostAudio_load_soundArgs) != 4) @compileError("HostAudio_load_soundArgs alignment mismatch");
+    }
+}
 
 /// Arguments for Host.audio_music_length!
 /// Roc signature: Resource.Handle([MusicResource]) => F32
@@ -11897,12 +11480,481 @@ pub const HostAudio_music_time_playedArgs = extern struct {
     arg0: *u64,
 };
 
+/// Arguments for Host.audio_pause_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_pause_musicArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_pause_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_pause_soundArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_play_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_play_musicArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_play_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_play_soundArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_resume_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_resume_musicArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_resume_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_resume_soundArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_seek_music!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_seek_musicArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
 /// Arguments for Host.audio_set_master_volume!
 /// Roc signature: F32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostAudio_set_master_volumeArgs = extern struct {
     arg0: f32,
 };
+
+/// Arguments for Host.audio_set_music_looping!
+/// Roc signature: Resource.Handle([MusicResource]), Bool => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_music_loopingArgs = extern struct {
+    arg0: *u64,
+    arg1: bool,
+};
+
+/// Arguments for Host.audio_set_music_pan!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_music_panArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_set_music_pitch!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_music_pitchArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_set_music_volume!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_music_volumeArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_set_sound_pan!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_sound_panArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_set_sound_pitch!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_sound_pitchArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_set_sound_volume!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_set_sound_volumeArgs = extern struct {
+    arg0: *u64,
+    arg1: f32,
+};
+
+/// Arguments for Host.audio_stop_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_stop_musicArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.audio_stop_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostAudio_stop_soundArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for Host.capture_pixel_at!
+/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_pixel_atArgs = if (@sizeOf(usize) == 4) extern struct {
+    source: __AnonStruct_29524f9bb2f9574c,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.source.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.source.incref(amount);
+    }
+} else extern struct {
+    source: __AnonStruct_29524f9bb2f9574c,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.source.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.source.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostCapture_pixel_atArgs) != 32) @compileError("HostCapture_pixel_atArgs size mismatch");
+        if (@alignOf(HostCapture_pixel_atArgs) != 8) @compileError("HostCapture_pixel_atArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostCapture_pixel_atArgs) != 24) @compileError("HostCapture_pixel_atArgs size mismatch");
+        if (@alignOf(HostCapture_pixel_atArgs) != 4) @compileError("HostCapture_pixel_atArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.capture_read_region!
+/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_read_regionArgs = if (@sizeOf(usize) == 4) extern struct {
+    source: __AnonStruct_29524f9bb2f9574c,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.source.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.source.incref(amount);
+    }
+} else extern struct {
+    source: __AnonStruct_29524f9bb2f9574c,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.source.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.source.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostCapture_read_regionArgs) != 40) @compileError("HostCapture_read_regionArgs size mismatch");
+        if (@alignOf(HostCapture_read_regionArgs) != 8) @compileError("HostCapture_read_regionArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostCapture_read_regionArgs) != 32) @compileError("HostCapture_read_regionArgs size mismatch");
+        if (@alignOf(HostCapture_read_regionArgs) != 4) @compileError("HostCapture_read_regionArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.capture_screenshot!
+/// Roc signature: Resource.Authority, Str => Try({}, [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_screenshotArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+};
+
+/// Arguments for Host.capture_screenshot_texture!
+/// Roc signature: Resource.Authority, { path : Str, target : Texture } => Try({}, [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_screenshot_textureArgs = extern struct {
+    arg0: u64,
+    arg1: __AnonStruct_aa2779af0bb79965,
+};
+
+/// Arguments for Host.capture_set_virtual_keys!
+/// Roc signature: { active : Bool, keys : List(U64) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_set_virtual_keysArgs = if (@sizeOf(usize) == 4) extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+} else extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostCapture_set_virtual_keysArgs) != 32) @compileError("HostCapture_set_virtual_keysArgs size mismatch");
+        if (@alignOf(HostCapture_set_virtual_keysArgs) != 8) @compileError("HostCapture_set_virtual_keysArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostCapture_set_virtual_keysArgs) != 16) @compileError("HostCapture_set_virtual_keysArgs size mismatch");
+        if (@alignOf(HostCapture_set_virtual_keysArgs) != 4) @compileError("HostCapture_set_virtual_keysArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.capture_set_virtual_mouse!
+/// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_set_virtual_mouseArgs = if (@sizeOf(usize) == 4) extern struct {
+    wheel: f32,
+    x: f32,
+    y: f32,
+    active: bool,
+    left: bool,
+    middle: bool,
+    right: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    wheel: f32,
+    x: f32,
+    y: f32,
+    active: bool,
+    left: bool,
+    middle: bool,
+    right: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostCapture_set_virtual_mouseArgs) != 16) @compileError("HostCapture_set_virtual_mouseArgs size mismatch");
+        if (@alignOf(HostCapture_set_virtual_mouseArgs) != 4) @compileError("HostCapture_set_virtual_mouseArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostCapture_set_virtual_mouseArgs) != 16) @compileError("HostCapture_set_virtual_mouseArgs size mismatch");
+        if (@alignOf(HostCapture_set_virtual_mouseArgs) != 4) @compileError("HostCapture_set_virtual_mouseArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.capture_set_virtual_text!
+/// Roc signature: List(U32) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_set_virtual_textArgs = extern struct {
+    arg0: RocListWith(u32, false),
+};
+
+/// Arguments for Host.capture_start_recording!
+/// Roc signature: Resource.Authority, { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => Try({}, [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, UnsupportedFormat, WriteFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_start_recordingArgs = extern struct {
+    arg0: u64,
+    arg1: __AnonStruct_96bd4e483c462501,
+};
+
+/// Arguments for Host.capture_stop_recording!
+/// Roc signature: Resource.Authority => Try({ bytes : U64, frames : U64 }, [BudgetExceeded, Busy, NotRecording, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCapture_stop_recordingArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for Host.cmd_run!
+/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostCmd_runArgs = extern struct {
+    arg0: u64,
+    arg1: __AnonStruct_3fe396bc5ba0c31c,
+};
+
+/// Arguments for Host.draw_begin_blend!
+/// Roc signature: U8 => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_begin_blendArgs = extern struct {
+    arg0: u8,
+};
+
+/// Arguments for Host.draw_begin_camera!
+/// Roc signature: Camera.Camera2D => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_begin_cameraArgs = if (@sizeOf(usize) == 4) extern struct {
+    offset: MathVec2,
+    rotation: f32,
+    target: MathVec2,
+    zoom: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.offset.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.offset.incref(amount);
+        value.target.incref(amount);
+    }
+} else extern struct {
+    offset: MathVec2,
+    rotation: f32,
+    target: MathVec2,
+    zoom: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.offset.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.offset.incref(amount);
+        value.target.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_begin_cameraArgs) != 24) @compileError("HostDraw_begin_cameraArgs size mismatch");
+        if (@alignOf(HostDraw_begin_cameraArgs) != 4) @compileError("HostDraw_begin_cameraArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_begin_cameraArgs) != 24) @compileError("HostDraw_begin_cameraArgs size mismatch");
+        if (@alignOf(HostDraw_begin_cameraArgs) != 4) @compileError("HostDraw_begin_cameraArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_begin_render_texture!
+/// Roc signature: Texture => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_begin_render_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+    handle: *u64,
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.handle), amount);
+    }
+} else extern struct {
+    handle: *u64,
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.handle), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_begin_render_textureArgs) != 16) @compileError("HostDraw_begin_render_textureArgs size mismatch");
+        if (@alignOf(HostDraw_begin_render_textureArgs) != 8) @compileError("HostDraw_begin_render_textureArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_begin_render_textureArgs) != 12) @compileError("HostDraw_begin_render_textureArgs size mismatch");
+        if (@alignOf(HostDraw_begin_render_textureArgs) != 4) @compileError("HostDraw_begin_render_textureArgs alignment mismatch");
+    }
+}
 
 /// Arguments for Host.draw_begin_scissor!
 /// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => Try({}, [ScopeLimit, ScopeUnavailable])
@@ -11955,6 +12007,13 @@ comptime {
         if (@alignOf(HostDraw_begin_scissorArgs) != 4) @compileError("HostDraw_begin_scissorArgs alignment mismatch");
     }
 }
+
+/// Arguments for Host.draw_begin_shader!
+/// Roc signature: Resource.Handle([ShaderResource]) => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_begin_shaderArgs = extern struct {
+    arg0: *u64,
+};
 
 /// Arguments for Host.draw_circle_gradient!
 /// Roc signature: { center : Math.Vec2, color_inner : Color.Rgba, color_outer : Color.Rgba, radius : F32 } => {}
@@ -12166,71 +12225,57 @@ comptime {
     }
 }
 
-/// Arguments for Host.draw_draw_texture!
-/// Roc signature: { dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba } => {}
+/// Arguments for Host.draw_draw_prepared_text!
+/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle([PreparedTextResource]) } => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostDraw_draw_textureArgs = if (@sizeOf(usize) == 4) extern struct {
-    texture: Texture,
-    dest: MathRect,
-    origin: MathVec2,
-    rotation: f32,
-    source: MathRect,
-    tint: ColorRgba,
+pub const HostDraw_draw_prepared_textArgs = if (@sizeOf(usize) == 4) extern struct {
+    prepared: *u64,
+    pos: MathVec2,
+    color: ColorRgba,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.texture.decref(roc_host);
-        value.dest.decref(roc_host);
-        value.origin.decref(roc_host);
-        value.source.decref(roc_host);
-        value.tint.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.prepared), @alignOf(u64), false, null, roc_host);
+        value.pos.decref(roc_host);
+        value.color.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.texture.incref(amount);
-        value.dest.incref(amount);
-        value.origin.incref(amount);
-        value.source.incref(amount);
-        value.tint.incref(amount);
+        increfBox(@ptrCast(value.prepared), amount);
+        value.pos.incref(amount);
+        value.color.incref(amount);
     }
 } else extern struct {
-    texture: Texture,
-    dest: MathRect,
-    origin: MathVec2,
-    rotation: f32,
-    source: MathRect,
-    tint: ColorRgba,
+    prepared: *u64,
+    pos: MathVec2,
+    color: ColorRgba,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        value.texture.decref(roc_host);
-        value.dest.decref(roc_host);
-        value.origin.decref(roc_host);
-        value.source.decref(roc_host);
-        value.tint.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.prepared), @alignOf(u64), false, null, roc_host);
+        value.pos.decref(roc_host);
+        value.color.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        value.texture.incref(amount);
-        value.dest.incref(amount);
-        value.origin.incref(amount);
-        value.source.incref(amount);
-        value.tint.incref(amount);
+        increfBox(@ptrCast(value.prepared), amount);
+        value.pos.incref(amount);
+        value.color.incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_draw_textureArgs) != 64) @compileError("HostDraw_draw_textureArgs size mismatch");
-        if (@alignOf(HostDraw_draw_textureArgs) != 8) @compileError("HostDraw_draw_textureArgs alignment mismatch");
+        if (@sizeOf(HostDraw_draw_prepared_textArgs) != 24) @compileError("HostDraw_draw_prepared_textArgs size mismatch");
+        if (@alignOf(HostDraw_draw_prepared_textArgs) != 8) @compileError("HostDraw_draw_prepared_textArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_draw_textureArgs) != 60) @compileError("HostDraw_draw_textureArgs size mismatch");
-        if (@alignOf(HostDraw_draw_textureArgs) != 4) @compileError("HostDraw_draw_textureArgs alignment mismatch");
+        if (@sizeOf(HostDraw_draw_prepared_textArgs) != 16) @compileError("HostDraw_draw_prepared_textArgs size mismatch");
+        if (@alignOf(HostDraw_draw_prepared_textArgs) != 4) @compileError("HostDraw_draw_prepared_textArgs alignment mismatch");
     }
 }
 
@@ -12368,6 +12413,74 @@ comptime {
     }
 }
 
+/// Arguments for Host.draw_draw_texture!
+/// Roc signature: { dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_draw_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+    texture: Texture,
+    dest: MathRect,
+    origin: MathVec2,
+    rotation: f32,
+    source: MathRect,
+    tint: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.texture.decref(roc_host);
+        value.dest.decref(roc_host);
+        value.origin.decref(roc_host);
+        value.source.decref(roc_host);
+        value.tint.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.texture.incref(amount);
+        value.dest.incref(amount);
+        value.origin.incref(amount);
+        value.source.incref(amount);
+        value.tint.incref(amount);
+    }
+} else extern struct {
+    texture: Texture,
+    dest: MathRect,
+    origin: MathVec2,
+    rotation: f32,
+    source: MathRect,
+    tint: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.texture.decref(roc_host);
+        value.dest.decref(roc_host);
+        value.origin.decref(roc_host);
+        value.source.decref(roc_host);
+        value.tint.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.texture.incref(amount);
+        value.dest.incref(amount);
+        value.origin.incref(amount);
+        value.source.incref(amount);
+        value.tint.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_draw_textureArgs) != 64) @compileError("HostDraw_draw_textureArgs size mismatch");
+        if (@alignOf(HostDraw_draw_textureArgs) != 8) @compileError("HostDraw_draw_textureArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_draw_textureArgs) != 60) @compileError("HostDraw_draw_textureArgs size mismatch");
+        if (@alignOf(HostDraw_draw_textureArgs) != 4) @compileError("HostDraw_draw_textureArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.draw_fps!
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, size : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -12417,13 +12530,6 @@ comptime {
         if (@alignOf(HostDraw_fpsArgs) != 4) @compileError("HostDraw_fpsArgs alignment mismatch");
     }
 }
-
-/// Arguments for Host.text_startup_default_font!
-/// Roc signature: Resource.Authority => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, PermissionDenied, ResourceLimit])
-/// Refcounted fields are owned by the hosted function.
-pub const HostText_startup_default_fontArgs = extern struct {
-    arg0: u64,
-};
 
 /// Arguments for Host.draw_line!
 /// Roc signature: { color : Color.Rgba, end : Math.Vec2, start : Math.Vec2, thickness : F32 } => {}
@@ -12478,208 +12584,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostDraw_lineArgs) != 24) @compileError("HostDraw_lineArgs size mismatch");
         if (@alignOf(HostDraw_lineArgs) != 4) @compileError("HostDraw_lineArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.text_load_font!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => Try(Font, [FontLoadFailed, ResourceLimit])
-/// Refcounted fields are owned by the hosted function.
-pub const HostText_load_fontArgs = if (@sizeOf(usize) == 4) extern struct {
-    bytes: RocListWith(u8, false),
-    size: i32,
-    format: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.bytes.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.bytes.incref(amount);
-    }
-} else extern struct {
-    bytes: RocListWith(u8, false),
-    size: i32,
-    format: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.bytes.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.bytes.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostText_load_fontArgs) != 32) @compileError("HostText_load_fontArgs size mismatch");
-        if (@alignOf(HostText_load_fontArgs) != 8) @compileError("HostText_load_fontArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostText_load_fontArgs) != 20) @compileError("HostText_load_fontArgs size mismatch");
-        if (@alignOf(HostText_load_fontArgs) != 4) @compileError("HostText_load_fontArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.text_load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Resource.Handle([StoreResource]) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
-/// Refcounted fields are owned by the hosted function.
-pub const HostText_load_store_fontArgs = if (@sizeOf(usize) == 4) extern struct {
-    path: RocStr,
-    store: *u64,
-    size: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
-} else extern struct {
-    path: RocStr,
-    store: *u64,
-    size: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostText_load_store_fontArgs) != 40) @compileError("HostText_load_store_fontArgs size mismatch");
-        if (@alignOf(HostText_load_store_fontArgs) != 8) @compileError("HostText_load_store_fontArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostText_load_store_fontArgs) != 20) @compileError("HostText_load_store_fontArgs size mismatch");
-        if (@alignOf(HostText_load_store_fontArgs) != 4) @compileError("HostText_load_store_fontArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.text_prepare!
-/// Roc signature: { font : Resource.Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle([PreparedTextResource]), width : F32 }, [InvalidResource, ResourceLimit])
-/// Refcounted fields are owned by the hosted function.
-pub const HostText_prepareArgs = if (@sizeOf(usize) == 4) extern struct {
-    font: *u64,
-    text: RocStr,
-    size: f32,
-    spacing: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
-        value.text.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.font), amount);
-        value.text.incref(amount);
-    }
-} else extern struct {
-    font: *u64,
-    text: RocStr,
-    size: f32,
-    spacing: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
-        value.text.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.font), amount);
-        value.text.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostText_prepareArgs) != 40) @compileError("HostText_prepareArgs size mismatch");
-        if (@alignOf(HostText_prepareArgs) != 8) @compileError("HostText_prepareArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostText_prepareArgs) != 24) @compileError("HostText_prepareArgs size mismatch");
-        if (@alignOf(HostText_prepareArgs) != 4) @compileError("HostText_prepareArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.draw_draw_prepared_text!
-/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle([PreparedTextResource]) } => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostDraw_draw_prepared_textArgs = if (@sizeOf(usize) == 4) extern struct {
-    prepared: *u64,
-    pos: MathVec2,
-    color: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.prepared), @alignOf(u64), false, null, roc_host);
-        value.pos.decref(roc_host);
-        value.color.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.prepared), amount);
-        value.pos.incref(amount);
-        value.color.incref(amount);
-    }
-} else extern struct {
-    prepared: *u64,
-    pos: MathVec2,
-    color: ColorRgba,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.prepared), @alignOf(u64), false, null, roc_host);
-        value.pos.decref(roc_host);
-        value.color.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.prepared), amount);
-        value.pos.incref(amount);
-        value.color.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_draw_prepared_textArgs) != 24) @compileError("HostDraw_draw_prepared_textArgs size mismatch");
-        if (@alignOf(HostDraw_draw_prepared_textArgs) != 8) @compileError("HostDraw_draw_prepared_textArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_draw_prepared_textArgs) != 16) @compileError("HostDraw_draw_prepared_textArgs size mismatch");
-        if (@alignOf(HostDraw_draw_prepared_textArgs) != 4) @compileError("HostDraw_draw_prepared_textArgs alignment mismatch");
     }
 }
 
@@ -13291,47 +13195,12 @@ comptime {
     }
 }
 
-/// Arguments for Host.app_report_error!
-/// Roc signature: Str, Str => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostApp_report_errorArgs = extern struct {
-    arg0: RocStr,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.files_open_root!
-/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_open_rootArgs = extern struct {
-    arg0: u64,
-    arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory,
-    arg2: bool,
-};
-
 /// Arguments for Host.files_designate!
 /// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
 /// Refcounted fields are owned by the hosted function.
 pub const HostFiles_designateArgs = extern struct {
     arg0: u64,
     arg1: ArgOrDrop,
-};
-
-/// Arguments for Host.files_read_text!
-/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_read_textArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-    arg2: RocStr,
-};
-
-/// Arguments for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostFiles_read_bytesArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-    arg2: RocStr,
 };
 
 /// Arguments for Host.files_list!
@@ -13352,14 +13221,31 @@ pub const HostFiles_metadataArgs = extern struct {
     arg2: RocStr,
 };
 
-/// Arguments for Host.files_write_text!
-/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
+/// Arguments for Host.files_open_root!
+/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
 /// Refcounted fields are owned by the hosted function.
-pub const HostFiles_write_textArgs = extern struct {
+pub const HostFiles_open_rootArgs = extern struct {
+    arg0: u64,
+    arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory,
+    arg2: bool,
+};
+
+/// Arguments for Host.files_read_bytes!
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_read_bytesArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
     arg2: RocStr,
-    arg3: RocStr,
+};
+
+/// Arguments for Host.files_read_text!
+/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostFiles_read_textArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+    arg2: RocStr,
 };
 
 /// Arguments for Host.files_write_bytes!
@@ -13372,442 +13258,28 @@ pub const HostFiles_write_bytesArgs = extern struct {
     arg3: RocListWith(u8, false),
 };
 
-/// Arguments for Host.capture_set_virtual_mouse!
-/// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
+/// Arguments for Host.files_write_text!
+/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
 /// Refcounted fields are owned by the hosted function.
-pub const HostCapture_set_virtual_mouseArgs = if (@sizeOf(usize) == 4) extern struct {
-    wheel: f32,
-    x: f32,
-    y: f32,
-    active: bool,
-    left: bool,
-    middle: bool,
-    right: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    wheel: f32,
-    x: f32,
-    y: f32,
-    active: bool,
-    left: bool,
-    middle: bool,
-    right: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostCapture_set_virtual_mouseArgs) != 16) @compileError("HostCapture_set_virtual_mouseArgs size mismatch");
-        if (@alignOf(HostCapture_set_virtual_mouseArgs) != 4) @compileError("HostCapture_set_virtual_mouseArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostCapture_set_virtual_mouseArgs) != 16) @compileError("HostCapture_set_virtual_mouseArgs size mismatch");
-        if (@alignOf(HostCapture_set_virtual_mouseArgs) != 4) @compileError("HostCapture_set_virtual_mouseArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.capture_set_virtual_keys!
-/// Roc signature: { active : Bool, keys : List(U64) } => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_set_virtual_keysArgs = if (@sizeOf(usize) == 4) extern struct {
-    keys: RocListWith(u64, false),
-    active: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.keys.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.keys.incref(amount);
-    }
-} else extern struct {
-    keys: RocListWith(u64, false),
-    active: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.keys.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.keys.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostCapture_set_virtual_keysArgs) != 32) @compileError("HostCapture_set_virtual_keysArgs size mismatch");
-        if (@alignOf(HostCapture_set_virtual_keysArgs) != 8) @compileError("HostCapture_set_virtual_keysArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostCapture_set_virtual_keysArgs) != 16) @compileError("HostCapture_set_virtual_keysArgs size mismatch");
-        if (@alignOf(HostCapture_set_virtual_keysArgs) != 4) @compileError("HostCapture_set_virtual_keysArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.capture_set_virtual_text!
-/// Roc signature: List(U32) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_set_virtual_textArgs = extern struct {
-    arg0: RocListWith(u32, false),
-};
-
-/// Arguments for Host.capture_start_recording!
-/// Roc signature: Resource.Authority, { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => Try({}, [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, UnsupportedFormat, WriteFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_start_recordingArgs = extern struct {
-    arg0: u64,
-    arg1: __AnonStruct_96bd4e483c462501,
-};
-
-/// Arguments for Host.capture_stop_recording!
-/// Roc signature: Resource.Authority => Try({ bytes : U64, frames : U64 }, [BudgetExceeded, Busy, NotRecording, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_stop_recordingArgs = extern struct {
-    arg0: u64,
-};
-
-/// Arguments for Host.capture_screenshot!
-/// Roc signature: Resource.Authority, Str => Try({}, [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_screenshotArgs = extern struct {
+pub const HostFiles_write_textArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
+    arg2: RocStr,
+    arg3: RocStr,
 };
 
-/// Arguments for Host.capture_screenshot_texture!
-/// Roc signature: Resource.Authority, { path : Str, target : Texture } => Try({}, [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed])
+/// Arguments for Host.http_send!
+/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
 /// Refcounted fields are owned by the hosted function.
-pub const HostCapture_screenshot_textureArgs = extern struct {
+pub const HostHttp_sendArgs = extern struct {
     arg0: u64,
-    arg1: __AnonStruct_aa2779af0bb79965,
-};
-
-/// Arguments for Host.capture_pixel_at!
-/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_pixel_atArgs = if (@sizeOf(usize) == 4) extern struct {
-    source: __AnonStruct_29524f9bb2f9574c,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.source.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.source.incref(amount);
-    }
-} else extern struct {
-    source: __AnonStruct_29524f9bb2f9574c,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.source.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.source.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostCapture_pixel_atArgs) != 32) @compileError("HostCapture_pixel_atArgs size mismatch");
-        if (@alignOf(HostCapture_pixel_atArgs) != 8) @compileError("HostCapture_pixel_atArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostCapture_pixel_atArgs) != 24) @compileError("HostCapture_pixel_atArgs size mismatch");
-        if (@alignOf(HostCapture_pixel_atArgs) != 4) @compileError("HostCapture_pixel_atArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.capture_read_region!
-/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCapture_read_regionArgs = if (@sizeOf(usize) == 4) extern struct {
-    source: __AnonStruct_29524f9bb2f9574c,
-    height: i32,
-    width: i32,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.source.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.source.incref(amount);
-    }
-} else extern struct {
-    source: __AnonStruct_29524f9bb2f9574c,
-    height: i32,
-    width: i32,
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.source.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.source.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostCapture_read_regionArgs) != 40) @compileError("HostCapture_read_regionArgs size mismatch");
-        if (@alignOf(HostCapture_read_regionArgs) != 8) @compileError("HostCapture_read_regionArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostCapture_read_regionArgs) != 32) @compileError("HostCapture_read_regionArgs size mismatch");
-        if (@alignOf(HostCapture_read_regionArgs) != 4) @compileError("HostCapture_read_regionArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.app_exit!
-/// Roc signature: I32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostApp_exitArgs = extern struct {
-    arg0: i32,
-};
-
-/// Arguments for Host.app_read_env!
-/// Roc signature: Resource.Authority, Str => Try(Str, [NotFound, PermissionDenied])
-/// Refcounted fields are owned by the hosted function.
-pub const HostApp_read_envArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.random_i32!
-/// Roc signature: I32, I32 => I32
-/// Refcounted fields are owned by the hosted function.
-pub const HostRandom_i32Args = extern struct {
-    arg0: i32,
-    arg1: i32,
+    arg1: __AnonStruct_85380e02323174c5,
 };
 
 /// Arguments for Host.keys_set_exit_key!
 /// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
 pub const HostKeys_set_exit_keyArgs = extern struct {
-    arg0: i32,
-};
-
-/// Arguments for Host.window_read_clipboard!
-/// Roc signature: Resource.Authority => Try(Str, [Busy, PermissionDenied, TooLarge, Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_read_clipboardArgs = extern struct {
-    arg0: u64,
-};
-
-/// Arguments for Host.window_set_clipboard_text!
-/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_set_clipboard_textArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.window_suggest_size!
-/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_suggest_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostWindow_suggest_sizeArgs) != 8) @compileError("HostWindow_suggest_sizeArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_sizeArgs) != 4) @compileError("HostWindow_suggest_sizeArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostWindow_suggest_sizeArgs) != 8) @compileError("HostWindow_suggest_sizeArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_sizeArgs) != 4) @compileError("HostWindow_suggest_sizeArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.window_set_target_fps!
-/// Roc signature: I32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_set_target_fpsArgs = extern struct {
-    arg0: i32,
-};
-
-/// Arguments for Host.window_suggest_min_size!
-/// Roc signature: { height : I32, width : I32 } => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_suggest_min_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostWindow_suggest_min_sizeArgs) != 8) @compileError("HostWindow_suggest_min_sizeArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_min_sizeArgs) != 4) @compileError("HostWindow_suggest_min_sizeArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostWindow_suggest_min_sizeArgs) != 8) @compileError("HostWindow_suggest_min_sizeArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_min_sizeArgs) != 4) @compileError("HostWindow_suggest_min_sizeArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.window_suggest_position!
-/// Roc signature: { x : I32, y : I32 } => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_suggest_positionArgs = if (@sizeOf(usize) == 4) extern struct {
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    x: i32,
-    y: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostWindow_suggest_positionArgs) != 8) @compileError("HostWindow_suggest_positionArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_positionArgs) != 4) @compileError("HostWindow_suggest_positionArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostWindow_suggest_positionArgs) != 8) @compileError("HostWindow_suggest_positionArgs size mismatch");
-        if (@alignOf(HostWindow_suggest_positionArgs) != 4) @compileError("HostWindow_suggest_positionArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.window_suggest_monitor!
-/// Roc signature: I32 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostWindow_suggest_monitorArgs = extern struct {
     arg0: i32,
 };
 
@@ -13825,303 +13297,13 @@ pub const HostMouse_set_cursorArgs = extern struct {
     arg0: u8,
 };
 
-/// Arguments for Host.task_sleep!
-/// Roc signature: U64 => {}
+/// Arguments for Host.random_i32!
+/// Roc signature: I32, I32 => I32
 /// Refcounted fields are owned by the hosted function.
-pub const HostTask_sleepArgs = extern struct {
-    arg0: u64,
+pub const HostRandom_i32Args = extern struct {
+    arg0: i32,
+    arg1: i32,
 };
-
-/// Arguments for Host.task_spawn!
-/// Roc signature: Box({} => rigid) => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTask_spawnArgs = extern struct {
-    arg0: RocErasedCallable,
-};
-
-/// Arguments for Host.tilemap_load_tmx!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTilemap_load_tmxArgs = if (@sizeOf(usize) == 4) extern struct {
-    path: RocStr,
-    store: *u64,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
-} else extern struct {
-    path: RocStr,
-    store: *u64,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        increfBox(@ptrCast(value.store), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTilemap_load_tmxArgs) != 32) @compileError("HostTilemap_load_tmxArgs size mismatch");
-        if (@alignOf(HostTilemap_load_tmxArgs) != 8) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTilemap_load_tmxArgs) != 16) @compileError("HostTilemap_load_tmxArgs size mismatch");
-        if (@alignOf(HostTilemap_load_tmxArgs) != 4) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.tilemap_draw!
-/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTilemap_drawArgs = if (@sizeOf(usize) == 4) extern struct {
-    max_col: u64,
-    max_row: u64,
-    min_col: u64,
-    min_row: u64,
-    selector_value: u64,
-    gids: RocListWith(u64, false),
-    layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_9f9f7e660a5e922b),
-    map_tile_height: f32,
-    map_tile_width: f32,
-    origin_x: f32,
-    origin_y: f32,
-    culled: bool,
-    selector_kind: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.gids.decref(roc_host);
-        value.layers.decref(roc_host);
-        decrefListOf__AnonStruct_9f9f7e660a5e922b(value.tilesets, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.gids.incref(amount);
-        value.layers.incref(amount);
-        value.tilesets.incref(amount);
-    }
-} else extern struct {
-    max_col: u64,
-    max_row: u64,
-    min_col: u64,
-    min_row: u64,
-    selector_value: u64,
-    gids: RocListWith(u64, false),
-    layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_9f9f7e660a5e922b),
-    map_tile_height: f32,
-    map_tile_width: f32,
-    origin_x: f32,
-    origin_y: f32,
-    culled: bool,
-    selector_kind: u8,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.gids.decref(roc_host);
-        value.layers.decref(roc_host);
-        decrefListOf__AnonStruct_9f9f7e660a5e922b(value.tilesets, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.gids.incref(amount);
-        value.layers.incref(amount);
-        value.tilesets.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTilemap_drawArgs) != 136) @compileError("HostTilemap_drawArgs size mismatch");
-        if (@alignOf(HostTilemap_drawArgs) != 8) @compileError("HostTilemap_drawArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTilemap_drawArgs) != 96) @compileError("HostTilemap_drawArgs size mismatch");
-        if (@alignOf(HostTilemap_drawArgs) != 8) @compileError("HostTilemap_drawArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.draw_begin_camera!
-/// Roc signature: Camera.Camera2D => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostDraw_begin_cameraArgs = if (@sizeOf(usize) == 4) extern struct {
-    offset: MathVec2,
-    rotation: f32,
-    target: MathVec2,
-    zoom: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.offset.decref(roc_host);
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.offset.incref(amount);
-        value.target.incref(amount);
-    }
-} else extern struct {
-    offset: MathVec2,
-    rotation: f32,
-    target: MathVec2,
-    zoom: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.offset.decref(roc_host);
-        value.target.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.offset.incref(amount);
-        value.target.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_begin_cameraArgs) != 24) @compileError("HostDraw_begin_cameraArgs size mismatch");
-        if (@alignOf(HostDraw_begin_cameraArgs) != 4) @compileError("HostDraw_begin_cameraArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_begin_cameraArgs) != 24) @compileError("HostDraw_begin_cameraArgs size mismatch");
-        if (@alignOf(HostDraw_begin_cameraArgs) != 4) @compileError("HostDraw_begin_cameraArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.draw_begin_blend!
-/// Roc signature: U8 => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostDraw_begin_blendArgs = extern struct {
-    arg0: u8,
-};
-
-/// Arguments for Host.draw_begin_render_texture!
-/// Roc signature: Texture => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostDraw_begin_render_textureArgs = if (@sizeOf(usize) == 4) extern struct {
-    handle: *u64,
-    height: f32,
-    width: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.handle), amount);
-    }
-} else extern struct {
-    handle: *u64,
-    height: f32,
-    width: f32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.handle), amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_begin_render_textureArgs) != 16) @compileError("HostDraw_begin_render_textureArgs size mismatch");
-        if (@alignOf(HostDraw_begin_render_textureArgs) != 8) @compileError("HostDraw_begin_render_textureArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_begin_render_textureArgs) != 12) @compileError("HostDraw_begin_render_textureArgs size mismatch");
-        if (@alignOf(HostDraw_begin_render_textureArgs) != 4) @compileError("HostDraw_begin_render_textureArgs alignment mismatch");
-    }
-}
-
-/// Arguments for Host.draw_begin_shader!
-/// Roc signature: Resource.Handle([ShaderResource]) => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostDraw_begin_shaderArgs = extern struct {
-    arg0: *u64,
-};
-
-/// Arguments for Host.texture_load_render_target!
-/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
-/// Refcounted fields are owned by the hosted function.
-pub const HostTexture_load_render_targetArgs = if (@sizeOf(usize) == 4) extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-} else extern struct {
-    height: i32,
-    width: i32,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        _ = value;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        _ = value;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostTexture_load_render_targetArgs) != 8) @compileError("HostTexture_load_render_targetArgs size mismatch");
-        if (@alignOf(HostTexture_load_render_targetArgs) != 4) @compileError("HostTexture_load_render_targetArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostTexture_load_render_targetArgs) != 8) @compileError("HostTexture_load_render_targetArgs size mismatch");
-        if (@alignOf(HostTexture_load_render_targetArgs) != 4) @compileError("HostTexture_load_render_targetArgs alignment mismatch");
-    }
-}
 
 /// Arguments for Host.shader_load_source!
 /// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Resource.Handle([ShaderResource]), [ResourceLimit, ShaderLoadFailed])
@@ -14553,30 +13735,56 @@ comptime {
     }
 }
 
-/// Arguments for Host.http_send!
-/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
+/// Arguments for Host.sqlite_close!
+/// Roc signature: Resource.Handle([SqliteDbResource]) => Try({}, [SqliteErr({ code : I64, message : Str })])
 /// Refcounted fields are owned by the hosted function.
-pub const HostHttp_sendArgs = extern struct {
-    arg0: u64,
-    arg1: __AnonStruct_85380e02323174c5,
+pub const HostSqlite_closeArgs = extern struct {
+    arg0: *u64,
 };
 
-/// Arguments for Host.stdio_write_text!
-/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Arguments for Host.sqlite_exec_script!
+/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try({}, [SqliteErr({ code : I64, message : Str })])
 /// Refcounted fields are owned by the hosted function.
-pub const HostStdio_write_textArgs = extern struct {
-    arg0: u64,
-    arg1: u8,
-    arg2: RocStr,
+pub const HostSqlite_exec_scriptArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
 };
 
-/// Arguments for Host.stdio_write_line!
-/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Arguments for Host.sqlite_open!
+/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
 /// Refcounted fields are owned by the hosted function.
-pub const HostStdio_write_lineArgs = extern struct {
+pub const HostSqlite_openArgs = extern struct {
     arg0: u64,
-    arg1: u8,
+    arg1: RocStr,
     arg2: RocStr,
+    arg3: u8,
+    arg4: u64,
+    arg5: u64,
+};
+
+/// Arguments for Host.sqlite_prepare!
+/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try(Resource.Handle([SqliteStmtResource]), [MultipleStatements, SqliteErr({ code : I64, message : Str }), TooManyStatements])
+/// Refcounted fields are owned by the hosted function.
+pub const HostSqlite_prepareArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
+};
+
+/// Arguments for Host.sqlite_run_once!
+/// Roc signature: Resource.Handle([SqliteDbResource]), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
+/// Refcounted fields are owned by the hosted function.
+pub const HostSqlite_run_onceArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
+    arg2: RocList(__AnonStruct_90c9f98ccd96f8ce),
+};
+
+/// Arguments for Host.sqlite_run_stmt!
+/// Roc signature: Resource.Handle([SqliteStmtResource]), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
+/// Refcounted fields are owned by the hosted function.
+pub const HostSqlite_run_stmtArgs = extern struct {
+    arg0: *u64,
+    arg1: RocList(__AnonStruct_90c9f98ccd96f8ce),
 };
 
 /// Arguments for Host.stdio_write_bytes!
@@ -14588,6 +13796,726 @@ pub const HostStdio_write_bytesArgs = extern struct {
     arg2: RocListWith(u8, false),
 };
 
+/// Arguments for Host.stdio_write_line!
+/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostStdio_write_lineArgs = extern struct {
+    arg0: u64,
+    arg1: u8,
+    arg2: RocStr,
+};
+
+/// Arguments for Host.stdio_write_text!
+/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostStdio_write_textArgs = extern struct {
+    arg0: u64,
+    arg1: u8,
+    arg2: RocStr,
+};
+
+/// Arguments for Host.store_open!
+/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Refcounted fields are owned by the hosted function.
+pub const HostStore_openArgs = extern struct {
+    arg0: u64,
+    arg1: __AnonStruct_3a568cb37b91deaf,
+};
+
+/// Arguments for Host.task_sleep!
+/// Roc signature: U64 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTask_sleepArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for Host.task_spawn!
+/// Roc signature: Box({} => rigid) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTask_spawnArgs = extern struct {
+    arg0: RocErasedCallable,
+};
+
+/// Arguments for Host.text_load_font!
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => Try(Font, [FontLoadFailed, ResourceLimit])
+/// Refcounted fields are owned by the hosted function.
+pub const HostText_load_fontArgs = if (@sizeOf(usize) == 4) extern struct {
+    bytes: RocListWith(u8, false),
+    size: i32,
+    format: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.bytes.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.bytes.incref(amount);
+    }
+} else extern struct {
+    bytes: RocListWith(u8, false),
+    size: i32,
+    format: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.bytes.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.bytes.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostText_load_fontArgs) != 32) @compileError("HostText_load_fontArgs size mismatch");
+        if (@alignOf(HostText_load_fontArgs) != 8) @compileError("HostText_load_fontArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostText_load_fontArgs) != 20) @compileError("HostText_load_fontArgs size mismatch");
+        if (@alignOf(HostText_load_fontArgs) != 4) @compileError("HostText_load_fontArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.text_load_store_font!
+/// Roc signature: { path : Str, size : I32, store : Resource.Handle([StoreResource]) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
+/// Refcounted fields are owned by the hosted function.
+pub const HostText_load_store_fontArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    size: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    size: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostText_load_store_fontArgs) != 40) @compileError("HostText_load_store_fontArgs size mismatch");
+        if (@alignOf(HostText_load_store_fontArgs) != 8) @compileError("HostText_load_store_fontArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostText_load_store_fontArgs) != 20) @compileError("HostText_load_store_fontArgs size mismatch");
+        if (@alignOf(HostText_load_store_fontArgs) != 4) @compileError("HostText_load_store_fontArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.text_prepare!
+/// Roc signature: { font : Resource.Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle([PreparedTextResource]), width : F32 }, [InvalidResource, ResourceLimit])
+/// Refcounted fields are owned by the hosted function.
+pub const HostText_prepareArgs = if (@sizeOf(usize) == 4) extern struct {
+    font: *u64,
+    text: RocStr,
+    size: f32,
+    spacing: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
+        value.text.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.font), amount);
+        value.text.incref(amount);
+    }
+} else extern struct {
+    font: *u64,
+    text: RocStr,
+    size: f32,
+    spacing: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.font), @alignOf(u64), false, null, roc_host);
+        value.text.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.font), amount);
+        value.text.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostText_prepareArgs) != 40) @compileError("HostText_prepareArgs size mismatch");
+        if (@alignOf(HostText_prepareArgs) != 8) @compileError("HostText_prepareArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostText_prepareArgs) != 24) @compileError("HostText_prepareArgs size mismatch");
+        if (@alignOf(HostText_prepareArgs) != 4) @compileError("HostText_prepareArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.text_startup_default_font!
+/// Roc signature: Resource.Authority => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, PermissionDenied, ResourceLimit])
+/// Refcounted fields are owned by the hosted function.
+pub const HostText_startup_default_fontArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for Host.texture_generate_checked!
+/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_generate_checkedArgs = if (@sizeOf(usize) == 4) extern struct {
+    checks_x: i32,
+    checks_y: i32,
+    height: i32,
+    width: i32,
+    color_a: ColorRgba,
+    color_b: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.color_a.decref(roc_host);
+        value.color_b.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.color_a.incref(amount);
+        value.color_b.incref(amount);
+    }
+} else extern struct {
+    checks_x: i32,
+    checks_y: i32,
+    height: i32,
+    width: i32,
+    color_a: ColorRgba,
+    color_b: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.color_a.decref(roc_host);
+        value.color_b.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.color_a.incref(amount);
+        value.color_b.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_generate_checkedArgs) != 24) @compileError("HostTexture_generate_checkedArgs size mismatch");
+        if (@alignOf(HostTexture_generate_checkedArgs) != 4) @compileError("HostTexture_generate_checkedArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_generate_checkedArgs) != 24) @compileError("HostTexture_generate_checkedArgs size mismatch");
+        if (@alignOf(HostTexture_generate_checkedArgs) != 4) @compileError("HostTexture_generate_checkedArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_generate_color!
+/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_generate_colorArgs = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.color.incref(amount);
+    }
+} else extern struct {
+    height: i32,
+    width: i32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_generate_colorArgs) != 12) @compileError("HostTexture_generate_colorArgs size mismatch");
+        if (@alignOf(HostTexture_generate_colorArgs) != 4) @compileError("HostTexture_generate_colorArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_generate_colorArgs) != 12) @compileError("HostTexture_generate_colorArgs size mismatch");
+        if (@alignOf(HostTexture_generate_colorArgs) != 4) @compileError("HostTexture_generate_colorArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_load_bytes!
+/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_load_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
+    bytes: RocListWith(u8, false),
+    format: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.bytes.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.bytes.incref(amount);
+    }
+} else extern struct {
+    bytes: RocListWith(u8, false),
+    format: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.bytes.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.bytes.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_bytesArgs) != 32) @compileError("HostTexture_load_bytesArgs size mismatch");
+        if (@alignOf(HostTexture_load_bytesArgs) != 8) @compileError("HostTexture_load_bytesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_bytesArgs) != 16) @compileError("HostTexture_load_bytesArgs size mismatch");
+        if (@alignOf(HostTexture_load_bytesArgs) != 4) @compileError("HostTexture_load_bytesArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_load_render_target!
+/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_load_render_targetArgs = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_render_targetArgs) != 8) @compileError("HostTexture_load_render_targetArgs size mismatch");
+        if (@alignOf(HostTexture_load_render_targetArgs) != 4) @compileError("HostTexture_load_render_targetArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_render_targetArgs) != 8) @compileError("HostTexture_load_render_targetArgs size mismatch");
+        if (@alignOf(HostTexture_load_render_targetArgs) != 4) @compileError("HostTexture_load_render_targetArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_load_store!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_load_storeArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_load_storeArgs) != 32) @compileError("HostTexture_load_storeArgs size mismatch");
+        if (@alignOf(HostTexture_load_storeArgs) != 8) @compileError("HostTexture_load_storeArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_load_storeArgs) != 16) @compileError("HostTexture_load_storeArgs size mismatch");
+        if (@alignOf(HostTexture_load_storeArgs) != 4) @compileError("HostTexture_load_storeArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_set_filter!
+/// Roc signature: Texture, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_set_filterArgs = extern struct {
+    arg0: Texture,
+    arg1: u8,
+};
+
+/// Arguments for Host.texture_set_wrap!
+/// Roc signature: Texture, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_set_wrapArgs = extern struct {
+    arg0: Texture,
+    arg1: u8,
+};
+
+/// Arguments for Host.texture_update!
+/// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => Try({}, [NotMutable, PixelCountMismatch])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_updateArgs = if (@sizeOf(usize) == 4) extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+} else extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_updateArgs) != 40) @compileError("HostTexture_updateArgs size mismatch");
+        if (@alignOf(HostTexture_updateArgs) != 8) @compileError("HostTexture_updateArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_updateArgs) != 24) @compileError("HostTexture_updateArgs size mismatch");
+        if (@alignOf(HostTexture_updateArgs) != 4) @compileError("HostTexture_updateArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.texture_update_region!
+/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => Try({}, [NotMutable, PixelCountMismatch, RegionOutOfBounds])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTexture_update_regionArgs = if (@sizeOf(usize) == 4) extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: Texture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+} else extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: Texture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTexture_update_regionArgs) != 56) @compileError("HostTexture_update_regionArgs size mismatch");
+        if (@alignOf(HostTexture_update_regionArgs) != 8) @compileError("HostTexture_update_regionArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTexture_update_regionArgs) != 40) @compileError("HostTexture_update_regionArgs size mismatch");
+        if (@alignOf(HostTexture_update_regionArgs) != 4) @compileError("HostTexture_update_regionArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.tilemap_draw!
+/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTilemap_drawArgs = if (@sizeOf(usize) == 4) extern struct {
+    max_col: u64,
+    max_row: u64,
+    min_col: u64,
+    min_row: u64,
+    selector_value: u64,
+    gids: RocListWith(u64, false),
+    layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
+    tilesets: RocList(__AnonStruct_9f9f7e660a5e922b),
+    map_tile_height: f32,
+    map_tile_width: f32,
+    origin_x: f32,
+    origin_y: f32,
+    culled: bool,
+    selector_kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.gids.decref(roc_host);
+        value.layers.decref(roc_host);
+        decrefListOf__AnonStruct_9f9f7e660a5e922b(value.tilesets, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.gids.incref(amount);
+        value.layers.incref(amount);
+        value.tilesets.incref(amount);
+    }
+} else extern struct {
+    max_col: u64,
+    max_row: u64,
+    min_col: u64,
+    min_row: u64,
+    selector_value: u64,
+    gids: RocListWith(u64, false),
+    layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
+    tilesets: RocList(__AnonStruct_9f9f7e660a5e922b),
+    map_tile_height: f32,
+    map_tile_width: f32,
+    origin_x: f32,
+    origin_y: f32,
+    culled: bool,
+    selector_kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.gids.decref(roc_host);
+        value.layers.decref(roc_host);
+        decrefListOf__AnonStruct_9f9f7e660a5e922b(value.tilesets, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.gids.incref(amount);
+        value.layers.incref(amount);
+        value.tilesets.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTilemap_drawArgs) != 136) @compileError("HostTilemap_drawArgs size mismatch");
+        if (@alignOf(HostTilemap_drawArgs) != 8) @compileError("HostTilemap_drawArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTilemap_drawArgs) != 96) @compileError("HostTilemap_drawArgs size mismatch");
+        if (@alignOf(HostTilemap_drawArgs) != 8) @compileError("HostTilemap_drawArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.tilemap_load_tmx!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
+/// Refcounted fields are owned by the hosted function.
+pub const HostTilemap_load_tmxArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+} else extern struct {
+    path: RocStr,
+    store: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.store), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        increfBox(@ptrCast(value.store), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostTilemap_load_tmxArgs) != 32) @compileError("HostTilemap_load_tmxArgs size mismatch");
+        if (@alignOf(HostTilemap_load_tmxArgs) != 8) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostTilemap_load_tmxArgs) != 16) @compileError("HostTilemap_load_tmxArgs size mismatch");
+        if (@alignOf(HostTilemap_load_tmxArgs) != 4) @compileError("HostTilemap_load_tmxArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.trace_begin!
+/// Roc signature: Str => U64
+/// Refcounted fields are owned by the hosted function.
+pub const HostTrace_beginArgs = extern struct {
+    arg0: RocStr,
+};
+
+/// Arguments for Host.trace_end!
+/// Roc signature: U64 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTrace_endArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for Host.trace_mark!
+/// Roc signature: Str => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTrace_markArgs = extern struct {
+    arg0: RocStr,
+};
+
+/// Arguments for Host.trace_sample_f64!
+/// Roc signature: Str, F64, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTrace_sample_f64Args = extern struct {
+    arg0: RocStr,
+    arg1: f64,
+    arg2: u8,
+};
+
+/// Arguments for Host.trace_sample_i64!
+/// Roc signature: Str, I64, U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostTrace_sample_i64Args = extern struct {
+    arg0: RocStr,
+    arg1: i64,
+    arg2: u8,
+};
+
 /// Arguments for Host.udp_bind!
 /// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
 /// Refcounted fields are owned by the hosted function.
@@ -14595,6 +14523,52 @@ pub const HostUdp_bindArgs = extern struct {
     arg0: u64,
     arg1: __AnonStruct_63b1422749dba501,
 };
+
+/// Arguments for Host.udp_receive!
+/// Roc signature: { max_datagrams : U32, socket : Resource.Handle([UdpSocketResource]), timeout_ms : U64 } => Try({ payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }, [AlreadyReceiving, ReceiveFailed, Timeout, Unavailable])
+/// Refcounted fields are owned by the hosted function.
+pub const HostUdp_receiveArgs = if (@sizeOf(usize) == 4) extern struct {
+    timeout_ms: u64,
+    socket: *u64,
+    max_datagrams: u32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.socket), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.socket), amount);
+    }
+} else extern struct {
+    timeout_ms: u64,
+    socket: *u64,
+    max_datagrams: u32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.socket), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.socket), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostUdp_receiveArgs) != 24) @compileError("HostUdp_receiveArgs size mismatch");
+        if (@alignOf(HostUdp_receiveArgs) != 8) @compileError("HostUdp_receiveArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostUdp_receiveArgs) != 16) @compileError("HostUdp_receiveArgs size mismatch");
+        if (@alignOf(HostUdp_receiveArgs) != 8) @compileError("HostUdp_receiveArgs alignment mismatch");
+    }
+}
 
 /// Arguments for Host.udp_send!
 /// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
@@ -14652,213 +14626,246 @@ comptime {
     }
 }
 
-/// Arguments for Host.udp_receive!
-/// Roc signature: { max_datagrams : U32, socket : Resource.Handle([UdpSocketResource]), timeout_ms : U64 } => Try({ payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }, [AlreadyReceiving, ReceiveFailed, Timeout, Unavailable])
+/// Arguments for Host.window_read_clipboard!
+/// Roc signature: Resource.Authority => Try(Str, [Busy, PermissionDenied, TooLarge, Unavailable])
 /// Refcounted fields are owned by the hosted function.
-pub const HostUdp_receiveArgs = if (@sizeOf(usize) == 4) extern struct {
-    timeout_ms: u64,
-    socket: *u64,
-    max_datagrams: u32,
+pub const HostWindow_read_clipboardArgs = extern struct {
+    arg0: u64,
+};
+
+/// Arguments for Host.window_set_clipboard_text!
+/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
+/// Refcounted fields are owned by the hosted function.
+pub const HostWindow_set_clipboard_textArgs = extern struct {
+    arg0: u64,
+    arg1: RocStr,
+};
+
+/// Arguments for Host.window_set_target_fps!
+/// Roc signature: I32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostWindow_set_target_fpsArgs = extern struct {
+    arg0: i32,
+};
+
+/// Arguments for Host.window_suggest_min_size!
+/// Roc signature: { height : I32, width : I32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostWindow_suggest_min_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        decrefBoxWith(@ptrCast(value.socket), @alignOf(u64), false, null, roc_host);
+        _ = value;
+        _ = roc_host;
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        increfBox(@ptrCast(value.socket), amount);
+        _ = value;
+        _ = amount;
     }
 } else extern struct {
-    timeout_ms: u64,
-    socket: *u64,
-    max_datagrams: u32,
+    height: i32,
+    width: i32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
-        decrefBoxWith(@ptrCast(value.socket), @alignOf(u64), false, null, roc_host);
+        _ = value;
+        _ = roc_host;
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
-        increfBox(@ptrCast(value.socket), amount);
+        _ = value;
+        _ = amount;
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostUdp_receiveArgs) != 24) @compileError("HostUdp_receiveArgs size mismatch");
-        if (@alignOf(HostUdp_receiveArgs) != 8) @compileError("HostUdp_receiveArgs alignment mismatch");
+        if (@sizeOf(HostWindow_suggest_min_sizeArgs) != 8) @compileError("HostWindow_suggest_min_sizeArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_min_sizeArgs) != 4) @compileError("HostWindow_suggest_min_sizeArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostUdp_receiveArgs) != 16) @compileError("HostUdp_receiveArgs size mismatch");
-        if (@alignOf(HostUdp_receiveArgs) != 8) @compileError("HostUdp_receiveArgs alignment mismatch");
+        if (@sizeOf(HostWindow_suggest_min_sizeArgs) != 8) @compileError("HostWindow_suggest_min_sizeArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_min_sizeArgs) != 4) @compileError("HostWindow_suggest_min_sizeArgs alignment mismatch");
     }
 }
 
-/// Arguments for Host.sqlite_open!
-/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
+/// Arguments for Host.window_suggest_monitor!
+/// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_openArgs = extern struct {
-    arg0: u64,
-    arg1: RocStr,
-    arg2: RocStr,
-    arg3: u8,
-    arg4: u64,
-    arg5: u64,
+pub const HostWindow_suggest_monitorArgs = extern struct {
+    arg0: i32,
 };
 
-/// Arguments for Host.sqlite_close!
-/// Roc signature: Resource.Handle([SqliteDbResource]) => Try({}, [SqliteErr({ code : I64, message : Str })])
+/// Arguments for Host.window_suggest_position!
+/// Roc signature: { x : I32, y : I32 } => {}
 /// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_closeArgs = extern struct {
-    arg0: *u64,
+pub const HostWindow_suggest_positionArgs = if (@sizeOf(usize) == 4) extern struct {
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
 };
 
-/// Arguments for Host.sqlite_prepare!
-/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try(Resource.Handle([SqliteStmtResource]), [MultipleStatements, SqliteErr({ code : I64, message : Str }), TooManyStatements])
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostWindow_suggest_positionArgs) != 8) @compileError("HostWindow_suggest_positionArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_positionArgs) != 4) @compileError("HostWindow_suggest_positionArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostWindow_suggest_positionArgs) != 8) @compileError("HostWindow_suggest_positionArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_positionArgs) != 4) @compileError("HostWindow_suggest_positionArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.window_suggest_size!
+/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_prepareArgs = extern struct {
-    arg0: *u64,
-    arg1: RocStr,
+pub const HostWindow_suggest_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    height: i32,
+    width: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
 };
 
-/// Arguments for Host.sqlite_run_stmt!
-/// Roc signature: Resource.Handle([SqliteStmtResource]), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
-/// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_run_stmtArgs = extern struct {
-    arg0: *u64,
-    arg1: RocList(__AnonStruct_90c9f98ccd96f8ce),
-};
-
-/// Arguments for Host.sqlite_run_once!
-/// Roc signature: Resource.Handle([SqliteDbResource]), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
-/// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_run_onceArgs = extern struct {
-    arg0: *u64,
-    arg1: RocStr,
-    arg2: RocList(__AnonStruct_90c9f98ccd96f8ce),
-};
-
-/// Arguments for Host.sqlite_exec_script!
-/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try({}, [SqliteErr({ code : I64, message : Str })])
-/// Refcounted fields are owned by the hosted function.
-pub const HostSqlite_exec_scriptArgs = extern struct {
-    arg0: *u64,
-    arg1: RocStr,
-};
-
-/// Arguments for Host.cmd_run!
-/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
-/// Refcounted fields are owned by the hosted function.
-pub const HostCmd_runArgs = extern struct {
-    arg0: u64,
-    arg1: __AnonStruct_3fe396bc5ba0c31c,
-};
-
-/// Arguments for Host.trace_mark!
-/// Roc signature: Str => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTrace_markArgs = extern struct {
-    arg0: RocStr,
-};
-
-/// Arguments for Host.trace_begin!
-/// Roc signature: Str => U64
-/// Refcounted fields are owned by the hosted function.
-pub const HostTrace_beginArgs = extern struct {
-    arg0: RocStr,
-};
-
-/// Arguments for Host.trace_end!
-/// Roc signature: U64 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTrace_endArgs = extern struct {
-    arg0: u64,
-};
-
-/// Arguments for Host.trace_sample_i64!
-/// Roc signature: Str, I64, U8 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTrace_sample_i64Args = extern struct {
-    arg0: RocStr,
-    arg1: i64,
-    arg2: u8,
-};
-
-/// Arguments for Host.trace_sample_f64!
-/// Roc signature: Str, F64, U8 => {}
-/// Refcounted fields are owned by the hosted function.
-pub const HostTrace_sample_f64Args = extern struct {
-    arg0: RocStr,
-    arg1: f64,
-    arg2: u8,
-};
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostWindow_suggest_sizeArgs) != 8) @compileError("HostWindow_suggest_sizeArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_sizeArgs) != 4) @compileError("HostWindow_suggest_sizeArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostWindow_suggest_sizeArgs) != 8) @compileError("HostWindow_suggest_sizeArgs size mismatch");
+        if (@alignOf(HostWindow_suggest_sizeArgs) != 4) @compileError("HostWindow_suggest_sizeArgs alignment mismatch");
+    }
+}
 
 // Platform Type Aliases
 
-pub const HostStore_openArg1 = __AnonStruct_3a568cb37b91deaf;
-pub const HostStore_openErr = AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch;
-pub const HostTexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
-pub const HostTexture_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed;
-pub const HostTexture_load_storeOk = Texture;
-pub const HostTexture_load_bytesArg0 = __AnonStruct_ff17f03b4409100d;
-pub const HostTexture_load_bytesErr = ResourceLimitOrTextureLoadFailed;
-pub const HostTexture_load_bytesOk = Texture;
-pub const HostTexture_generate_colorArg0 = __AnonStruct_261d7d093f4d74f0;
-pub const HostTexture_generate_colorErr = ResourceLimitOrTextureGenerationFailed;
-pub const HostTexture_generate_colorOk = Texture;
-pub const HostTexture_generate_checkedArg0 = __AnonStruct_8ffafd56eb173f8d;
-pub const HostTexture_generate_checkedResult = HostTexture_generate_colorResult;
-pub const HostTexture_generate_checkedResultPayload = HostTexture_generate_colorResultPayload;
-pub const HostTexture_generate_checkedResultTag = HostTexture_generate_colorResultTag;
-pub const HostTexture_generate_checkedErr = ResourceLimitOrTextureGenerationFailed;
-pub const HostTexture_generate_checkedOk = Texture;
-pub const HostTexture_updateArg0 = __AnonStruct_8e0d47be14ad0be3;
-pub const HostTexture_updateArg0Pixels = ColorRgba;
-pub const HostTexture_updateErr = NotMutableOrPixelCountMismatch;
-pub const HostTexture_update_regionArg0 = __AnonStruct_307d51efe2380633;
-pub const HostTexture_update_regionArg0Pixels = ColorRgba;
-pub const HostTexture_update_regionErr = NotMutableOrPixelCountMismatchOrRegionOutOfBounds;
-pub const HostAudio_gen_toneArg0 = __AnonStruct_74e1febaa758f087;
-pub const HostAudio_gen_toneErr = ResourceLimitOrSoundGenerationFailed;
+pub const HostApp_read_envErr = NotFoundOrPermissionDenied;
 pub const HostAudio_gen_soundArg0 = __AnonStruct_37b6eb678c2c2ca2;
-pub const HostAudio_gen_soundResult = HostAudio_gen_toneResult;
-pub const HostAudio_gen_soundResultPayload = HostAudio_gen_toneResultPayload;
-pub const HostAudio_gen_soundResultTag = HostAudio_gen_toneResultTag;
 pub const HostAudio_gen_soundErr = ResourceLimitOrSoundGenerationFailed;
-pub const HostAudio_load_soundArg0 = __AnonStruct_e6634fb4c190c214;
-pub const HostAudio_load_soundErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed;
+pub const HostAudio_gen_toneArg0 = __AnonStruct_74e1febaa758f087;
+pub const HostAudio_gen_toneResult = HostAudio_gen_soundResult;
+pub const HostAudio_gen_toneResultPayload = HostAudio_gen_soundResultPayload;
+pub const HostAudio_gen_toneResultTag = HostAudio_gen_soundResultTag;
+pub const HostAudio_gen_toneErr = ResourceLimitOrSoundGenerationFailed;
 pub const HostAudio_load_musicArg0 = __AnonStruct_e6634fb4c190c214;
 pub const HostAudio_load_musicErr = MusicLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit;
+pub const HostAudio_load_soundArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostAudio_load_soundErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed;
+pub const HostCapture_pixel_atArg0 = __AnonStruct_30827bd86e7a53b3;
+pub const HostCapture_pixel_atArg0Source = __AnonStruct_29524f9bb2f9574c;
+pub const HostCapture_pixel_atErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
+pub const HostCapture_pixel_atOk = __AnonStruct_bda5c9dc6cabe78e;
+pub const HostCapture_read_regionArg0 = __AnonStruct_7ea2de5aa3c18166;
+pub const HostCapture_read_regionArg0Source = __AnonStruct_29524f9bb2f9574c;
+pub const HostCapture_read_regionErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
+pub const HostCapture_screenshotErr = AlreadyPendingOrBusyOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
+pub const HostCapture_screenshot_textureArg1 = __AnonStruct_aa2779af0bb79965;
+pub const HostCapture_screenshot_textureErr = BudgetExceededOrBusyOrOutOfMemoryOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrReadbackFailedOrTargetUnavailableOrUnavailableOrWriteFailed;
+pub const HostCapture_set_virtual_keysArg0 = __AnonStruct_c3425bb1e3730c6e;
+pub const HostCapture_set_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
+pub const HostCapture_start_recordingArg1 = __AnonStruct_96bd4e483c462501;
+pub const HostCapture_start_recordingErr = AlreadyRecordingOrBusyOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrUnavailableOrUnsupportedFormatOrWriteFailed;
+pub const HostCapture_stop_recordingErr = BudgetExceededOrBusyOrNotRecordingOrPermissionDeniedOrReadbackFailedOrTargetUnavailableOrUnavailable;
+pub const HostCapture_stop_recordingOk = __AnonStruct_5c978c17ba0c990a;
+pub const HostCmd_runArg1 = __AnonStruct_3fe396bc5ba0c31c;
+pub const HostCmd_runArg1Envs = __AnonStruct_82a96c5d55d63488;
+pub const HostCmd_runErr = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable;
+pub const HostCmd_runErrPayload = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload;
+pub const HostCmd_runErrTag = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag;
+pub const HostCmd_runErrTimeout = __AnonStruct_45d496287297bf7f;
+pub const HostCmd_runOk = __AnonStruct_45d496287297bf7f;
+pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTimeout = __AnonStruct_45d496287297bf7f;
+pub const HostDraw_begin_blendErr = ScopeLimitOrScopeUnavailable;
+pub const HostDraw_begin_cameraResult = HostDraw_begin_blendResult;
+pub const HostDraw_begin_cameraResultPayload = HostDraw_begin_blendResultPayload;
+pub const HostDraw_begin_cameraResultTag = HostDraw_begin_blendResultTag;
+pub const HostDraw_begin_cameraErr = ScopeLimitOrScopeUnavailable;
+pub const HostDraw_begin_render_textureResult = HostDraw_begin_blendResult;
+pub const HostDraw_begin_render_textureResultPayload = HostDraw_begin_blendResultPayload;
+pub const HostDraw_begin_render_textureResultTag = HostDraw_begin_blendResultTag;
+pub const HostDraw_begin_render_textureErr = ScopeLimitOrScopeUnavailable;
 pub const HostDraw_begin_scissorArg0 = __AnonStruct_5d393593a1f032cb;
+pub const HostDraw_begin_scissorResult = HostDraw_begin_blendResult;
+pub const HostDraw_begin_scissorResultPayload = HostDraw_begin_blendResultPayload;
+pub const HostDraw_begin_scissorResultTag = HostDraw_begin_blendResultTag;
 pub const HostDraw_begin_scissorErr = ScopeLimitOrScopeUnavailable;
+pub const HostDraw_begin_shaderResult = HostDraw_begin_blendResult;
+pub const HostDraw_begin_shaderResultPayload = HostDraw_begin_blendResultPayload;
+pub const HostDraw_begin_shaderResultTag = HostDraw_begin_blendResultTag;
+pub const HostDraw_begin_shaderErr = ScopeLimitOrScopeUnavailable;
 pub const HostDraw_circle_gradientArg0 = __AnonStruct_f8a458371716c148;
 pub const HostDraw_circle_linesArg0 = __AnonStruct_8b18bd818a3a6ac2;
 pub const HostDraw_circleArg0 = __AnonStruct_e430ec55b5760490;
-pub const HostDraw_draw_textureArg0 = __AnonStruct_f942b11a3b075f2d;
+pub const HostDraw_draw_prepared_textArg0 = __AnonStruct_6bff15fb6a4cb85a;
 pub const HostDraw_draw_texture_instancesArg0 = __AnonStruct_a819339c8fa68dd6;
 pub const HostDraw_draw_texture_instancesArg0Instances = __AnonStruct_1b47e50f7d442c7;
 pub const HostDraw_draw_texture_quadArg0 = __AnonStruct_81a2561bb748cfff;
+pub const HostDraw_draw_textureArg0 = __AnonStruct_f942b11a3b075f2d;
 pub const HostDraw_fpsArg0 = __AnonStruct_477f59604acc661e;
-pub const FontMetrics = __AnonStruct_2bfb89334ad27c35;
-pub const FontMetricsGlyphs = __AnonStruct_a31979034eec4b2e;
-pub const HostText_startup_default_fontErr = AssetNotFoundOrAssetPathInvalidOrAssetReadFailedOrFontLoadFailedOrPermissionDeniedOrResourceLimit;
-pub const HostText_startup_default_fontOk = Font;
 pub const HostDraw_frame_size = __AnonStruct_473ae8de77ee164b;
 pub const HostDraw_lineArg0 = __AnonStruct_a3fdb7fbf4ae00b8;
-pub const HostText_load_fontArg0 = __AnonStruct_5cba559c3a07b56a;
-pub const HostText_load_fontErr = FontLoadFailedOrResourceLimit;
-pub const HostText_load_fontOk = Font;
-pub const HostText_load_store_fontArg0 = __AnonStruct_80c864420ea33e1e;
-pub const HostText_load_store_fontErr = FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit;
-pub const HostText_load_store_fontOk = Font;
-pub const HostText_prepareArg0 = __AnonStruct_7f4d6dac6c3eef5e;
-pub const HostText_prepareErr = InvalidResourceOrResourceLimit;
-pub const HostText_prepareOk = __AnonStruct_e1165210b218b76c;
-pub const HostDraw_draw_prepared_textArg0 = __AnonStruct_6bff15fb6a4cb85a;
 pub const HostDraw_polygon_linesArg0 = __AnonStruct_2dcd38bc772d0799;
 pub const HostDraw_polygon_linesArg0Points = MathVec2;
 pub const HostDraw_polygonArg0 = __AnonStruct_16cb9af61afe2d08;
@@ -14872,72 +14879,25 @@ pub const HostDraw_rounded_rectangleArg0 = __AnonStruct_2b98c437f1796b13;
 pub const HostDraw_textArg0 = __AnonStruct_a794ed9ee3bc5d8d;
 pub const HostDraw_triangle_linesArg0 = __AnonStruct_563f890a3b4ea7a0;
 pub const HostDraw_triangleArg0 = __AnonStruct_d48cb861dff2afaa;
-pub const HostFiles_open_rootErr = AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable;
 pub const HostFiles_designateOk = __AnonStruct_c497f4ed41e47ac1;
-pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
-pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_metadataErr = AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable;
 pub const HostFiles_metadataOk = __AnonStruct_a1f5c33e74b3920b;
-pub const HostFiles_write_textErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
-pub const HostFiles_write_bytesResult = HostFiles_write_textResult;
-pub const HostFiles_write_bytesResultPayload = HostFiles_write_textResultPayload;
-pub const HostFiles_write_bytesResultTag = HostFiles_write_textResultTag;
+pub const HostFiles_open_rootErr = AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable;
+pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
+pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_write_bytesErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
-pub const HostCapture_set_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
-pub const HostCapture_set_virtual_keysArg0 = __AnonStruct_c3425bb1e3730c6e;
-pub const HostCapture_start_recordingArg1 = __AnonStruct_96bd4e483c462501;
-pub const HostCapture_start_recordingErr = AlreadyRecordingOrBusyOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrUnavailableOrUnsupportedFormatOrWriteFailed;
-pub const HostCapture_stop_recordingErr = BudgetExceededOrBusyOrNotRecordingOrPermissionDeniedOrReadbackFailedOrTargetUnavailableOrUnavailable;
-pub const HostCapture_stop_recordingOk = __AnonStruct_5c978c17ba0c990a;
-pub const HostCapture_screenshotErr = AlreadyPendingOrBusyOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
-pub const HostCapture_screenshot_textureArg1 = __AnonStruct_aa2779af0bb79965;
-pub const HostCapture_screenshot_textureErr = BudgetExceededOrBusyOrOutOfMemoryOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrReadbackFailedOrTargetUnavailableOrUnavailableOrWriteFailed;
-pub const HostCapture_pixel_atArg0 = __AnonStruct_30827bd86e7a53b3;
-pub const HostCapture_pixel_atArg0Source = __AnonStruct_29524f9bb2f9574c;
-pub const HostCapture_pixel_atErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
-pub const HostCapture_pixel_atOk = __AnonStruct_bda5c9dc6cabe78e;
-pub const HostCapture_read_regionArg0 = __AnonStruct_7ea2de5aa3c18166;
-pub const HostCapture_read_regionArg0Source = __AnonStruct_29524f9bb2f9574c;
-pub const HostCapture_read_regionErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
-pub const HostApp_read_envErr = NotFoundOrPermissionDenied;
-pub const HostWindow_read_clipboardErr = BusyOrPermissionDeniedOrTooLargeOrUnavailable;
-pub const HostWindow_suggest_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
-pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
-pub const HostWindow_scale_dpi = __AnonStruct_2818a50bdccefb1e;
-pub const HostWindow_monitors = __AnonStruct_dae0ce24e748c0cf;
-pub const HostWindow_suggest_positionArg0 = __AnonStruct_3560e04f2553d83d;
-pub const HostTilemap_load_tmxArg0 = __AnonStruct_e6634fb4c190c214;
-pub const HostTilemap_load_tmxErr = NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported;
-pub const HostTilemap_load_tmxOk = __AnonStruct_831cf812524287ed;
-pub const HostTilemap_load_tmxOkLayers = __AnonStruct_1299823ae1663c65;
-pub const HostTilemap_load_tmxOkObjects = __AnonStruct_109c1082e72f7bad;
-pub const HostTilemap_load_tmxOkPoints = __AnonStruct_2818a50bdccefb1e;
-pub const HostTilemap_load_tmxOkProperties = __AnonStruct_f80f1d26742641bb;
-pub const HostTilemap_load_tmxOkTileProperties = __AnonStruct_6ef82b7d80b893b3;
-pub const HostTilemap_load_tmxOkTilesets = __AnonStruct_756aabd194c61573;
-pub const HostTilemap_drawArg0 = __AnonStruct_bcdb8f2e5f1946e1;
-pub const HostTilemap_drawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
-pub const HostTilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
-pub const HostDraw_begin_cameraResult = HostDraw_begin_scissorResult;
-pub const HostDraw_begin_cameraResultPayload = HostDraw_begin_scissorResultPayload;
-pub const HostDraw_begin_cameraResultTag = HostDraw_begin_scissorResultTag;
-pub const HostDraw_begin_cameraErr = ScopeLimitOrScopeUnavailable;
-pub const HostDraw_begin_blendResult = HostDraw_begin_scissorResult;
-pub const HostDraw_begin_blendResultPayload = HostDraw_begin_scissorResultPayload;
-pub const HostDraw_begin_blendResultTag = HostDraw_begin_scissorResultTag;
-pub const HostDraw_begin_blendErr = ScopeLimitOrScopeUnavailable;
-pub const HostDraw_begin_render_textureResult = HostDraw_begin_scissorResult;
-pub const HostDraw_begin_render_textureResultPayload = HostDraw_begin_scissorResultPayload;
-pub const HostDraw_begin_render_textureResultTag = HostDraw_begin_scissorResultTag;
-pub const HostDraw_begin_render_textureErr = ScopeLimitOrScopeUnavailable;
-pub const HostDraw_begin_shaderResult = HostDraw_begin_scissorResult;
-pub const HostDraw_begin_shaderResultPayload = HostDraw_begin_scissorResultPayload;
-pub const HostDraw_begin_shaderResultTag = HostDraw_begin_scissorResultTag;
-pub const HostDraw_begin_shaderErr = ScopeLimitOrScopeUnavailable;
-pub const HostTexture_load_render_targetArg0 = __AnonStruct_bc8fa73ca49a5ac0;
-pub const HostTexture_load_render_targetErr = RenderTextureLoadFailedOrResourceLimit;
-pub const HostTexture_load_render_targetOk = Texture;
+pub const HostFiles_write_textResult = HostFiles_write_bytesResult;
+pub const HostFiles_write_textResultPayload = HostFiles_write_bytesResultPayload;
+pub const HostFiles_write_textResultTag = HostFiles_write_bytesResultTag;
+pub const HostFiles_write_textErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
+pub const HostHttp_sendArg1 = __AnonStruct_85380e02323174c5;
+pub const HostHttp_sendArg1Headers = __AnonStruct_82a96c5d55d63488;
+pub const HostHttp_sendErr = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout;
+pub const HostHttp_sendErrPayload = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutPayload;
+pub const HostHttp_sendErrTag = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag;
+pub const HostHttp_sendOk = __AnonStruct_a14cd3b7d5755441;
+pub const HostHttp_sendOkHeaders = __AnonStruct_82a96c5d55d63488;
 pub const HostShader_load_sourceArg0 = __AnonStruct_c813cb81fdeac2dc;
 pub const HostShader_load_sourceErr = ResourceLimitOrShaderLoadFailed;
 pub const HostShader_load_storeArg0 = __AnonStruct_3e85b4e878c74d96;
@@ -14957,75 +14917,117 @@ pub const HostShader_set_vec3Arg0Value = __AnonStruct_1c1c4c2ebf90bdba;
 pub const HostShader_set_vec4Arg0 = __AnonStruct_70e8e55530300f02;
 pub const HostShader_set_vec4Arg0Uniform = __AnonStruct_5977b9984ceff2ca;
 pub const HostShader_set_vec4Arg0Value = __AnonStruct_8ea1de206d7d534d;
-pub const HostHttp_sendArg1 = __AnonStruct_85380e02323174c5;
-pub const HostHttp_sendArg1Headers = __AnonStruct_82a96c5d55d63488;
-pub const HostHttp_sendErr = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout;
-pub const HostHttp_sendErrPayload = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutPayload;
-pub const HostHttp_sendErrTag = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag;
-pub const HostHttp_sendOk = __AnonStruct_a14cd3b7d5755441;
-pub const HostHttp_sendOkHeaders = __AnonStruct_82a96c5d55d63488;
-pub const HostTime_now = __AnonStruct_bbf5049c4fa71893;
-pub const HostStdio_write_textErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
-pub const HostStdio_write_lineResult = HostStdio_write_textResult;
-pub const HostStdio_write_lineResultPayload = HostStdio_write_textResultPayload;
-pub const HostStdio_write_lineResultTag = HostStdio_write_textResultTag;
-pub const HostStdio_write_lineErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
-pub const HostStdio_write_bytesResult = HostStdio_write_textResult;
-pub const HostStdio_write_bytesResultPayload = HostStdio_write_textResultPayload;
-pub const HostStdio_write_bytesResultTag = HostStdio_write_textResultTag;
-pub const HostStdio_write_bytesErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
-pub const HostUdp_bindArg1 = __AnonStruct_63b1422749dba501;
-pub const HostUdp_bindErr = AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable;
-pub const HostUdp_bindOk = __AnonStruct_ec1e23856e0d8ecf;
-pub const HostUdp_sendArg0 = __AnonStruct_686570ce13fde405;
-pub const HostUdp_sendErr = AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock;
-pub const HostUdp_receiveArg0 = __AnonStruct_3d573c3bcb10a375;
-pub const HostUdp_receiveErr = AlreadyReceivingOrReceiveFailedOrTimeoutOrUnavailable;
-pub const HostUdp_receiveOk = __AnonStruct_1772298ecb801858;
-pub const HostUdp_receiveOkSlices = __AnonStruct_4dd3180405b3f44f;
+pub const HostSqlite_closeErr = __AnonStruct_22cf486058afc711;
+pub const SqliteErr = __AnonStruct_22cf486058afc711;
+pub const SqliteErrSqliteErr = __AnonStruct_22cf486058afc711;
+pub const HostSqlite_exec_scriptResult = HostSqlite_closeResult;
+pub const HostSqlite_exec_scriptResultPayload = HostSqlite_closeResultPayload;
+pub const HostSqlite_exec_scriptResultTag = HostSqlite_closeResultTag;
+pub const HostSqlite_exec_scriptErr = __AnonStruct_22cf486058afc711;
 pub const HostSqlite_openErr = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnections;
 pub const HostSqlite_openErrPayload = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsPayload;
 pub const HostSqlite_openErrTag = PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsTag;
 pub const HostSqlite_openErrSqliteErr = __AnonStruct_22cf486058afc711;
 pub const PathInvalidOrPermissionDeniedOrSqliteErrOrTooManyConnectionsSqliteErr = __AnonStruct_22cf486058afc711;
-pub const HostSqlite_closeErr = __AnonStruct_22cf486058afc711;
-pub const SqliteErr = __AnonStruct_22cf486058afc711;
-pub const SqliteErrSqliteErr = __AnonStruct_22cf486058afc711;
 pub const HostSqlite_prepareErr = MultipleStatementsOrSqliteErrOrTooManyStatements;
 pub const HostSqlite_prepareErrPayload = MultipleStatementsOrSqliteErrOrTooManyStatementsPayload;
 pub const HostSqlite_prepareErrTag = MultipleStatementsOrSqliteErrOrTooManyStatementsTag;
 pub const HostSqlite_prepareErrSqliteErr = __AnonStruct_22cf486058afc711;
 pub const MultipleStatementsOrSqliteErrOrTooManyStatementsSqliteErr = __AnonStruct_22cf486058afc711;
-pub const HostSqlite_run_stmtArg1 = __AnonStruct_90c9f98ccd96f8ce;
-pub const HostSqlite_run_stmtErr = MultipleStatementsOrResultTooLargeOrSqliteErr;
-pub const HostSqlite_run_stmtErrPayload = MultipleStatementsOrResultTooLargeOrSqliteErrPayload;
-pub const HostSqlite_run_stmtErrTag = MultipleStatementsOrResultTooLargeOrSqliteErrTag;
-pub const HostSqlite_run_stmtErrSqliteErr = __AnonStruct_22cf486058afc711;
-pub const HostSqlite_run_stmtOk = __AnonStruct_566a76c01f44ee92;
-pub const MultipleStatementsOrResultTooLargeOrSqliteErrSqliteErr = __AnonStruct_22cf486058afc711;
-pub const HostSqlite_run_stmtOkCells = __AnonStruct_3a90da783672cf8d;
 pub const HostSqlite_run_onceArg2 = __AnonStruct_90c9f98ccd96f8ce;
-pub const HostSqlite_run_onceResult = HostSqlite_run_stmtResult;
-pub const HostSqlite_run_onceResultPayload = HostSqlite_run_stmtResultPayload;
-pub const HostSqlite_run_onceResultTag = HostSqlite_run_stmtResultTag;
 pub const HostSqlite_run_onceErr = MultipleStatementsOrResultTooLargeOrSqliteErr;
 pub const HostSqlite_run_onceErrPayload = MultipleStatementsOrResultTooLargeOrSqliteErrPayload;
 pub const HostSqlite_run_onceErrTag = MultipleStatementsOrResultTooLargeOrSqliteErrTag;
 pub const HostSqlite_run_onceErrSqliteErr = __AnonStruct_22cf486058afc711;
 pub const HostSqlite_run_onceOk = __AnonStruct_566a76c01f44ee92;
+pub const MultipleStatementsOrResultTooLargeOrSqliteErrSqliteErr = __AnonStruct_22cf486058afc711;
 pub const HostSqlite_run_onceOkCells = __AnonStruct_3a90da783672cf8d;
-pub const HostSqlite_exec_scriptResult = HostSqlite_closeResult;
-pub const HostSqlite_exec_scriptResultPayload = HostSqlite_closeResultPayload;
-pub const HostSqlite_exec_scriptResultTag = HostSqlite_closeResultTag;
-pub const HostSqlite_exec_scriptErr = __AnonStruct_22cf486058afc711;
-pub const HostCmd_runArg1 = __AnonStruct_3fe396bc5ba0c31c;
-pub const HostCmd_runArg1Envs = __AnonStruct_82a96c5d55d63488;
-pub const HostCmd_runErr = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailable;
-pub const HostCmd_runErrPayload = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailablePayload;
-pub const HostCmd_runErrTag = AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTag;
-pub const HostCmd_runErrTimeout = __AnonStruct_45d496287297bf7f;
-pub const HostCmd_runOk = __AnonStruct_45d496287297bf7f;
-pub const AccessRefusedOrBusyOrCommandNotFoundOrPermissionDeniedOrSpawnFailedOrStderrLimitExceededOrStdoutLimitExceededOrTimeoutOrUnavailableTimeout = __AnonStruct_45d496287297bf7f;
+pub const HostSqlite_run_stmtArg1 = __AnonStruct_90c9f98ccd96f8ce;
+pub const HostSqlite_run_stmtResult = HostSqlite_run_onceResult;
+pub const HostSqlite_run_stmtResultPayload = HostSqlite_run_onceResultPayload;
+pub const HostSqlite_run_stmtResultTag = HostSqlite_run_onceResultTag;
+pub const HostSqlite_run_stmtErr = MultipleStatementsOrResultTooLargeOrSqliteErr;
+pub const HostSqlite_run_stmtErrPayload = MultipleStatementsOrResultTooLargeOrSqliteErrPayload;
+pub const HostSqlite_run_stmtErrTag = MultipleStatementsOrResultTooLargeOrSqliteErrTag;
+pub const HostSqlite_run_stmtErrSqliteErr = __AnonStruct_22cf486058afc711;
+pub const HostSqlite_run_stmtOk = __AnonStruct_566a76c01f44ee92;
+pub const HostSqlite_run_stmtOkCells = __AnonStruct_3a90da783672cf8d;
+pub const HostStdio_write_bytesErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
+pub const HostStdio_write_lineResult = HostStdio_write_bytesResult;
+pub const HostStdio_write_lineResultPayload = HostStdio_write_bytesResultPayload;
+pub const HostStdio_write_lineResultTag = HostStdio_write_bytesResultTag;
+pub const HostStdio_write_lineErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
+pub const HostStdio_write_textResult = HostStdio_write_bytesResult;
+pub const HostStdio_write_textResultPayload = HostStdio_write_bytesResultPayload;
+pub const HostStdio_write_textResultTag = HostStdio_write_bytesResultTag;
+pub const HostStdio_write_textErr = BufferFullOrPermissionDeniedOrTooLargeOrUnavailable;
+pub const HostStore_openArg1 = __AnonStruct_3a568cb37b91deaf;
+pub const HostStore_openErr = AssetSetMismatchOrContentHashMismatchOrContentVersionMismatchOrInvalidExpectedContentHashOrManifestMalformedOrManifestMissingOrManifestUnreadableOrPathInvalidOrPermissionDeniedOrResourceLimitOrRootNotDirectoryOrRootNotFoundOrRootUnreadableOrSchemaMismatch;
+pub const FontMetrics = __AnonStruct_2bfb89334ad27c35;
+pub const FontMetricsGlyphs = __AnonStruct_a31979034eec4b2e;
+pub const HostText_load_fontArg0 = __AnonStruct_5cba559c3a07b56a;
+pub const HostText_load_fontErr = FontLoadFailedOrResourceLimit;
+pub const HostText_load_fontOk = Font;
+pub const HostText_load_store_fontArg0 = __AnonStruct_80c864420ea33e1e;
+pub const HostText_load_store_fontErr = FontLoadFailedOrNotFoundOrPathInvalidOrReadFailedOrResourceLimit;
+pub const HostText_load_store_fontOk = Font;
+pub const HostText_prepareArg0 = __AnonStruct_7f4d6dac6c3eef5e;
+pub const HostText_prepareErr = InvalidResourceOrResourceLimit;
+pub const HostText_prepareOk = __AnonStruct_e1165210b218b76c;
+pub const HostText_startup_default_fontErr = AssetNotFoundOrAssetPathInvalidOrAssetReadFailedOrFontLoadFailedOrPermissionDeniedOrResourceLimit;
+pub const HostText_startup_default_fontOk = Font;
+pub const HostTexture_generate_checkedArg0 = __AnonStruct_8ffafd56eb173f8d;
+pub const HostTexture_generate_checkedErr = ResourceLimitOrTextureGenerationFailed;
+pub const HostTexture_generate_checkedOk = Texture;
+pub const HostTexture_generate_colorArg0 = __AnonStruct_261d7d093f4d74f0;
+pub const HostTexture_generate_colorResult = HostTexture_generate_checkedResult;
+pub const HostTexture_generate_colorResultPayload = HostTexture_generate_checkedResultPayload;
+pub const HostTexture_generate_colorResultTag = HostTexture_generate_checkedResultTag;
+pub const HostTexture_generate_colorErr = ResourceLimitOrTextureGenerationFailed;
+pub const HostTexture_generate_colorOk = Texture;
+pub const HostTexture_load_bytesArg0 = __AnonStruct_ff17f03b4409100d;
+pub const HostTexture_load_bytesErr = ResourceLimitOrTextureLoadFailed;
+pub const HostTexture_load_bytesOk = Texture;
+pub const HostTexture_load_render_targetArg0 = __AnonStruct_bc8fa73ca49a5ac0;
+pub const HostTexture_load_render_targetErr = RenderTextureLoadFailedOrResourceLimit;
+pub const HostTexture_load_render_targetOk = Texture;
+pub const HostTexture_load_storeArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostTexture_load_storeErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrTextureLoadFailed;
+pub const HostTexture_load_storeOk = Texture;
+pub const HostTexture_updateArg0 = __AnonStruct_8e0d47be14ad0be3;
+pub const HostTexture_updateArg0Pixels = ColorRgba;
+pub const HostTexture_updateErr = NotMutableOrPixelCountMismatch;
+pub const HostTexture_update_regionArg0 = __AnonStruct_307d51efe2380633;
+pub const HostTexture_update_regionArg0Pixels = ColorRgba;
+pub const HostTexture_update_regionErr = NotMutableOrPixelCountMismatchOrRegionOutOfBounds;
+pub const HostTilemap_drawArg0 = __AnonStruct_bcdb8f2e5f1946e1;
+pub const HostTilemap_drawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
+pub const HostTilemap_drawArg0Tilesets = __AnonStruct_9f9f7e660a5e922b;
+pub const HostTilemap_load_tmxArg0 = __AnonStruct_e6634fb4c190c214;
+pub const HostTilemap_load_tmxErr = NotFoundOrParseFailedOrPathInvalidOrReadFailedOrUnsupported;
+pub const HostTilemap_load_tmxOk = __AnonStruct_831cf812524287ed;
+pub const HostTilemap_load_tmxOkLayers = __AnonStruct_1299823ae1663c65;
+pub const HostTilemap_load_tmxOkObjects = __AnonStruct_109c1082e72f7bad;
+pub const HostTilemap_load_tmxOkPoints = __AnonStruct_2818a50bdccefb1e;
+pub const HostTilemap_load_tmxOkProperties = __AnonStruct_f80f1d26742641bb;
+pub const HostTilemap_load_tmxOkTileProperties = __AnonStruct_6ef82b7d80b893b3;
+pub const HostTilemap_load_tmxOkTilesets = __AnonStruct_756aabd194c61573;
+pub const HostTime_now = __AnonStruct_bbf5049c4fa71893;
+pub const HostUdp_bindArg1 = __AnonStruct_63b1422749dba501;
+pub const HostUdp_bindErr = AccessRefusedOrAddressInUseOrAddressUnavailableOrInvalidAddressOrPermissionDeniedOrResourceLimitOrUnavailable;
+pub const HostUdp_bindOk = __AnonStruct_ec1e23856e0d8ecf;
+pub const HostUdp_receiveArg0 = __AnonStruct_3d573c3bcb10a375;
+pub const HostUdp_receiveErr = AlreadyReceivingOrReceiveFailedOrTimeoutOrUnavailable;
+pub const HostUdp_receiveOk = __AnonStruct_1772298ecb801858;
+pub const HostUdp_receiveOkSlices = __AnonStruct_4dd3180405b3f44f;
+pub const HostUdp_sendArg0 = __AnonStruct_686570ce13fde405;
+pub const HostUdp_sendErr = AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDeniedOrSendFailedOrTooLargeOrUnavailableOrWouldBlock;
+pub const HostWindow_monitors = __AnonStruct_dae0ce24e748c0cf;
+pub const HostWindow_read_clipboardErr = BusyOrPermissionDeniedOrTooLargeOrUnavailable;
+pub const HostWindow_scale_dpi = __AnonStruct_2818a50bdccefb1e;
+pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
+pub const HostWindow_suggest_positionArg0 = __AnonStruct_3560e04f2553d83d;
+pub const HostWindow_suggest_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const App_config_for_host = __AnonStruct_4f0c1c4bc3c3ab28;
 pub const App_config_for_hostPermissions = ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectory;
 pub const App_config_for_hostPermissionsPayload = ClipboardReadOrClipboardWriteOrCommandOrCommandAnyOrDirectoryOrEnvAnyOrEnvVarOrFilesAnyOrHttpAnyOrHttpOriginOrUdpAnyOrUdpBindOrUdpLoopbackOrUdpPeerOrWorkingDirectoryPayload;
@@ -15126,7 +15128,7 @@ pub const __AnonStruct_ff17f03b4409100dRelease = struct {
     }
 };
 
-fn decrefHostTexture_generate_colorResult(value: HostTexture_generate_colorResult, roc_host: *RocHost) void {
+fn decrefHostTexture_generate_checkedResult(value: HostTexture_generate_checkedResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -15137,7 +15139,7 @@ fn decrefHostTexture_generate_colorResult(value: HostTexture_generate_colorResul
     }
 }
 
-fn increfHostTexture_generate_colorResult(value: HostTexture_generate_colorResult, amount: isize) void {
+fn increfHostTexture_generate_checkedResult(value: HostTexture_generate_checkedResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -15148,8 +15150,8 @@ fn increfHostTexture_generate_colorResult(value: HostTexture_generate_colorResul
     }
 }
 
-pub const HostTexture_generate_colorResultRelease = struct {
-    pub fn release(value: HostTexture_generate_colorResult, roc_host: *RocHost) void {
+pub const HostTexture_generate_checkedResultRelease = struct {
+    pub fn release(value: HostTexture_generate_checkedResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -15616,7 +15618,7 @@ pub const __AnonStruct_bbf5049c4fa71893Release = struct {
     }
 };
 
-fn decrefHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, roc_host: *RocHost) void {
+fn decrefHostAudio_gen_soundResult(value: HostAudio_gen_soundResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -15627,7 +15629,7 @@ fn decrefHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, roc_host: *Ro
     }
 }
 
-fn increfHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, amount: isize) void {
+fn increfHostAudio_gen_soundResult(value: HostAudio_gen_soundResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -15638,8 +15640,8 @@ fn increfHostAudio_gen_toneResult(value: HostAudio_gen_toneResult, amount: isize
     }
 }
 
-pub const HostAudio_gen_toneResultRelease = struct {
-    pub fn release(value: HostAudio_gen_toneResult, roc_host: *RocHost) void {
+pub const HostAudio_gen_soundResultRelease = struct {
+    pub fn release(value: HostAudio_gen_soundResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -15948,7 +15950,7 @@ pub const HostFiles_listResultRelease = struct {
     }
 };
 
-fn decrefHostFiles_write_textResult(value: HostFiles_write_textResult, roc_host: *RocHost) void {
+fn decrefHostFiles_write_bytesResult(value: HostFiles_write_bytesResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -15957,7 +15959,7 @@ fn decrefHostFiles_write_textResult(value: HostFiles_write_textResult, roc_host:
     }
 }
 
-fn increfHostFiles_write_textResult(value: HostFiles_write_textResult, amount: isize) void {
+fn increfHostFiles_write_bytesResult(value: HostFiles_write_bytesResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -15966,8 +15968,8 @@ fn increfHostFiles_write_textResult(value: HostFiles_write_textResult, amount: i
     }
 }
 
-pub const HostFiles_write_textResultRelease = struct {
-    pub fn release(value: HostFiles_write_textResult, roc_host: *RocHost) void {
+pub const HostFiles_write_bytesResultRelease = struct {
+    pub fn release(value: HostFiles_write_bytesResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16126,7 +16128,7 @@ pub const __AnonStruct_3fe396bc5ba0c31cRelease = struct {
     }
 };
 
-fn decrefHostStdio_write_textResult(value: HostStdio_write_textResult, roc_host: *RocHost) void {
+fn decrefHostStdio_write_bytesResult(value: HostStdio_write_bytesResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -16135,7 +16137,7 @@ fn decrefHostStdio_write_textResult(value: HostStdio_write_textResult, roc_host:
     }
 }
 
-fn increfHostStdio_write_textResult(value: HostStdio_write_textResult, amount: isize) void {
+fn increfHostStdio_write_bytesResult(value: HostStdio_write_bytesResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -16144,8 +16146,8 @@ fn increfHostStdio_write_textResult(value: HostStdio_write_textResult, amount: i
     }
 }
 
-pub const HostStdio_write_textResultRelease = struct {
-    pub fn release(value: HostStdio_write_textResult, roc_host: *RocHost) void {
+pub const HostStdio_write_bytesResultRelease = struct {
+    pub fn release(value: HostStdio_write_bytesResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16562,7 +16564,7 @@ pub const MultipleStatementsOrSqliteErrOrTooManyStatementsRelease = struct {
     }
 };
 
-fn decrefHostSqlite_run_stmtResult(value: HostSqlite_run_stmtResult, roc_host: *RocHost) void {
+fn decrefHostSqlite_run_onceResult(value: HostSqlite_run_onceResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -16573,7 +16575,7 @@ fn decrefHostSqlite_run_stmtResult(value: HostSqlite_run_stmtResult, roc_host: *
     }
 }
 
-fn increfHostSqlite_run_stmtResult(value: HostSqlite_run_stmtResult, amount: isize) void {
+fn increfHostSqlite_run_onceResult(value: HostSqlite_run_onceResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -16584,8 +16586,8 @@ fn increfHostSqlite_run_stmtResult(value: HostSqlite_run_stmtResult, amount: isi
     }
 }
 
-pub const HostSqlite_run_stmtResultRelease = struct {
-    pub fn release(value: HostSqlite_run_stmtResult, roc_host: *RocHost) void {
+pub const HostSqlite_run_onceResultRelease = struct {
+    pub fn release(value: HostSqlite_run_onceResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -16634,7 +16636,7 @@ pub const __AnonStruct_90c9f98ccd96f8ceRelease = struct {
     }
 };
 
-fn decrefHostDraw_begin_scissorResult(value: HostDraw_begin_scissorResult, roc_host: *RocHost) void {
+fn decrefHostDraw_begin_blendResult(value: HostDraw_begin_blendResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().decref(roc_host);
@@ -16643,7 +16645,7 @@ fn decrefHostDraw_begin_scissorResult(value: HostDraw_begin_scissorResult, roc_h
     }
 }
 
-fn increfHostDraw_begin_scissorResult(value: HostDraw_begin_scissorResult, amount: isize) void {
+fn increfHostDraw_begin_blendResult(value: HostDraw_begin_blendResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
             value.payload_err().incref(amount);
@@ -16652,8 +16654,8 @@ fn increfHostDraw_begin_scissorResult(value: HostDraw_begin_scissorResult, amoun
     }
 }
 
-pub const HostDraw_begin_scissorResultRelease = struct {
-    pub fn release(value: HostDraw_begin_scissorResult, roc_host: *RocHost) void {
+pub const HostDraw_begin_blendResultRelease = struct {
+    pub fn release(value: HostDraw_begin_blendResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -17134,6 +17136,30 @@ pub const Init_for_hostResultRelease = struct {
     }
 };
 
+fn decrefRender_for_hostResult(value: Render_for_hostResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            decrefBox(@ptrCast(value.payload_ok()), roc_host);
+        },
+    }
+}
+
+fn increfRender_for_hostResult(value: Render_for_hostResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            increfBox(@ptrCast(value.payload_ok()), amount);
+        },
+    }
+}
+
+pub const Render_for_hostResultRelease = struct {
+    pub fn release(value: Render_for_hostResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
 fn decrefUpdate_for_hostResult(value: Update_for_hostResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {},
@@ -17214,30 +17240,6 @@ pub const __AnonStruct_db5a281b648e1efeRelease = struct {
 
 pub const __AnonStruct_d905f039c8a75547Release = struct {
     pub fn release(value: __AnonStruct_d905f039c8a75547, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
-fn decrefRender_for_hostResult(value: Render_for_hostResult, roc_host: *RocHost) void {
-    switch (value.tag) {
-        .Err => {},
-        .Ok => {
-            decrefBox(@ptrCast(value.payload_ok()), roc_host);
-        },
-    }
-}
-
-fn increfRender_for_hostResult(value: Render_for_hostResult, amount: isize) void {
-    switch (value.tag) {
-        .Err => {},
-        .Ok => {
-            increfBox(@ptrCast(value.payload_ok()), amount);
-        },
-    }
-}
-
-pub const Render_for_hostResultRelease = struct {
-    pub fn release(value: Render_for_hostResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -17347,7 +17349,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostTexture_load_bytesResult) return HostTexture_load_bytesResultRelease;
     if (T == __AnonStruct_ff17f03b4409100d) return __AnonStruct_ff17f03b4409100dRelease;
     if (T == RocListWith(u8, false)) return RocListSpineRelease(RocListWith(u8, false));
-    if (T == HostTexture_generate_colorResult) return HostTexture_generate_colorResultRelease;
+    if (T == HostTexture_generate_checkedResult) return HostTexture_generate_checkedResultRelease;
     if (T == __AnonStruct_8e0d47be14ad0be3) return __AnonStruct_8e0d47be14ad0be3Release;
     if (T == RocListWith(ColorRgba, false)) return RocListSpineRelease(RocListWith(ColorRgba, false));
     if (T == __AnonStruct_307d51efe2380633) return __AnonStruct_307d51efe2380633Release;
@@ -17378,7 +17380,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostStore_openResult) return HostStore_openResultRelease;
     if (T == __AnonStruct_3a568cb37b91deaf) return __AnonStruct_3a568cb37b91deafRelease;
     if (T == RocErasedCallable) return RocErasedCallableRelease;
-    if (T == HostAudio_gen_toneResult) return HostAudio_gen_toneResultRelease;
+    if (T == HostAudio_gen_soundResult) return HostAudio_gen_soundResultRelease;
     if (T == HostAudio_load_soundResult) return HostAudio_load_soundResultRelease;
     if (T == HostAudio_load_musicResult) return HostAudio_load_musicResultRelease;
     if (T == HostFiles_open_rootResult) return HostFiles_open_rootResultRelease;
@@ -17435,7 +17437,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostSqlite_closeResult) return HostSqlite_closeResultRelease;
     if (T == HostSqlite_prepareResult) return HostSqlite_prepareResultRelease;
     if (T == MultipleStatementsOrSqliteErrOrTooManyStatements) return MultipleStatementsOrSqliteErrOrTooManyStatementsRelease;
-    if (T == HostSqlite_run_stmtResult) return HostSqlite_run_stmtResultRelease;
+    if (T == HostSqlite_run_onceResult) return HostSqlite_run_onceResultRelease;
     if (T == MultipleStatementsOrResultTooLargeOrSqliteErr) return MultipleStatementsOrResultTooLargeOrSqliteErrRelease;
     if (T == __AnonStruct_566a76c01f44ee92) return __AnonStruct_566a76c01f44ee92Release;
     if (T == RocListWith(__AnonStruct_3a90da783672cf8d, false)) return RocListSpineRelease(RocListWith(__AnonStruct_3a90da783672cf8d, false));
@@ -17480,11 +17482,17 @@ fn rocReleasePolicy(comptime T: type) type {
 //
 // The host defines these linker symbols. Compiled Roc code calls them directly.
 
-pub extern fn roc_alloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque;
+/// Returns `length` bytes aligned to `alignment`. Never returns null: Roc writes through
+/// the result without checking it, so a host that cannot allocate must stop the Roc
+/// program and not return, exactly as `roc_crashed` does.
+pub extern fn roc_alloc(length: usize, alignment: usize) callconv(.c) *anyopaque;
 pub extern fn roc_dealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void;
-pub extern fn roc_realloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque;
+/// Never returns null, under the same rule as `roc_alloc`.
+pub extern fn roc_realloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) *anyopaque;
 pub extern fn roc_dbg(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_expect_failed(bytes: [*]const u8, len: usize) callconv(.c) void;
+/// Must never return: end the process, or longjmp out of the Roc code that called
+/// it. Roc code traps right after this call, so returning terminates the process.
 pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 
 // Hosted Symbols
@@ -17492,85 +17500,54 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // The platform host must export these symbols with the exact direct C ABI signatures.
 // Refcounted arguments are owned by the hosted function.
 
-/// Hosted symbol for Host.store_open!
-/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
+/// Hosted symbol for Host.app_args!
+/// Roc signature: {} => List(Str)
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_app_args() callconv(.c) RocList(RocStr);
+
+/// Hosted symbol for Host.app_exit!
+/// Roc signature: I32 => {}
+pub extern fn roc_app_exit(arg0: i32) callconv(.c) void;
+
+/// Hosted symbol for Host.app_read_env!
+/// Roc signature: Resource.Authority, Str => Try(Str, [NotFound, PermissionDenied])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_store_open_raw(arg0: u64, arg1: __AnonStruct_3a568cb37b91deaf) callconv(.c) HostStore_openResult;
+pub extern fn roc_app_read_env(arg0: u64, arg1: RocStr) callconv(.c) HostApp_read_envResult;
 
-/// Hosted symbol for Host.texture_load_store!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Hosted symbol for Host.app_report_error!
+/// Roc signature: Str, Str => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_store_raw(arg0: HostTexture_load_storeArgs) callconv(.c) HostTexture_load_storeResult;
-
-/// Hosted symbol for Host.texture_load_bytes!
-/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_bytes_raw(arg0: HostTexture_load_bytesArgs) callconv(.c) HostTexture_load_bytesResult;
-
-/// Hosted symbol for Host.texture_generate_color!
-/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_generate_color_raw(arg0: HostTexture_generate_colorArgs) callconv(.c) HostTexture_generate_colorResult;
-
-/// Hosted symbol for Host.texture_generate_checked!
-/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_generate_checked_raw(arg0: HostTexture_generate_checkedArgs) callconv(.c) HostTexture_generate_colorResult;
-
-/// Hosted symbol for Host.texture_update!
-/// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => Try({}, [NotMutable, PixelCountMismatch])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_texture_update_raw(arg0: HostTexture_updateArgs) callconv(.c) HostTexture_updateResult;
-
-/// Hosted symbol for Host.texture_update_region!
-/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => Try({}, [NotMutable, PixelCountMismatch, RegionOutOfBounds])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_texture_update_region_raw(arg0: HostTexture_update_regionArgs) callconv(.c) HostTexture_update_regionResult;
-
-/// Hosted symbol for Host.texture_set_filter!
-/// Roc signature: Texture, U8 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_texture_set_filter_raw(arg0: Texture, arg1: u8) callconv(.c) void;
-
-/// Hosted symbol for Host.texture_set_wrap!
-/// Roc signature: Texture, U8 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_texture_set_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_gen_tone!
-/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) HostAudio_gen_toneResult;
+///     arg1.decref(roc_host);
+pub extern fn roc_app_report_error(arg0: RocStr, arg1: RocStr) callconv(.c) void;
 
 /// Hosted symbol for Host.audio_gen_sound!
 /// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) HostAudio_gen_toneResult;
+pub extern fn roc_audio_gen_sound_raw(arg0: HostAudio_gen_soundArgs) callconv(.c) HostAudio_gen_soundResult;
 
-/// Hosted symbol for Host.audio_load_sound!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
+/// Hosted symbol for Host.audio_gen_tone!
+/// Roc signature: { freq : F32, ms : I32 } => Try(Resource.Handle([SoundResource]), [ResourceLimit, SoundGenerationFailed])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_audio_gen_tone_raw(arg0: HostAudio_gen_toneArgs) callconv(.c) HostAudio_gen_soundResult;
+
+/// Hosted symbol for Host.audio_is_music_playing!
+/// Roc signature: Resource.Handle([MusicResource]) => Bool
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_audio_load_sound_raw(arg0: HostAudio_load_soundArgs) callconv(.c) HostAudio_load_soundResult;
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_is_music_playing_raw(arg0: *u64) callconv(.c) bool;
+
+/// Hosted symbol for Host.audio_is_sound_playing!
+/// Roc signature: Resource.Handle([SoundResource]) => Bool
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_is_playing_raw(arg0: *u64) callconv(.c) bool;
 
 /// Hosted symbol for Host.audio_load_music!
 /// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([MusicResource]), [MusicLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
@@ -17580,131 +17557,13 @@ pub extern fn roc_audio_load_sound_raw(arg0: HostAudio_load_soundArgs) callconv(
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_audio_load_music_raw(arg0: HostAudio_load_musicArgs) callconv(.c) HostAudio_load_musicResult;
 
-/// Hosted symbol for Host.audio_play_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Hosted symbol for Host.audio_load_sound!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Resource.Handle([SoundResource]), [NotFound, PathInvalid, ReadFailed, ResourceLimit, SoundLoadFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_play_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_stop_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_stop_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_pause_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_pause_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_resume_sound!
-/// Roc signature: Resource.Handle([SoundResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_resume_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_is_sound_playing!
-/// Roc signature: Resource.Handle([SoundResource]) => Bool
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_is_playing_raw(arg0: *u64) callconv(.c) bool;
-
-/// Hosted symbol for Host.audio_set_sound_volume!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_sound_pitch!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_sound_pan!
-/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_play_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_play_music_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_stop_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_stop_music_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_pause_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_pause_music_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_resume_music!
-/// Roc signature: Resource.Handle([MusicResource]) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_resume_music_raw(arg0: *u64) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_music_volume!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_music_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_music_pitch!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_music_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_music_pan!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_music_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_set_music_looping!
-/// Roc signature: Resource.Handle([MusicResource]), Bool => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_set_music_looping_raw(arg0: *u64, arg1: bool) callconv(.c) void;
-
-/// Hosted symbol for Host.audio_is_music_playing!
-/// Roc signature: Resource.Handle([MusicResource]) => Bool
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_is_music_playing_raw(arg0: *u64) callconv(.c) bool;
-
-/// Hosted symbol for Host.audio_seek_music!
-/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_audio_seek_music_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_audio_load_sound_raw(arg0: HostAudio_load_soundArgs) callconv(.c) HostAudio_load_soundResult;
 
 /// Hosted symbol for Host.audio_music_length!
 /// Roc signature: Resource.Handle([MusicResource]) => F32
@@ -17720,13 +17579,216 @@ pub extern fn roc_audio_music_length_raw(arg0: *u64) callconv(.c) f32;
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 pub extern fn roc_audio_music_time_played_raw(arg0: *u64) callconv(.c) f32;
 
+/// Hosted symbol for Host.audio_pause_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_pause_music_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_pause_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_pause_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_play_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_play_music_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_play_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_play_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_resume_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_resume_music_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_resume_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_resume_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_seek_music!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_seek_music_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
 /// Hosted symbol for Host.audio_set_master_volume!
 /// Roc signature: F32 => {}
 pub extern fn roc_audio_set_master_volume_raw(arg0: f32) callconv(.c) void;
 
+/// Hosted symbol for Host.audio_set_music_looping!
+/// Roc signature: Resource.Handle([MusicResource]), Bool => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_music_looping_raw(arg0: *u64, arg1: bool) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_music_pan!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_music_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_music_pitch!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_music_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_music_volume!
+/// Roc signature: Resource.Handle([MusicResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_music_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_sound_pan!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_pan_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_sound_pitch!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_pitch_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_set_sound_volume!
+/// Roc signature: Resource.Handle([SoundResource]), F32 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_set_volume_raw(arg0: *u64, arg1: f32) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_stop_music!
+/// Roc signature: Resource.Handle([MusicResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_stop_music_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.audio_stop_sound!
+/// Roc signature: Resource.Handle([SoundResource]) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_audio_stop_raw(arg0: *u64) callconv(.c) void;
+
+/// Hosted symbol for Host.capture_pixel_at!
+/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_pixel_at(arg0: HostCapture_pixel_atArgs) callconv(.c) HostCapture_pixel_atResult;
+
+/// Hosted symbol for Host.capture_read_region!
+/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_capture_read_region(arg0: HostCapture_read_regionArgs) callconv(.c) HostCapture_read_regionResult;
+
+/// Hosted symbol for Host.capture_screenshot!
+/// Roc signature: Resource.Authority, Str => Try({}, [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_capture_screenshot(arg0: u64, arg1: RocStr) callconv(.c) HostCapture_screenshotResult;
+
+/// Hosted symbol for Host.capture_screenshot_texture!
+/// Roc signature: Resource.Authority, { path : Str, target : Texture } => Try({}, [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_capture_screenshot_texture(arg0: u64, arg1: __AnonStruct_aa2779af0bb79965) callconv(.c) HostCapture_screenshot_textureResult;
+
+/// Hosted symbol for Host.capture_set_virtual_keys!
+/// Roc signature: { active : Bool, keys : List(U64) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_set_virtual_keys(arg0: HostCapture_set_virtual_keysArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.capture_set_virtual_mouse!
+/// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
+pub extern fn roc_capture_set_virtual_mouse(arg0: HostCapture_set_virtual_mouseArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.capture_set_virtual_text!
+/// Roc signature: List(U32) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_set_virtual_text(arg0: RocListWith(u32, false)) callconv(.c) void;
+
+/// Hosted symbol for Host.capture_start_recording!
+/// Roc signature: Resource.Authority, { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => Try({}, [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, UnsupportedFormat, WriteFailed])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_capture_start_recording(arg0: u64, arg1: __AnonStruct_96bd4e483c462501) callconv(.c) HostCapture_start_recordingResult;
+
+/// Hosted symbol for Host.capture_stop_recording!
+/// Roc signature: Resource.Authority => Try({ bytes : U64, frames : U64 }, [BudgetExceeded, Busy, NotRecording, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable])
+pub extern fn roc_capture_stop_recording(arg0: u64) callconv(.c) HostCapture_stop_recordingResult;
+
+/// Hosted symbol for Host.cmd_run!
+/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_cmd_run(arg0: u64, arg1: __AnonStruct_3fe396bc5ba0c31c) callconv(.c) HostCmd_runResult;
+
+/// Hosted symbol for Host.draw_begin_blend!
+/// Roc signature: U8 => Try({}, [ScopeLimit, ScopeUnavailable])
+pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) HostDraw_begin_blendResult;
+
+/// Hosted symbol for Host.draw_begin_camera!
+/// Roc signature: Camera.Camera2D => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_begin_camera(arg0: CameraCamera2D) callconv(.c) HostDraw_begin_blendResult;
+
+/// Hosted symbol for Host.draw_begin_render_texture!
+/// Roc signature: Texture => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_begin_render_texture_raw(arg0: Texture) callconv(.c) HostDraw_begin_blendResult;
+
 /// Hosted symbol for Host.draw_begin_scissor!
 /// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => Try({}, [ScopeLimit, ScopeUnavailable])
-pub extern fn roc_draw_begin_scissor_raw(arg0: HostDraw_begin_scissorArgs) callconv(.c) HostDraw_begin_scissorResult;
+pub extern fn roc_draw_begin_scissor_raw(arg0: HostDraw_begin_scissorArgs) callconv(.c) HostDraw_begin_blendResult;
+
+/// Hosted symbol for Host.draw_begin_shader!
+/// Roc signature: Resource.Handle([ShaderResource]) => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+pub extern fn roc_draw_begin_shader_raw(arg0: *u64) callconv(.c) HostDraw_begin_blendResult;
 
 /// Hosted symbol for Host.draw_circle_gradient!
 /// Roc signature: { center : Math.Vec2, color_inner : Color.Rgba, color_outer : Color.Rgba, radius : F32 } => {}
@@ -17747,12 +17809,12 @@ pub extern fn roc_draw_circle_raw(arg0: HostDraw_circleArgs) callconv(.c) void;
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_clear(arg0: ColorRgba) callconv(.c) void;
 
-/// Hosted symbol for Host.draw_draw_texture!
-/// Roc signature: { dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba } => {}
+/// Hosted symbol for Host.draw_draw_prepared_text!
+/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle([PreparedTextResource]) } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_draw_draw_texture_raw(arg0: HostDraw_draw_textureArgs) callconv(.c) void;
+pub extern fn roc_draw_draw_prepared_text_raw(arg0: HostDraw_draw_prepared_textArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.draw_draw_texture_instances!
 /// Roc signature: { instances : List({ dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, tint : Color.Rgba }), texture : Texture } => {}
@@ -17768,23 +17830,36 @@ pub extern fn roc_draw_draw_texture_instances_raw(arg0: HostDraw_draw_texture_in
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_draw_texture_quad_raw(arg0: HostDraw_draw_texture_quadArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_draw_texture!
+/// Roc signature: { dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_draw_texture_raw(arg0: HostDraw_draw_textureArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_end_blend!
+/// Roc signature: {} => {}
+pub extern fn roc_draw_end_blend_raw() callconv(.c) void;
+
+/// Hosted symbol for Host.draw_end_camera!
+/// Roc signature: {} => {}
+pub extern fn roc_draw_end_camera() callconv(.c) void;
+
+/// Hosted symbol for Host.draw_end_render_texture!
+/// Roc signature: {} => {}
+pub extern fn roc_draw_end_render_texture_raw() callconv(.c) void;
+
 /// Hosted symbol for Host.draw_end_scissor!
 /// Roc signature: {} => {}
 pub extern fn roc_draw_end_scissor_raw() callconv(.c) void;
 
+/// Hosted symbol for Host.draw_end_shader!
+/// Roc signature: {} => {}
+pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
+
 /// Hosted symbol for Host.draw_fps!
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, size : F32 } => {}
 pub extern fn roc_draw_fps(arg0: HostDraw_fpsArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.text_default_font!
-/// Roc signature: {} => Font
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_default_font_raw() callconv(.c) Font;
-
-/// Hosted symbol for Host.text_startup_default_font!
-/// Roc signature: Resource.Authority => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, PermissionDenied, ResourceLimit])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_startup_default_font_raw(arg0: u64) callconv(.c) HostText_startup_default_fontResult;
 
 /// Hosted symbol for Host.draw_frame_size!
 /// Roc signature: {} => { height : F32, width : F32 }
@@ -17793,37 +17868,6 @@ pub extern fn roc_draw_frame_size() callconv(.c) __AnonStruct_473ae8de77ee164b;
 /// Hosted symbol for Host.draw_line!
 /// Roc signature: { color : Color.Rgba, end : Math.Vec2, start : Math.Vec2, thickness : F32 } => {}
 pub extern fn roc_draw_line_raw(arg0: HostDraw_lineArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.text_load_font!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => Try(Font, [FontLoadFailed, ResourceLimit])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_load_font_raw(arg0: HostText_load_fontArgs) callconv(.c) HostText_load_fontResult;
-
-/// Hosted symbol for Host.text_load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Resource.Handle([StoreResource]) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_load_store_font_raw(arg0: HostText_load_store_fontArgs) callconv(.c) HostText_load_store_fontResult;
-
-/// Hosted symbol for Host.text_prepare!
-/// Roc signature: { font : Resource.Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle([PreparedTextResource]), width : F32 }, [InvalidResource, ResourceLimit])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_text_prepare_raw(arg0: HostText_prepareArgs) callconv(.c) HostText_prepareResult;
-
-/// Hosted symbol for Host.draw_draw_prepared_text!
-/// Roc signature: { color : Color.Rgba, pos : Math.Vec2, prepared : Resource.Handle([PreparedTextResource]) } => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_draw_draw_prepared_text_raw(arg0: HostDraw_draw_prepared_textArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.draw_polygon_lines!
 /// Roc signature: { color : Color.Rgba, points : List(Math.Vec2), thickness : F32 } => {}
@@ -17878,22 +17922,6 @@ pub extern fn roc_draw_triangle_lines_raw(arg0: HostDraw_triangle_linesArgs) cal
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba } => {}
 pub extern fn roc_draw_triangle_raw(arg0: HostDraw_triangleArgs) callconv(.c) void;
 
-/// Hosted symbol for Host.app_report_error!
-/// Roc signature: Str, Str => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-///     arg1.decref(roc_host);
-pub extern fn roc_app_report_error(arg0: RocStr, arg1: RocStr) callconv(.c) void;
-
-/// Hosted symbol for Host.files_open_root!
-/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, arg2: bool) callconv(.c) HostFiles_open_rootResult;
-
 /// Hosted symbol for Host.files_designate!
 /// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])
 /// Owned arguments. Release each exactly once before returning, unless it is
@@ -17901,24 +17929,6 @@ pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataO
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_files_designate(arg0: u64, arg1: ArgOrDrop) callconv(.c) HostFiles_designateResult;
-
-/// Hosted symbol for Host.files_read_text!
-/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-///     arg2.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_read_text(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_textResult;
-
-/// Hosted symbol for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-///     arg2.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_bytesResult;
 
 /// Hosted symbol for Host.files_list!
 /// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotADirectory, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
@@ -17937,14 +17947,31 @@ pub extern fn roc_files_list(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c)
 ///     arg2.decref(roc_host);
 pub extern fn roc_files_metadata(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_metadataResult;
 
-/// Hosted symbol for Host.files_write_text!
-/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
+/// Hosted symbol for Host.files_open_root!
+/// Roc signature: Resource.Authority, [AppCache, AppConfig, AppData, BesideExecutable, Declared(Str), WorkingDirectory], Bool => Try(Str, [AccessRefused, NotADirectory, NotFound, OpenFailed, PathInvalid, PermissionDenied, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, arg2: bool) callconv(.c) HostFiles_open_rootResult;
+
+/// Hosted symbol for Host.files_read_bytes!
+/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 ///     arg2.decref(roc_host);
-///     arg3.decref(roc_host);
-pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocStr) callconv(.c) HostFiles_write_textResult;
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_bytesResult;
+
+/// Hosted symbol for Host.files_read_text!
+/// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_files_read_text(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_textResult;
 
 /// Hosted symbol for Host.files_write_bytes!
 /// Roc signature: Resource.Authority, Str, Str, List(U8) => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
@@ -17953,135 +17980,28 @@ pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: 
 ///     arg1.decref(roc_host);
 ///     arg2.decref(roc_host);
 ///     arg3.decref(roc_host);
-pub extern fn roc_files_write_bytes(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocListWith(u8, false)) callconv(.c) HostFiles_write_textResult;
+pub extern fn roc_files_write_bytes(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocListWith(u8, false)) callconv(.c) HostFiles_write_bytesResult;
 
-/// Hosted symbol for Host.capture_set_virtual_mouse!
-/// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
-pub extern fn roc_capture_set_virtual_mouse(arg0: HostCapture_set_virtual_mouseArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.capture_set_virtual_keys!
-/// Roc signature: { active : Bool, keys : List(U64) } => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_capture_set_virtual_keys(arg0: HostCapture_set_virtual_keysArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.capture_set_virtual_text!
-/// Roc signature: List(U32) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_capture_set_virtual_text(arg0: RocListWith(u32, false)) callconv(.c) void;
-
-/// Hosted symbol for Host.capture_start_recording!
-/// Roc signature: Resource.Authority, { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => Try({}, [AlreadyRecording, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, UnsupportedFormat, WriteFailed])
+/// Hosted symbol for Host.files_write_text!
+/// Roc signature: Resource.Authority, Str, Str, Str => Try({}, [AccessRefused, NoSpace, NotFound, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
-pub extern fn roc_capture_start_recording(arg0: u64, arg1: __AnonStruct_96bd4e483c462501) callconv(.c) HostCapture_start_recordingResult;
+///     arg2.decref(roc_host);
+///     arg3.decref(roc_host);
+pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocStr) callconv(.c) HostFiles_write_bytesResult;
 
-/// Hosted symbol for Host.capture_stop_recording!
-/// Roc signature: Resource.Authority => Try({ bytes : U64, frames : U64 }, [BudgetExceeded, Busy, NotRecording, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable])
-pub extern fn roc_capture_stop_recording(arg0: u64) callconv(.c) HostCapture_stop_recordingResult;
-
-/// Hosted symbol for Host.capture_screenshot!
-/// Roc signature: Resource.Authority, Str => Try({}, [AlreadyPending, Busy, PathEscapesOutputDir, PathInvalid, PermissionDenied, Unavailable, WriteFailed])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-pub extern fn roc_capture_screenshot(arg0: u64, arg1: RocStr) callconv(.c) HostCapture_screenshotResult;
-
-/// Hosted symbol for Host.capture_screenshot_texture!
-/// Roc signature: Resource.Authority, { path : Str, target : Texture } => Try({}, [BudgetExceeded, Busy, OutOfMemory, PathEscapesOutputDir, PathInvalid, PermissionDenied, ReadbackFailed, TargetUnavailable, Unavailable, WriteFailed])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-pub extern fn roc_capture_screenshot_texture(arg0: u64, arg1: __AnonStruct_aa2779af0bb79965) callconv(.c) HostCapture_screenshot_textureResult;
-
-/// Hosted symbol for Host.capture_pixel_at!
-/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_capture_pixel_at(arg0: HostCapture_pixel_atArgs) callconv(.c) HostCapture_pixel_atResult;
-
-/// Hosted symbol for Host.capture_read_region!
-/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_capture_read_region(arg0: HostCapture_read_regionArgs) callconv(.c) HostCapture_read_regionResult;
-
-/// Hosted symbol for Host.app_exit!
-/// Roc signature: I32 => {}
-pub extern fn roc_app_exit(arg0: i32) callconv(.c) void;
-
-/// Hosted symbol for Host.app_args!
-/// Roc signature: {} => List(Str)
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_app_args() callconv(.c) RocList(RocStr);
-
-/// Hosted symbol for Host.app_read_env!
-/// Roc signature: Resource.Authority, Str => Try(Str, [NotFound, PermissionDenied])
+/// Hosted symbol for Host.http_send!
+/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_app_read_env(arg0: u64, arg1: RocStr) callconv(.c) HostApp_read_envResult;
-
-/// Hosted symbol for Host.random_entropy!
-/// Roc signature: {} => U64
-pub extern fn roc_random_entropy() callconv(.c) u64;
-
-/// Hosted symbol for Host.random_i32!
-/// Roc signature: I32, I32 => I32
-pub extern fn roc_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
+pub extern fn roc_http_send(arg0: u64, arg1: __AnonStruct_85380e02323174c5) callconv(.c) HostHttp_sendResult;
 
 /// Hosted symbol for Host.keys_set_exit_key!
 /// Roc signature: I32 => {}
 pub extern fn roc_keys_set_exit_key(arg0: i32) callconv(.c) void;
-
-/// Hosted symbol for Host.window_read_clipboard!
-/// Roc signature: Resource.Authority => Try(Str, [Busy, PermissionDenied, TooLarge, Unavailable])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_window_read_clipboard(arg0: u64) callconv(.c) HostWindow_read_clipboardResult;
-
-/// Hosted symbol for Host.window_set_clipboard_text!
-/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-pub extern fn roc_window_set_clipboard_text(arg0: u64, arg1: RocStr) callconv(.c) HostWindow_set_clipboard_textResult;
-
-/// Hosted symbol for Host.window_suggest_size!
-/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
-pub extern fn roc_window_suggest_size(arg0: HostWindow_suggest_sizeArgs) callconv(.c) HostWindow_suggest_sizeResult;
-
-/// Hosted symbol for Host.window_set_target_fps!
-/// Roc signature: I32 => {}
-pub extern fn roc_window_set_target_fps(arg0: i32) callconv(.c) void;
-
-/// Hosted symbol for Host.window_suggest_min_size!
-/// Roc signature: { height : I32, width : I32 } => {}
-pub extern fn roc_window_suggest_min_size(arg0: HostWindow_suggest_min_sizeArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.window_scale_dpi!
-/// Roc signature: {} => { x : F32, y : F32 }
-pub extern fn roc_window_scale_dpi() callconv(.c) __AnonStruct_2818a50bdccefb1e;
-
-/// Hosted symbol for Host.window_monitors!
-/// Roc signature: {} => List({ height : I32, index : I32, name : Str, refresh_hz : I32, width : I32, x : I32, y : I32 })
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_window_monitors() callconv(.c) RocList(__AnonStruct_dae0ce24e748c0cf);
-
-/// Hosted symbol for Host.window_suggest_position!
-/// Roc signature: { x : I32, y : I32 } => {}
-pub extern fn roc_window_suggest_position(arg0: HostWindow_suggest_positionArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.window_suggest_monitor!
-/// Roc signature: I32 => {}
-pub extern fn roc_window_suggest_monitor(arg0: i32) callconv(.c) void;
 
 /// Hosted symbol for Host.mouse_set_cursor_mode!
 /// Roc signature: U8 => {}
@@ -18091,77 +18011,13 @@ pub extern fn roc_mouse_set_cursor_mode_raw(arg0: u8) callconv(.c) void;
 /// Roc signature: U8 => {}
 pub extern fn roc_mouse_set_cursor_raw(arg0: u8) callconv(.c) void;
 
-/// Hosted symbol for Host.task_sleep!
-/// Roc signature: U64 => {}
-pub extern fn roc_task_sleep(arg0: u64) callconv(.c) void;
+/// Hosted symbol for Host.random_entropy!
+/// Roc signature: {} => U64
+pub extern fn roc_random_entropy() callconv(.c) u64;
 
-/// Hosted symbol for Host.task_spawn!
-/// Roc signature: Box({} => rigid) => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefErasedCallable(arg0, roc_host);
-pub extern fn roc_task_spawn(arg0: RocErasedCallable) callconv(.c) void;
-
-/// Hosted symbol for Host.tilemap_load_tmx!
-/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_tilemap_load_tmx_raw(arg0: HostTilemap_load_tmxArgs) callconv(.c) HostTilemap_load_tmxResult;
-
-/// Hosted symbol for Host.tilemap_draw!
-/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_tilemap_draw_raw(arg0: HostTilemap_drawArgs) callconv(.c) void;
-
-/// Hosted symbol for Host.draw_begin_camera!
-/// Roc signature: Camera.Camera2D => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_draw_begin_camera(arg0: CameraCamera2D) callconv(.c) HostDraw_begin_scissorResult;
-
-/// Hosted symbol for Host.draw_begin_blend!
-/// Roc signature: U8 => Try({}, [ScopeLimit, ScopeUnavailable])
-pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) HostDraw_begin_scissorResult;
-
-/// Hosted symbol for Host.draw_begin_render_texture!
-/// Roc signature: Texture => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_draw_begin_render_texture_raw(arg0: Texture) callconv(.c) HostDraw_begin_scissorResult;
-
-/// Hosted symbol for Host.draw_begin_shader!
-/// Roc signature: Resource.Handle([ShaderResource]) => Try({}, [ScopeLimit, ScopeUnavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-pub extern fn roc_draw_begin_shader_raw(arg0: *u64) callconv(.c) HostDraw_begin_scissorResult;
-
-/// Hosted symbol for Host.draw_end_camera!
-/// Roc signature: {} => {}
-pub extern fn roc_draw_end_camera() callconv(.c) void;
-
-/// Hosted symbol for Host.draw_end_blend!
-/// Roc signature: {} => {}
-pub extern fn roc_draw_end_blend_raw() callconv(.c) void;
-
-/// Hosted symbol for Host.draw_end_render_texture!
-/// Roc signature: {} => {}
-pub extern fn roc_draw_end_render_texture_raw() callconv(.c) void;
-
-/// Hosted symbol for Host.draw_end_shader!
-/// Roc signature: {} => {}
-pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
-
-/// Hosted symbol for Host.texture_load_render_target!
-/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) HostTexture_load_render_targetResult;
+/// Hosted symbol for Host.random_i32!
+/// Roc signature: I32, I32 => I32
+pub extern fn roc_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
 
 /// Hosted symbol for Host.shader_load_source!
 /// Roc signature: { fragment_source : Str, vertex_source : Str } => Try(Resource.Handle([ShaderResource]), [ResourceLimit, ShaderLoadFailed])
@@ -18228,71 +18084,6 @@ pub extern fn roc_shader_set_vec3_raw(arg0: HostShader_set_vec3Args) callconv(.c
 ///     arg0.decref(roc_host);
 pub extern fn roc_shader_set_vec4_raw(arg0: HostShader_set_vec4Args) callconv(.c) void;
 
-/// Hosted symbol for Host.http_send!
-/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_http_send(arg0: u64, arg1: __AnonStruct_85380e02323174c5) callconv(.c) HostHttp_sendResult;
-
-/// Hosted symbol for Host.time_now!
-/// Roc signature: {} => { nanosecond : U32, seconds : I64 }
-pub extern fn roc_time_now() callconv(.c) __AnonStruct_bbf5049c4fa71893;
-
-/// Hosted symbol for Host.stdio_write_text!
-/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg2.decref(roc_host);
-pub extern fn roc_stdio_write_text(arg0: u64, arg1: u8, arg2: RocStr) callconv(.c) HostStdio_write_textResult;
-
-/// Hosted symbol for Host.stdio_write_line!
-/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg2.decref(roc_host);
-pub extern fn roc_stdio_write_line(arg0: u64, arg1: u8, arg2: RocStr) callconv(.c) HostStdio_write_textResult;
-
-/// Hosted symbol for Host.stdio_write_bytes!
-/// Roc signature: Resource.Authority, U8, List(U8) => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg2.decref(roc_host);
-pub extern fn roc_stdio_write_bytes(arg0: u64, arg1: u8, arg2: RocListWith(u8, false)) callconv(.c) HostStdio_write_textResult;
-
-/// Hosted symbol for Host.udp_bind!
-/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_udp_bind(arg0: u64, arg1: __AnonStruct_63b1422749dba501) callconv(.c) HostUdp_bindResult;
-
-/// Hosted symbol for Host.udp_send!
-/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_udp_send(arg0: HostUdp_sendArgs) callconv(.c) HostUdp_sendResult;
-
-/// Hosted symbol for Host.udp_receive!
-/// Roc signature: { max_datagrams : U32, socket : Resource.Handle([UdpSocketResource]), timeout_ms : U64 } => Try({ payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }, [AlreadyReceiving, ReceiveFailed, Timeout, Unavailable])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg0.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_udp_receive(arg0: HostUdp_receiveArgs) callconv(.c) HostUdp_receiveResult;
-
-/// Hosted symbol for Host.sqlite_open!
-/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     arg1.decref(roc_host);
-///     arg2.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_sqlite_open(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: u8, arg4: u64, arg5: u64) callconv(.c) HostSqlite_openResult;
-
 /// Hosted symbol for Host.sqlite_close!
 /// Roc signature: Resource.Handle([SqliteDbResource]) => Try({}, [SqliteErr({ code : I64, message : Str })])
 /// Owned arguments. Release each exactly once before returning, unless it is
@@ -18300,34 +18091,6 @@ pub extern fn roc_sqlite_open(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: u8, a
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_sqlite_close(arg0: *u64) callconv(.c) HostSqlite_closeResult;
-
-/// Hosted symbol for Host.sqlite_prepare!
-/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try(Resource.Handle([SqliteStmtResource]), [MultipleStatements, SqliteErr({ code : I64, message : Str }), TooManyStatements])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-///     arg1.decref(roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_sqlite_prepare(arg0: *u64, arg1: RocStr) callconv(.c) HostSqlite_prepareResult;
-
-/// Hosted symbol for Host.sqlite_run_stmt!
-/// Roc signature: Resource.Handle([SqliteStmtResource]), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg1, roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_sqlite_run_stmt(arg0: *u64, arg1: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) HostSqlite_run_stmtResult;
-
-/// Hosted symbol for Host.sqlite_run_once!
-/// Roc signature: Resource.Handle([SqliteDbResource]), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
-/// Owned arguments. Release each exactly once before returning, unless it is
-/// moved into storage or into the result:
-///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
-///     arg1.decref(roc_host);
-///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg2, roc_host);
-/// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) HostSqlite_run_stmtResult;
 
 /// Hosted symbol for Host.sqlite_exec_script!
 /// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try({}, [SqliteErr({ code : I64, message : Str })])
@@ -18338,20 +18101,194 @@ pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__Anon
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_sqlite_exec_script(arg0: *u64, arg1: RocStr) callconv(.c) HostSqlite_closeResult;
 
-/// Hosted symbol for Host.cmd_run!
-/// Roc signature: Resource.Authority, { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => Try({ exit_code : I64, stderr : List(U8), stdout : List(U8) }, [AccessRefused, Busy, CommandNotFound, PermissionDenied, SpawnFailed, StderrLimitExceeded, StdoutLimitExceeded, Timeout({ exit_code : I64, stderr : List(U8), stdout : List(U8) }), Unavailable])
+/// Hosted symbol for Host.sqlite_open!
+/// Roc signature: Resource.Authority, Str, Str, U8, U64, U64 => Try(Resource.Handle([SqliteDbResource]), [PathInvalid, PermissionDenied, SqliteErr({ code : I64, message : Str }), TooManyConnections])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+///     arg2.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_open(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: u8, arg4: u64, arg5: u64) callconv(.c) HostSqlite_openResult;
+
+/// Hosted symbol for Host.sqlite_prepare!
+/// Roc signature: Resource.Handle([SqliteDbResource]), Str => Try(Resource.Handle([SqliteStmtResource]), [MultipleStatements, SqliteErr({ code : I64, message : Str }), TooManyStatements])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_prepare(arg0: *u64, arg1: RocStr) callconv(.c) HostSqlite_prepareResult;
+
+/// Hosted symbol for Host.sqlite_run_once!
+/// Roc signature: Resource.Handle([SqliteDbResource]), Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     arg1.decref(roc_host);
+///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg2, roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) HostSqlite_run_onceResult;
+
+/// Hosted symbol for Host.sqlite_run_stmt!
+/// Roc signature: Resource.Handle([SqliteStmtResource]), List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => Try({ cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, last_insert_rowid : I64, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }, [MultipleStatements, ResultTooLarge, SqliteErr({ code : I64, message : Str })])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg1, roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_run_stmt(arg0: *u64, arg1: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) HostSqlite_run_onceResult;
+
+/// Hosted symbol for Host.stdio_write_bytes!
+/// Roc signature: Resource.Authority, U8, List(U8) => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg2.decref(roc_host);
+pub extern fn roc_stdio_write_bytes(arg0: u64, arg1: u8, arg2: RocListWith(u8, false)) callconv(.c) HostStdio_write_bytesResult;
+
+/// Hosted symbol for Host.stdio_write_line!
+/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg2.decref(roc_host);
+pub extern fn roc_stdio_write_line(arg0: u64, arg1: u8, arg2: RocStr) callconv(.c) HostStdio_write_bytesResult;
+
+/// Hosted symbol for Host.stdio_write_text!
+/// Roc signature: Resource.Authority, U8, Str => Try({}, [BufferFull, PermissionDenied, TooLarge, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg2.decref(roc_host);
+pub extern fn roc_stdio_write_text(arg0: u64, arg1: u8, arg2: RocStr) callconv(.c) HostStdio_write_bytesResult;
+
+/// Hosted symbol for Host.store_open!
+/// Roc signature: Resource.Authority, { asset_set : Str, content_hash : Str, content_hash_mode : U8, content_version : U32, manifest_required : Bool, path : Str, root : Str, schema : U32 } => Try(Resource.Handle([StoreResource]), [AssetSetMismatch, ContentHashMismatch, ContentVersionMismatch, InvalidExpectedContentHash, ManifestMalformed, ManifestMissing, ManifestUnreadable, PathInvalid, PermissionDenied, ResourceLimit, RootNotDirectory, RootNotFound, RootUnreadable, SchemaMismatch])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_cmd_run(arg0: u64, arg1: __AnonStruct_3fe396bc5ba0c31c) callconv(.c) HostCmd_runResult;
+pub extern fn roc_store_open_raw(arg0: u64, arg1: __AnonStruct_3a568cb37b91deaf) callconv(.c) HostStore_openResult;
 
-/// Hosted symbol for Host.trace_mark!
-/// Roc signature: Str => {}
+/// Hosted symbol for Host.task_sleep!
+/// Roc signature: U64 => {}
+pub extern fn roc_task_sleep(arg0: u64) callconv(.c) void;
+
+/// Hosted symbol for Host.task_spawn!
+/// Roc signature: Box({} => rigid) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefErasedCallable(arg0, roc_host);
+pub extern fn roc_task_spawn(arg0: RocErasedCallable) callconv(.c) void;
+
+/// Hosted symbol for Host.text_default_font!
+/// Roc signature: {} => Font
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_text_default_font_raw() callconv(.c) Font;
+
+/// Hosted symbol for Host.text_load_font!
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => Try(Font, [FontLoadFailed, ResourceLimit])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_trace_mark(arg0: RocStr) callconv(.c) void;
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_text_load_font_raw(arg0: HostText_load_fontArgs) callconv(.c) HostText_load_fontResult;
+
+/// Hosted symbol for Host.text_load_store_font!
+/// Roc signature: { path : Str, size : I32, store : Resource.Handle([StoreResource]) } => Try(Font, [FontLoadFailed, NotFound, PathInvalid, ReadFailed, ResourceLimit])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_text_load_store_font_raw(arg0: HostText_load_store_fontArgs) callconv(.c) HostText_load_store_fontResult;
+
+/// Hosted symbol for Host.text_prepare!
+/// Roc signature: { font : Resource.Handle([FontResource]), size : F32, spacing : F32, text : Str } => Try({ height : F32, prepared : Resource.Handle([PreparedTextResource]), width : F32 }, [InvalidResource, ResourceLimit])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_text_prepare_raw(arg0: HostText_prepareArgs) callconv(.c) HostText_prepareResult;
+
+/// Hosted symbol for Host.text_startup_default_font!
+/// Roc signature: Resource.Authority => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, PermissionDenied, ResourceLimit])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_text_startup_default_font_raw(arg0: u64) callconv(.c) HostText_startup_default_fontResult;
+
+/// Hosted symbol for Host.texture_generate_checked!
+/// Roc signature: { checks_x : I32, checks_y : I32, color_a : Color.Rgba, color_b : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_texture_generate_checked_raw(arg0: HostTexture_generate_checkedArgs) callconv(.c) HostTexture_generate_checkedResult;
+
+/// Hosted symbol for Host.texture_generate_color!
+/// Roc signature: { color : Color.Rgba, height : I32, width : I32 } => Try(Texture, [ResourceLimit, TextureGenerationFailed])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_texture_generate_color_raw(arg0: HostTexture_generate_colorArgs) callconv(.c) HostTexture_generate_checkedResult;
+
+/// Hosted symbol for Host.texture_load_bytes!
+/// Roc signature: { bytes : List(U8), format : U8 } => Try(Texture, [ResourceLimit, TextureLoadFailed])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_texture_load_bytes_raw(arg0: HostTexture_load_bytesArgs) callconv(.c) HostTexture_load_bytesResult;
+
+/// Hosted symbol for Host.texture_load_render_target!
+/// Roc signature: { height : I32, width : I32 } => Try(Texture, [RenderTextureLoadFailed, ResourceLimit])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_texture_load_render_target_raw(arg0: HostTexture_load_render_targetArgs) callconv(.c) HostTexture_load_render_targetResult;
+
+/// Hosted symbol for Host.texture_load_store!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try(Texture, [NotFound, PathInvalid, ReadFailed, ResourceLimit, TextureLoadFailed])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_texture_load_store_raw(arg0: HostTexture_load_storeArgs) callconv(.c) HostTexture_load_storeResult;
+
+/// Hosted symbol for Host.texture_set_filter!
+/// Roc signature: Texture, U8 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_texture_set_filter_raw(arg0: Texture, arg1: u8) callconv(.c) void;
+
+/// Hosted symbol for Host.texture_set_wrap!
+/// Roc signature: Texture, U8 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_texture_set_wrap_raw(arg0: Texture, arg1: u8) callconv(.c) void;
+
+/// Hosted symbol for Host.texture_update!
+/// Roc signature: { pixels : List(Color.Rgba), texture : Texture } => Try({}, [NotMutable, PixelCountMismatch])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_texture_update_raw(arg0: HostTexture_updateArgs) callconv(.c) HostTexture_updateResult;
+
+/// Hosted symbol for Host.texture_update_region!
+/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : Texture, width : I32, x : I32, y : I32 } => Try({}, [NotMutable, PixelCountMismatch, RegionOutOfBounds])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_texture_update_region_raw(arg0: HostTexture_update_regionArgs) callconv(.c) HostTexture_update_regionResult;
+
+/// Hosted symbol for Host.tilemap_draw!
+/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Texture, tile_height : F32, tile_width : F32 }) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_tilemap_draw_raw(arg0: HostTilemap_drawArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.tilemap_load_tmx!
+/// Roc signature: { path : Str, store : Resource.Handle([StoreResource]) } => Try({ gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, [NotFound, ParseFailed, PathInvalid, ReadFailed, Unsupported])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_tilemap_load_tmx_raw(arg0: HostTilemap_load_tmxArgs) callconv(.c) HostTilemap_load_tmxResult;
+
+/// Hosted symbol for Host.time_now!
+/// Roc signature: {} => { nanosecond : U32, seconds : I64 }
+pub extern fn roc_time_now() callconv(.c) __AnonStruct_bbf5049c4fa71893;
 
 /// Hosted symbol for Host.trace_begin!
 /// Roc signature: Str => U64
@@ -18364,12 +18301,12 @@ pub extern fn roc_trace_begin(arg0: RocStr) callconv(.c) u64;
 /// Roc signature: U64 => {}
 pub extern fn roc_trace_end(arg0: u64) callconv(.c) void;
 
-/// Hosted symbol for Host.trace_sample_i64!
-/// Roc signature: Str, I64, U8 => {}
+/// Hosted symbol for Host.trace_mark!
+/// Roc signature: Str => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
-pub extern fn roc_trace_sample_i64(arg0: RocStr, arg1: i64, arg2: u8) callconv(.c) void;
+pub extern fn roc_trace_mark(arg0: RocStr) callconv(.c) void;
 
 /// Hosted symbol for Host.trace_sample_f64!
 /// Roc signature: Str, F64, U8 => {}
@@ -18378,6 +18315,77 @@ pub extern fn roc_trace_sample_i64(arg0: RocStr, arg1: i64, arg2: u8) callconv(.
 ///     arg0.decref(roc_host);
 pub extern fn roc_trace_sample_f64(arg0: RocStr, arg1: f64, arg2: u8) callconv(.c) void;
 
+/// Hosted symbol for Host.trace_sample_i64!
+/// Roc signature: Str, I64, U8 => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_trace_sample_i64(arg0: RocStr, arg1: i64, arg2: u8) callconv(.c) void;
+
+/// Hosted symbol for Host.udp_bind!
+/// Roc signature: Resource.Authority, { ip : Str, port : U16 } => Try({ handle : Resource.Handle([UdpSocketResource]), ip : U32, port : U16 }, [AccessRefused, AddressInUse, AddressUnavailable, InvalidAddress, PermissionDenied, ResourceLimit, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_udp_bind(arg0: u64, arg1: __AnonStruct_63b1422749dba501) callconv(.c) HostUdp_bindResult;
+
+/// Hosted symbol for Host.udp_receive!
+/// Roc signature: { max_datagrams : U32, socket : Resource.Handle([UdpSocketResource]), timeout_ms : U64 } => Try({ payload : List(U8), slices : List({ ip : U32, len : U64, port : U16, start : U64 }) }, [AlreadyReceiving, ReceiveFailed, Timeout, Unavailable])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_udp_receive(arg0: HostUdp_receiveArgs) callconv(.c) HostUdp_receiveResult;
+
+/// Hosted symbol for Host.udp_send!
+/// Roc signature: { bytes : List(U8), ip : Str, port : U16, socket : Resource.Handle([UdpSocketResource]) } => Try({}, [AccessRefused, InvalidAddress, NoRoute, PermissionDenied, SendFailed, TooLarge, Unavailable, WouldBlock])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_udp_send(arg0: HostUdp_sendArgs) callconv(.c) HostUdp_sendResult;
+
+/// Hosted symbol for Host.window_monitors!
+/// Roc signature: {} => List({ height : I32, index : I32, name : Str, refresh_hz : I32, width : I32, x : I32, y : I32 })
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_window_monitors() callconv(.c) RocList(__AnonStruct_dae0ce24e748c0cf);
+
+/// Hosted symbol for Host.window_read_clipboard!
+/// Roc signature: Resource.Authority => Try(Str, [Busy, PermissionDenied, TooLarge, Unavailable])
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_window_read_clipboard(arg0: u64) callconv(.c) HostWindow_read_clipboardResult;
+
+/// Hosted symbol for Host.window_scale_dpi!
+/// Roc signature: {} => { x : F32, y : F32 }
+pub extern fn roc_window_scale_dpi() callconv(.c) __AnonStruct_2818a50bdccefb1e;
+
+/// Hosted symbol for Host.window_set_clipboard_text!
+/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_window_set_clipboard_text(arg0: u64, arg1: RocStr) callconv(.c) HostWindow_set_clipboard_textResult;
+
+/// Hosted symbol for Host.window_set_target_fps!
+/// Roc signature: I32 => {}
+pub extern fn roc_window_set_target_fps(arg0: i32) callconv(.c) void;
+
+/// Hosted symbol for Host.window_suggest_min_size!
+/// Roc signature: { height : I32, width : I32 } => {}
+pub extern fn roc_window_suggest_min_size(arg0: HostWindow_suggest_min_sizeArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.window_suggest_monitor!
+/// Roc signature: I32 => {}
+pub extern fn roc_window_suggest_monitor(arg0: i32) callconv(.c) void;
+
+/// Hosted symbol for Host.window_suggest_position!
+/// Roc signature: { x : I32, y : I32 } => {}
+pub extern fn roc_window_suggest_position(arg0: HostWindow_suggest_positionArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.window_suggest_size!
+/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
+pub extern fn roc_window_suggest_size(arg0: HostWindow_suggest_sizeArgs) callconv(.c) HostWindow_suggest_sizeResult;
+
 /// Default memory management functions for Roc platforms.
 ///
 /// Uses `RocEnv.allocator` for allocation. Each allocation prepends
@@ -18385,7 +18393,7 @@ pub extern fn roc_trace_sample_f64(arg0: RocStr, arg1: f64, arg2: u8) callconv(.
 /// allocation size (required because `roc_dealloc` receives no length).
 pub const DefaultAllocators = struct {
     /// Allocate memory for the Roc runtime.
-    pub fn rocAlloc(roc_host: *RocHost, length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    pub fn rocAlloc(roc_host: *RocHost, length: usize, alignment: usize) callconv(.c) *anyopaque {
         const env: *RocEnv = @ptrCast(@alignCast(roc_host.env));
         const allocator = env.allocator;
 
@@ -18424,7 +18432,7 @@ pub const DefaultAllocators = struct {
     }
 
     /// Reallocate memory, copying existing data to the new allocation.
-    pub fn rocRealloc(roc_host: *RocHost, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    pub fn rocRealloc(roc_host: *RocHost, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) *anyopaque {
         const env: *RocEnv = @ptrCast(@alignCast(roc_host.env));
         const allocator = env.allocator;
 
@@ -18520,17 +18528,17 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 /// Entrypoint: app_config_for_host!
 pub extern fn app_config_for_host() callconv(.c) __AnonStruct_4f0c1c4bc3c3ab28;
 
+/// Entrypoint: drop_model_for_host!
+pub extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
+
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host(arg0: u64) callconv(.c) Init_for_hostResult;
-
-/// Entrypoint: update_for_host!
-pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_789266b361159fc9, arg2: u64) callconv(.c) Update_for_hostResult;
 
 /// Entrypoint: render_for_host!
 pub extern fn render_for_host(arg0: RocBox) callconv(.c) Render_for_hostResult;
 
-/// Entrypoint: drop_model_for_host!
-pub extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
-
 /// Entrypoint: run_task_for_host!
 pub extern fn run_task_for_host(arg0: RocErasedCallable) callconv(.c) RocErasedCallable;
+
+/// Entrypoint: update_for_host!
+pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_789266b361159fc9, arg2: u64) callconv(.c) Update_for_hostResult;

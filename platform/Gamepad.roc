@@ -178,7 +178,10 @@ Gamepad := [].{
 	expect {
 		snapshot : Snapshot
 		snapshot = { connected: [1, 0, 0, 0], buttons: [], axes: [] }
-		snapshot.lookup(Two) == Disconnected
+		match snapshot.lookup(Two) {
+			Disconnected => True
+			Connected(_) => False
+		}
 	}
 
 }

@@ -54,7 +54,7 @@ Font := {
 	## test drawing, loading, resource lifetime, or rasterized-font parity.
 	stub : Font
 	stub = {
-		handle: Resource.Handle.stub,
+		handle: Resource.Handle.stub({}),
 		metrics: {
 			base_size: 1,
 			line_spacing: 0,

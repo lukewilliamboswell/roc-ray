@@ -199,7 +199,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		close! : Db => Try({}, [SqliteErr(ErrCode, Str)])
 		close! = |Db.(db)|
-		# closed error union to open error union
+			# closed error union to open error union
 			match Host.sqlite_close!(db) {
 				Ok({}) => Ok({})
 				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
@@ -261,7 +261,7 @@ Sqlite := [].{
 		## parks the task; refused in `update!` and `render!`.
 		exec_script! : Db, Str => Try({}, [SqliteErr(ErrCode, Str)])
 		exec_script! = |Db.(db), script|
-		# closed error union to open error union
+			# closed error union to open error union
 			match Host.sqlite_exec_script!(db, script) {
 				Ok({}) => Ok({})
 				Err(SqliteErr(failure)) => Err(sqlite_err(failure))
@@ -275,7 +275,7 @@ Sqlite := [].{
 		## model, to let a pure `expect` build that model. Do not use it to
 		## test queries or resource lifetime.
 		stub : Db
-		stub = Db.(Resource.Handle.stub)
+		stub = Db.(Resource.Handle.stub({}))
 	}
 
 	## One row of a result, with its column names.
@@ -452,7 +452,7 @@ Sqlite := [].{
 
 		## Resource-free statement value for pure tests. See `Db.stub`.
 		stub : Stmt
-		stub = Stmt.(Resource.Handle.stub)
+		stub = Stmt.(Resource.Handle.stub({}))
 	}
 
 	## Describe an error code, for a log line or an error screen.
@@ -670,7 +670,7 @@ expect binding_wire({ name: ":a", value: String("hi") }).text == "hi"
 ## Turn a finished query into rows, or into the reason there are none.
 queried : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(List(Sqlite.Row), Sqlite.QueryErr)
 queried = |result|
-# closed error union to open error union
+	# closed error union to open error union
 	match result {
 		Ok(rows) => Ok(decode_rows(rows))
 		Err(ResultTooLarge) => Err(ResultTooLarge)
@@ -685,7 +685,7 @@ queried = |result|
 ## a `SELECT`'s output would hide the mistake.
 executed : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(Sqlite.Outcome, Sqlite.ExecuteErr)
 executed = |result|
-# closed error union to open error union
+	# closed error union to open error union
 	match result {
 		Ok(rows) =>
 			if rows.row_count > 0 {
@@ -701,7 +701,7 @@ executed = |result|
 ## Turn a finished query into its single row.
 exactly_one : Try(Host.SqliteRows, Host.SqliteQueryError) -> Try(Sqlite.Row, Sqlite.ExactlyOneErr)
 exactly_one = |result|
-# closed error union to open error union
+	# closed error union to open error union
 	match result {
 		Ok(rows) =>
 			if rows.row_count == 0 {
@@ -754,7 +754,7 @@ decode_cells = |result, at, remaining, found|
 			Err(_) => found
 			Ok(cell) =>
 				decode_cells(result, at + 1, remaining - 1, List.append(found, decode_cell(cell, result.payload)))
-			}
+		}
 	}
 
 decode_cell : Host.SqliteCell, List(U8) -> Sqlite.Value
@@ -796,7 +796,7 @@ decode_names = |bytes, at, found|
 					end + 1,
 					List.append(found, Str.from_utf8_lossy(payload_slice(bytes, at, end - at))),
 				)
-			}
+		}
 	}
 
 index_of_nul : List(U8), U64 -> Try(U64, [NotFound])
@@ -809,7 +809,7 @@ index_of_nul = |bytes, at|
 			} else {
 				index_of_nul(bytes, at + 1)
 			}
-		}
+	}
 
 expect decode_names([], 0, []) == []
 expect decode_names(['i', 'd', 0], 0, []) == ["id"]

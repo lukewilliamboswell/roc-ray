@@ -237,7 +237,7 @@ Url :: {
 							NotFound => (form_decode(pair), "")
 						},
 				)
-			}
+		}
 
 	## Replace or remove the query.
 	##
@@ -253,7 +253,7 @@ Url :: {
 						Ok(value) => Ok(Some(value))
 						Err(err) => Err(err)
 					}
-				}?
+			}?
 		Ok(
 			Url.{
 				scheme: url.scheme,
@@ -279,7 +279,7 @@ Url :: {
 						Ok(value) => Ok(Some(value))
 						Err(err) => Err(err)
 					}
-				}?
+			}?
 		Ok(
 			Url.{
 				scheme: url.scheme,
@@ -306,7 +306,7 @@ parse_absolute = |input| {
 				} else {
 					Err(MissingScheme)
 				}
-			}?
+		}?
 	scheme =
 		match ascii_lower(scheme_parts.before) {
 			"http" => Ok(Http)
@@ -433,7 +433,7 @@ parse_ipv4_parts = |parts, out|
 					}
 				Err(_) => Err(BadIpv4Part)
 			}
-		}
+	}
 
 parse_port : Str, [Http, Https] -> Try([None, Some(U16)], [InvalidPort(Str), PortOutOfRange(U64)])
 parse_port = |raw, scheme|
@@ -457,7 +457,7 @@ parse_port = |raw, scheme|
 					},
 				)
 			}
-		}
+	}
 
 parse_decimal : Str -> Try(U64, [NotDecimal])
 parse_decimal = |raw| {
@@ -580,7 +580,7 @@ validate_optional = |option, kind|
 				Ok(value) => Ok(Some(value))
 				Err(err) => Err(err)
 			}
-		}
+	}
 
 validate_component : Str, [Fragment, Path, Query] -> Try(Str, Url.ParseErr)
 validate_component = |raw, kind|
@@ -1122,7 +1122,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/c?new=2#fresh"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b?old=1#old") {
@@ -1132,7 +1132,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/a/b?new=2"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b?old=1") {
@@ -1142,7 +1142,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/a/b?old=1#fresh"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b") {
@@ -1152,7 +1152,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/root/y"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a?x=1#frag") {
@@ -1272,7 +1272,7 @@ expect
 				Ok(changed) => Url.to_str(changed) == "https://example.com/path#frag"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/path") {
@@ -1282,7 +1282,7 @@ expect
 				Ok(changed) => Url.to_str(changed) == "https://example.com/path?term=caf%C3%A9&empty="
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/path") {
@@ -1298,7 +1298,7 @@ expect
 				Ok(changed) => Url.to_str(changed) == "https://example.com/path"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/path") {
@@ -1308,7 +1308,7 @@ expect
 				Ok(changed) => Url.to_str(changed) == "https://example.com/path#r%C3%A9sum%C3%A9/?"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/path") {
@@ -1324,7 +1324,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/a/b?old=1"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b") {
@@ -1334,7 +1334,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "https://example.com/root"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b") {
@@ -1344,7 +1344,7 @@ expect
 				Ok(resolved) => Url.to_str(resolved) == "http://other.example/x"
 				Err(_) => False
 			}
-		}
+	}
 
 expect
 	match Url.parse("https://example.com/a/b") {
@@ -1399,5 +1399,5 @@ expect {
 expect {
 	decoded : Try(Url, [InvalidJson(Str)])
 	decoded = Json.parse("\"not a url\"")
-	decoded == Err(Json.invalid_json)
+	decoded == Err(Json.invalid_json({}))
 }

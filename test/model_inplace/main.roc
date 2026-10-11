@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Color
@@ -159,7 +159,7 @@ update! = |model, _input, _io|
 
 		NoChange =>
 			Ok(model)
-		}
+	}
 
 ## `List.set` with the failed write discarded rather than falling back to the
 ## list it was given, so the original is mentioned exactly once.

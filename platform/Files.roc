@@ -593,8 +593,8 @@ decode_entries = |bytes, at, found|
 							end + 1,
 							List.append(found, { name: entry_name(bytes, at + 1, end), kind: entry_kind(code) }),
 						)
-					}
-			}
+				}
+		}
 	}
 
 ## Copy one entry's name out of the listing.
@@ -635,7 +635,7 @@ index_of_nul = |bytes, at|
 			} else {
 				index_of_nul(bytes, at + 1)
 			}
-		}
+	}
 
 expect decode_listing([]) == []
 expect decode_listing([1, 'a', 0]) == [{ name: "a", kind: File }]

@@ -214,7 +214,7 @@ Udp := [].{
 		## a pure `expect` build that model. Do not use it to test delivery or
 		## resource lifetime.
 		stub : Socket
-		stub = Socket.({ handle: Resource.Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
+		stub = Socket.({ handle: Resource.Handle.stub({}), local: { ip: "0.0.0.0", port: 0 } })
 	}
 
 	## Opaque UDP authority supplied by App.Io, scoped by the app's declared

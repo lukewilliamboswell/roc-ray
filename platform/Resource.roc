@@ -22,8 +22,8 @@ Resource := [].{
 		## This value never resolves to a host resource. Public adapters use it to
 		## construct their documented test stubs; it must not be used to test host
 		## operations or resource lifetime.
-		stub : Handle(_resource)
-		stub = Handle.(Box.box(U64.highest))
+		stub : {} -> Handle(_resource)
+		stub = |{}| Handle.(Box.box(U64.highest))
 	}
 
 	# Closed phantom tags keep handle kinds distinct without extra runtime data.

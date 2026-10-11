@@ -590,7 +590,7 @@ Draw := [].{
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit])
 		from_source! = |cfg|
-		# closed error union to open error union
+			# closed error union to open error union
 			match Host.shader_load_source!(cfg) {
 				Ok(shader) => Ok(Shader.(shader))
 				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
@@ -606,7 +606,7 @@ Draw := [].{
 		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit])
 		from_store! = |store, cfg|
-		# closed error union to open error union
+			# closed error union to open error union
 			match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
 				Ok(shader) => Ok(Shader.(shader))
 				Err(PathInvalid) => Err(PathInvalid)
@@ -672,7 +672,7 @@ Draw := [].{
 		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
-		stub = Shader.(Resource.Handle.stub)
+		stub = Shader.(Resource.Handle.stub({}))
 	}
 
 	## Store-relative shader stage names. An empty path selects raylib's default

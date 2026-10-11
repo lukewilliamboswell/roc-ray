@@ -99,7 +99,7 @@ update! = |model, input, io| {
 				Ok(texture) => { status: Showing(path, position), image: Shown(texture) }
 				Err(_) => { status: Refused("${path}: the decoder refused these bytes"), image: model.image }
 			}
-		}
+	}
 
 	Ok({
 		..model,
@@ -262,7 +262,7 @@ render! = |model, frame| {
 				rotation: 0,
 				tint: Color.white,
 			})
-		}
+	}
 
 	# A lit dot carries the state; the words carry the detail.
 	frame.circle!({ center: { x: 47, y: 105 }, radius: 5, style: Draw.filled(status_color(model.status)) })

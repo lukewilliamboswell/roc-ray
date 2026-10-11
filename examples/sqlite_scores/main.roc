@@ -78,7 +78,7 @@ runner_names = ["ada", "grace", "alan", "edsger", "barbara", "ken", "donald", "m
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [ResourceLimit, ..])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("RocRay SQLite Scores")
@@ -124,7 +124,7 @@ init! = App.init(
 					subtitle,
 					hint,
 				})
-			}
+		}
 	},
 )
 
@@ -216,7 +216,7 @@ record_run! = |db, insert, name, score| {
 				Ok(rows) => Refreshed(rows)
 				Err(reason) => Failed(reason)
 			}
-		}
+	}
 }
 
 ## Wipe every run, then read the board back.
@@ -234,7 +234,7 @@ reset_board! = |db| {
 				Ok(rows) => Refreshed(rows)
 				Err(reason) => Failed(reason)
 			}
-		}
+	}
 }
 
 ## Fractional seconds since the Unix epoch, which is what the REAL column

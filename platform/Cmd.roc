@@ -43,7 +43,6 @@ import Host
 import Resource
 
 Cmd := {
-
 	## The executable to run, as `argv[0]`.
 	program : Str,
 

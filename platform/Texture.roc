@@ -20,7 +20,7 @@ Texture := {
 	## sampling configuration, or resource lifetime.
 	stub : Texture
 	stub = {
-		handle: Resource.Handle.stub,
+		handle: Resource.Handle.stub({}),
 		width: 0,
 		height: 0,
 	}

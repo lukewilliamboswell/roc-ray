@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-09-27-a3ce7f1" }
+app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Task
@@ -150,7 +150,7 @@ update! = |model, input, _io| {
 			} else {
 				Ok(next)
 			}
-		}
+	}
 }
 
 ## What the run is waiting for once its first task is in flight.
@@ -261,7 +261,7 @@ react! = |model, input, message, cycle, current|
 
 				(RoundTrip, Received(local, datagrams, started)) => reply!(model, input, local, datagrams, cycle, started)
 			}
-		}
+	}
 
 ## Check one delivered batch and, when it was the ping, answer it.
 reply! : Model, App.Input(Msg), Udp.Address, List(Udp.Datagram), U64, U64 => { outcome : Outcome, state : State }
@@ -309,7 +309,7 @@ reply! = |model, input, local, datagrams, cycle, started| {
 			} else {
 				{ outcome: Passed, state: model.state }
 			}
-		}
+	}
 }
 
 render! : Model, _ => Try({}, [Exit(I64)])

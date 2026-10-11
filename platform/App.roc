@@ -854,7 +854,10 @@ expect neutral_input.time == Time.first_cycle
 expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False, close_requested: Bool.False }
 expect !(neutral_input.devices.key_pressed(KeyEscape))
 expect !(neutral_input.devices.mouse.button_down(Left))
-expect neutral_input.devices.gamepad(One) == Disconnected
+expect match neutral_input.devices.gamepad(One) {
+	Disconnected => True
+	Connected(_) => False
+}
 
 ## The neutral input is `Devices.none`, so it is writable: this is the property
 ## that makes "SPACE was pressed this input" expressible at all.
@@ -962,7 +965,7 @@ app_set_cursor! = |_startup, cursor| Host.mouse_set_cursor!(Mouse.cursor_code(cu
 
 app_default_font! : App.Io => Try(Font, [PermissionDenied, AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 app_default_font! = |App.Io.(authority)|
-# closed error union to open error union
+	# closed error union to open error union
 	match Host.text_startup_default_font!(authority) {
 		Ok(font) => Ok(font)
 		Err(PermissionDenied) => Err(PermissionDenied)

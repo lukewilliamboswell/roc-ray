@@ -96,7 +96,7 @@ apply_message = |state, message, cycle|
 				Waiting => Woke({ arrived_on: cycle })
 				already => already
 			}
-		}
+	}
 
 expect match apply_message(Waiting, Woke, 18) {
 	Woke({ arrived_on }) => arrived_on == 18

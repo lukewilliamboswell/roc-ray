@@ -42,7 +42,6 @@ Devices := [].{
 	## `input.key_pressed(KeyW)`, `input.mouse.position()`,
 	## `input.gamepad(One)`.
 	Snapshot := {
-
 		## Packed per-key state, one byte per raylib key code. Each byte stores
 		## a held bit, which is a state sample, and pressed and released bits,
 		## which are interval events: set when at least one press (release) of
@@ -342,7 +341,10 @@ Devices := [].{
 	expect Devices.empty.key_up(KeyW)
 	expect !(Devices.empty.key_pressed(KeyEscape))
 	expect !(Devices.empty.key_released(KeySpace))
-	expect Devices.empty.gamepad(One) == Disconnected
+	expect match Devices.empty.gamepad(One) {
+		Disconnected => True
+		Connected(_) => False
+	}
 	expect !(Devices.empty.mouse.button_down(Left))
 	expect !(Devices.empty.mouse.button_pressed(Left))
 	expect !(Devices.empty.mouse.button_released(Right))
@@ -503,8 +505,14 @@ expect !(Devices.none.key_down(KeyW))
 expect Devices.none.key_up(KeyW)
 expect !(Devices.none.key_pressed(KeyEscape))
 expect !(Devices.none.key_released(KeySpace))
-expect Devices.none.gamepad(One) == Disconnected
-expect Devices.none.gamepad(Four) == Disconnected
+expect match Devices.none.gamepad(One) {
+	Disconnected => True
+	Connected(_) => False
+}
+expect match Devices.none.gamepad(Four) {
+	Disconnected => True
+	Connected(_) => False
+}
 expect !(Devices.none.mouse.button_down(Left))
 expect Devices.none.mouse.position() == { x: 0, y: 0 }
 expect Devices.none.mouse.delta() == { x: 0, y: 0 }

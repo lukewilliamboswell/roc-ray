@@ -241,8 +241,8 @@ hours after the upstream 09:00 UTC build. If a nightly is published late, the
 update waits until the next day. `.github/roc-nightly.json` also selects the validation workflows,
 including their validation-only release paths. The controller, its tests, and
 job permissions are maintained in
-https://github.com/lukewilliamboswell/roc-automation[roc-automation]. The
-caller workflows pin shared code to `75f3e1b4f2d6558e631a0d35d739165056b036d2`.
+https://github.com/lukewilliamboswell/roc-automation[roc-automation]. Each
+caller workflow pins the shared code it uses to a full commit hash.
 Dependabot proposes reviewed updates to Actions/workflow references.
 
 Follow the shared https://github.com/lukewilliamboswell/roc-automation/blob/75f3e1b4f2d6558e631a0d35d739165056b036d2/docs/integration.md[integration and permissions guide]

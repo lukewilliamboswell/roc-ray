@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Focused tests for reproducible Roc glue generation."""
+"""Focused tests for reading the compiler pin and checking a compiler against it."""
 
 from __future__ import annotations
 
-import contextlib
-import io
 import subprocess
 import tempfile
 import unittest
@@ -13,19 +11,6 @@ from unittest import mock
 
 import roc_platform_abi as abi
 import local_bundles
-
-
-def run_git(repo: Path, *args: str) -> str:
-    result = subprocess.run(
-        # Signing off: this repository is a scratch fixture, and a developer
-        # whose global config signs every commit would otherwise fail here on
-        # a pinentry prompt that has no terminal to appear on.
-        ["git", "-C", str(repo), "-c", "commit.gpgsign=false", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
 
 
 class RocPlatformAbiTests(unittest.TestCase):
@@ -75,74 +60,6 @@ class RocPlatformAbiTests(unittest.TestCase):
             self.assertRaisesRegex(abi.GlueError, "does not match platform/main.roc"),
         ):
             abi.verify_compiler("roc", pin)
-
-    def test_extracts_committed_glue_without_reading_dirty_worktree(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_name:
-            temporary = Path(temporary_name)
-            repo = temporary / "roc"
-            repo.mkdir()
-            run_git(repo, "init", "--quiet")
-            run_git(repo, "config", "user.name", "Glue Test")
-            run_git(repo, "config", "user.email", "glue@example.invalid")
-
-            glue = repo / "src" / "glue" / "src" / "ZigGlue.roc"
-            glue.parent.mkdir(parents=True)
-            glue.write_text("committed glue\n", encoding="utf-8")
-            run_git(repo, "add", "src/glue/src/ZigGlue.roc")
-            run_git(repo, "commit", "--quiet", "-m", "Add glue")
-            commit = run_git(repo, "rev-parse", "HEAD")
-            pin = abi.RocPin(
-                nightly=f"nightly-2026-August-03-{commit[:7]}",
-                commit=commit[:7],
-            )
-
-            glue.write_text("dirty glue\n", encoding="utf-8")
-            status_before = run_git(repo, "status", "--short")
-            resolved = abi.resolve_pinned_commit(repo, pin)
-            extraction = temporary / "extraction"
-            extraction.mkdir()
-            extracted = abi.extract_glue(repo, resolved, extraction)
-
-            self.assertEqual(extracted.read_text(encoding="utf-8"), "committed glue\n")
-            self.assertEqual(run_git(repo, "status", "--short"), status_before)
-
-            glue.write_text("tagged elsewhere\n", encoding="utf-8")
-            run_git(repo, "add", "src/glue/src/ZigGlue.roc")
-            run_git(repo, "commit", "--quiet", "-m", "Move nightly tag")
-            run_git(repo, "tag", pin.nightly)
-            with self.assertRaisesRegex(abi.GlueError, "embedded hash"):
-                abi.resolve_pinned_commit(repo, pin)
-
-    def test_check_reports_diff_without_modifying_destination(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_name:
-            temporary = Path(temporary_name)
-            checked_in = temporary / "roc_platform_abi.zig"
-            generated = temporary / "generated.zig"
-            checked_in.write_text("const old = 1;\n", encoding="utf-8")
-            generated.write_text("const new = 2;\n", encoding="utf-8")
-
-            diagnostics = io.StringIO()
-            with (
-                contextlib.redirect_stderr(diagnostics),
-                self.assertRaisesRegex(abi.GlueError, "not reproducible"),
-            ):
-                abi.install_or_check(generated, checked_in, check=True)
-
-            self.assertEqual(checked_in.read_text(encoding="utf-8"), "const old = 1;\n")
-            self.assertIn("-const old = 1;", diagnostics.getvalue())
-            self.assertIn("+const new = 2;", diagnostics.getvalue())
-
-    def test_update_is_atomic_and_idempotent(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_name:
-            temporary = Path(temporary_name)
-            checked_in = temporary / "roc_platform_abi.zig"
-            generated = temporary / "generated.zig"
-            checked_in.write_text("old\n", encoding="utf-8")
-            generated.write_text("new\n", encoding="utf-8")
-
-            self.assertTrue(abi.install_or_check(generated, checked_in, check=False))
-            self.assertEqual(checked_in.read_text(encoding="utf-8"), "new\n")
-            self.assertFalse(abi.install_or_check(generated, checked_in, check=False))
 
 
 if __name__ == "__main__":

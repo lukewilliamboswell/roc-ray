@@ -330,8 +330,8 @@ camera to find what the mouse is over.
 A _render texture_ is a texture you draw into instead of the window: draw a
 scene into it once, then draw the result, scaled or through a shader, as part
 of the frame. `Draw.RenderTexture.load!({ width, height })` creates one, and
-`Draw.Shader.from_source!` compiles a shader from GLSL source text; both are
-legal in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a
+`Shader.from_source!` compiles a shader from GLSL source text; both are
+legal in `init!`, `update!`, and tasks. `Shader.from_store!` loads a
 shader from an asset store and waits, so it belongs in `init!` or a task.
 A shader _uniform_ is a value the app passes to the shader, such as a time or
 a colour. Pass the initial complete record when constructing the shader. Every

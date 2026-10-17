@@ -10,6 +10,7 @@ import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Math
+import rr.Shader
 import rr.Text
 
 ## State kept between updates: the offscreen drawing target, typed shader,
@@ -17,7 +18,7 @@ import rr.Text
 ## These resources are created once and reused for every frame.
 Model : {
 	target : Draw.RenderTexture,
-	shader : Draw.Shader({ time : F32 }),
+	shader : Shader({ time : F32 }),
 	title : Text.Prepared,
 	hint : Text.Prepared,
 	seconds : F32,
@@ -40,7 +41,7 @@ init! = App.init(
 		assets = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
 		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
-		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" }, { time: 0 })?
+		shader = Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" }, { time: 0 })?
 		title = Text.from("offscreen + shader", font).size(48).prepare!()?
 		hint = Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", font).size(18).prepare!()?
 		Ok({ target, shader, title, hint, seconds: 0 })

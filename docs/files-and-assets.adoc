@@ -214,7 +214,7 @@ Load from a store with:
 |`Audio.load_music!(store, path)` |A music track, streamed
 |`Tilemap.load_tmx!(store, path)` |A parsed Tiled map, ready to bind to textures
 |`Draw.load_store_font!(store, font)` |A font
-|`Draw.Shader.from_store!(store, shader, initial_uniforms)` |A shader typed by its validated uniform record
+|`Shader.from_store!(store, shader, initial_uniforms)` |A shader typed by its validated uniform record
 |===
 
 Opening a store and loading from it wait, so they belong in `init!` or a

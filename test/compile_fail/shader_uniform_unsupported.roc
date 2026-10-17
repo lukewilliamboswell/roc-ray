@@ -7,6 +7,7 @@ app [Model, program] {
 # so an unsupported field is rejected before the host can see it.
 import rr.App
 import rr.Draw
+import rr.Shader
 
 Model : {}
 
@@ -16,7 +17,7 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default,
 	|_io| {
-		_shader = Draw.Shader.from_source!(
+		_shader = Shader.from_source!(
 			{ vertex_source: "", fragment_source: "void main() {}" },
 			{ label: "unsupported" },
 		)?

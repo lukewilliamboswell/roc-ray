@@ -267,7 +267,7 @@ shader.with_uniforms({ time: elapsed })
 ----
 
 Use attached constructors such as `Draw.RenderTexture.load!` and
-`Draw.Shader.from_store!` when creation naturally belongs to the result type.
+`Shader.from_store!` when creation naturally belongs to the result type.
 Textures use standalone `Assets` functions for loading and mutation; their
 value type and pure helpers live in the platform's `Texture` module.
 
@@ -306,7 +306,7 @@ unloads the native value and makes its bounded slot reusable.
 
 Keep capabilities narrow. `Texture` exposes dimensions and pure construction
 of test stubs; mutation requires `Assets`. `Assets.Texture` and `Draw.Texture`
-name the same platform-owned value. A `Draw.Shader(uniforms)` carries one closed
+name the same platform-owned value. A `Shader(uniforms)` carries one closed
 record: construction validates each field against the linked program, and
 `with_uniforms` accepts only that same record shape and field types.
 Applications depend only on the platform to name every RocRay API value.

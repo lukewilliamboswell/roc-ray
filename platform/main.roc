@@ -61,7 +61,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Assets, Audio, Camera, Capture, Cmd, Color, Devices, Draw, Files, Font, Gamepad, Http, Keys, Math, Mouse, Permission, Physics, Random, Sprite, Sqlite, Stderr, Stdout, Task, Text, Texture, Tilemap, Time, Trace, Udp, Url, Window]
+	exposes [App, Assets, Audio, Camera, Capture, Cmd, Color, Devices, Draw, Files, Font, Gamepad, Http, Keys, Math, Mouse, Permission, Physics, Random, Shader, Sprite, Sqlite, Stderr, Stdout, Task, Text, Texture, Tilemap, Time, Trace, Udp, Url, Window]
 	packages {
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -222,6 +222,7 @@ platform ""
 import Draw
 import Font
 import Texture
+import Shader
 import Host
 import Text
 import Color

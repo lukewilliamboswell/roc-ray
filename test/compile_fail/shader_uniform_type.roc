@@ -6,8 +6,9 @@ app [Model, program] {
 # Replacing uniforms must preserve every field's value type.
 import rr.App
 import rr.Draw
+import rr.Shader
 
-Model : { shader : Draw.Shader({ amount : F32 }) }
+Model : { shader : Shader({ amount : F32 }) }
 
 program = { init!, update!, render! }
 
@@ -15,7 +16,7 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default,
 	|_io| {
-		shader = Draw.Shader.stub({ amount: 1.F32 })
+		shader = Shader.stub({ amount: 1.F32 })
 		changed = shader.with_uniforms({ amount: 2.I32 })
 		Ok({ shader: changed })
 	},

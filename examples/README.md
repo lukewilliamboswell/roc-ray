@@ -31,7 +31,7 @@ Start with these, in order:
 6. `task_sleep` -- a task that waits and the message it sends back
 
 For a shader example, see `post_process`. It constructs
-`Draw.Shader({ time : F32 })` with an initial record, stores only application
+`Shader({ time : F32 })` with an initial record, stores only application
 state during `update!`, and uses pure `with_uniforms` before `with_shader!`
 uploads the complete record for drawing.
 

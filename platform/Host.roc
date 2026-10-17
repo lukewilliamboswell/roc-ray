@@ -23,7 +23,7 @@
 ##
 ## > `Texture` resource: loading, generation, updates, configuration, and render targets.
 ## > `Text` resource: font loading, glyph metrics, and text preparation.
-## > `Shader` resource: loading, uniform lookup, and uniform updates.
+## > `Shader` resource: loading, typed schema binding, and scoped value batches.
 ## > `Store` resource: confined asset directories.
 ## > `Mouse`: cursor shape, visibility, and capture effects.
 ## > `Audio`: host-owned sounds and music plus playback effects.
@@ -202,35 +202,33 @@ Host := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	text_prepare! : TextPrepare => Try(TextPreparedResult, TextPrepareError)
 
-	## Located shader uniform.
-	ShaderUniform : { shader : Resource.Shader, location : I32 }
-
 	## Vertex and fragment shader sources.
 	ShaderLoadSource : { vertex_source : Str, fragment_source : Str }
 
 	## Store-relative vertex and fragment shader paths.
 	ShaderLoadStore : { store : Resource.Store, vertex_path : Str, fragment_path : Str }
 
-	## Shader-uniform lookup parameters.
-	ShaderLocation : { shader : Resource.Shader, name : Str }
+	## One application uniform in a shader's closed record schema. `kind` uses
+	## the private table documented beside the encoder in `Draw.roc`.
+	ShaderUniformSchema : { kind : U8, name : Str }
 
-	## Scalar floating-point uniform value.
-	ShaderFloat : { uniform : ShaderUniform, value : F32 }
+	## Bind and validate a complete schema. `operation` identifies the public
+	## constructor so phase failures use application-facing vocabulary: `0` is
+	## `from_source!`, `1` is `from_store!`.
+	ShaderBindUniforms : {
+		operation : U8,
+		schema : List(ShaderUniformSchema),
+		shader : Resource.Shader,
+	}
 
-	## Scalar integer uniform value.
-	ShaderInt : { uniform : ShaderUniform, value : I32 }
-
-	## Two-component vector uniform value.
-	ShaderVec2 : { uniform : ShaderUniform, value : Math.Vec2 }
-
-	## Three-component vector uniform value.
-	ShaderVec3 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32 } }
-
-	## Four-component vector uniform value.
-	ShaderVec4 : { uniform : ShaderUniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-
-	## Texture uniform value.
-	ShaderTexture : { uniform : ShaderUniform, texture : Texture }
+	## A complete shader value batch. Float, integer, and texture lanes are
+	## traversed in the same field order as the cached schema.
+	ShaderScope : {
+		floats : List(F32),
+		ints : List(I32),
+		shader : Resource.Shader,
+		textures : List(Texture),
+	}
 
 	## Failures while compiling shader source strings.
 	ShaderLoadSourceError : [ResourceLimit, ShaderLoadFailed]
@@ -246,36 +244,19 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	shader_load_store! : ShaderLoadStore => Try(Resource.Shader, ShaderLoadStoreError)
 
-	## Failures while looking up a shader uniform.
-	ShaderLocationError : [UniformNotFound]
+	## Failures while atomically binding a complete shader schema. Indices name
+	## entries in the submitted schema; `actual` is an OpenGL type code and
+	## `array_len` is zero only when no reflected type is available.
+	ShaderBindError : [
+		ResourceLimit,
+		UniformNotFound(U8),
+		UniformReflectionUnavailable,
+		UniformTypeMismatch({ actual : U32, array_len : U32, index : U8 }),
+	]
 
-	## Get a shader uniform location.
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	shader_location! : ShaderLocation => Try(I32, ShaderLocationError)
-
-	## Set a floating-point shader uniform.
-	## Legal in `render!` only.
-	shader_set_float! : ShaderFloat => {}
-
-	## Set an integer shader uniform.
-	## Legal in `render!` only.
-	shader_set_int! : ShaderInt => {}
-
-	## Set a two-component shader uniform.
-	## Legal in `render!` only.
-	shader_set_vec2! : ShaderVec2 => {}
-
-	## Set a three-component shader uniform.
-	## Legal in `render!` only.
-	shader_set_vec3! : ShaderVec3 => {}
-
-	## Set a four-component shader uniform.
-	## Legal in `render!` only.
-	shader_set_vec4! : ShaderVec4 => {}
-
-	## Set a texture shader uniform.
-	## Legal in `render!` only.
-	shader_set_texture! : ShaderTexture => {}
+	## Validate and cache a shader's complete application-uniform schema.
+	## Legal in the same phases as the constructor identified by `operation`.
+	shader_bind_uniforms! : ShaderBindUniforms => Try({}, ShaderBindError)
 
 	## Permission declarations, as the host validates them at startup.
 
@@ -1183,9 +1164,9 @@ Host := [].{
 	## Legal in `render!` only.
 	draw_end_scissor! : () => {}
 
-	## Begin custom-shader drawing.
+	## Begin custom-shader drawing and upload its complete value record.
 	## Legal in `render!` only.
-	draw_begin_shader! : Resource.Shader => Try({}, DrawScopeError)
+	draw_begin_shader! : ShaderScope => Try({}, DrawScopeError)
 
 	## Restore the default shader.
 	## Legal in `render!` only.

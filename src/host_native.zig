@@ -3755,8 +3755,7 @@ fn drawDetailKind(name: []const u8) ?u8 {
     if (std.mem.indexOf(u8, name, "read_region") != null or std.mem.indexOf(u8, name, "pixel_at") != null or std.mem.indexOf(u8, name, "screenshot") != null) return 4;
     if (std.mem.indexOf(u8, name, "with_render_texture") != null) return 5;
     if (std.mem.indexOf(u8, name, "instances") != null or std.mem.indexOf(u8, name, "Tilemap.draw_layers") != null) return 1;
-    if (std.mem.indexOf(u8, name, "TextureUniform.set") != null) return 3;
-    if (std.mem.indexOf(u8, name, "update_texture") != null or std.mem.indexOf(u8, name, "from_bytes") != null or std.mem.indexOf(u8, name, "Uniform.set") != null) return 2;
+    if (std.mem.indexOf(u8, name, "update_texture") != null or std.mem.indexOf(u8, name, "from_bytes") != null) return 2;
     if (std.mem.indexOf(u8, name, "with_") != null or std.mem.indexOf(u8, name, "set_texture_") != null or std.mem.indexOf(u8, name, "clear!") != null) return 3;
     if (std.mem.startsWith(u8, name, "Draw.") or std.mem.startsWith(u8, name, "Text.Prepared.draw")) return 0;
     return null;
@@ -3766,8 +3765,6 @@ test "full draw detail names map to stable non-payload categories" {
     try std.testing.expectEqual(@as(?u8, 0), drawDetailKind("Draw.circle!"));
     try std.testing.expectEqual(@as(?u8, 1), drawDetailKind("Draw.texture_instances!"));
     try std.testing.expectEqual(@as(?u8, 2), drawDetailKind("Assets.update_texture!"));
-    try std.testing.expectEqual(@as(?u8, 2), drawDetailKind("Draw.Vec4Uniform.set!"));
-    try std.testing.expectEqual(@as(?u8, 3), drawDetailKind("Draw.TextureUniform.set!"));
     try std.testing.expectEqual(@as(?u8, 3), drawDetailKind("Draw.with_shader!"));
     try std.testing.expectEqual(@as(?u8, 4), drawDetailKind("Capture.read_region!"));
     try std.testing.expectEqual(@as(?u8, 5), drawDetailKind("Draw.with_render_texture!"));
@@ -4240,6 +4237,7 @@ var headless_clipboard_len: usize = 0;
 var headless_clipboard_set: bool = false;
 var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
+var shader_value_upload_count: usize = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
 var render_texture_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 /// Dimensions of each open render-target scope, pushed and popped in step with
@@ -4258,7 +4256,7 @@ var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
 var headless_texture_instance_batches: usize = 0;
 var headless_texture_instances: usize = 0;
 var render_texture_lease_count: usize = 0;
-var shader_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
+var shader_leases: [SCOPE_STACK_LIMIT]?abi.HostDraw_begin_shaderArgs = @splat(null);
 var shader_lease_count: usize = 0;
 var blend_scopes: [SCOPE_STACK_LIMIT]u8 = undefined;
 var blend_scope_count: usize = 0;
@@ -4329,10 +4327,40 @@ const RenderTextureResource = union(enum) {
     native: raylib.RenderTexture,
 };
 
-const ShaderResource = union(enum) {
+const MAX_SHADER_UNIFORMS: usize = 32;
+
+const ShaderProgram = union(enum) {
     headless,
     native: raylib.Shader,
 };
+
+const ShaderBinding = struct {
+    location: c_int,
+    kind: u8,
+};
+
+const ShaderResource = struct {
+    program: ShaderProgram,
+    bindings: [MAX_SHADER_UNIFORMS]ShaderBinding = @splat(.{ .location = 0, .kind = 0 }),
+    binding_count: u8 = 0,
+};
+
+fn headlessShaderResource() ShaderResource {
+    return .{ .program = .headless };
+}
+
+fn nativeShaderResource(shader: raylib.Shader) ShaderResource {
+    return .{ .program = .{ .native = shader } };
+}
+
+fn emptyShaderScope(shader: *u64) abi.HostDraw_begin_shaderArgs {
+    return .{
+        .floats = abi.RocListWith(f32, false).empty(),
+        .ints = abi.RocListWith(i32, false).empty(),
+        .shader = shader,
+        .textures = abi.RocList(abi.Texture).empty(),
+    };
+}
 
 /// An opened root directory. Its `Dir` is the capability that makes asset
 /// operations independent of later process-CWD changes. This first slice uses
@@ -4392,7 +4420,7 @@ fn destroyRenderTexture(resource: *RenderTextureResource) void {
 }
 
 fn destroyShader(resource: *ShaderResource) void {
-    switch (resource.*) {
+    switch (resource.program) {
         .headless => {},
         .native => |shader| if (!builtin.is_test) raylib.unloadShader(shader),
     }
@@ -4813,16 +4841,6 @@ fn abiTryEmptyOk(comptime Result: type) Result {
     return result;
 }
 
-/// A `Try` whose failure carries nothing.
-///
-/// A closed union with one payloadless variant erases to a zero-sized
-/// payload, so there is nothing to write but the tag.
-fn abiTryEmptyErr(comptime Result: type) Result {
-    var result: Result = std.mem.zeroes(Result);
-    result.tag = .Err;
-    return result;
-}
-
 /// One payloadless variant of a generated closed error union.
 ///
 /// A union whose variants all carry nothing is generated as a plain `enum`,
@@ -5123,6 +5141,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_clipboard_set = false;
     headless_render_texture_depth = 0;
     headless_shader_depth = 0;
+    shader_value_upload_count = 0;
     render_texture_lease_count = 0;
     render_target_sizes = @splat(.{ .height = 0, .width = 0 });
     shader_lease_count = 0;
@@ -5368,7 +5387,7 @@ test "prepared text rejects resource kind confusion and releases transferred own
         active_roc_host = null;
     }
 
-    const draw_shader = storeShader(.headless).?;
+    const draw_shader = storeShader(headlessShaderResource()).?;
     hostedDrawPreparedTextRaw(&roc_host, .{
         .prepared = draw_shader,
         .pos = .{ .x = 0, .y = 0 },
@@ -5377,7 +5396,7 @@ test "prepared text rejects resource kind confusion and releases transferred own
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
-    const font_shader = storeShader(.headless).?;
+    const font_shader = storeShader(headlessShaderResource()).?;
     const result = hostedTextPrepareRaw(&roc_host, .{
         .font = font_shader,
         .text = abi.RocStr.empty(),
@@ -5426,17 +5445,21 @@ test "nested render and shader scopes lease last references until matching end" 
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
 
-    const outer_shader = storeShader(.headless).?;
-    const inner_shader = storeShader(.headless).?;
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .arg0 = outer_shader }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .arg0 = inner_shader }));
+    const outer_shader = storeShader(headlessShaderResource()).?;
+    const inner_shader = storeShader(headlessShaderResource()).?;
+    shader_value_upload_count = 0;
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(emptyShaderScope(outer_shader)));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(emptyShaderScope(inner_shader)));
+    try std.testing.expectEqual(@as(usize, 2), shader_value_upload_count);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_shader_depth);
     hostedDrawEndShaderRaw();
+    try std.testing.expectEqual(@as(usize, 3), shader_value_upload_count);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), shader_heap.active());
     hostedDrawEndShaderRaw();
+    try std.testing.expectEqual(@as(usize, 3), shader_value_upload_count);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
@@ -5621,10 +5644,10 @@ test "resource scopes report bounded saturation without leaking transferred owne
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 
-    const shader = storeShader(.headless).?;
+    const shader = storeShader(headlessShaderResource()).?;
     abi.increfBox(@ptrCast(shader), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .arg0 = shader }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRawCode(.{ .arg0 = shader }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(emptyShaderScope(shader)));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRawCode(emptyShaderScope(shader)));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
@@ -5645,12 +5668,12 @@ test "scope kind confusion fails and releases transferred owners" {
         active_roc_host = null;
     }
 
-    const shader = storeShader(.headless).?;
+    const shader = storeShader(headlessShaderResource()).?;
     try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRawCode(.{ .handle = @ptrCast(shader), .height = 16, .width = 16 }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     const target = storeRenderTexture(.headless).?;
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(.{ .arg0 = @ptrCast(target) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(emptyShaderScope(@ptrCast(target))));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
@@ -5664,6 +5687,111 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     try std.testing.expectEqual(abi.HostTexture_load_render_targetErr.render_texture_load_failed, target.payload_err());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(before, render_texture_heap.active());
+}
+
+test "shader schema binding is atomic and accepts exactly thirty two fields" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
+
+    const shader = storeShader(headlessShaderResource()).?;
+    var at_limit: [MAX_SHADER_UNIFORMS]abi.HostShader_bind_uniformsArg0Schema = undefined;
+    for (&at_limit, 0..) |*entry, index| entry.* = .{
+        .kind = @intCast(index % 8),
+        .name = abi.RocStr.fromSlice("active", &roc_host),
+    };
+    const accepted = hostedShaderBindUniformsRaw(&roc_host, .{
+        .operation = 0,
+        .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).fromSlice(&at_limit, &roc_host),
+        .shader = retainTestResourceBox(shader),
+    });
+    try std.testing.expectEqual(abi.HostShader_bind_uniformsResultTag.Ok, accepted.tag);
+    const resource = shader_heap.get(shader.*).?;
+    try std.testing.expectEqual(@as(u8, MAX_SHADER_UNIFORMS), resource.binding_count);
+    const original_last = resource.bindings[MAX_SHADER_UNIFORMS - 1];
+
+    var over_limit: [MAX_SHADER_UNIFORMS + 1]abi.HostShader_bind_uniformsArg0Schema = undefined;
+    for (&over_limit) |*entry| entry.* = .{ .kind = 0, .name = abi.RocStr.fromSlice("too_many", &roc_host) };
+    const saturated = hostedShaderBindUniformsRaw(&roc_host, .{
+        .operation = 0,
+        .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).fromSlice(&over_limit, &roc_host),
+        .shader = retainTestResourceBox(shader),
+    });
+    try std.testing.expectEqual(abi.HostShader_bind_uniformsResultTag.Err, saturated.tag);
+    try std.testing.expectEqual(abi.HostShader_bind_uniformsErrTag.ResourceLimit, saturated.payload_err().tag);
+    try std.testing.expectEqual(@as(u8, MAX_SHADER_UNIFORMS), resource.binding_count);
+    try std.testing.expectEqual(original_last.kind, resource.bindings[MAX_SHADER_UNIFORMS - 1].kind);
+
+    const missing = abi.HostShader_bind_uniformsArg0Schema{ .kind = 0, .name = abi.RocStr.empty() };
+    const refused = hostedShaderBindUniformsRaw(&roc_host, .{
+        .operation = 0,
+        .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).fromSlice(&.{missing}, &roc_host),
+        .shader = retainTestResourceBox(shader),
+    });
+    try std.testing.expectEqual(abi.HostShader_bind_uniformsResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostShader_bind_uniformsErrTag.UniformNotFound, refused.payload_err().tag);
+    try std.testing.expectEqual(@as(u8, 0), refused.payload_err().payload_uniform_not_found());
+    try std.testing.expectEqual(@as(u8, MAX_SHADER_UNIFORMS), resource.binding_count);
+
+    releaseResourceBox(&roc_host, shader);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+}
+
+test "shader value batches validate every lane and retain texture owners through scope end" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+
+    const mismatched = storeShader(headlessShaderResource()).?;
+    const mismatch_resource = shader_heap.get(mismatched.*).?;
+    mismatch_resource.bindings[0] = .{ .kind = 0, .location = 0 };
+    mismatch_resource.binding_count = 1;
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(emptyShaderScope(mismatched)));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+
+    const shader = storeShader(headlessShaderResource()).?;
+    const resource = shader_heap.get(shader.*).?;
+    for (0..8) |index| resource.bindings[index] = .{ .kind = @intCast(index), .location = @intCast(index) };
+    resource.binding_count = 8;
+    const texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
+    const texture_value = abi.Texture{ .handle = texture, .height = 1, .width = 1 };
+    shader_value_upload_count = 0;
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
+        .floats = abi.RocListWith(f32, false).fromSlice(&.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, &roc_host),
+        .ints = abi.RocListWith(i32, false).fromSlice(&.{ 2, 1 }, &roc_host),
+        .shader = shader,
+        .textures = abi.RocList(abi.Texture).fromSlice(&.{texture_value}, &roc_host),
+    }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), shader_value_upload_count);
+    hostedDrawEndShaderRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 }
 
 test "last resource references remain live through owning host operations" {
@@ -5696,17 +5824,33 @@ test "last resource references remain live through owning host operations" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
-    const shader = storeShader(.headless).?;
-    hostedShaderSetFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
+    const shader = storeShader(headlessShaderResource()).?;
+    const shader_resource = shader_heap.get(shader.*).?;
+    shader_resource.bindings[0] = .{ .location = 0, .kind = 0 };
+    shader_resource.binding_count = 1;
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
+        .floats = abi.RocListWith(f32, false).fromSlice(&.{1}, &roc_host),
+        .ints = abi.RocListWith(i32, false).empty(),
+        .shader = shader,
+        .textures = abi.RocList(abi.Texture).empty(),
+    }));
+    hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
-    const sampler_shader = storeShader(.headless).?;
+    const sampler_shader = storeShader(headlessShaderResource()).?;
     const sampler_texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
-    hostedShaderSetTextureRaw(.{
-        .texture = .{ .handle = sampler_texture, .height = 1, .width = 1 },
-        .uniform = .{ .shader = sampler_shader, .location = 0 },
-    });
+    const sampler_resource = shader_heap.get(sampler_shader.*).?;
+    sampler_resource.bindings[0] = .{ .location = 0, .kind = 7 };
+    sampler_resource.binding_count = 1;
+    const sampler_value = abi.Texture{ .handle = sampler_texture, .height = 1, .width = 1 };
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
+        .floats = abi.RocListWith(f32, false).empty(),
+        .ints = abi.RocListWith(i32, false).empty(),
+        .shader = sampler_shader,
+        .textures = abi.RocList(abi.Texture).fromSlice(&.{sampler_value}, &roc_host),
+    }));
+    hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -5913,7 +6057,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
     try std.testing.expect(prepared_text_heap.get(INVALID_RESOURCE_TOKEN) == null);
     try std.testing.expect(store_heap.get(INVALID_RESOURCE_TOKEN) == null);
 
-    const real_shader = storeShader(.headless).?;
+    const real_shader = storeShader(headlessShaderResource()).?;
     const real_target = storeRenderTexture(.headless).?;
 
     {
@@ -5933,11 +6077,18 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 
-        // A uniform cannot be resolved on a stub shader.
-        try std.testing.expectEqual(@as(i32, -1), hostedShaderLocationRawCode(&roc_host, .{
-            .shader = allocateTestResourceStub(&roc_host),
+        // A uniform schema cannot be bound to a stub shader.
+        const uniform_schema = abi.HostShader_bind_uniformsArg0Schema{
+            .kind = 0,
             .name = abi.RocStr.fromSlice("uTime", &roc_host),
-        }));
+        };
+        const bound = hostedShaderBindUniformsRaw(&roc_host, .{
+            .operation = 0,
+            .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).fromSlice(&.{uniform_schema}, &roc_host),
+            .shader = allocateTestResourceStub(&roc_host),
+        });
+        try std.testing.expectEqual(abi.HostShader_bind_uniformsResultTag.Err, bound.tag);
+        try std.testing.expectEqual(abi.HostShader_bind_uniformsErrTag.ResourceLimit, bound.payload_err().tag);
 
         // Every store-backed loader reports the read it could not make.
         const store_texture = hostedTextureLoadStoreRaw(&roc_host, .{
@@ -5974,7 +6125,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A scope cannot be opened on a stub, and reports the same refusal a
         // released resource would. Nothing is leased, so there is no end call.
-        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(.{ .arg0 = allocateTestResourceStub(&roc_host) }));
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRawCode(emptyShaderScope(allocateTestResourceStub(&roc_host))));
         try std.testing.expectEqual(@as(usize, 0), shader_lease_count);
         try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRawCode(.{
             .handle = allocateTestResourceStub(&roc_host),
@@ -5998,7 +6149,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         // the reference each call was given.
         for (0..3) |_| {
             abi.increfBox(@ptrCast(real_shader), 1);
-            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{ .arg0 = real_shader }));
+            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(emptyShaderScope(real_shader)));
         }
         try std.testing.expectEqual(@as(u8, 3), headless_shader_depth);
         for (0..3) |_| hostedDrawEndShaderRaw();
@@ -6197,7 +6348,7 @@ test "one instance batch crosses once and releases its texture and list" {
 
     // A handle of the wrong kind is the same failure an app sees after a
     // release: nothing is drawn, and both transferred references still go back.
-    const shader = storeShader(.headless).?;
+    const shader = storeShader(headlessShaderResource()).?;
     hostedDrawTextureInstancesRaw(&roc_host, .{
         .texture = .{ .handle = shader, .width = 1, .height = 1 },
         .instances = headlessTextureInstances(&roc_host, 3),
@@ -6377,7 +6528,7 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     for (targets) |target| releaseResourceBox(&roc_host, target);
 
     var shaders: [32]*u64 = undefined;
-    for (&shaders) |*shader| shader.* = storeShader(.headless).?;
+    for (&shaders) |*shader| shader.* = storeShader(headlessShaderResource()).?;
     const refused_shader = hostedShaderLoadSourceRaw(&roc_host, .{
         .fragment_source = abi.RocStr.fromSlice("shader", &roc_host),
         .vertex_source = abi.RocStr.empty(),
@@ -7513,7 +7664,7 @@ fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArg
     const fragment_slice = args.fragment_source.asSlice();
     if (vertex_slice.len == 0 and fragment_slice.len == 0) return abiTryErr(Result, Error.shader_load_failed);
     if (headlessMode()) {
-        const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        const shader = storeShader(headlessShaderResource()) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, shader);
     }
 
@@ -7525,7 +7676,7 @@ fn hostedShaderLoadSourceRaw(host: *RocHost, args: abi.HostShader_load_sourceArg
     var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return abiTryErr(Result, Error.shader_load_failed);
     defer fragment.deinit();
     const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
-    const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
+    const stored = storeShader(nativeShaderResource(shader)) orelse return abiTryErr(Result, Error.resource_limit);
     return abiTryOk(Result, stored);
 }
 
@@ -7571,7 +7722,7 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
     defer if (fragment_bytes) |bytes| allocator.free(bytes);
 
     if (headlessMode()) {
-        const shader = storeShader(.headless) orelse return abiTryErr(Result, Error.resource_limit);
+        const shader = storeShader(headlessShaderResource()) orelse return abiTryErr(Result, Error.resource_limit);
         return abiTryOk(Result, shader);
     }
     var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -7581,12 +7732,107 @@ fn hostedShaderLoadStoreRaw(host: *RocHost, args: abi.HostShader_load_storeArgs)
     var fragment = if (fragment_bytes) |bytes| OptionalTempCString.init(allocator, &fragment_stack, bytes) catch return abiTryErr(Result, Error.read_failed) else OptionalTempCString{ .value = null };
     defer fragment.deinit();
     const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return abiTryErr(Result, Error.shader_load_failed);
-    const stored = storeShader(.{ .native = shader }) orelse return abiTryErr(Result, Error.resource_limit);
+    const stored = storeShader(nativeShaderResource(shader)) orelse return abiTryErr(Result, Error.resource_limit);
     return abiTryOk(Result, stored);
 }
 
 fn exportedShaderLoadStoreRaw(args: abi.HostShader_load_storeArgs) callconv(.c) abi.HostShader_load_storeResult {
     return hostedShaderLoadStoreRaw(activeHost(), args);
+}
+
+const GL_FLOAT: u32 = 0x1406;
+const GL_INT: u32 = 0x1404;
+const GL_BOOL: u32 = 0x8B56;
+const GL_FLOAT_VEC2: u32 = 0x8B50;
+const GL_FLOAT_VEC3: u32 = 0x8B51;
+const GL_FLOAT_VEC4: u32 = 0x8B52;
+const GL_SAMPLER_2D: u32 = 0x8B5E;
+
+fn shaderKindGlType(kind: u8) ?u32 {
+    return switch (kind) {
+        0 => GL_FLOAT,
+        1 => GL_INT,
+        2 => GL_BOOL,
+        3 => GL_FLOAT_VEC2,
+        4 => GL_FLOAT_VEC3,
+        5, 6 => GL_FLOAT_VEC4,
+        7 => GL_SAMPLER_2D,
+        else => null,
+    };
+}
+
+fn shaderBindError(comptime variant: @TypeOf(.enum_literal), comptime field: []const u8, payload: anytype) abi.HostShader_bind_uniformsResult {
+    const Result = abi.HostShader_bind_uniformsResult;
+    const Union = abi.HostShader_bind_uniformsErr;
+    return abiTryErr(Result, abiUnionPayload(Union, variant, field, payload));
+}
+
+fn hostedShaderBindUniformsRaw(host: *RocHost, args: abi.HostShader_bind_uniformsArgs) callconv(.c) abi.HostShader_bind_uniformsResult {
+    const Result = abi.HostShader_bind_uniformsResult;
+    const Union = abi.HostShader_bind_uniformsErr;
+    const effect_name = if (args.operation == 1) "Draw.Shader.from_store!" else "Draw.Shader.from_source!";
+    enforcePhase(effect_name, if (args.operation == 1) during_wait else during_load);
+    var payload_bytes: usize = 0;
+    for (args.schema.items()) |entry| payload_bytes +|= entry.name.asSlice().len;
+    const effect = EffectScope.begin(effect_name, payload_bytes);
+    defer effect.end();
+    defer args.decref(host);
+
+    const resource = shader_heap.get(args.shader.*) orelse
+        return abiTryErr(Result, abiUnion(Union, .ResourceLimit));
+    const schema = args.schema.items();
+    if (schema.len > MAX_SHADER_UNIFORMS) return abiTryErr(Result, abiUnion(Union, .ResourceLimit));
+
+    var bindings: [MAX_SHADER_UNIFORMS]ShaderBinding = @splat(.{ .location = 0, .kind = 0 });
+    for (schema, 0..) |entry, index| {
+        const name_slice = entry.name.asSlice();
+        if (name_slice.len == 0) return shaderBindError(.UniformNotFound, "uniform_not_found", @as(u8, @intCast(index)));
+        const expected_gl_type = shaderKindGlType(entry.kind) orelse
+            return shaderBindError(.UniformTypeMismatch, "uniform_type_mismatch", abi.HostShader_bind_uniformsErrUniformTypeMismatch{
+                .actual = 0,
+                .array_len = 0,
+                .index = @intCast(index),
+            });
+
+        bindings[index].kind = entry.kind;
+        switch (resource.program) {
+            .headless => bindings[index].location = @intCast(index),
+            .native => |shader| {
+                if (builtin.is_test) {
+                    bindings[index].location = @intCast(index);
+                    continue;
+                }
+                var name_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+                var name = makeTempCString(allocatorFromHost(host), &name_stack, name_slice) catch
+                    return abiTryErr(Result, abiUnion(Union, .UniformReflectionUnavailable));
+                defer name.deinit();
+                switch (raylib.reflectShaderUniform(shader, name.ptr)) {
+                    .unavailable => return abiTryErr(Result, abiUnion(Union, .UniformReflectionUnavailable)),
+                    .missing => return shaderBindError(.UniformNotFound, "uniform_not_found", @as(u8, @intCast(index))),
+                    .found => |actual| {
+                        if (actual.array_len != 1 or actual.gl_type != expected_gl_type) {
+                            return shaderBindError(.UniformTypeMismatch, "uniform_type_mismatch", abi.HostShader_bind_uniformsErrUniformTypeMismatch{
+                                .actual = actual.gl_type,
+                                .array_len = actual.array_len,
+                                .index = @intCast(index),
+                            });
+                        }
+                        bindings[index].location = actual.location;
+                    },
+                }
+            },
+        }
+    }
+
+    // Schema binding is atomic: no part of the cached layout changes until
+    // every name, type, array length, and capacity check has succeeded.
+    resource.bindings = bindings;
+    resource.binding_count = @intCast(schema.len);
+    return abiTryEmptyOk(Result);
+}
+
+fn exportedShaderBindUniformsRaw(args: abi.HostShader_bind_uniformsArgs) callconv(.c) abi.HostShader_bind_uniformsResult {
+    return hostedShaderBindUniformsRaw(activeHost(), args);
 }
 
 fn nativeTextureForToken(token: u64) ?raylib.Texture {
@@ -7603,6 +7849,104 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
         };
     }
     return null;
+}
+
+const ShaderTexture = union(enum) {
+    headless,
+    native: raylib.Texture,
+};
+
+fn shaderTextureForToken(token: u64) ?ShaderTexture {
+    if (texture_heap.get(token)) |resource| {
+        return switch (resource.*) {
+            .headless => .headless,
+            .native => |texture| .{ .native = texture },
+        };
+    }
+    if (render_texture_heap.get(token)) |resource| {
+        return switch (resource.*) {
+            .headless => .headless,
+            .native => |target| .{ .native = raylib.renderTextureColor(target) },
+        };
+    }
+    return null;
+}
+
+const PreparedShaderValues = struct {
+    textures: [MAX_SHADER_UNIFORMS]raylib.Texture = undefined,
+    texture_count: usize = 0,
+};
+
+fn prepareShaderValues(resource: *const ShaderResource, args: *const abi.HostDraw_begin_shaderArgs) ?PreparedShaderValues {
+    var float_count: usize = 0;
+    var int_count: usize = 0;
+    var texture_count: usize = 0;
+    for (resource.bindings[0..resource.binding_count]) |binding| switch (binding.kind) {
+        0 => float_count += 1,
+        1, 2 => int_count += 1,
+        3 => float_count += 2,
+        4 => float_count += 3,
+        5, 6 => float_count += 4,
+        7 => texture_count += 1,
+        else => return null,
+    };
+    if (args.floats.items().len != float_count or args.ints.items().len != int_count or args.textures.items().len != texture_count) return null;
+
+    var prepared = PreparedShaderValues{};
+    for (args.textures.items(), 0..) |texture, index| {
+        const resolved = shaderTextureForToken(texture.handle.*) orelse return null;
+        switch (resource.program) {
+            .headless => {},
+            .native => switch (resolved) {
+                .headless => return null,
+                .native => |native| prepared.textures[index] = native,
+            },
+        }
+    }
+    prepared.texture_count = texture_count;
+    return prepared;
+}
+
+fn uploadShaderValues(resource: *const ShaderResource, args: *const abi.HostDraw_begin_shaderArgs, prepared: *const PreparedShaderValues) void {
+    shader_value_upload_count += 1;
+    const shader = switch (resource.program) {
+        .headless => return,
+        .native => |shader| shader,
+    };
+    if (builtin.is_test) return;
+
+    const floats = args.floats.items();
+    const ints = args.ints.items();
+    var float_index: usize = 0;
+    var int_index: usize = 0;
+    var texture_index: usize = 0;
+    for (resource.bindings[0..resource.binding_count]) |binding| switch (binding.kind) {
+        0 => {
+            raylib.setShaderFloat(shader, binding.location, floats[float_index]);
+            float_index += 1;
+        },
+        1, 2 => {
+            raylib.setShaderInt(shader, binding.location, ints[int_index]);
+            int_index += 1;
+        },
+        3 => {
+            raylib.setShaderVec2(shader, binding.location, floats[float_index..][0..2].*);
+            float_index += 2;
+        },
+        4 => {
+            raylib.setShaderVec3(shader, binding.location, floats[float_index..][0..3].*);
+            float_index += 3;
+        },
+        5, 6 => {
+            raylib.setShaderVec4(shader, binding.location, floats[float_index..][0..4].*);
+            float_index += 4;
+        },
+        7 => {
+            raylib.setShaderTexture(shader, binding.location, prepared.textures[texture_index]);
+            texture_index += 1;
+        },
+        else => unreachable,
+    };
 }
 
 /// Name a scope code in `Draw`'s vocabulary.
@@ -7684,23 +8028,31 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.HostDraw_frame_size {
 
 fn hostedDrawBeginShaderRawCode(args: abi.HostDraw_begin_shaderArgs) u8 {
     enforcePhase("Draw.with_shader!", during_render);
-    const effect = EffectScope.begin("Draw.with_shader!", 0);
+    var effect = EffectScope.begin(
+        "Draw.with_shader!",
+        args.floats.items().len * @sizeOf(f32) +| args.ints.items().len * @sizeOf(i32) +| args.textures.items().len * @sizeOf(abi.Texture),
+    );
     defer effect.end();
     const host = activeHost();
-    const owner = args.arg0;
     if (shader_lease_count == SCOPE_STACK_LIMIT) {
-        releaseResourceBox(host, owner);
+        args.decref(host);
         return SCOPE_LIMIT;
     }
-    const resource = shader_heap.get(owner.*) orelse {
-        releaseResourceBox(host, owner);
+    const resource = shader_heap.get(args.shader.*) orelse {
+        args.decref(host);
         return SCOPE_UNAVAILABLE;
     };
-    switch (resource.*) {
+    const prepared = prepareShaderValues(resource, &args) orelse {
+        args.decref(host);
+        return SCOPE_UNAVAILABLE;
+    };
+    effect.setDrawMetrics(resource.binding_count, args.floats.items().len * @sizeOf(f32) +| args.ints.items().len * @sizeOf(i32) +| args.textures.items().len * @sizeOf(abi.Texture));
+    switch (resource.program) {
         .headless => headless_shader_depth +|= 1,
         .native => |shader| if (!builtin.is_test) raylib.beginShaderMode(shader),
     }
-    shader_leases[shader_lease_count] = owner;
+    uploadShaderValues(resource, &args, &prepared);
+    shader_leases[shader_lease_count] = args;
     shader_lease_count += 1;
     return SCOPE_OK;
 }
@@ -7716,13 +8068,20 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
     if (shader_lease_count == 0) return;
     if (headlessMode()) headless_shader_depth -|= 1 else raylib.endShaderMode();
     shader_lease_count -= 1;
-    const owner = shader_leases[shader_lease_count].?;
+    const lease = shader_leases[shader_lease_count].?;
     shader_leases[shader_lease_count] = null;
-    if (!headlessMode() and shader_lease_count > 0) {
+    if (shader_lease_count > 0) {
         const outer = shader_leases[shader_lease_count - 1].?;
-        if (shader_heap.get(outer.*)) |resource| raylib.beginShaderMode(resource.native);
+        if (shader_heap.get(outer.shader.*)) |resource| {
+            const prepared = prepareShaderValues(resource, &outer) orelse unreachable;
+            switch (resource.program) {
+                .headless => {},
+                .native => |shader| if (!builtin.is_test) raylib.beginShaderMode(shader),
+            }
+            uploadShaderValues(resource, &outer, &prepared);
+        }
     }
-    releaseResourceBox(activeHost(), owner);
+    lease.decref(activeHost());
 }
 
 fn hostedDrawBeginBlendRawCode(args: abi.HostDraw_begin_blendArgs) u8 {
@@ -7749,112 +8108,6 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
     if (!headlessMode()) raylib.endBlendMode();
     blend_scope_count -= 1;
     if (!headlessMode() and blend_scope_count > 0) raylib.beginBlendMode(blend_scopes[blend_scope_count - 1]);
-}
-
-fn hostedShaderLocationRawCode(host: *RocHost, args: abi.HostShader_locationArgs) i32 {
-    enforcePhase("Draw.Shader.uniform_*!", during_load);
-    const effect = EffectScope.begin("Draw.Shader.uniform_*!", args.name.asSlice().len);
-    defer effect.end();
-    defer args.name.decref(host);
-    defer releaseResourceBox(host, args.shader);
-    const resource = shader_heap.get(args.shader.*) orelse return -1;
-    const name_slice = args.name.asSlice();
-    if (name_slice.len == 0) return -1;
-    switch (resource.*) {
-        .headless => return 0,
-        .native => |shader| {
-            if (builtin.is_test) return 0;
-            var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-            var name = makeTempCString(allocatorFromHost(host), &stack, name_slice) catch return -1;
-            defer name.deinit();
-            return raylib.shaderLocation(shader, name.ptr);
-        },
-    }
-}
-
-/// A uniform raylib could not find is a refusal rather than a negative index.
-fn hostedShaderLocationRaw(host: *RocHost, args: abi.HostShader_locationArgs) callconv(.c) abi.HostShader_locationResult {
-    const Result = abi.HostShader_locationResult;
-    const location = hostedShaderLocationRawCode(host, args);
-    if (location < 0) return abiTryEmptyErr(Result);
-    return abiTryOk(Result, location);
-}
-
-fn exportedShaderLocationRaw(args: abi.HostShader_locationArgs) callconv(.c) abi.HostShader_locationResult {
-    return hostedShaderLocationRaw(activeHost(), args);
-}
-
-fn hostedShaderSetFloatRaw(args: abi.HostShader_set_floatArgs) callconv(.c) void {
-    enforcePhase("Draw.F32Uniform.set!", during_render);
-    var effect = EffectScope.begin("Draw.F32Uniform.set!", 0);
-    defer effect.end();
-    effect.setDrawMetrics(1, @sizeOf(f32));
-    defer args.uniform.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    raylib.setShaderFloat(resource.native, args.uniform.location, args.value);
-}
-
-fn hostedShaderSetIntRaw(args: abi.HostShader_set_intArgs) callconv(.c) void {
-    enforcePhase("Draw.I32Uniform.set!", during_render);
-    var effect = EffectScope.begin("Draw.I32Uniform.set!", 0);
-    defer effect.end();
-    effect.setDrawMetrics(1, @sizeOf(i32));
-    defer args.uniform.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    raylib.setShaderInt(resource.native, args.uniform.location, args.value);
-}
-
-fn hostedShaderSetVec2Raw(args: abi.HostShader_set_vec2Args) callconv(.c) void {
-    enforcePhase("Draw.Vec2Uniform.set!", during_render);
-    var effect = EffectScope.begin("Draw.Vec2Uniform.set!", 0);
-    defer effect.end();
-    effect.setDrawMetrics(1, 2 * @sizeOf(f32));
-    defer args.uniform.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    raylib.setShaderVec2(resource.native, args.uniform.location, .{ args.value.x, args.value.y });
-}
-
-fn hostedShaderSetVec3Raw(args: abi.HostShader_set_vec3Args) callconv(.c) void {
-    enforcePhase("Draw.Vec3Uniform.set!", during_render);
-    var effect = EffectScope.begin("Draw.Vec3Uniform.set!", 0);
-    defer effect.end();
-    effect.setDrawMetrics(1, 3 * @sizeOf(f32));
-    defer args.uniform.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    raylib.setShaderVec3(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z });
-}
-
-fn hostedShaderSetVec4Raw(args: abi.HostShader_set_vec4Args) callconv(.c) void {
-    enforcePhase("Draw.Vec4Uniform.set!", during_render);
-    var effect = EffectScope.begin("Draw.Vec4Uniform.set!", 0);
-    defer effect.end();
-    effect.setDrawMetrics(1, 4 * @sizeOf(f32));
-    defer args.uniform.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    raylib.setShaderVec4(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
-}
-
-fn hostedShaderSetTextureRaw(args: abi.HostShader_set_textureArgs) callconv(.c) void {
-    enforcePhase("Draw.TextureUniform.set!", during_render);
-    const effect = EffectScope.begin("Draw.TextureUniform.set!", 0);
-    defer effect.end();
-    defer args.uniform.decref(activeHost());
-    defer args.texture.decref(activeHost());
-    if (builtin.is_test) return;
-    const resource = shader_heap.get(args.uniform.shader.*) orelse return;
-    if (resource.* == .headless) return;
-    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
-    raylib.setShaderTexture(resource.native, args.uniform.location, texture);
 }
 
 /// Forward Roc scissor bounds to the raylib backend.
@@ -8169,6 +8422,32 @@ test "the store-backed font and shader loaders wait rather than load" {
         try std.testing.expectEqualStrings("Draw.Shader.from_store!", shader_violation.operation);
         try std.testing.expect(shader_violation.allowed.eql(during_wait));
         try std.testing.expectEqual(Phase.update, shader_violation.actual);
+
+        last_phase_violation = null;
+        _ = hostedShaderBindUniformsRaw(&roc_host, .{
+            .operation = 1,
+            .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).empty(),
+            .shader = allocateTestResourceStub(&roc_host),
+        });
+        const bind_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Draw.Shader.from_store!", bind_violation.operation);
+        try std.testing.expect(bind_violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, bind_violation.actual);
+    }
+
+    {
+        const render = PhaseScope.enter(.render);
+        defer render.leave();
+        last_phase_violation = null;
+        _ = hostedShaderBindUniformsRaw(&roc_host, .{
+            .operation = 0,
+            .schema = abi.RocList(abi.HostShader_bind_uniformsArg0Schema).empty(),
+            .shader = allocateTestResourceStub(&roc_host),
+        });
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Draw.Shader.from_source!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_load));
+        try std.testing.expectEqual(Phase.render, violation.actual);
     }
 
     // On a task, where the read parks rather than holding the frame, the same
@@ -10184,16 +10463,10 @@ comptime {
         @export(&hostedTextureLoadRenderTargetRaw, .{ .name = "roc_texture_load_render_target_raw" });
         @export(&exportedShaderLoadSourceRaw, .{ .name = "roc_shader_load_source_raw" });
         @export(&exportedShaderLoadStoreRaw, .{ .name = "roc_shader_load_store_raw" });
+        @export(&exportedShaderBindUniformsRaw, .{ .name = "roc_shader_bind_uniforms_raw" });
         @export(&exportedTextPrepareRaw, .{ .name = "roc_text_prepare_raw" });
         @export(&exportedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
         @export(&exportedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });
-        @export(&exportedShaderLocationRaw, .{ .name = "roc_shader_location_raw" });
-        @export(&hostedShaderSetFloatRaw, .{ .name = "roc_shader_set_float_raw" });
-        @export(&hostedShaderSetIntRaw, .{ .name = "roc_shader_set_int_raw" });
-        @export(&hostedShaderSetTextureRaw, .{ .name = "roc_shader_set_texture_raw" });
-        @export(&hostedShaderSetVec2Raw, .{ .name = "roc_shader_set_vec2_raw" });
-        @export(&hostedShaderSetVec3Raw, .{ .name = "roc_shader_set_vec3_raw" });
-        @export(&hostedShaderSetVec4Raw, .{ .name = "roc_shader_set_vec4_raw" });
         @export(&hostedDrawRectangleGradientH, .{ .name = "roc_draw_rectangle_gradient_h" });
         @export(&hostedDrawRectangleGradientV, .{ .name = "roc_draw_rectangle_gradient_v" });
         @export(&hostedDrawRectangleLinesRaw, .{ .name = "roc_draw_rectangle_lines_raw" });
@@ -12808,7 +13081,7 @@ test "an offscreen export of a handle that resolves to nothing is unavailable" {
         .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 },
     }));
 
-    const shader = storeShader(.headless).?;
+    const shader = storeShader(headlessShaderResource()).?;
     try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTextureCode(&roc_host, .{
         .path = abi.RocStr.fromSlice("poster.png", &roc_host),
         .target = .{ .handle = @ptrCast(shader), .height = 8, .width = 16 },

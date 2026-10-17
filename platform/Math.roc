@@ -17,6 +17,18 @@ Math := [].{
 		y : F32,
 	}.{
 
+		## Encode this vector as one semantic leaf for formats that support 2D
+		## vectors. Shader uniform records use this for one GLSL `vec2`.
+		encoder_for : encoding -> (Vec2, state -> Try(state, err))
+			where [
+				encoding.encode_vec2 : Vec2, state -> Try(state, err),
+			]
+		encoder_for = |_encoding| {
+			Encoding : encoding
+
+			|value, state| Encoding.encode_vec2(value, state)
+		}
+
 		## Compare two of these values.
 		is_eq : Vec2, Vec2 -> Bool
 		is_eq = |a, b| a.x == b.x and a.y == b.y

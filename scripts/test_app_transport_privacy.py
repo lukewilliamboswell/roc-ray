@@ -102,6 +102,18 @@ CASES = (
         ("cannot use opaque nominal type", "instance of Draw.Shader"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "shader_uniform_unsupported.roc",
+        ("missing method", "encode_str", "UniformFormat"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "shader_uniform_shape.roc",
+        ("type mismatch", "enabled: Bool", "with_uniforms"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "shader_uniform_type.roc",
+        ("type mismatch", "amount: I32", "amount: F32"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "resource_handle_kind_confusion.roc",
         ("type mismatch", "Texture.TextureHandle", "Font.FontHandle"),
     ),

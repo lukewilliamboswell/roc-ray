@@ -263,7 +263,7 @@ frame.circle!(config)
 input.devices.key_pressed(KeySpace)
 camera.screen_to_world(point)
 Assets.update_texture!(texture, pixels)
-uniform.set!(value)
+shader.with_uniforms({ time: elapsed })
 ----
 
 Use attached constructors such as `Draw.RenderTexture.load!` and
@@ -306,13 +306,16 @@ unloads the native value and makes its bounded slot reusable.
 
 Keep capabilities narrow. `Texture` exposes dimensions and pure construction
 of test stubs; mutation requires `Assets`. `Assets.Texture` and `Draw.Texture`
-name the same platform-owned value. Keep typed shader-uniform handles so
-invalid setter combinations remain a compile-time error. Applications depend
-only on the platform to name every RocRay API value.
+name the same platform-owned value. A `Draw.Shader(uniforms)` carries one closed
+record: construction validates each field against the linked program, and
+`with_uniforms` accepts only that same record shape and field types.
+Applications depend only on the platform to name every RocRay API value.
 
 Create long-lived resources during initialization and retain them in the app
-model. Do not introduce per-frame loading, preparing, name lookup, or allocation
-when the work can be done once.
+model. Do not introduce per-frame loading, preparing, or name lookup when the
+work can be done once. Shader scope entry currently creates bounded transient
+value lists for at most 32 uniforms; do not describe this path as
+allocation-free.
 
 *The package describes, the app performs.* Reusable packages keep their own
 domain types and explicit data interfaces. A package can describe required

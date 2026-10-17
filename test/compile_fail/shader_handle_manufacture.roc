@@ -9,7 +9,7 @@ import rr.App
 import rr.Draw
 
 Model : {
-	shader : Draw.Shader,
+	shader : Draw.Shader({}),
 }
 
 program = { init!, update!, render! }
@@ -17,9 +17,9 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
-	|io| {
+	|_io| {
 		handle = Box.box(0)
-		Ok({ shader: Draw.Shader.(handle) })
+		Ok({ shader: Draw.Shader.({ resource: handle, uniforms: {} }) })
 	},
 )
 

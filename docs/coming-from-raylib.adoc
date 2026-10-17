@@ -92,7 +92,7 @@ the command line, or directories it declares (see <<files-and-assets>>).
 |`GetScreenToWorld2D(p, camera)` |`camera.screen_to_world(p)` |Anywhere: it is pure
 |`+BeginScissorMode(...)+` |`+frame.with_scissor!(rect, \|f\| { ... })+` |`render!`
 |`BeginBlendMode(BLEND_ADDITIVE)` |`+frame.with_blend_mode!(Draw.additive_blend, \|f\| { ... })+` |`render!`
-|`+LoadShader(...)+`, `+BeginShaderMode(...)+` |`Draw.Shader.from_store!` or `Draw.Shader.from_source!`, then `frame.with_shader!` |`init!`; `render!`
+|`+LoadShader(...)+`, `+BeginShaderMode(...)+` |Construct with an initial typed uniform record, replace it with `shader.with_uniforms(...)`, then use `frame.with_shader!` |`init!`; `render!`
 |`LoadRenderTexture(w, h)`, `+BeginTextureMode(...)+` |`Draw.RenderTexture.load!({ width, height })`, then `frame.with_render_texture!` |`init!`; `render!`
 
 3+h|Audio

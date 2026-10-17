@@ -8,7 +8,7 @@ import rr.Assets
 import rr.Draw
 import rr.Text
 
-Model : { store : Assets.Store, texture : Assets.Texture, font : Text.Font, shader : Draw.Shader }
+Model : { store : Assets.Store, texture : Assets.Texture, font : Text.Font, shader : Draw.Shader({}) }
 
 program = { init!, update!, render! }
 
@@ -28,7 +28,7 @@ init! = App.init(
 		)?
 		texture = Assets.load_texture!(store, "textures/example.png")?
 		font = Draw.load_store_font!(store, { path: "fonts/example.ttf", size: 20 })?
-		shader = Draw.Shader.from_store!(store, { vertex_path: "", fragment_path: "shaders/example.fs" })?
+		shader = Draw.Shader.from_store!(store, { vertex_path: "", fragment_path: "shaders/example.fs" }, {})?
 		Ok({ store, texture, font, shader })
 	},
 )

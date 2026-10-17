@@ -12,18 +12,12 @@ import rr.Draw
 import rr.Math
 import rr.Text
 
-## State kept between updates: the offscreen drawing target, shader, prepared
-## labels, and prepared time setting, plus the elapsed animation time.
+## State kept between updates: the offscreen drawing target, typed shader,
+## prepared labels, and elapsed animation time.
 ## These resources are created once and reused for every frame.
 Model : {
 	target : Draw.RenderTexture,
-	shader : Draw.Shader,
-
-	## The uniform's location, resolved once, and the value to write into it.
-	## The value lives in the model because `update!` computes it; the write
-	## happens in `render!` because a uniform is a statement about the draws
-	## that follow it, and only `render!` knows where those are.
-	time_uniform : Draw.F32Uniform,
+	shader : Draw.Shader({ time : F32 }),
 	title : Text.Prepared,
 	hint : Text.Prepared,
 	seconds : F32,
@@ -46,19 +40,18 @@ init! = App.init(
 		assets = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
 		font = Draw.default_font!()
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
-		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
-		time_uniform = shader.uniform_f32!("time")?
+		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" }, { time: 0 })?
 		title = Text.from("offscreen + shader", font).size(48).prepare!()?
 		hint = Text.from("render texture -> additive blend -> fragment shader   (ESC quits)", font).size(18).prepare!()?
-		Ok({ target, shader, time_uniform, title, hint, seconds: 0 })
+		Ok({ target, shader, title, hint, seconds: 0 })
 	},
 )
 
 ## Nothing here waits, so there is no task to spawn and no message to fold in.
 ## The shader clock is the only state this example advances, and the input
-## carries it, so `update!` reads it off the input and stores it. Writing it into
-## the shader is `render!`'s job: the uniform only means anything relative to
-## the draws it precedes.
+## carries it, so `update!` reads it off the input and stores it. `render!`
+## pairs that model value with the shader using pure `with_uniforms`; entering
+## the scope uploads the complete record immediately before its draws.
 Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
@@ -107,11 +100,8 @@ render! = |model, frame| {
 	frame.clear!(Color.black)
 
 	frame.with_shader!(
-		model.shader,
+		model.shader.with_uniforms({ time: model.seconds }),
 		|shader_frame| {
-			# Inside the scope and before the draw it applies to, which is the
-			# whole reason this is here rather than in `update!`.
-			model.time_uniform.set!(model.seconds)
 			shader_frame.texture!(target_draw)
 			Ok({})
 		},

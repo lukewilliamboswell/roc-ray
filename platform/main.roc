@@ -65,7 +65,7 @@ platform ""
 	packages {
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
-		roc: "nightly-2026-10-09-258ab27",
+		roc: "nightly-2026-10-17-5f126ac",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,

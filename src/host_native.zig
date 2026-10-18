@@ -4256,7 +4256,7 @@ var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
 var headless_texture_instance_batches: usize = 0;
 var headless_texture_instances: usize = 0;
 var render_texture_lease_count: usize = 0;
-var shader_leases: [SCOPE_STACK_LIMIT]?abi.HostDraw_begin_shaderArgs = @splat(null);
+var shader_leases: [SCOPE_STACK_LIMIT]?ShaderLease = @splat(null);
 var shader_lease_count: usize = 0;
 var blend_scopes: [SCOPE_STACK_LIMIT]u8 = undefined;
 var blend_scope_count: usize = 0;
@@ -4353,10 +4353,20 @@ fn nativeShaderResource(shader: raylib.Shader) ShaderResource {
     return .{ .program = .{ .native = shader } };
 }
 
-fn emptyShaderScope(shader: *u64) abi.HostDraw_begin_shaderArgs {
+const ShaderLease = struct {
+    shader: *u64,
+    values: abi.RocList(abi.HostDraw_begin_shaderArg1),
+
+    fn decref(self: @This(), host: *RocHost) void {
+        abi.decrefBoxWith(@ptrCast(self.shader), @alignOf(u64), false, null, host);
+        abi.decrefListOfHostShaderUniformValue(self.values, host);
+    }
+};
+
+fn emptyShaderScope(shader: *u64) ShaderLease {
     return .{
         .shader = shader,
-        .values = abi.RocList(abi.HostDraw_begin_shaderArg0Values).empty(),
+        .values = abi.RocList(abi.HostDraw_begin_shaderArg1).empty(),
     };
 }
 
@@ -5764,7 +5774,7 @@ test "shader value batches validate every lane and retain texture owners through
     resource.binding_count = 8;
     const texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
     const texture_value = abi.Texture{ .handle = texture, .height = 1, .width = 1 };
-    const values = [_]abi.HostDraw_begin_shaderArg0Values{
+    const values = [_]abi.HostDraw_begin_shaderArg1{
         shaderFloatValue(1),
         shaderIntValue(2),
         shaderBoolValue(true),
@@ -5777,7 +5787,7 @@ test "shader value batches validate every lane and retain texture owners through
     shader_value_upload_count = 0;
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
         .shader = shader,
-        .values = abi.RocList(abi.HostDraw_begin_shaderArg0Values).fromSlice(&values, &roc_host),
+        .values = abi.RocList(abi.HostDraw_begin_shaderArg1).fromSlice(&values, &roc_host),
     }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), shader_heap.active());
@@ -5823,12 +5833,12 @@ test "last resource references remain live through owning host operations" {
     const shader_resource = shader_heap.get(shader.*).?;
     shader_resource.bindings[0] = .{ .location = 0, .kind = 0 };
     shader_resource.binding_count = 1;
-    const float_value = [_]abi.HostDraw_begin_shaderArg0Values{
+    const float_value = [_]abi.HostDraw_begin_shaderArg1{
         shaderFloatValue(1),
     };
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
         .shader = shader,
-        .values = abi.RocList(abi.HostDraw_begin_shaderArg0Values).fromSlice(&float_value, &roc_host),
+        .values = abi.RocList(abi.HostDraw_begin_shaderArg1).fromSlice(&float_value, &roc_host),
     }));
     hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -5840,12 +5850,12 @@ test "last resource references remain live through owning host operations" {
     sampler_resource.bindings[0] = .{ .location = 0, .kind = 7 };
     sampler_resource.binding_count = 1;
     const sampler_value = abi.Texture{ .handle = sampler_texture, .height = 1, .width = 1 };
-    const texture_uniform = [_]abi.HostDraw_begin_shaderArg0Values{
+    const texture_uniform = [_]abi.HostDraw_begin_shaderArg1{
         shaderTextureValue(sampler_value),
     };
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRawCode(.{
         .shader = sampler_shader,
-        .values = abi.RocList(abi.HostDraw_begin_shaderArg0Values).fromSlice(&texture_uniform, &roc_host),
+        .values = abi.RocList(abi.HostDraw_begin_shaderArg1).fromSlice(&texture_uniform, &roc_host),
     }));
     hostedDrawEndShaderRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -7910,7 +7920,7 @@ fn shaderTextureValue(value: abi.Texture) abi.HostShaderUniformValue {
     return .{ .payload = .{ .sampler2d = value }, .tag = .Sampler2D };
 }
 
-fn prepareShaderValues(resource: *const ShaderResource, args: *const abi.HostDraw_begin_shaderArgs) ?PreparedShaderValues {
+fn prepareShaderValues(resource: *const ShaderResource, args: *const ShaderLease) ?PreparedShaderValues {
     var prepared = PreparedShaderValues{};
     const values = args.values.items();
     if (values.len != resource.binding_count) return null;
@@ -7942,7 +7952,7 @@ fn prepareShaderValues(resource: *const ShaderResource, args: *const abi.HostDra
     return prepared;
 }
 
-fn uploadShaderValues(resource: *const ShaderResource, args: *const abi.HostDraw_begin_shaderArgs, prepared: *const PreparedShaderValues) void {
+fn uploadShaderValues(resource: *const ShaderResource, args: *const ShaderLease, prepared: *const PreparedShaderValues) void {
     shader_value_upload_count += 1;
     const shader = switch (resource.program) {
         .headless => return,
@@ -8064,11 +8074,11 @@ fn hostedDrawFrameSizeRaw() callconv(.c) abi.HostDraw_frame_size {
     return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
 }
 
-fn hostedDrawBeginShaderRawCode(args: abi.HostDraw_begin_shaderArgs) u8 {
+fn hostedDrawBeginShaderRawCode(args: ShaderLease) u8 {
     enforcePhase("Draw.with_shader!", during_render);
     var effect = EffectScope.begin(
         "Draw.with_shader!",
-        args.values.items().len * @sizeOf(abi.HostDraw_begin_shaderArg0Values),
+        args.values.items().len * @sizeOf(abi.HostDraw_begin_shaderArg1),
     );
     defer effect.end();
     const host = activeHost();
@@ -8084,7 +8094,7 @@ fn hostedDrawBeginShaderRawCode(args: abi.HostDraw_begin_shaderArgs) u8 {
         args.decref(host);
         return SCOPE_UNAVAILABLE;
     };
-    effect.setDrawMetrics(resource.binding_count, args.values.items().len * @sizeOf(abi.HostDraw_begin_shaderArg0Values));
+    effect.setDrawMetrics(resource.binding_count, args.values.items().len * @sizeOf(abi.HostDraw_begin_shaderArg1));
     switch (resource.program) {
         .headless => headless_shader_depth +|= 1,
         .native => |shader| if (!builtin.is_test) raylib.beginShaderMode(shader),
@@ -8095,8 +8105,8 @@ fn hostedDrawBeginShaderRawCode(args: abi.HostDraw_begin_shaderArgs) u8 {
     return SCOPE_OK;
 }
 
-fn hostedDrawBeginShaderRaw(args: abi.HostDraw_begin_shaderArgs) callconv(.c) abi.HostDraw_begin_shaderResult {
-    return drawScopeResult(abi.HostDraw_begin_shaderResult, hostedDrawBeginShaderRawCode(args));
+fn hostedDrawBeginShaderRaw(shader: *u64, values: abi.RocList(abi.HostDraw_begin_shaderArg1)) callconv(.c) abi.HostDraw_begin_shaderResult {
+    return drawScopeResult(abi.HostDraw_begin_shaderResult, hostedDrawBeginShaderRawCode(.{ .shader = shader, .values = values }));
 }
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {

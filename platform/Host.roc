@@ -242,12 +242,6 @@ Host := [].{
 		Sampler2D(Texture),
 	]
 
-	## A complete shader value batch.
-	ShaderScope : {
-		shader : Resource.Shader,
-		values : List(ShaderUniformValue),
-	}
-
 	## Failures while compiling shader source strings.
 	ShaderLoadSourceError : [ResourceLimit, ShaderLoadFailed]
 
@@ -1184,7 +1178,7 @@ Host := [].{
 
 	## Begin custom-shader drawing and upload its complete value record.
 	## Legal in `render!` only.
-	draw_begin_shader! : ShaderScope => Try({}, DrawScopeError)
+	draw_begin_shader! : Resource.Shader, List(ShaderUniformValue) => Try({}, DrawScopeError)
 
 	## Restore the default shader.
 	## Legal in `render!` only.

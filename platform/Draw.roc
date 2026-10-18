@@ -910,10 +910,7 @@ Draw := [].{
 		values = shader.for_frame()
 		# closed error union to open error union. The scope is closed on every
 		# path the callback can take, error included.
-		match Host.draw_begin_shader!({
-			shader: values.resource,
-			values: values.values,
-		}) {
+		match Host.draw_begin_shader!(values.resource, values.values) {
 			Ok({}) => {
 				result = callback(frame)
 				Host.draw_end_shader!()

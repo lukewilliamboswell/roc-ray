@@ -3581,52 +3581,6 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_93a7011b6b84668d
-pub const __AnonStruct_93a7011b6b84668d = if (@sizeOf(usize) == 4) extern struct {
-    shader: *u64,
-    values: RocList(HostShaderUniformValue),
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-        decrefListOfHostShaderUniformValue(value.values, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-        value.values.incref(amount);
-    }
-} else extern struct {
-    shader: *u64,
-    values: RocList(HostShaderUniformValue),
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-        decrefListOfHostShaderUniformValue(value.values, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-        value.values.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_93a7011b6b84668d) != 32) @compileError("__AnonStruct_93a7011b6b84668d size mismatch");
-        if (@alignOf(__AnonStruct_93a7011b6b84668d) != 8) @compileError("__AnonStruct_93a7011b6b84668d alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_93a7011b6b84668d) != 16) @compileError("__AnonStruct_93a7011b6b84668d size mismatch");
-        if (@alignOf(__AnonStruct_93a7011b6b84668d) != 4) @compileError("__AnonStruct_93a7011b6b84668d alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct_1c1c4c2ebf90bdba
 pub const __AnonStruct_1c1c4c2ebf90bdba = if (@sizeOf(usize) == 4) extern struct {
     x: f32,
@@ -12007,52 +11961,12 @@ comptime {
 }
 
 /// Arguments for Host.draw_begin_shader!
-/// Roc signature: { shader : Resource.Handle([ShaderResource]), values : List(Host.ShaderUniformValue) } => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Roc signature: Resource.Handle([ShaderResource]), List(Host.ShaderUniformValue) => Try({}, [ScopeLimit, ScopeUnavailable])
 /// Refcounted fields are owned by the hosted function.
-pub const HostDraw_begin_shaderArgs = if (@sizeOf(usize) == 4) extern struct {
-    shader: *u64,
-    values: RocList(HostShaderUniformValue),
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-        decrefListOfHostShaderUniformValue(value.values, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-        value.values.incref(amount);
-    }
-} else extern struct {
-    shader: *u64,
-    values: RocList(HostShaderUniformValue),
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        decrefBoxWith(@ptrCast(value.shader), @alignOf(u64), false, null, roc_host);
-        decrefListOfHostShaderUniformValue(value.values, roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        increfBox(@ptrCast(value.shader), amount);
-        value.values.incref(amount);
-    }
+pub const HostDraw_begin_shaderArgs = extern struct {
+    arg0: *u64,
+    arg1: RocList(HostShaderUniformValue),
 };
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostDraw_begin_shaderArgs) != 32) @compileError("HostDraw_begin_shaderArgs size mismatch");
-        if (@alignOf(HostDraw_begin_shaderArgs) != 8) @compileError("HostDraw_begin_shaderArgs alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostDraw_begin_shaderArgs) != 16) @compileError("HostDraw_begin_shaderArgs size mismatch");
-        if (@alignOf(HostDraw_begin_shaderArgs) != 4) @compileError("HostDraw_begin_shaderArgs alignment mismatch");
-    }
-}
 
 /// Arguments for Host.draw_circle_gradient!
 /// Roc signature: { center : Math.Vec2, color_inner : Color.Rgba, color_outer : Color.Rgba, radius : F32 } => {}
@@ -14570,14 +14484,13 @@ pub const HostDraw_begin_scissorResult = HostDraw_begin_blendResult;
 pub const HostDraw_begin_scissorResultPayload = HostDraw_begin_blendResultPayload;
 pub const HostDraw_begin_scissorResultTag = HostDraw_begin_blendResultTag;
 pub const HostDraw_begin_scissorErr = ScopeLimitOrScopeUnavailable;
-pub const HostDraw_begin_shaderArg0 = __AnonStruct_93a7011b6b84668d;
-pub const HostDraw_begin_shaderArg0Values = HostShaderUniformValue;
-pub const HostDraw_begin_shaderArg0ValuesPayload = HostShaderUniformValuePayload;
-pub const HostDraw_begin_shaderArg0ValuesTag = HostShaderUniformValueTag;
-pub const HostDraw_begin_shaderArg0ValuesSampler2D = Texture;
-pub const HostDraw_begin_shaderArg0ValuesVec2 = __AnonStruct_2818a50bdccefb1e;
-pub const HostDraw_begin_shaderArg0ValuesVec3 = __AnonStruct_1c1c4c2ebf90bdba;
-pub const HostDraw_begin_shaderArg0ValuesVec4 = __AnonStruct_8ea1de206d7d534d;
+pub const HostDraw_begin_shaderArg1 = HostShaderUniformValue;
+pub const HostDraw_begin_shaderArg1Payload = HostShaderUniformValuePayload;
+pub const HostDraw_begin_shaderArg1Tag = HostShaderUniformValueTag;
+pub const HostDraw_begin_shaderArg1Sampler2D = Texture;
+pub const HostDraw_begin_shaderArg1Vec2 = __AnonStruct_2818a50bdccefb1e;
+pub const HostDraw_begin_shaderArg1Vec3 = __AnonStruct_1c1c4c2ebf90bdba;
+pub const HostDraw_begin_shaderArg1Vec4 = __AnonStruct_8ea1de206d7d534d;
 pub const HostShaderUniformValueSampler2D = Texture;
 pub const HostShaderUniformValueVec2 = __AnonStruct_2818a50bdccefb1e;
 pub const HostShaderUniformValueVec3 = __AnonStruct_1c1c4c2ebf90bdba;
@@ -16376,12 +16289,6 @@ pub const __AnonStruct_5d393593a1f032cbRelease = struct {
     }
 };
 
-pub const __AnonStruct_93a7011b6b84668dRelease = struct {
-    pub fn release(value: __AnonStruct_93a7011b6b84668d, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
 fn decrefHostShaderUniformValue(value: HostShaderUniformValue, roc_host: *RocHost) void {
     switch (value.tag) {
         .Bool => {},
@@ -17221,7 +17128,6 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == RocListWith(__AnonStruct_3a90da783672cf8d, false)) return RocListSpineRelease(RocListWith(__AnonStruct_3a90da783672cf8d, false));
     if (T == RocList(__AnonStruct_90c9f98ccd96f8ce)) return RocListRelease(RocList(__AnonStruct_90c9f98ccd96f8ce), __AnonStruct_90c9f98ccd96f8ceRelease);
     if (T == __AnonStruct_90c9f98ccd96f8ce) return __AnonStruct_90c9f98ccd96f8ceRelease;
-    if (T == __AnonStruct_93a7011b6b84668d) return __AnonStruct_93a7011b6b84668dRelease;
     if (T == RocList(HostShaderUniformValue)) return RocListRelease(RocList(HostShaderUniformValue), HostShaderUniformValueRelease);
     if (T == HostShaderUniformValue) return HostShaderUniformValueRelease;
     if (T == __AnonStruct_6bff15fb6a4cb85a) return __AnonStruct_6bff15fb6a4cb85aRelease;
@@ -17565,11 +17471,12 @@ pub extern fn roc_draw_begin_render_texture_raw(arg0: Texture) callconv(.c) Host
 pub extern fn roc_draw_begin_scissor_raw(arg0: HostDraw_begin_scissorArgs) callconv(.c) HostDraw_begin_blendResult;
 
 /// Hosted symbol for Host.draw_begin_shader!
-/// Roc signature: { shader : Resource.Handle([ShaderResource]), values : List(Host.ShaderUniformValue) } => Try({}, [ScopeLimit, ScopeUnavailable])
+/// Roc signature: Resource.Handle([ShaderResource]), List(Host.ShaderUniformValue) => Try({}, [ScopeLimit, ScopeUnavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
-///     arg0.decref(roc_host);
-pub extern fn roc_draw_begin_shader_raw(arg0: HostDraw_begin_shaderArgs) callconv(.c) HostDraw_begin_blendResult;
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     decrefListOfHostShaderUniformValue(arg1, roc_host);
+pub extern fn roc_draw_begin_shader_raw(arg0: *u64, arg1: RocList(HostShaderUniformValue)) callconv(.c) HostDraw_begin_blendResult;
 
 /// Hosted symbol for Host.draw_circle_gradient!
 /// Roc signature: { center : Math.Vec2, color_inner : Color.Rgba, color_outer : Color.Rgba, radius : F32 } => {}

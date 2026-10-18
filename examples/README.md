@@ -30,11 +30,6 @@ Start with these, in order:
 5. `snake` -- a grid game across a few modules
 6. `task_sleep` -- a task that waits and the message it sends back
 
-For a shader example, see `post_process`. It constructs
-`Shader({ time : F32 })` with an initial record, stores only application
-state during `update!`, and uses pure `with_uniforms` before `with_shader!`
-uploads the complete record for drawing.
-
 The [example gallery](https://lukewilliamboswell.github.io/roc-ray/manual/#examples)
 in the RocRay manual describes every example, what it demonstrates, and where
 to go next; its source is [`docs/examples.adoc`](../docs/examples.adoc).

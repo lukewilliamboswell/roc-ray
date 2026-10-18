@@ -99,7 +99,7 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "shader_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "instance of Draw.Shader"),
+        ("cannot use opaque nominal type", "instance of Shader"),
     ),
     (
         ROOT / "test" / "compile_fail" / "shader_uniform_unsupported.roc",

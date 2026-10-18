@@ -210,24 +210,42 @@ Host := [].{
 
 	## One application uniform in a shader's closed record schema. `kind` uses
 	## the private table documented beside the encoder in `Draw.roc`.
-	ShaderUniformSchema : { kind : U8, name : Str }
+	ShaderUniformKind : [Float, Int, Bool, Vec2, Vec3, Vec4, Sampler2D]
+	ShaderUniformSchema : { kind : ShaderUniformKind, name : Str }
 
-	## Bind and validate a complete schema. `operation` identifies the public
-	## constructor so phase failures use application-facing vocabulary: `0` is
-	## `from_source!`, `1` is `from_store!`.
-	ShaderBindUniforms : {
-		operation : U8,
-		schema : List(ShaderUniformSchema),
-		shader : Resource.Shader,
-	}
+	## Compiler workaround: current Roc nightly crashes on imported closed-union
+	## constructors in Shader.roc; move these aliases there when fixed.
+	shader_uniform_kind_float : ShaderUniformKind
+	shader_uniform_kind_float = Float
+	shader_uniform_kind_int : ShaderUniformKind
+	shader_uniform_kind_int = Int
+	shader_uniform_kind_bool : ShaderUniformKind
+	shader_uniform_kind_bool = Bool
+	shader_uniform_kind_vec2 : ShaderUniformKind
+	shader_uniform_kind_vec2 = Vec2
+	shader_uniform_kind_vec3 : ShaderUniformKind
+	shader_uniform_kind_vec3 = Vec3
+	shader_uniform_kind_vec4 : ShaderUniformKind
+	shader_uniform_kind_vec4 = Vec4
+	shader_uniform_kind_sampler2d : ShaderUniformKind
+	shader_uniform_kind_sampler2d = Sampler2D
 
-	## A complete shader value batch. Float, integer, and texture lanes are
-	## traversed in the same field order as the cached schema.
+	## One application-uniform value in cached schema order. The variant is
+	## already the transport-level type, so no unused payload lanes are carried.
+	ShaderUniformValue := [
+		Float(F32),
+		Int(I32),
+		Bool(Bool),
+		Vec2({ x : F32, y : F32 }),
+		Vec3({ x : F32, y : F32, z : F32 }),
+		Vec4({ x : F32, y : F32, z : F32, w : F32 }),
+		Sampler2D(Texture),
+	]
+
+	## A complete shader value batch.
 	ShaderScope : {
-		floats : List(F32),
-		ints : List(I32),
 		shader : Resource.Shader,
-		textures : List(Texture),
+		values : List(ShaderUniformValue),
 	}
 
 	## Failures while compiling shader source strings.
@@ -255,8 +273,8 @@ Host := [].{
 	]
 
 	## Validate and cache a shader's complete application-uniform schema.
-	## Legal in the same phases as the constructor identified by `operation`.
-	shader_bind_uniforms! : ShaderBindUniforms => Try({}, ShaderBindError)
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	shader_bind_uniforms! : Resource.Shader, List(ShaderUniformSchema) => Try({}, ShaderBindError)
 
 	## Permission declarations, as the host validates them at startup.
 

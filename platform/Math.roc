@@ -34,6 +34,43 @@ Math := [].{
 		is_eq = |a, b| a.x == b.x and a.y == b.y
 	}
 
+	## Three-dimensional floating-point vector.
+	Vec3 := {
+		x : F32,
+		y : F32,
+		z : F32,
+	}.{
+		encoder_for : encoding -> (Vec3, state -> Try(state, err))
+			where [encoding.encode_vec3 : Vec3, state -> Try(state, err)]
+		encoder_for = |_encoding| {
+			Encoding : encoding
+			|value, state| Encoding.encode_vec3(value, state)
+		}
+	}
+
+	## Construct a three-dimensional vector.
+	vec3 : F32, F32, F32 -> Vec3
+	vec3 = |x, y, z| { x, y, z }
+
+	## Four-dimensional floating-point vector.
+	Vec4 := {
+		x : F32,
+		y : F32,
+		z : F32,
+		w : F32,
+	}.{
+		encoder_for : encoding -> (Vec4, state -> Try(state, err))
+			where [encoding.encode_vec4 : Vec4, state -> Try(state, err)]
+		encoder_for = |_encoding| {
+			Encoding : encoding
+			|value, state| Encoding.encode_vec4(value, state)
+		}
+	}
+
+	## Construct a four-dimensional vector.
+	vec4 : F32, F32, F32, F32 -> Vec4
+	vec4 = |x, y, z, w| { x, y, z, w }
+
 	## Axis-aligned rectangle represented by top-left position and size.
 	Rect := {
 		x : F32,

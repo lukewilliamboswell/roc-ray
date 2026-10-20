@@ -13,7 +13,8 @@ import Math
 Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : List(Host.ShaderUniformValue) }.{
 
 	## Compile shader stages from source strings and validate the complete
-	## application-uniform schema.
+	## application-uniform schema. Legal in `init!`, `update!`, and tasks;
+	## refused in `render!`.
 	from_source! : LoadShaderSource, uniforms => Try(Shader(uniforms), [ShaderLoadFailed, ResourceLimit, UniformNotFound(Str), UniformReflectionUnavailable, UniformTypeMismatch({ name : Str, expected : ShaderUniformType, actual : ShaderUniformType }), UnsupportedUniformType(Str)])
 		where [
 			uniforms.encoder_for : UniformFormat -> (uniforms, UniformState -> Try(UniformState, UniformEncodeError)),
@@ -27,7 +28,8 @@ Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : 
 	}
 
 	## Compile shader stage files resolved through an explicit asset store.
-	## Legal in `init!` and tasks; refused in `update!` and `render!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	from_store! : Assets.Store, LoadShader, uniforms => Try(Shader(uniforms), [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, UniformNotFound(Str), UniformReflectionUnavailable, UniformTypeMismatch({ name : Str, expected : ShaderUniformType, actual : ShaderUniformType }), UnsupportedUniformType(Str)])
 		where [
 			uniforms.encoder_for : UniformFormat -> (uniforms, UniformState -> Try(UniformState, UniformEncodeError)),

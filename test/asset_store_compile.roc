@@ -1,5 +1,5 @@
 app [Model, program] {
-	roc: "nightly-2026-10-09-258ab27",
+	roc: "nightly-2026-10-23-18478ff",
 	rr: platform "../platform/main.roc",
 }
 

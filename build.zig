@@ -492,6 +492,12 @@ fn buildHostLib(
             .optimize = optimize,
             .strip = optimize != .Debug,
             .pic = true,
+            // On MSVC targets LLVM implements the stack protector with its own
+            // `__security_cookie` global, which collides with the definition in
+            // src/msvc_runtime_stubs.zig and crashes LLVM in Debug builds. The
+            // protector would check nothing there anyway: those stubs accept
+            // every cookie, and they exist only for the MSVC-built raylib.lib.
+            .stack_protector = if (target.result.abi == .msvc) false else null,
             // Selects Zig's pthread path for std.Thread. The native path
             // depends on TLS that Zig's start code sets up, and the start code
             // never runs here: this is a static library that `roc build` links

@@ -30,20 +30,35 @@ The `user32.def` file was modified from the original `user32.def.in`:
   - `SetClassLongPtrA`, `SetClassLongPtrW`
   - `SetWindowLongPtrA`, `SetWindowLongPtrW`
 
+`kernel32.def`, `ntdll.def`, and `ucrtbase.def` are the preprocessed output of
+their `.def.in` templates for x86-64, with blank lines removed:
+
+```
+zig cc -E -P -x c -target x86_64-windows-gnu     -I <mingw>/def-include -I <mingw>/lib-common <mingw>/lib-common/<name>.def.in
+```
+
+where `<mingw>` is `<zig-installation>/lib/libc/mingw`.
+
 ## Usage
 
-During `zig build`, these DEF files are processed by `zig dlltool` to generate import libraries:
-- `gdi32.lib` - Graphics Device Interface
-- `user32.lib` - Windows USER API (windows, messages, input)
-- `winmm.lib` - Windows Multimedia (timers)
-- `opengl32.lib` - OpenGL
-- `shell32.lib` - Windows Shell
+`zig build link-inputs` runs `zig dlltool` over these DEF files to generate the
+import libraries of the `x64win` linker-input profile; see
+`dependencies/link-inputs/README.md`.
 
-These import libraries are required by raylib on Windows. `zig build link-inputs` generates them into the `x64win` linker-input profile; see `dependencies/link-inputs/README.md`.
+`roc build` links only the inputs `platform/main.roc` lists and takes nothing
+from a Visual Studio or Windows SDK install, so this set is everything an
+`x64win` executable imports:
+
+- `ucrtbase.lib` - the Universal C Runtime
+- `kernel32.lib`, `ntdll.lib` - core Windows APIs, also imported by Roc's runtime
+- `gdi32.lib`, `user32.lib`, `winmm.lib`, `opengl32.lib`, `shell32.lib` - raylib's windowing, timing and graphics
+- `ws2_32.lib`, `crypt32.lib`, `shlwapi.lib`, `bcryptprimitives.lib` - networking, certificates, paths and entropy
 
 ## Updating
 
 To update these files for a newer version of MinGW-w64:
 1. Copy the relevant .def files from your Zig installation's `lib/libc/mingw/lib-common/`
-2. For `user32.def.in`, apply the modifications listed above
-3. Run `zig build` to regenerate the import libraries
+2. For `user32.def.in`, apply the modifications listed above; for the three
+   preprocessed files, rerun the command above
+3. Follow the producer procedure in `dependencies/link-inputs/README.md` to
+   publish the regenerated import libraries

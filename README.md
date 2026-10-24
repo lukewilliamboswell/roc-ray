@@ -115,6 +115,15 @@ published as a website and a PDF. Its chapters are the AsciiDoc files in
 - [Contributing](docs/contributing.adoc)
 - [Release notes](docs/releases/) and the
   [releases page](https://github.com/lukewilliamboswell/roc-ray/releases)
+- [Third-party licences](THIRD-PARTY-LICENCES.md)
+
+## Licence
+
+RocRay is released under the Universal Permissive License v1.0; see
+[`LICENSE`](LICENSE). That grant covers this project's own code and data.
+Vendored libraries and example asset packs keep their own licences and
+copyright holders, all indexed in
+[`THIRD-PARTY-LICENCES.md`](THIRD-PARTY-LICENCES.md).
 
 RocRay follows the latest nightly build of the Roc compiler, and names no
 compiler of its own. Because Roc is still changing, RocRay's API may also

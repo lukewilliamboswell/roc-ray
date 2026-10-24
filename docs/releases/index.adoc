@@ -5,6 +5,8 @@
 // Earlier releases are described on their GitHub release pages:
 // https://github.com/lukewilliamboswell/roc-ray/releases
 
+include::0.11.1.adoc[]
+
 include::0.11.0.adoc[]
 
 include::0.10.0.adoc[]

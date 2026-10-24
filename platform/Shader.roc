@@ -21,7 +21,15 @@ Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : 
 		]
 	from_source! = |cfg, uniforms| {
 		schema = uniform_schema(uniforms)?
-		shader = Host.shader_load_source!(cfg)?
+		# Rebuilt with a match, never `?`. A hosted call's error union is fixed
+		# by the host, so it cannot widen into this function's row. The compiler
+		# misses that when the row is an alias such as `ShaderLoadSourceError`,
+		# and `?` then reads the host's `Ok` as an `Err` (roc-lang/roc#12555).
+		shader = match Host.shader_load_source!(cfg) {
+			Ok(loaded) => loaded
+			Err(ShaderLoadFailed) => return Err(ShaderLoadFailed)
+			Err(ResourceLimit) => return Err(ResourceLimit)
+		}
 		bind_shader_uniforms!(shader, schema)?
 		values = uniform_values(uniforms)
 		Ok(Shader.({ resource: shader, uniforms, values: values.values }))
@@ -36,7 +44,15 @@ Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : 
 		]
 	from_store! = |store, cfg, uniforms| {
 		schema = uniform_schema(uniforms)?
-		shader = Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })?
+		# Rebuilt with a match, never `?`; see `from_source!`.
+		shader = match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
+			Ok(loaded) => loaded
+			Err(PathInvalid) => return Err(PathInvalid)
+			Err(NotFound) => return Err(NotFound)
+			Err(ReadFailed) => return Err(ReadFailed)
+			Err(ShaderLoadFailed) => return Err(ShaderLoadFailed)
+			Err(ResourceLimit) => return Err(ResourceLimit)
+		}
 		bind_shader_uniforms!(shader, schema)?
 		values = uniform_values(uniforms)
 		Ok(Shader.({ resource: shader, uniforms, values: values.values }))

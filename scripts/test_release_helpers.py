@@ -79,6 +79,8 @@ class PackageExamplesTests(unittest.TestCase):
         git(root, "init", "-q")
         git(root, "config", "user.email", "test@example.com")
         git(root, "config", "user.name", "Test")
+        # A scratch repository: never ask the developer's signing key.
+        git(root, "config", "commit.gpgsign", "false")
         git(root, "add", "examples", "test")
         git(root, "commit", "-qm", "examples")
 
@@ -130,6 +132,7 @@ class PackageExamplesTests(unittest.TestCase):
                 spec = json.loads(archive.read(f"{ARCHIVE}/spec.json"))
                 readme = archive.read(f"{ARCHIVE}/README.md").decode("utf-8")
                 stamps = {info.date_time for info in archive.infolist()}
+                modes = {info.external_attr >> 16 for info in archive.infolist()}
 
             # One root folder, named for the archive, as the nightly
             # compatibility runner requires.
@@ -160,6 +163,9 @@ class PackageExamplesTests(unittest.TestCase):
             self.assertEqual(b"\x89PNG ball", ball)
             self.assertNotIn(f"{ARCHIVE}/examples/gallery/pong.webp", names)
             self.assertEqual({(1980, 1, 1, 0, 0, 0)}, stamps)
+            # Every member is a regular file: the nightly compatibility
+            # runner rejects any other type, and so a missing type field.
+            self.assertEqual({0o100644}, modes)
             self.assertEqual(
                 {
                     "schema_version": 1,

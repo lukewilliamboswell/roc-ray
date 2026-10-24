@@ -18,8 +18,8 @@
 ##
 ## Every effect that takes a `Frame` is legal only in `render!`. Resource
 ## constructors `default_font!`, `font_from_bytes!`,
-## `RenderTexture.load!`, `Shader.from_source!` and the `Shader.uniform_*!`
-## resolvers allocate host resources from what the app already has, so they are
+## `RenderTexture.load!` and `Shader.from_source!` allocate host resources from
+## what the app already has, so they are
 ## legal in `init!`, `update!`, and tasks. The two
 ## that read files out of an asset store, `load_store_font!` and
 ## `Shader.from_store!`, wait instead: each is legal in `init!`, where it
@@ -40,6 +40,7 @@ import Color
 import Host
 import Font
 import Math
+import Shader
 
 TextureDrawConfig : {
 	texture : Assets.Texture,
@@ -581,115 +582,6 @@ Draw := [].{
 		height : I32,
 	}
 
-	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
-	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: Resource.Shader.{
-
-		## Compile shader stages from source strings.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit])
-		from_source! = |cfg|
-			# closed error union to open error union
-			match Host.shader_load_source!(cfg) {
-				Ok(shader) => Ok(Shader.(shader))
-				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
-				Err(ResourceLimit) => Err(ResourceLimit)
-			}
-
-		## Compile shader stage files resolved through an explicit asset store.
-		##
-		## Legal in `init!`, where it blocks startup, and in tasks, where it
-		## parks the task; refused in `update!` and `render!`. The sources are
-		## read off the frame thread and compiled when the bytes are back. To
-		## compile from `update!`, use `from_source!` with strings the app
-		## already holds.
-		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit])
-		from_store! = |store, cfg|
-			# closed error union to open error union
-			match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
-				Ok(shader) => Ok(Shader.(shader))
-				Err(PathInvalid) => Err(PathInvalid)
-				Err(NotFound) => Err(NotFound)
-				Err(ReadFailed) => Err(ReadFailed)
-				Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
-				Err(ResourceLimit) => Err(ResourceLimit)
-			}
-
-		## Resolve a scalar floating-point uniform once.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`. Resolving a
-		## uniform is a lookup against the compiled program, so it belongs beside the
-		## load. Setting one is the opposite: `set!` on the resolved handle is legal
-		## in `render!` only.
-		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound])
-		uniform_f32! = |Shader.(shader), name| Ok(F32Uniform.(uniform_host!(shader, name)?))
-
-		## Resolve a scalar integer uniform once. Same phases as `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound])
-		uniform_i32! = |Shader.(shader), name| Ok(I32Uniform.(uniform_host!(shader, name)?))
-
-		## Resolve a two-component vector uniform once. Same phases as
-		## `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound])
-		uniform_vec2! = |Shader.(shader), name| Ok(Vec2Uniform.(uniform_host!(shader, name)?))
-
-		## Resolve a three-component vector uniform once. Same phases as
-		## `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound])
-		uniform_vec3! = |Shader.(shader), name| Ok(Vec3Uniform.(uniform_host!(shader, name)?))
-
-		## Resolve a four-component vector uniform once. Same phases as
-		## `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound])
-		uniform_vec4! = |Shader.(shader), name| Ok(Vec4Uniform.(uniform_host!(shader, name)?))
-
-		## Resolve a color-valued vec4 uniform once. Same phases as `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound])
-		uniform_color! = |Shader.(shader), name| Ok(ColorUniform.(uniform_host!(shader, name)?))
-
-		## Resolve a sampled-texture uniform once. Same phases as `uniform_f32!`.
-		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound])
-		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
-
-		## Resource-free shader value for pure tests.
-		##
-		## The handle never resolves to a host resource, so entering a scope with
-		## it is refused the way a released shader is, and setting a uniform
-		## derived from it does nothing. Put it in a model to test the app's
-		## real `update!` from an `expect`. Do not use it to test compilation,
-		## uniforms, or resource lifetime.
-		stub : Shader
-		stub = Shader.(Resource.Handle.stub({}))
-	}
-
-	## Store-relative shader stage names. An empty path selects raylib's default
-	## stage; non-empty paths are resolved only through `Shader.from_store!`.
-	LoadShader : {
-		vertex_path : Str,
-		fragment_path : Str,
-	}
-
-	## Shader stages as GLSL source strings rather than store paths, for
-	## `Shader.from_source!`. An empty string selects raylib's default stage,
-	## which is what a fragment-only 2D post-processing effect wants.
-	LoadShaderSource : {
-		vertex_source : Str,
-		fragment_source : Str,
-	}
-
 	## Which font file format `FontBytes` holds. The bytes are decoded by
 	## format rather than by sniffing them, so a mislabelled file fails to load
 	## instead of loading as something else.
@@ -700,106 +592,6 @@ Draw := [].{
 	## drawing at a much larger size scales that atlas up rather than
 	## re-rasterizing; load the font again at the size you need instead.
 	FontBytes : { format : FontFormat, bytes : List(U8), size : I32 }
-
-	## A resolved `F32` uniform location, from `Shader.uniform_f32!`.
-	##
-	## The typed uniform handles are zero-cost nominal wrappers over the cached
-	## host location plus its owning shader. Their distinct types prevent using
-	## the wrong setter without adding a tag, allocation, or host lookup.
-	F32Uniform :: Host.ShaderUniform.{
-
-		## Send a scalar float to this uniform for the draws that follow.
-		##
-		## Legal in `render!` only.
-		set! : F32Uniform, F32 => {}
-		set! = |F32Uniform.(uniform), value| Host.shader_set_float!({ uniform, value })
-	}
-
-	## A resolved `I32` uniform location, from `Shader.uniform_i32!`.
-	I32Uniform :: Host.ShaderUniform.{
-
-		## Send a scalar integer to this uniform for the draws that follow.
-		##
-		## Legal in `render!` only.
-		set! : I32Uniform, I32 => {}
-		set! = |I32Uniform.(uniform), value| Host.shader_set_int!({ uniform, value })
-	}
-
-	## A resolved two-component uniform location, from `Shader.uniform_vec2!`.
-	Vec2Uniform :: Host.ShaderUniform.{
-
-		## Send a two-component vector to this uniform for the draws that follow.
-		##
-		## Legal in `render!` only.
-		set! : Vec2Uniform, Vector2 => {}
-		set! = |Vec2Uniform.(uniform), value| Host.shader_set_vec2!({ uniform, value })
-	}
-
-	## A resolved `Vec3` uniform location, from `Shader.uniform_vec3!`.
-	Vec3Uniform :: Host.ShaderUniform.{
-
-		## Send a three-component vector to this uniform for the draws that follow.
-		##
-		## Legal in `render!` only.
-		set! : Vec3Uniform, Vec3 => {}
-		set! = |Vec3Uniform.(uniform), value| Host.shader_set_vec3!({ uniform, value })
-	}
-
-	## A resolved `Vec4` uniform location, from `Shader.uniform_vec4!`.
-	Vec4Uniform :: Host.ShaderUniform.{
-
-		## Send a four-component vector to this uniform for the draws that follow.
-		##
-		## Legal in `render!` only.
-		set! : Vec4Uniform, Vec4 => {}
-		set! = |Vec4Uniform.(uniform), value| Host.shader_set_vec4!({ uniform, value })
-	}
-
-	## A resolved color uniform location, from `Shader.uniform_color!`. GLSL has
-	## no color type, so this is a `vec4` whose components the setter normalizes
-	## from the 0-to-255 bytes of an `Rgba` to the 0-to-1 floats a shader reads.
-	ColorUniform :: Host.ShaderUniform.{
-
-		## Send a color to this uniform for the draws that follow, normalized to
-		## the 0-to-1 range GLSL uses.
-		##
-		## Legal in `render!` only.
-		set! : ColorUniform, Color.Rgba => {}
-		set! = |ColorUniform.(uniform), color| Host.shader_set_vec4!({
-			uniform,
-			value: normalized_color(color),
-		})
-	}
-
-	TextureUniform :: Host.ShaderUniform.{
-
-		## Bind any sampled texture view, including a render-target attachment.
-		##
-		## Legal in `render!` only.
-		##
-		## This is the one to use. `set_texture!` is the same call named
-		## for the ordinary case, and exists only because binding a plain
-		## texture is what most shaders want and `set!` does not say so.
-		set! : TextureUniform, Texture => {}
-		set! = |TextureUniform.(uniform), texture| Host.shader_set_texture!({
-			uniform,
-			texture,
-		})
-
-		## Bind an ordinary texture, as `set!` does. Prefer `set!`, which also
-		## accepts a render-target attachment; this spelling reads better when
-		## the value at hand is plainly a texture.
-		##
-		## Legal in `render!` only.
-		set_texture! : TextureUniform, Texture => {}
-		set_texture! = |uniform, texture| uniform.set!(texture)
-	}
-
-	## Three-component shader uniform value.
-	Vec3 : { x : F32, y : F32, z : F32 }
-
-	## Four-component shader uniform value.
-	Vec4 : { x : F32, y : F32, z : F32, w : F32 }
 
 	## Built-in blend equations with scoped application through `with_blend_mode!`.
 	BlendMode : [
@@ -1108,15 +900,17 @@ Draw := [].{
 		}
 	}
 
-	## Scope shader application so the default shader is always restored. Callback
-	## errors are returned only after the previous shader has been restored.
+	## Scope shader application and upload its complete uniform record before the
+	## callback draws. Callback errors are returned only after the previous
+	## shader and all of its uniform values have been restored.
 	##
 	## Legal in `render!` only.
-	with_shader! : Frame, Shader, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
-	with_shader! = |frame, Shader.(shader), callback| {
+	with_shader! : Frame, Shader(uniforms), (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_shader! = |frame, shader, callback| {
+		values = shader.for_frame()
 		# closed error union to open error union. The scope is closed on every
 		# path the callback can take, error included.
-		match Host.draw_begin_shader!(shader) {
+		match Host.draw_begin_shader!(values.resource, values.values) {
 			Ok({}) => {
 				result = callback(frame)
 				Host.draw_end_shader!()
@@ -1261,23 +1055,6 @@ font_format_code = |format|
 		Ttf => 0
 		Otf => 1
 	}
-
-uniform_host! : Resource.Shader, Str => Try(Host.ShaderUniform, [UniformNotFound])
-uniform_host! = |shader, name| {
-	# closed error union to open error union
-	match Host.shader_location!({ shader, name }) {
-		Ok(location) => Ok({ shader, location })
-		Err(UniformNotFound) => Err(UniformNotFound)
-	}
-}
-
-normalized_color : Color.Rgba -> Draw.Vec4
-normalized_color = |color| {
-	x: U8.to_f32(color.r) / 255,
-	y: U8.to_f32(color.g) / 255,
-	z: U8.to_f32(color.b) / 255,
-	w: U8.to_f32(color.a) / 255,
-}
 
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5

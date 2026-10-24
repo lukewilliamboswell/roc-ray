@@ -234,6 +234,40 @@ fn expectPixel(image: rl.Image, x: c_int, y: c_int, expected: Color) !void {
     }
 }
 
+fn expectReflectedUniform(shader: backend.Shader, name: [*:0]const u8, expected_gl_type: u32) !void {
+    switch (backend.reflectShaderUniform(shader, name)) {
+        .found => |uniform| {
+            try std.testing.expectEqual(expected_gl_type, uniform.gl_type);
+            try std.testing.expectEqual(@as(u32, 1), uniform.array_len);
+            try std.testing.expect(uniform.location >= 0);
+        },
+        .missing => return error.ExpectedActiveUniform,
+        .unavailable => return error.ShaderReflectionUnavailable,
+    }
+}
+
+fn expectReflectedUniformMismatch(shader: backend.Shader, name: [*:0]const u8, requested_gl_type: u32) !void {
+    switch (backend.reflectShaderUniform(shader, name)) {
+        .found => |uniform| {
+            try std.testing.expect(uniform.gl_type != requested_gl_type);
+            try std.testing.expectEqual(@as(u32, 1), uniform.array_len);
+        },
+        .missing => return error.ExpectedActiveUniform,
+        .unavailable => return error.ShaderReflectionUnavailable,
+    }
+}
+
+fn expectReflectedArray(shader: backend.Shader, name: [*:0]const u8, expected_gl_type: u32, expected_len: u32) !void {
+    switch (backend.reflectShaderUniform(shader, name)) {
+        .found => |uniform| {
+            try std.testing.expectEqual(expected_gl_type, uniform.gl_type);
+            try std.testing.expectEqual(expected_len, uniform.array_len);
+        },
+        .missing => return error.ExpectedActiveUniform,
+        .unavailable => return error.ShaderReflectionUnavailable,
+    }
+}
+
 /// Draw a known frame, capture it the way the host does, and read the file back.
 ///
 /// This runs in a frame of its own so the assertions in `main` keep testing the
@@ -630,6 +664,72 @@ pub fn main() !void {
     ;
     const shader = backend.loadShaderFromMemory(null, fragment_source) orelse return error.ShaderUnavailable;
     defer backend.unloadShader(shader);
+    const typed_uniform_source =
+        \\#version 330
+        \\in vec2 fragTexCoord;
+        \\in vec4 fragColor;
+        \\uniform float amount;
+        \\uniform int index;
+        \\uniform bool enabled;
+        \\uniform vec2 offset;
+        \\uniform vec3 direction;
+        \\uniform vec4 tint;
+        \\uniform sampler2D image;
+        \\uniform float weights[2];
+        \\out vec4 finalColor;
+        \\void main() {
+        \\    float keepActive = amount + float(index) + (enabled ? 1.0 : 0.0) + offset.x + direction.x + texture(image, fragTexCoord).r + weights[0] + weights[1];
+        \\    finalColor = tint + vec4(keepActive * 0.000001);
+        \\}
+    ;
+    const typed_shader = backend.loadShaderFromMemory(null, typed_uniform_source) orelse return error.ShaderUnavailable;
+    defer backend.unloadShader(typed_shader);
+    try expectReflectedUniform(typed_shader, "amount", 0x1406);
+    try expectReflectedUniform(typed_shader, "index", 0x1404);
+    try expectReflectedUniform(typed_shader, "enabled", 0x8B56);
+    try expectReflectedUniform(typed_shader, "offset", 0x8B50);
+    try expectReflectedUniform(typed_shader, "direction", 0x8B51);
+    try expectReflectedUniform(typed_shader, "tint", 0x8B52);
+    try expectReflectedUniform(typed_shader, "image", 0x8B5E);
+    try expectReflectedUniformMismatch(typed_shader, "amount", 0x1404);
+    try expectReflectedArray(typed_shader, "weights", 0x1406, 2);
+    try std.testing.expect(backend.reflectShaderUniform(typed_shader, "missing") == .missing);
+
+    const tint_source =
+        \\#version 330
+        \\in vec4 fragColor;
+        \\uniform vec4 tint;
+        \\out vec4 finalColor;
+        \\void main() { finalColor = fragColor * tint; }
+    ;
+    const tint_shader = backend.loadShaderFromMemory(null, tint_source) orelse return error.ShaderUnavailable;
+    defer backend.unloadShader(tint_shader);
+    const tint_reflection = backend.reflectShaderUniform(tint_shader, "tint");
+    const tint_location = switch (tint_reflection) {
+        .found => |uniform| blk: {
+            try std.testing.expectEqual(@as(u32, 0x8B52), uniform.gl_type);
+            break :blk uniform.location;
+        },
+        .missing => return error.ExpectedActiveUniform,
+        .unavailable => return error.ShaderReflectionUnavailable,
+    };
+    const tint_target = backend.loadRenderTexture(16, 8) orelse return error.RenderTextureUnavailable;
+    defer backend.unloadRenderTexture(tint_target);
+    backend.beginTextureMode(tint_target);
+    backend.clearBackground(black);
+    backend.beginShaderMode(tint_shader);
+    backend.setShaderVec4(tint_shader, tint_location, .{ 0, 121.0 / 255.0, 241.0 / 255.0, 1 });
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 8, .height = 8, .color = white });
+    backend.endShaderMode();
+    backend.beginShaderMode(tint_shader);
+    backend.setShaderVec4(tint_shader, tint_location, .{ 230.0 / 255.0, 41.0 / 255.0, 55.0 / 255.0, 1 });
+    backend.drawRectangle(.{ .x = 8, .y = 0, .width = 8, .height = 8, .color = white });
+    backend.endShaderMode();
+    backend.endTextureMode();
+    const tint_image = rl.LoadImageFromTexture(backend.renderTextureColor(tint_target));
+    defer rl.UnloadImage(tint_image);
+    try expectPixel(tint_image, 4, 4, blue);
+    try expectPixel(tint_image, 12, 4, red);
     const projective_fragment_source =
         \\#version 330
         \\in vec2 fragTexCoord;

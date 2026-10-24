@@ -21,6 +21,19 @@ Color := [].{
 		a : U8,
 	}.{
 
+		## Encode this color as one semantic leaf for formats that support colors.
+		## Shader uniform records use this to upload one normalized `vec4` rather
+		## than traversing the four byte channels as separate fields.
+		encoder_for : encoding -> (Rgba, state -> Try(state, err))
+			where [
+				encoding.encode_color : Rgba, state -> Try(state, err),
+			]
+		encoder_for = |_encoding| {
+			Encoding : encoding
+
+			|color, state| Encoding.encode_color(color, state)
+		}
+
 		## Compare all four color channels for equality.
 		is_eq : _
 	}

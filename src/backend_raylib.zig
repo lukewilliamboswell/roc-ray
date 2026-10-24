@@ -1756,6 +1756,81 @@ pub fn shaderLocation(shader: Shader, name: [*:0]const u8) c_int {
     return rl.GetShaderLocation(shader, name);
 }
 
+/// Active-uniform metadata read from the linked OpenGL program below raylib.
+/// `unavailable` is distinct from `missing`: a graphical profile must never
+/// silently weaken typed binding to name-only validation.
+pub const ShaderUniformReflection = union(enum) {
+    found: struct {
+        gl_type: u32,
+        array_len: u32,
+        location: c_int,
+    },
+    missing,
+    unavailable,
+};
+
+const GL_ACTIVE_UNIFORMS: c_uint = 0x8B86;
+const ACTIVE_UNIFORM_NAME_CAPACITY: usize = 256;
+
+const GetProgramivFn = *const fn (c_uint, c_uint, *c_int) callconv(.c) void;
+const GetActiveUniformFn = *const fn (c_uint, c_uint, c_int, *c_int, *c_int, *c_uint, [*]u8) callconv(.c) void;
+
+fn uniformNameMatches(active: []const u8, requested: []const u8, array_len: c_int) bool {
+    if (std.mem.eql(u8, active, requested)) return true;
+    if (array_len <= 1 or !std.mem.endsWith(u8, active, "[0]")) return false;
+    return std.mem.eql(u8, active[0 .. active.len - 3], requested);
+}
+
+/// Reflect one exact active uniform name and type from a linked shader.
+///
+/// OpenGL reports arrays as `name[0]`; matching their base name lets the caller
+/// reject them as arrays instead of misreporting them as absent.
+pub fn reflectShaderUniform(shader: Shader, requested_name: [*:0]const u8) ShaderUniformReflection {
+    const get_program_iv_address = rl.rlGetProcAddress("glGetProgramiv") orelse return .unavailable;
+    const get_active_uniform_address = rl.rlGetProcAddress("glGetActiveUniform") orelse return .unavailable;
+    const get_program_iv: GetProgramivFn = @ptrCast(@alignCast(get_program_iv_address));
+    const get_active_uniform: GetActiveUniformFn = @ptrCast(@alignCast(get_active_uniform_address));
+
+    var uniform_count: c_int = 0;
+    get_program_iv(shader.id, GL_ACTIVE_UNIFORMS, &uniform_count);
+    if (uniform_count < 0) return .unavailable;
+
+    const requested = std.mem.span(requested_name);
+    for (0..@intCast(uniform_count)) |uniform_index| {
+        var name_buffer: [ACTIVE_UNIFORM_NAME_CAPACITY]u8 = @splat(0);
+        var name_len: c_int = 0;
+        var array_len: c_int = 0;
+        var gl_type: c_uint = 0;
+        get_active_uniform(
+            shader.id,
+            @intCast(uniform_index),
+            @intCast(name_buffer.len - 1),
+            &name_len,
+            &array_len,
+            &gl_type,
+            &name_buffer,
+        );
+        if (name_len < 0 or @as(usize, @intCast(name_len)) >= name_buffer.len) return .unavailable;
+        const active_name = name_buffer[0..@intCast(name_len)];
+        if (!uniformNameMatches(active_name, requested, array_len)) continue;
+        const location = shaderLocation(shader, requested_name);
+        if (location < 0) return .missing;
+        return .{ .found = .{
+            .gl_type = gl_type,
+            .array_len = if (array_len < 0) 0 else @intCast(array_len),
+            .location = location,
+        } };
+    }
+    return .missing;
+}
+
+test "uniform reflection matches scalar names and array base names exactly" {
+    try std.testing.expect(uniformNameMatches("tint", "tint", 1));
+    try std.testing.expect(!uniformNameMatches("tintExtra", "tint", 1));
+    try std.testing.expect(uniformNameMatches("lights[0]", "lights", 3));
+    try std.testing.expect(!uniformNameMatches("lights[0]", "light", 3));
+}
+
 /// Update scalar/vector shader values without allocating.
 pub fn setShaderFloat(shader: Shader, location: c_int, value: f32) void {
     rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_FLOAT);

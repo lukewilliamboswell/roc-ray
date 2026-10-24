@@ -110,6 +110,7 @@ frees its place for another.
 |Fonts |32 |`ResourceLimit`
 |Render textures |32 |`ResourceLimit`
 |Shaders |32 |`ResourceLimit`
+|Application uniforms per shader |32 |`ResourceLimit`
 |Prepared texts |256 |`ResourceLimit`
 |Asset stores |16 |`ResourceLimit`
 |UDP sockets |8 |`ResourceLimit`

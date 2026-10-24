@@ -38,7 +38,7 @@ doc comment in step with it.
 
 `during_load` is for allocating or generating a resource from bytes the app
 already holds, such as `Assets.texture_from_bytes!`,
-`Draw.Shader.from_source!`, and `Audio.gen_sound!`. A loader that opens a
+`Shader.from_source!`, and `Audio.gen_sound!`. A loader that opens a
 directory or reads a file is `during_wait`, however small the file: touching
 the filesystem from `update!` is exactly what invariant 4 in <<architecture>>
 forbids. Where the resource can be built without

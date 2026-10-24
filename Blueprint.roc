@@ -48,6 +48,8 @@ config = [
 	Task("glue", [Use("dev"), Run(["scripts/check_glue.roc"])]),
 	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--update"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),
+	# Release host libraries carry no Zig debug allocator; run after a ReleaseFast build.
+	Task("check-release-hosts", [Use("scripts"), Run(["scripts/check_release_hosts.roc"])]),
 	# The tooling compiler, as release notes record it.
 	Task("compiler-version", [Use("scripts"), Run(["roc-stable", "version"])]),
 ]

@@ -129,8 +129,13 @@ jobs:
             --platform-mode=bundle --skip-windowed --headless-frames=3
           python3 scripts/build_docs.py --check
 
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+        with:
+          cache: "true"
+          cache-workload: scripts
+
       - name: Verify release hosts
-        run: scripts/check_release_hosts.py
+        run: blueprint run check-release-hosts
 
       - name: Resolve previous default bundle
         if: github.event_name == 'workflow_dispatch'

@@ -15754,7 +15754,7 @@ fn releaseDeniedArgument(value: anytype) void {
             if (@hasDecl(T, "decref")) {
                 value.decref(activeHost());
             } else {
-                inline for (std.meta.fields(T)) |field| releaseDeniedArgument(@field(value, field.name));
+                inline for (@typeInfo(T).@"struct".field_names) |name| releaseDeniedArgument(@field(value, name));
             }
         },
         else => {},
@@ -16087,7 +16087,8 @@ fn deniedTestArgument(comptime T: type) T {
     if (@typeInfo(T) == .@"struct" and @hasDecl(T, "empty")) return T.empty();
     if (@typeInfo(T) == .@"struct") {
         var value: T = undefined;
-        inline for (std.meta.fields(T)) |field| @field(value, field.name) = deniedTestArgument(field.type);
+        const info = @typeInfo(T).@"struct";
+        inline for (info.field_names, info.field_types) |name, Field| @field(value, name) = deniedTestArgument(Field);
         return value;
     }
     return std.mem.zeroes(T);

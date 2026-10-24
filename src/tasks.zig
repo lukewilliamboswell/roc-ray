@@ -380,8 +380,10 @@ pub fn Tasks(comptime Hooks: type) type {
         /// datagram that arrived during the vsync wait sat unseen for that
         /// long.
         ///
-        /// A zero-length sleep parks the main task on a timer that is already
-        /// due, which is the one public way to make the executor run its loop.
+        /// Parking the main task on a timer that is already due is the one
+        /// public way to make the executor run its loop. Not `zio.sleep(.zero)`:
+        /// that is now `zio.yield()`, fast path included. A zero timeout on an
+        /// event nothing ever sets arms exactly that timer.
         /// One such turn does only part of the job: the loop polls, readies
         /// the tasks whose I/O completed, and returns to the main task before
         /// running them, because the same poll fired the timer. The next turn
@@ -394,7 +396,8 @@ pub fn Tasks(comptime Hooks: type) type {
             var quiet: usize = 0;
             while (turns < max_turns and quiet < quiet_turns) : (turns += 1) {
                 const before = self.progress;
-                zio.sleep(.zero) catch {};
+                var never: zio.Event = .init;
+                never.waitTimeout(.{ .duration = .zero }) catch {};
                 quiet = if (self.progress == before) quiet + 1 else 0;
             }
         }

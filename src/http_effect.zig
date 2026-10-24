@@ -326,12 +326,12 @@ fn run(exchange: *Exchange) ExchangeError!void {
         const decompress_buffer = try exchange.arena.alloc(u8, std.compress.flate.max_window_len);
         const reader = response.readerDecompressing(transfer_buffer, decompress, decompress_buffer);
 
-        // `allocRemaining` fails once the limit is *reached*, so a body of exactly
-        // `max_response_bytes` has to be allowed one byte of headroom to succeed.
+        // `allocRemaining` fails only once the limit is *exceeded*, so a body of
+        // exactly `max_response_bytes` succeeds.
         const limit: std.Io.Limit = if (exchange.max_response_bytes == 0)
             .unlimited
         else
-            .limited(@intCast(@min(exchange.max_response_bytes +| 1, std.math.maxInt(usize))));
+            .limited(@intCast(@min(exchange.max_response_bytes, std.math.maxInt(usize))));
 
         exchange.response_body = reader.allocRemaining(exchange.arena, limit) catch |err| switch (err) {
             error.StreamTooLong => return error.ResponseTooLarge,

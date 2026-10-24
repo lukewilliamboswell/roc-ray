@@ -133,12 +133,15 @@ pub fn openFile(io: std.Io, root: Dir, path: []const u8) !File {
         return linkIsInvalid(io, parent.dir, parent.name, err);
 }
 
-/// Read a whole file beneath `root`, stopping at `limit`.
+/// Read a whole file beneath `root`. As with `Dir.readFileAlloc`, a file that
+/// reaches `limit` is `error.StreamTooLong`: a caller allowing `n` bytes passes
+/// `n + 1`.
 pub fn readFileAlloc(io: std.Io, root: Dir, path: []const u8, allocator: std.mem.Allocator, limit: std.Io.Limit) ![]u8 {
     var file = try openFile(io, root, path);
     defer file.close(io);
     var reader = file.reader(io, &.{});
-    return reader.interface.allocRemaining(allocator, limit) catch |err| switch (err) {
+    // Not `allocRemaining`: that one only fails once `limit` is exceeded.
+    return reader.interface.allocRemainingAlignedSentinel(allocator, limit, .of(u8), null) catch |err| switch (err) {
         error.ReadFailed => return reader.err.?,
         error.OutOfMemory, error.StreamTooLong => |e| return e,
     };

@@ -44,8 +44,8 @@ larger examples show what else it can do:
 1. Install the latest nightly build of the Roc compiler, as
    [Getting started](docs/getting-started.adoc#install) describes.
 2. Open the [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest),
-   download its `examples-<version>.zip` and unzip it.
-3. Open a terminal in the extracted directory, the one containing `examples/`,
+   download its `roc-ray-examples-<version>.zip` and unzip it.
+3. Open a terminal in the extracted `roc-ray-examples-<version>` directory,
    and run:
 
 ```bash

@@ -75,6 +75,7 @@ def main() -> int:
     package.add_argument("--bundle-url", default="")
     package.add_argument("--tag", default="")
     package.add_argument("--examples-dir", default="examples")
+    package.add_argument("--spec", default="test/examples-spec.json")
     package.add_argument("--repo", default="")
     package.add_argument("--output", default="")
     package.add_argument("--output-dir", default=".release")
@@ -196,13 +197,14 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         f'platform "{wayland_url}"',
         "```",
     ]
-    examples_url = release_asset_url(repo, release_version, f"examples-{release_version}.zip")
+    examples_url = release_asset_url(repo, release_version, f"roc-ray-examples-{release_version}.zip")
     lines.extend([
         "",
         "## Examples",
         "",
         f"A [zip of the examples]({examples_url}) that use this release is attached to every",
-        "release; unzip and `roc examples/<name>/main.roc`.",
+        f"release; unzip it, then from its `roc-ray-examples-{release_version}` folder run",
+        "`roc examples/<name>/main.roc`.",
     ])
 
     lines.extend(["", "## Docs", ""])
@@ -440,15 +442,18 @@ def cmd_package_docs(args: argparse.Namespace) -> int:
 
 
 def cmd_package_examples(args: argparse.Namespace) -> int:
-    default_url = resolve_default_bundle_url(
-        args.bundle_url, args.release_version, args.release_bundles, args.repo
-    )
-
+    """Write `roc-ray-examples-<tag>.zip`: one root folder holding a README, the
+    `spec.json` test plan that roc-automation's nightly compatibility runner
+    reads, and the tracked examples with every platform reference pointing at
+    the published default bundle."""
     tag = args.tag or args.release_version or os.environ.get("RELEASE_VERSION", "")
     if not tag:
         raise RuntimeError("release tag is required")
     if "/" in tag or "\\" in tag or not tag.strip():
         raise RuntimeError(f"invalid release tag: {tag!r}")
+    default_url = resolve_default_bundle_url(
+        args.bundle_url, tag, args.release_bundles, args.repo
+    )
 
     root = repo_root()
     examples_dir = Path(args.examples_dir)
@@ -464,54 +469,102 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
     if not entries:
         raise RuntimeError(f"no tracked files found under {examples_dir}")
 
-    output = Path(args.output) if args.output else Path(args.output_dir) / f"examples-{tag}.zip"
+    archive_root = f"roc-ray-examples-{tag}"
+    output = Path(args.output) if args.output else Path(args.output_dir) / f"{archive_root}.zip"
     output.parent.mkdir(parents=True, exist_ok=True)
 
     replacement = f'"{default_url}"'
-    rewritten_headers = 0
     example_dirs: set[str] = set()
     packaged_apps: set[str] = set()
+    files: dict[str, bytes] = {}
 
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for entry in entries:
-            source = root / entry
-            if not source.is_file():
-                raise RuntimeError(f"tracked example file is missing from the tree: {entry}")
-
-            parts = entry.split("/")
-            if len(parts) >= 3:
-                example_dirs.add(parts[1])
-
+    for entry in entries:
+        source = root / entry
+        if not source.is_file():
+            raise RuntimeError(f"tracked example file is missing from the tree: {entry}")
+        parts = entry.split("/")
+        if len(parts) >= 3:
+            example_dirs.add(parts[1])
+        data = source.read_bytes()
+        if entry.endswith(".roc"):
+            original = data.decode("utf-8")
+            rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
             if parts[-1] == "main.roc" and len(parts) == 3:
-                original = source.read_text(encoding="utf-8")
-                rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
                 if count != 1:
                     raise RuntimeError(
                         f"expected one recognized platform reference in {entry}, found {count}"
                     )
-                data = rewritten.encode("utf-8")
-                rewritten_headers += 1
-                packaged_apps.add(parts[1])
-            else:
-                data = source.read_bytes()
+                packaged_apps.add(entry)
+            data = rewritten.encode("utf-8")
+        files[entry] = data
 
-            write_zip_entry(archive, entry, data)
-
-    missing = sorted(example_dirs - packaged_apps)
+    missing = sorted(
+        name for name in example_dirs
+        if f"{examples_dir.as_posix()}/{name}/main.roc" not in packaged_apps
+    )
     if missing:
-        output.unlink(missing_ok=True)
         raise RuntimeError(
             "example directories without a rewritten main.roc header: " + ", ".join(missing)
         )
-    if not rewritten_headers:
-        output.unlink(missing_ok=True)
-        raise RuntimeError("no example headers were rewritten")
+
+    spec = examples_spec(Path(args.spec), tag, default_url, packaged_apps)
+    files["spec.json"] = (json.dumps(spec, indent=2) + "\n").encode("utf-8")
+    files["README.md"] = examples_readme(tag, default_url, len(packaged_apps)).encode("utf-8")
+
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(files):
+            write_zip_entry(archive, f"{archive_root}/{name}", files[name])
 
     if args.github_output:
         append_github_output(args.github_output, "examples_zip", output.as_posix())
 
-    print(f"Wrote {output} with {len(entries)} file(s), {rewritten_headers} header(s) -> {default_url}")
+    print(f"Wrote {output} with {len(files)} file(s), {len(packaged_apps)} app(s) -> {default_url}")
     return 0
+
+
+def examples_spec(path: Path, tag: str, default_url: str, apps: set[str]) -> dict:
+    """The archive's `spec.json`: the recorded cases for every packaged app,
+    under the release and the bundle URL its headers name."""
+    recorded = read_json(path.as_posix())
+    listed = [app["path"] for app in recorded["apps"]]
+    if len(listed) != len(set(listed)):
+        raise RuntimeError(f"{path} lists an app more than once")
+    if set(listed) != apps:
+        unrecorded = sorted(apps - set(listed))
+        stale = sorted(set(listed) - apps)
+        raise RuntimeError(
+            f"{path} must list every packaged app exactly: "
+            f"unrecorded {unrecorded}, not packaged {stale}"
+        )
+    return {
+        "schema_version": 1,
+        "release": tag,
+        "dependencies": [default_url],
+        "apps": recorded["apps"],
+    }
+
+
+def examples_readme(tag: str, default_url: str, app_count: int) -> str:
+    return f"""# RocRay {tag} examples
+
+The {app_count} examples from the RocRay {tag} release. Each one names the
+release's platform bundle:
+
+    {default_url}
+
+Run one from this folder with the latest Roc nightly:
+
+    roc examples/hello_world/main.roc
+
+Some examples read files beside them; run every example from this folder so
+their paths resolve. `spec.json` records what each example prints when it
+runs headlessly, for example
+
+    roc build examples/pong/main.roc --output=pong
+    ./pong --host-headless --host-headless-frames=60
+
+The manual is at https://lukewilliamboswell.github.io/roc-ray/.
+"""
 
 
 def repo_root() -> Path:

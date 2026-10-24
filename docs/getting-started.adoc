@@ -137,7 +137,7 @@ the X11 libraries, and runs only on Linux. <<reference>> lists both bundles.
 [#run-an-example]
 == Run an example
 
-Each release attaches a zip of the examples, named `examples-<version>.zip`,
+Each release attaches a zip of the examples, named `roc-ray-examples-<version>.zip`,
 whose files already name that release's bundle.
 
 . Open the {repo}/releases[RocRay releases page] and choose the newest release

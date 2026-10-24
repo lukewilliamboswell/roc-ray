@@ -1,0 +1,68 @@
+[#release-0-11-0]
+= RocRay 0.11.0
+
+0.11.0 adds typed shader uniforms, 3D drawing and a playable RocDOOM example. It also stops naming a Roc compiler: the platform and its examples work with the latest Roc nightly. Apps that use shaders need a small change; everything else from 0.10.0 builds as it is.
+
+== No compiler pin
+
+0.10.0 named the one nightly it had been built with, and every app header and example repeated it. 0.11.0 names none. Use the https://github.com/roc-lang/nightlies/releases/latest[latest Roc nightly]. Each night, RocRay's CI builds and runs every example in this release's `roc-ray-examples-0.11.0.zip` against that night's compiler on Linux, macOS and Windows, and keeps one issue open while anything fails.
+
+If an app header still has a `roc:` field from 0.10.0, delete it.
+
+== Typed shader uniforms
+
+Shaders have their own module, `Shader`, and a shader's uniforms are a Roc record. RocRay checks the record against the compiled program once, when the shader is created: a missing uniform, a type that differs from the GLSL declaration, or an unsupported type is an error from `Shader.from_source!` or `Shader.from_store!`. Each frame then supplies all the values together.
+
+In 0.10.0 each uniform was looked up by name and set by its own effect:
+
+[source,roc]
+----
+# 0.10
+shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
+time_uniform = shader.uniform_f32!("time")?
+# later, in render!, inside frame.with_shader!
+model.time_uniform.set!(model.seconds)
+----
+
+In 0.11.0 the record is the schema and the values:
+
+[source,roc]
+----
+# 0.11
+shader = Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" }, { time: 0 })?
+
+# in render!, a pure update of the record, then the frame scope
+frame.with_shader!(model.shader.with_uniforms({ time: model.seconds }), |shader_frame| {
+    shader_frame.texture!(target_draw)
+    Ok({})
+})?
+----
+
+Uniform fields can be `F32`, `I32`, `Bool`, `Math.Vec2`, `Math.Vec3`, `Math.Vec4`, `Color.Rgba` and `Assets.Texture`. `Draw.Shader` and its `uniform_*!` and `set!` functions are gone. `examples/post_process` shows the whole pattern.
+
+== 3D drawing
+
+`Camera.perspective` describes a 3D camera, `frame.with_camera_3d!` draws inside it, and `frame.textured_triangles_3d!` draws textured triangles in world space. Like every other drawing operation they are legal only in `render!`, within the frame. The camera scope always ends, including when its body returns an error.
+
+`App.default.with_cursor_mode(Locked)` now takes effect at startup, and RocRay keeps the cursor locked when the window loses focus and regains it.
+
+== RocDOOM
+
+`examples/roc-doom-e1m1` is a playable, deterministic slice of DOOM's first level, built from freely redistributable Freedoom assets. All game state and rules are Roc; RocRay provides input, audio and drawing. It is the largest RocRay app so far and is part of the examples archive.
+
+== Windows without Visual Studio
+
+Building an app for Windows no longer needs Visual Studio or the Windows SDK. RocRay's `x64win` target now lists every library the final link needs, and the host starts the process itself through the Universal CRT that ships with Windows.
+
+== Smaller changes
+
+* The platform depends on roc-random 0.9.3, which removes the unreachable-code warnings 0.9.2 caused on current nightlies.
+* `vendor/raylib/LICENSE` ships raylib's licence beside the vendored libraries.
+* `examples/task_sleep` prints the same line every run; the window still shows the cycle the task's message arrived on.
+* The examples archive is now `roc-ray-examples-0.11.0.zip`. It has one top-level folder with a short README and a `spec.json` that records what each example prints when it runs headlessly.
+
+== For host contributors
+
+* The host builds with Zig 0.17.0. `Blueprint.roc` declares the development environment; `blueprint run check` and `blueprint run glue` are what CI runs, and the contributor guide describes both.
+* `src/roc_platform_abi.zig` is checked against the latest nightly's `roc glue` on every pull request.
+* A hosted call's `Try` is matched and rebuilt, never forwarded with `?`. A compiler defect, https://github.com/roc-lang/roc/issues/12555[roc-lang/roc#12555], miscompiles `?` on a hosted result whose error type is an alias.

@@ -1,6 +1,6 @@
 generated-docs/
 
-# The manual built by scripts/build_manual.py
+# The manual, as roc-docs builds it (blueprint run docs)
 .docs-out/
 
 # Built example executables (each Roc app is examples/<name>/main.roc)

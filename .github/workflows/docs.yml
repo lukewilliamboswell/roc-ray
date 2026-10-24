@@ -1,17 +1,17 @@
 name: docs
 
-# Builds the RocRay manual (docs/*.adoc) as a website and a PDF and uploads
-# both for review. The Pages site itself is published by the release workflow,
-# which shows the released version's manual and API reference; publishing from
-# main here would replace that site with documentation for unreleased APIs.
+# Builds the RocRay manual (docs/*.adoc) as a website, a PDF and Markdown with
+# roc-automation's shared renderer, and uploads them for review. The Pages
+# site itself is published by the release workflow, which shows the released
+# version's manual and API reference; publishing from main here would replace
+# that site with documentation for unreleased APIs.
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: docs-${{ github.ref }}
@@ -22,29 +22,46 @@ jobs:
     name: Build the manual
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # Blueprint downloads roc-docs from the roc-automation release named in
+      # Blueprint.roc and checks its bytes against the digest Blueprint.lock
+      # records before handing out the path. The docs environment fetches one
+      # program and needs no Nix.
+      - name: Set up Blueprint
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+
+      - id: renderer
+        name: Get the verified renderer
+        run: echo "path=$(blueprint run docs-renderer)" >> "$GITHUB_OUTPUT"
+
+      # The renderer refuses a Mermaid diagram whose prepared PNG is stale;
+      # this also catches a gallery still whose recording has changed.
+      - name: Check the prepared images
+        run: python3 scripts/prepare_docs_images.py
+
       # This build tracks the branch, not a release, and says so on its title
-      # page rather than claiming the last published version.
-      #
-      # The build fails on what a reader would see going wrong: typographic
-      # replacements in inline code (HTML and PDF text), unresolved cross
-      # references, unhighlighted code, third-party requests, and, rendered in
-      # headless Chromium, Rouge tokens with their own background, text below
-      # WCAG AA contrast in either scheme, and sideways page scroll or buried
-      # content at phone and tablet widths (scripts/check_manual_render.cjs).
-      - name: Build and check HTML and PDF
-        env:
-          DOCS_VERSION: ${{ github.event_name == 'pull_request' && format('pull request {0}', github.event.number) || github.ref_name }}
-        run: python3 scripts/build_manual.py --pdf --docs-version "$DOCS_VERSION"
+      # page rather than claiming the last published version. Every renderer
+      # warning is an error: a broken cross reference, an unprepared image or
+      # an unsupported construct fails the build.
+      - id: docs
+        name: Build HTML, PDF and Markdown
+        uses: lukewilliamboswell/roc-automation/actions/build-docs@7aff4132691ad4fc348abe9df146a57512b49bd6
+        with:
+          renderer-binary: ${{ steps.renderer.outputs.path }}
+          pdf-filename: roc-ray.pdf
+          site-url: https://lukewilliamboswell.github.io/roc-ray/
+          docs-version: ${{ github.event_name == 'pull_request' && format('pull request {0}', github.event.number) || github.ref_name }}
 
       - name: Upload the manual
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: roc-ray-manual
-          path: .docs-out/site
+          path: ${{ steps.docs.outputs.site-directory }}
           retention-days: 14

@@ -61,7 +61,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Assets, Audio, Camera, Capture, Cmd, Color, Devices, Draw, Files, Font, Gamepad, Http, Keys, Math, Mouse, Permission, Physics, Random, Sprite, Sqlite, Stderr, Stdout, Task, Text, Texture, Tilemap, Time, Trace, Udp, Url, Window]
+	exposes [App, Assets, Audio, Camera, Capture, Cmd, Color, Devices, Draw, Files, Font, Gamepad, Http, Keys, Math, Mouse, Permission, Physics, Random, Shader, Sprite, Sqlite, Stderr, Stdout, Task, Text, Texture, Tilemap, Time, Trace, Udp, Url, Window]
 	packages {
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -161,15 +161,9 @@ platform ""
 		"roc_mouse_set_cursor_raw": Host.mouse_set_cursor!,
 		"roc_random_entropy": Host.random_entropy!,
 		"roc_random_i32": Host.random_i32!,
+		"roc_shader_bind_uniforms_raw": Host.shader_bind_uniforms!,
 		"roc_shader_load_source_raw": Host.shader_load_source!,
 		"roc_shader_load_store_raw": Host.shader_load_store!,
-		"roc_shader_location_raw": Host.shader_location!,
-		"roc_shader_set_float_raw": Host.shader_set_float!,
-		"roc_shader_set_int_raw": Host.shader_set_int!,
-		"roc_shader_set_texture_raw": Host.shader_set_texture!,
-		"roc_shader_set_vec2_raw": Host.shader_set_vec2!,
-		"roc_shader_set_vec3_raw": Host.shader_set_vec3!,
-		"roc_shader_set_vec4_raw": Host.shader_set_vec4!,
 		"roc_sqlite_close": Host.sqlite_close!,
 		"roc_sqlite_exec_script": Host.sqlite_exec_script!,
 		"roc_sqlite_open": Host.sqlite_open!,
@@ -225,6 +219,7 @@ platform ""
 import Draw
 import Font
 import Texture
+import Shader
 import Host
 import Text
 import Color

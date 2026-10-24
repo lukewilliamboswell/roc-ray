@@ -330,15 +330,28 @@ camera to find what the mouse is over.
 A _render texture_ is a texture you draw into instead of the window: draw a
 scene into it once, then draw the result, scaled or through a shader, as part
 of the frame. `Draw.RenderTexture.load!({ width, height })` creates one, and
-`Draw.Shader.from_source!` compiles a shader from GLSL source text; both are
-legal in `init!`, `update!`, and tasks. `Draw.Shader.from_store!` loads a
+`Shader.from_source!` compiles a shader from GLSL source text; both are
+legal in `init!`, `update!`, and tasks. `Shader.from_store!` loads a
 shader from an asset store and waits, so it belongs in `init!` or a task.
 A shader _uniform_ is a value the app passes to the shader, such as a time or
-a colour. The app looks up each uniform once and keeps the typed handle it
-gets back, so a setter of the wrong type does not compile.
+a colour. Pass the initial complete record when constructing the shader. Every
+record field must exactly name an active application uniform and have its
+matching type; platform-managed uniforms need not be listed. Construction
+validates those names and types once. A graphical target reports
+`UniformReflectionUnavailable` rather than accepting an unvalidated schema if
+its OpenGL uniform-reflection functions are unavailable.
+
+`shader.with_uniforms(record)` is pure and accepts only the shader's original
+closed record shape and field types. `frame.with_shader!` uploads that complete
+record immediately before drawing. Nested shader scopes restore and re-upload
+the outer record when the inner scope ends. Supported values are `F32`, `I32`,
+`Bool`, `Math.Vec2`, `Draw.Vec3`, `Draw.Vec4`, `Color.Rgba`, and
+`Assets.Texture`; arrays and matrices are not supported. A shader may bind at
+most 32 application uniforms. Encoding a scope currently allocates bounded
+transient lists, so it is not an allocation-free drawing operation.
 
 See {src}/examples/post_process/main.roc[Post Process] for render textures,
-blend scopes, shaders, and cached uniform locations, and
+blend scopes, shaders, and a typed uniform record, and
 {src}/examples/postcard_studio/main.roc[Postcard Studio] for exporting an
 offscreen target larger than the window.
 

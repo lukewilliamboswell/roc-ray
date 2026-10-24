@@ -13,6 +13,18 @@ Texture := {
 }.{
 	TextureHandle : Resource.Texture
 
+	## Encode this texture as one semantic leaf for formats that support
+	## textures. Shader uniform records use this for one GLSL `sampler2D`.
+	encoder_for : encoding -> (Texture, state -> Try(state, err))
+		where [
+			encoding.encode_texture : Texture, state -> Try(state, err),
+		]
+	encoder_for = |_encoding| {
+		Encoding : encoding
+
+		|texture, state| Encoding.encode_texture(texture, state)
+	}
+
 	## Resource-free texture value for pure tests.
 	##
 	## The handle never resolves to a host resource. Copy this value with the

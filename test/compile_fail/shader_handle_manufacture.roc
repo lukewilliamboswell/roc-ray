@@ -7,9 +7,10 @@ app [Model, program] {
 # the shared shader value, but cannot manufacture its handle from a raw integer.
 import rr.App
 import rr.Draw
+import rr.Shader
 
 Model : {
-	shader : Draw.Shader,
+	shader : Shader({}),
 }
 
 program = { init!, update!, render! }
@@ -17,9 +18,9 @@ program = { init!, update!, render! }
 init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
-	|io| {
+	|_io| {
 		handle = Box.box(0)
-		Ok({ shader: Draw.Shader.(handle) })
+		Ok({ shader: Shader.({ resource: handle, uniforms: {} }) })
 	},
 )
 

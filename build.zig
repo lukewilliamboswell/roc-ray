@@ -257,7 +257,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
-        native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        native_tests.root_module.addImport("raylib_c", raylibCModule(b, native_target, optimize));
         addBuildMetadata(b, native_tests.root_module);
         native_tests.root_module.link_libc = true;
         native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
@@ -350,7 +350,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
-        graphical_smoke.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        graphical_smoke.root_module.addImport("raylib_c", raylibCModule(b, graphical_smoke_target, optimize));
         graphical_smoke.root_module.addLibraryPath(b.path(raylib_lib_dir));
         graphical_smoke.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
         switch (native_target.result.os.tag) {
@@ -421,16 +421,32 @@ pub fn build(b: *std.Build) void {
 
 /// The zio module for one target.
 ///
-/// `task-migration` off: tasks stay on the executor that spawned them, which
-/// with one executor means the frame thread. Work stealing would be a way for
-/// Roc code to run on another thread, and nothing in the host is safe for that.
+/// Scheduling is `single_executor`: the one executor is the frame thread, and
+/// no task can move off it. Work stealing would be a way for Roc code to run on
+/// another thread, and nothing in the host is safe for that. The host root
+/// module declares the same `zio_options`, which is what a library build reads;
+/// this build option is the default the test runner root falls back to.
 fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.Optimize) *std.Build.Module {
     const dep = b.dependency("zio", .{
         .target = target,
         .optimize = optimize,
-        .@"task-migration" = false,
+        .scheduling = .single_executor,
     });
     return dep.module("zio");
+}
+
+/// The raylib C API for one target, translated from src/raylib_c.h.
+///
+/// Only src/backend_raylib.zig imports this module (ci/tidy.zig enforces it):
+/// that file is the host's sole C-import boundary into raylib.
+fn raylibCModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.Optimize) *std.Build.Module {
+    const translate = b.addTranslateC(.{
+        .root_source_file = b.path("src/raylib_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate.addIncludePath(b.path("vendor/raylib/include"));
+    return translate.createModule();
 }
 
 /// Detect which RocTarget matches the native platform
@@ -459,8 +475,6 @@ fn buildHostLib(
     optimize: std.builtin.Optimize,
     macos_interfaces_path: []const u8,
 ) *std.Build.Step.Compile {
-    const raylib_include_path = b.path("vendor/raylib/include");
-
     const host_lib = b.addLibrary(.{
         .name = "host",
         .linkage = .static,
@@ -479,12 +493,12 @@ fn buildHostLib(
         }),
     });
 
-    host_lib.root_module.addIncludePath(raylib_include_path);
+    host_lib.root_module.addImport("raylib_c", raylibCModule(b, target, optimize));
     addBuildMetadata(b, host_lib.root_module);
 
     // Coroutine runtime for app tasks. Configured to a single executor on the
-    // frame thread at runtime; task migration is compiled out so the
-    // scheduler cannot move a Roc call onto another thread.
+    // frame thread; zio is built single-executor so the scheduler cannot move
+    // a Roc call onto another thread.
     host_lib.root_module.addImport("zio", zioModule(b, target, optimize));
 
     if (target.result.os.tag == .macos) {
@@ -500,10 +514,6 @@ fn buildHostLib(
             b.path(library_path);
         host_lib.root_module.addSystemFrameworkPath(sysroot_frameworks);
         host_lib.root_module.addLibraryPath(sysroot_lib);
-    }
-
-    if (target.result.os.tag == .linux) {
-        host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
     // The glibc 2.38 C23 aliases the prebuilt Linux raylib references, resolved

@@ -240,7 +240,7 @@ fn tidyFile(
     if (file.hasExtension(".zig")) {
         tidyBanned(file, errors);
 
-        var tree = try std.zig.Ast.parse(gpa, file.text, .zig);
+        var tree = try std.zig.Ast.parse(gpa, file.text, .{});
         defer tree.deinit(gpa);
 
         tidyDeadDeclarations(file, &tree, counter, errors);
@@ -292,6 +292,9 @@ fn tidyBanned(file: SourceFile, errors: *Errors) void {
     if (!std.mem.endsWith(u8, file.path, "backend_raylib.zig")) {
         if (std.mem.indexOf(u8, file.text, "raylib.rl.")) |offset| {
             errors.addBanned(file, offset, "raylib.rl.", "raylib backend functions (colorToRl, drawText, etc.)");
+        }
+        if (std.mem.indexOf(u8, file.text, "@import(\"raylib_c\")")) |offset| {
+            errors.addBanned(file, offset, "@import(\"raylib_c\")", "import from backend_raylib.zig");
         }
         if (std.mem.indexOf(u8, file.text, "@cInclude(\"raylib.h\")")) |offset| {
             errors.addBanned(file, offset, "@cInclude(\"raylib.h\")", "import from backend_raylib.zig");

@@ -576,7 +576,7 @@ fn invalidHandle() *u64 {
 /// SQLite's C interface wants a terminator a `Str` does not carry, and the copy
 /// also means the worker is not reading Roc memory while the frame thread runs.
 fn dupeZ(allocator: std.mem.Allocator, text: abi.RocStr) ?[:0]const u8 {
-    return allocator.dupeZ(u8, text.asSlice()) catch null;
+    return allocator.dupeSentinel(u8, text.asSlice(), 0) catch null;
 }
 
 /// Copy every binding out of Roc memory, so a worker can read them.
@@ -589,7 +589,7 @@ fn copyBindings(
     var filled: usize = 0;
     errdefer freeBindings(allocator, copied[0..filled]);
     for (items) |binding| {
-        const name = allocator.dupeZ(u8, binding.name.asSlice()) catch {
+        const name = allocator.dupeSentinel(u8, binding.name.asSlice(), 0) catch {
             freeBindings(allocator, copied[0..filled]);
             allocator.free(copied);
             return null;

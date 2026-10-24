@@ -13,11 +13,8 @@ const capture = @import("capture.zig");
 /// Roc's `Color.Rgba`, the RGBA record that crosses the host boundary.
 pub const Color = abi.ColorRgba;
 
-/// Raw raylib C bindings.
-pub const rl = @cImport({
-    @cInclude("raylib.h");
-    @cInclude("rlgl.h");
-});
+/// Raw raylib C bindings, translated from src/raylib_c.h by build.zig.
+pub const rl = @import("raylib_c");
 
 /// Native sound value retained in the host resource heap.
 pub const Sound = rl.Sound;
@@ -2299,7 +2296,7 @@ pub fn drawCircleGradient(args: anytype) void {
 /// Draw FPS counter at specified position.
 pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
-    const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
+    const text = std.mem.printSentinel(&buf, "FPS: {d}", .{rl.GetFPS()}, 0) catch return;
     rl.DrawTextEx(defaultFont(), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 

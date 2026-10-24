@@ -33,7 +33,7 @@ pub const Family = enum(u8) {
 };
 
 /// Number of independently accounted event families.
-pub const family_count = @typeInfo(Family).@"enum".fields.len;
+pub const family_count = @typeInfo(Family).@"enum".field_names.len;
 
 /// Admission class used to protect summary capacity from detail traffic.
 pub const Priority = enum { summary, detail };
@@ -595,7 +595,7 @@ pub const Session = struct {
             error.OutOfMemory => error.OutOfMemory,
         };
         errdefer pool.deinit();
-        const path = allocator.dupeZ(u8, options.path) catch return error.OutOfMemory;
+        const path = allocator.dupeSentinel(u8, options.path, 0) catch return error.OutOfMemory;
         errdefer allocator.free(path);
         shared.* = .{
             .allocator = allocator,
@@ -1473,7 +1473,7 @@ test "loss snapshots are per-family saturating and drain once" {
 }
 
 test "summary starvation restores gap counts until capacity returns" {
-    const path = try std.testing.allocator.dupeZ(u8, "unused");
+    const path = try std.testing.allocator.dupeSentinel(u8, "unused", 0);
     defer std.testing.allocator.free(path);
     var shared = Shared{
         .allocator = std.testing.allocator,
@@ -1624,7 +1624,7 @@ test "session writer creates and finalizes a queryable stage one database" {
     }));
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1717,7 +1717,7 @@ test "session refuses overwrite and an output limit still shuts down cleanly" {
     try std.testing.expect(session.outputLimited());
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1769,7 +1769,7 @@ test "blocked writer saturation persists an explicit gap without borrowing summa
     try std.testing.expect(report.complete);
     try std.testing.expectEqual(@as(u64, 1), report.omitted_events);
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1803,14 +1803,14 @@ test "summary detail admits only summaries and rejects standard and full detail"
     try std.testing.expect(session.recordCallback(.{ .cycle = 0, .timestamp_ns = 1, .kind = 0, .name = "init!" }));
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
     defer _ = rocray_sqlite_close(db);
     inline for (.{ "task_events", "hosted_effects", "queue_pressure", "resource_lifecycle", "structural_latency", "allocation_events" }) |table| {
         var sql_buffer: [96]u8 = undefined;
-        const sql = try std.fmt.bufPrintZ(&sql_buffer, "SELECT count(*) FROM {s}", .{table});
+        const sql = try std.mem.printSentinel(&sql_buffer, "SELECT count(*) FROM {s}", .{table}, 0);
         try std.testing.expectEqual(@as(i64, 0), queryI64(db, sql).?);
     }
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM draw_summaries").?);
@@ -1836,7 +1836,7 @@ test "abrupt shutdown leaves a queryable committed prefix marked unclean" {
     while (session.shared.accepting.load(.acquire)) std.Thread.yield() catch std.atomic.spinLoopHint();
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1866,7 +1866,7 @@ test "post-start writer failure refuses recording without stopping the applicati
     try std.testing.expect(!session.recordCycle(.{ .cycle = 2, .start_ns = 2, .duration_ns = 1, .update_ns = 1, .render_callback_ns = 0, .task_executor_ns = 0, .host_other_ns = 0 }));
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1891,7 +1891,7 @@ test "detail SQL preserves lifecycle saturation and structural semantics" {
     try std.testing.expect(session.recordLatency(.{ .cycle = 4, .timestamp_ns = 30, .kind = 1, .subject_id = 91, .duration_ns = 20, .name = "input_to_presentation" }));
     _ = session.stop();
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1920,7 +1920,7 @@ test "stop flushes tail loss and returns persisted terminal facts" {
     try std.testing.expect(!report.output_limited);
     try std.testing.expectEqual(@as(u64, 3), report.omitted_events);
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));
@@ -1948,7 +1948,7 @@ test "unresolved run relationship prevents a clean finalization" {
     try std.testing.expect(report.failed);
     try std.testing.expect(!report.complete);
 
-    const zpath = try std.testing.allocator.dupeZ(u8, path);
+    const zpath = try std.testing.allocator.dupeSentinel(u8, path, 0);
     defer std.testing.allocator.free(zpath);
     var db: ?*anyopaque = null;
     try std.testing.expectEqual(SQLITE_OK, rocray_sqlite_open(zpath.ptr, 2, 1000, &db));

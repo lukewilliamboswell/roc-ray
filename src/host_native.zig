@@ -53,6 +53,11 @@ pub const std_options: std.Options = .{
     .log_scope_levels = &.{.{ .scope = .zio, .level = .warn }},
 };
 
+/// One executor, on the frame thread, and no task migration: work stealing
+/// would be a way for Roc code to run on another thread, and nothing in the
+/// host is safe for that. build.zig sets the same default for test roots.
+pub const zio_options: zio.Options = .{ .scheduling = .single_executor };
+
 // Type aliases
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
@@ -1541,7 +1546,7 @@ fn resolveBeneathCover(io: std.Io, allocator: std.mem.Allocator, request: *const
     var dir = try confined_path.openDir(io, root_dir, rest, .{ .create = request.create });
     dir.close(io);
     return if (rest.len == 0)
-        allocator.dupeZ(u8, canonical_root)
+        allocator.dupeSentinel(u8, canonical_root, 0)
     else
         std.fs.path.joinZ(allocator, &.{ canonical_root, rest });
 }

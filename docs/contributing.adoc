@@ -36,7 +36,22 @@ the smallest app or example that shows the problem.
 
 == Development setup
 
-Install:
+On x86_64 Linux and Apple Silicon macOS, `Blueprint.roc` declares the
+development environment and `Blueprint.lock` fixes it. With
+https://github.com/lukewilliamboswell/roc-blueprint[Blueprint] and Nix
+installed, and the Roc nightly as `roc` on `PATH`, run:
+
+[source,bash]
+----
+blueprint shell              # Zig, Python, zstd and roc-stable on PATH
+blueprint run glue           # the committed host ABI matches `roc glue`
+blueprint run check          # zig build lint
+blueprint run test           # zig build test
+----
+
+`roc-stable` is the compiler that runs the Roc scripts under `scripts/`; it is
+not the compiler the platform is tested with. Elsewhere, or without Nix,
+install:
 
 * https://ziglang.org/download/[Zig] 0.16.0
 * The exact Roc nightly named in {src}/platform/main.roc[`platform/main.roc`],

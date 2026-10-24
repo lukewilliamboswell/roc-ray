@@ -143,3 +143,6 @@ probe_out/
 .docs-api/
 .pages/
 www/
+
+# Blueprint state and generated environment
+.blueprint/

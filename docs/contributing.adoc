@@ -55,7 +55,7 @@ with. The platform, its examples and its tests name no compiler: they are
 tested with the latest Roc nightly, which you install yourself as `roc`.
 Elsewhere, or without Nix, install:
 
-* https://ziglang.org/download/[Zig] 0.16.0
+* https://ziglang.org/download/[Zig] 0.17.0
 * The https://github.com/roc-lang/nightlies/releases/latest[latest Roc nightly],
   available as `roc` on `PATH`
 * Python 3 and `zstd` for the full test and bundle checks

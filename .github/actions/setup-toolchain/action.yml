@@ -1,6 +1,6 @@
 name: Install the RocRay toolchain
 description: >-
-  Install Zig 0.16.0 and the Roc nightly this run resolved once, in its first
+  Install Zig 0.17.0 and the Roc nightly this run resolved once, in its first
   job, and report the compiler.
 
 inputs:
@@ -18,7 +18,7 @@ runs:
     - if: inputs.zig == 'true'
       uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       with:
-        version: 0.16.0
+        version: 0.17.0
 
     # The platform names no compiler: every job of a run installs the one
     # nightly that run resolved, so one run never mixes compilers.

@@ -324,7 +324,7 @@ pub fn clearAfterWorkStops() void {
 /// only the process the host started is terminated.
 fn terminate(id: std.process.Child.Id) void {
     if (comptime builtin.os.tag == .windows) {
-        _ = std.os.windows.ntdll.NtTerminateProcess(id, @enumFromInt(1));
+        _ = std.os.windows.ntdll.NtTerminateProcess(id, @fromBackingInt(@intCast(1)));
     } else {
         std.posix.kill(-id, .KILL) catch {};
     }
@@ -572,8 +572,8 @@ pub fn spawnErrorCode(err: anyerror) u8 {
 pub fn exitCode(term: std.process.Child.Term) i64 {
     return switch (term) {
         .exited => |code| @intCast(code),
-        .signal => |sig| -@as(i64, @intCast(@intFromEnum(sig))),
-        .stopped => |sig| -@as(i64, @intCast(@intFromEnum(sig))),
+        .signal => |sig| -@as(i64, @intCast(@backingInt(sig))),
+        .stopped => |sig| -@as(i64, @intCast(@backingInt(sig))),
         .unknown => |status| @intCast(status),
     };
 }
@@ -596,7 +596,7 @@ test "a spawn failure is named in the app's vocabulary" {
 test "a signalled child is not confused with one that chose an exit code" {
     try std.testing.expectEqual(@as(i64, 0), exitCode(.{ .exited = 0 }));
     try std.testing.expectEqual(@as(i64, 7), exitCode(.{ .exited = 7 }));
-    try std.testing.expect(exitCode(.{ .signal = @enumFromInt(9) }) < 0);
+    try std.testing.expect(exitCode(.{ .signal = @fromBackingInt(@intCast(9)) }) < 0);
 }
 
 test "the child bound admits exactly its own number of runs" {

@@ -38,7 +38,7 @@ config = [
 			Extend("scripts"),
 			# The exact Zig release that builds the host and its linker inputs;
 			# build.zig.zon names the same version.
-			Tools(["nix#zig_0_16", "nix#python3", "nix#zstd", "nix#curl", "nix#binutils"]),
+			Tools(["nix#zig_0_17", "nix#python3", "nix#zstd", "nix#curl", "nix#binutils"]),
 		],
 	),
 	Shell("default", [Use("dev")]),

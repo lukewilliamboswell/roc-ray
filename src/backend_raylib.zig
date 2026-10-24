@@ -13,11 +13,8 @@ const capture = @import("capture.zig");
 /// Roc's `Color.Rgba`, the RGBA record that crosses the host boundary.
 pub const Color = abi.ColorRgba;
 
-/// Raw raylib C bindings.
-pub const rl = @cImport({
-    @cInclude("raylib.h");
-    @cInclude("rlgl.h");
-});
+/// Raw raylib C bindings, translated from src/raylib_c.h by build.zig.
+pub const rl = @import("raylib_c");
 
 /// Native sound value retained in the host resource heap.
 pub const Sound = rl.Sound;
@@ -67,15 +64,15 @@ pub const Shader = rl.Shader;
 /// Persistent packed keyboard state, derived once per input interval.
 /// Bit 0 is held, bit 1 is pressed this interval, and bit 2 is released this
 /// interval.
-var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+var key_state: [ffi.KEY_COUNT]u8 = @as([ffi.KEY_COUNT]u8, @splat(0));
 
 /// Persistent packed mouse button state, with the same bits.
-var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = @as([ffi.MOUSE_BUTTON_COUNT]u8, @splat(0));
 
 /// Persistent gamepad snapshot, flattened by gamepad then control index.
-var gamepad_available: [ffi.GAMEPAD_COUNT]u8 = [_]u8{0} ** ffi.GAMEPAD_COUNT;
-var gamepad_button_state: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
-var gamepad_axes: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 = [_]f32{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT);
+var gamepad_available: [ffi.GAMEPAD_COUNT]u8 = @as([ffi.GAMEPAD_COUNT]u8, @splat(0));
+var gamepad_button_state: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 = @as([(ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT)]u8, @splat(0));
+var gamepad_axes: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 = @as([(ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT)]f32, @splat(0));
 
 /// How many typed codepoints one input interval delivers.
 ///
@@ -92,7 +89,7 @@ pub const TEXT_INPUT_CAPACITY: usize = 32;
 const RAYLIB_CHAR_QUEUE_CAPACITY: usize = 16;
 
 /// Typed characters recorded since the interval began, in the order typed.
-var text_input: [TEXT_INPUT_CAPACITY]u32 = [_]u32{0} ** TEXT_INPUT_CAPACITY;
+var text_input: [TEXT_INPUT_CAPACITY]u32 = @as([TEXT_INPUT_CAPACITY]u32, @splat(0));
 var text_input_len: usize = 0;
 var text_input_overflowed: bool = false;
 var text_input_high_water: usize = 0;
@@ -123,7 +120,7 @@ pub const InputSource = enum { hardware, virtual };
 /// clicks, position.
 fn EdgeAccumulator(comptime count: usize) type {
     return struct {
-        bits: [count]u8 = [_]u8{0} ** count,
+        bits: [count]u8 = @as([count]u8, @splat(0)),
 
         fn record(self: *@This(), index: usize, edge: InputEdge) void {
             self.bits[index] |= switch (edge) {
@@ -139,7 +136,7 @@ fn EdgeAccumulator(comptime count: usize) type {
         }
 
         fn clear(self: *@This()) void {
-            self.bits = [_]u8{0} ** count;
+            self.bits = @as([count]u8, @splat(0));
         }
     };
 }
@@ -300,7 +297,7 @@ var taken_events: [INPUT_EVENT_CAPACITY]InputEventRecord = undefined;
 
 fn keyRecord(code: usize, edge: InputEdge) InputEventRecord {
     return .{
-        .kind = @intFromEnum(@as(InputEventKind, if (edge == .press) .key_pressed else .key_released)),
+        .kind = @backingInt(@as(InputEventKind, if (edge == .press) .key_pressed else .key_released)),
         .code = @intCast(code),
         .x = 0,
         .y = 0,
@@ -309,7 +306,7 @@ fn keyRecord(code: usize, edge: InputEdge) InputEventRecord {
 
 fn buttonRecord(button: usize, edge: InputEdge, position: Vec2) InputEventRecord {
     return .{
-        .kind = @intFromEnum(@as(InputEventKind, if (edge == .press) .button_pressed else .button_released)),
+        .kind = @backingInt(@as(InputEventKind, if (edge == .press) .button_pressed else .button_released)),
         .code = @intCast(button),
         .x = position.x,
         .y = position.y,
@@ -317,11 +314,11 @@ fn buttonRecord(button: usize, edge: InputEdge, position: Vec2) InputEventRecord
 }
 
 fn wheelRecord(x_offset: f32, y_offset: f32) InputEventRecord {
-    return .{ .kind = @intFromEnum(InputEventKind.wheel), .code = 0, .x = x_offset, .y = y_offset };
+    return .{ .kind = @backingInt(InputEventKind.wheel), .code = 0, .x = x_offset, .y = y_offset };
 }
 
 fn textRecord(codepoint: u32) InputEventRecord {
-    return .{ .kind = @intFromEnum(InputEventKind.text), .code = codepoint, .x = 0, .y = 0 };
+    return .{ .kind = @backingInt(InputEventKind.text), .code = codepoint, .x = 0, .y = 0 };
 }
 
 fn sourceFeeds(sources: EventSources, source: InputSource) bool {
@@ -432,7 +429,7 @@ const all_hardware = EventSources{ .keyboard = .hardware, .mouse = .hardware, .t
 const all_virtual = EventSources{ .keyboard = .virtual, .mouse = .virtual, .text = .virtual };
 
 fn expectEvent(record: InputEventRecord, kind: InputEventKind, code: u32, x: f32, y: f32) !void {
-    try std.testing.expectEqual(@intFromEnum(kind), record.kind);
+    try std.testing.expectEqual(@backingInt(kind), record.kind);
     try std.testing.expectEqual(code, record.code);
     try std.testing.expectEqual(x, record.x);
     try std.testing.expectEqual(y, record.y);
@@ -665,7 +662,7 @@ test "recorded edges surface even when the level did not change" {
 test "gamepad buttons use one held query per connected button" {
     const Query = struct {
         count: usize = 0,
-        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = @as([ffi.GAMEPAD_BUTTON_COUNT]bool, @splat(false)),
 
         fn isDown(self: *@This(), _: c_int, button: c_int) bool {
             self.count += 1;
@@ -673,7 +670,7 @@ test "gamepad buttons use one held query per connected button" {
         }
     };
 
-    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var states = @as([(ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT)]u8, @splat(0));
     var query = Query{};
 
     updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
@@ -685,7 +682,7 @@ test "gamepad buttons use one held query per connected button" {
 
 test "gamepad button edges survive disconnect and reconnect" {
     const Query = struct {
-        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = @as([ffi.GAMEPAD_BUTTON_COUNT]bool, @splat(false)),
 
         fn isDown(self: *@This(), _: c_int, button: c_int) bool {
             return self.down[@intCast(button)];
@@ -694,7 +691,7 @@ test "gamepad button edges survive disconnect and reconnect" {
 
     const button = 3;
     const index = gamepadButtonIndex(0, button);
-    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var states = @as([(ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT)]u8, @splat(0));
     var query = Query{};
 
     query.down[button] = true;
@@ -1204,7 +1201,7 @@ pub fn updateKeyboardStateFrom(down: *const [ffi.KEY_COUNT]bool) void {
 /// Called when an app lifetime starts, so a key held when one app exited is
 /// not still held when the next one begins.
 pub fn clearKeyState() void {
-    key_state = [_]u8{0} ** ffi.KEY_COUNT;
+    key_state = @as([ffi.KEY_COUNT]u8, @splat(0));
     hardware_key_edges.clear();
     virtual_key_edges.clear();
 }
@@ -1228,7 +1225,7 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
 
 /// Forget every mouse button's held and edge bits, as `clearKeyState` does.
 pub fn clearMouseButtonState() void {
-    mouse_button_state = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+    mouse_button_state = @as([ffi.MOUSE_BUTTON_COUNT]u8, @splat(0));
     hardware_mouse_button_edges.clear();
 }
 
@@ -2340,7 +2337,7 @@ pub fn drawCircleGradient(args: anytype) void {
 /// Draw FPS counter at specified position.
 pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
-    const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
+    const text = std.mem.printSentinel(&buf, "FPS: {d}", .{rl.GetFPS()}, 0) catch return;
     rl.DrawTextEx(defaultFont(), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 
@@ -2507,7 +2504,7 @@ pub const MouseCursor = enum(c_int) {
 
 /// Set the OS cursor shape.
 pub fn setMouseCursor(cursor: MouseCursor) void {
-    rl.SetMouseCursor(@intFromEnum(cursor));
+    rl.SetMouseCursor(@backingInt(cursor));
 }
 
 /// Show the OS cursor.
@@ -2959,12 +2956,12 @@ pub const Key = enum(c_int) {
 
 /// Check if a key was pressed (not held).
 pub fn isKeyPressed(key: Key) bool {
-    return rl.IsKeyPressed(@intFromEnum(key));
+    return rl.IsKeyPressed(@backingInt(key));
 }
 
 /// Check if a key is currently held down.
 pub fn isKeyDown(key: Key) bool {
-    return rl.IsKeyDown(@intFromEnum(key));
+    return rl.IsKeyDown(@backingInt(key));
 }
 
 /// Mouse button enum for type-safe button handling.
@@ -2995,17 +2992,17 @@ pub fn getMouseDelta() Vec2 {
 
 /// Check if a mouse button is down.
 pub fn isMouseButtonDown(button: MouseButton) bool {
-    return rl.IsMouseButtonDown(@intFromEnum(button));
+    return rl.IsMouseButtonDown(@backingInt(button));
 }
 
 /// Check if a mouse button was pressed.
 pub fn isMouseButtonPressed(button: MouseButton) bool {
-    return rl.IsMouseButtonPressed(@intFromEnum(button));
+    return rl.IsMouseButtonPressed(@backingInt(button));
 }
 
 /// Check if a mouse button was released.
 pub fn isMouseButtonReleased(button: MouseButton) bool {
-    return rl.IsMouseButtonReleased(@intFromEnum(button));
+    return rl.IsMouseButtonReleased(@backingInt(button));
 }
 
 /// Get mouse wheel movement.

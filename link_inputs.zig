@@ -17,7 +17,7 @@ const std = @import("std");
 
 /// Linker inputs are always built at one fixed optimization mode, whatever the
 /// host is built with, so a release has exactly one identity per profile.
-pub const release_optimize: std.builtin.OptimizeMode = .ReleaseFast;
+pub const release_optimize: std.builtin.Optimize = .fast;
 
 /// Roc target definitions for native platforms
 /// Maps to vendored raylib library directories
@@ -323,7 +323,7 @@ pub fn generateLibcStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         .version = .{ .major = 6, .minor = 0, .patch = 0 },
         .root_module = b.createModule(.{
             .target = target,
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
         }),
     });
 
@@ -339,7 +339,7 @@ pub fn generateLibmStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Bu
         .version = .{ .major = 6, .minor = 0, .patch = 0 },
         .root_module = b.createModule(.{
             .target = target,
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
         }),
     });
 
@@ -359,7 +359,7 @@ pub fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.B
         .version = .{ .major = 6, .minor = 0, .patch = 0 },
         .root_module = b.createModule(.{
             .target = target,
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
         }),
     });
 
@@ -384,7 +384,7 @@ pub fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.B
 pub fn buildLibvpx(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.builtin.Optimize,
     roc_target: RocTarget,
 ) *std.Build.Step.Compile {
     // Vendored libvpx, built from source for every target rather than shipped
@@ -407,7 +407,7 @@ pub fn buildLibvpx(
         .root_module = b.createModule(.{
             .target = libvpx_target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
+            .strip = optimize != .debug,
             .pic = true,
             // As with msf_gif: Roc's final link has no UBSan runtime.
             .sanitize_c = .off,
@@ -499,7 +499,7 @@ const sqlite3_flags = [_][]const u8{
 pub fn buildSqlite3(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.builtin.Optimize,
     roc_target: RocTarget,
 ) *std.Build.Step.Compile {
     // As with libvpx: MSVC has no libc headers available when cross-compiling
@@ -517,7 +517,7 @@ pub fn buildSqlite3(
         .root_module = b.createModule(.{
             .target = sqlite_target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
+            .strip = optimize != .debug,
             .pic = true,
             // As with the other vendored C: Roc's final link has no UBSan runtime.
             .sanitize_c = .off,
@@ -551,7 +551,7 @@ pub fn buildSqlite3(
 pub fn buildMsfGif(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    mode: std.builtin.OptimizeMode,
+    mode: std.builtin.Optimize,
 ) *std.Build.Step.Compile {
     const msf_gif = b.addLibrary(.{
         .name = "msf_gif",
@@ -559,7 +559,7 @@ pub fn buildMsfGif(
         .root_module = b.createModule(.{
             .target = target,
             .optimize = mode,
-            .strip = mode != .Debug,
+            .strip = mode != .debug,
             .pic = true,
             // Debug builds otherwise emit UBSan calls into the vendored C, and
             // Roc's final link has no UBSan runtime to resolve them against.

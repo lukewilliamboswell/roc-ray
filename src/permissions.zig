@@ -712,7 +712,7 @@ test "the table is bounded" {
     for (0..capacity) |_| try policy.add(.clipboard_read);
     try std.testing.expectError(error.TooManyDeclarations, policy.add(.clipboard_read));
     var long: Policy = .{};
-    const big = [_]u8{'a'} ** 4096;
+    const big = @as([4096]u8, @splat('a'));
     for (0..4) |_| try long.add(.{ .command = &big });
     try std.testing.expectError(error.DeclarationTextTooLong, long.add(.{ .command = "x" }));
 }

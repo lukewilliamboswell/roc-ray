@@ -1905,6 +1905,21 @@ gai_strerror:
     xor %rax, %rax
     ret
 
+# Interface scope IDs (zio's IPv6 address parsing and formatting)
+.balign 8
+.globl if_nametoindex
+.type if_nametoindex, %function
+if_nametoindex:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl if_indextoname
+.type if_indextoname, %function
+if_indextoname:
+    xor %rax, %rax
+    ret
+
 # More file I/O
 .balign 8
 .globl preadv64

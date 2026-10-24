@@ -44,7 +44,7 @@ pub const Kind = enum(u8) {
     comptime {
         // Zero is the reserved "not a token" byte; `decodeToken` rejects it.
         for (std.enums.values(Kind)) |kind| {
-            if (@intFromEnum(kind) == 0) @compileError("host resource kind must be non-zero");
+            if (@backingInt(kind) == 0) @compileError("host resource kind must be non-zero");
         }
     }
 };
@@ -113,13 +113,13 @@ pub fn HostResourceHeap(
         };
 
         slots: [capacity]Slot = undefined,
-        generations: [capacity]u64 = [_]u64{0} ** capacity,
-        live: [capacity]bool = [_]bool{false} ** capacity,
+        generations: [capacity]u64 = @as([capacity]u64, @splat(0)),
+        live: [capacity]bool = @as([capacity]bool, @splat(false)),
         /// Slots whose last Roc reference is gone but whose native resource is
         /// still alive. They stay `live` so the slot cannot be handed out
         /// again before the resource behind it has been destroyed.
-        retired: [capacity]bool = [_]bool{false} ** capacity,
-        retired_at: [capacity]u64 = [_]u64{0} ** capacity,
+        retired: [capacity]bool = @as([capacity]bool, @splat(false)),
+        retired_at: [capacity]u64 = @as([capacity]u64, @splat(0)),
         retired_count: usize = 0,
         active_count: usize = 0,
         high_water_count: usize = 0,
@@ -326,7 +326,7 @@ pub fn HostResourceHeap(
 
 fn encodeToken(index: usize, generation: u64, comptime kind: Kind) u64 {
     return (generation << token_generation_shift) |
-        (@as(u64, @intFromEnum(kind)) << token_index_bits) |
+        (@as(u64, @backingInt(kind)) << token_index_bits) |
         @as(u64, @intCast(index + 1));
 }
 
@@ -438,7 +438,7 @@ test "resource observer distinguishes use and generation-safe slot reuse" {
         var operations: [8]u8 = undefined;
         var count: usize = 0;
         fn callback(event: Observation) u64 {
-            operations[count] = @intFromEnum(event.operation);
+            operations[count] = @backingInt(event.operation);
             count += 1;
             return 0;
         }

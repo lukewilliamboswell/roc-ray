@@ -21,7 +21,15 @@ Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : 
 		]
 	from_source! = |cfg, uniforms| {
 		schema = uniform_schema(uniforms)?
-		shader = load_shader_source!(cfg)?
+		# Rebuilt with a match, never `?`. A hosted call's error union is fixed
+		# by the host, so it cannot widen into this function's row. The compiler
+		# misses that when the row is an alias such as `ShaderLoadSourceError`,
+		# and `?` then reads the host's `Ok` as an `Err` (roc-lang/roc#12555).
+		shader = match Host.shader_load_source!(cfg) {
+			Ok(loaded) => loaded
+			Err(ShaderLoadFailed) => return Err(ShaderLoadFailed)
+			Err(ResourceLimit) => return Err(ResourceLimit)
+		}
 		bind_shader_uniforms!(shader, schema)?
 		values = uniform_values(uniforms)
 		Ok(Shader.({ resource: shader, uniforms, values: values.values }))
@@ -36,7 +44,15 @@ Shader(uniforms) :: { resource : Resource.Shader, uniforms : uniforms, values : 
 		]
 	from_store! = |store, cfg, uniforms| {
 		schema = uniform_schema(uniforms)?
-		shader = load_shader_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })?
+		# Rebuilt with a match, never `?`; see `from_source!`.
+		shader = match Host.shader_load_store!({ store: store.for_host(), vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path }) {
+			Ok(loaded) => loaded
+			Err(PathInvalid) => return Err(PathInvalid)
+			Err(NotFound) => return Err(NotFound)
+			Err(ReadFailed) => return Err(ReadFailed)
+			Err(ShaderLoadFailed) => return Err(ShaderLoadFailed)
+			Err(ResourceLimit) => return Err(ResourceLimit)
+		}
 		bind_shader_uniforms!(shader, schema)?
 		values = uniform_values(uniforms)
 		Ok(Shader.({ resource: shader, uniforms, values: values.values }))
@@ -168,27 +184,6 @@ uniform_values = |uniforms|
 	match encode_uniforms(uniforms, ValueMode) {
 		Ok(state) => state
 		Err(NestedUniformRecord(_)) => crash "nested shader uniform record escaped construction validation"
-	}
-
-# A hosted result's error row is the host's fixed representation. Each tag is
-# rebuilt here, so `?` widens a Roc-constructed row instead of the host's.
-load_shader_source! : Host.ShaderLoadSource => Try(Resource.Shader, [ResourceLimit, ShaderLoadFailed])
-load_shader_source! = |cfg|
-	match Host.shader_load_source!(cfg) {
-		Ok(shader) => Ok(shader)
-		Err(ResourceLimit) => Err(ResourceLimit)
-		Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
-	}
-
-load_shader_store! : Host.ShaderLoadStore => Try(Resource.Shader, [NotFound, PathInvalid, ReadFailed, ResourceLimit, ShaderLoadFailed])
-load_shader_store! = |request|
-	match Host.shader_load_store!(request) {
-		Ok(shader) => Ok(shader)
-		Err(NotFound) => Err(NotFound)
-		Err(PathInvalid) => Err(PathInvalid)
-		Err(ReadFailed) => Err(ReadFailed)
-		Err(ResourceLimit) => Err(ResourceLimit)
-		Err(ShaderLoadFailed) => Err(ShaderLoadFailed)
 	}
 
 bind_shader_uniforms! : Resource.Shader, List(Host.ShaderUniformSchema) => Try({}, [ResourceLimit, UniformNotFound(Str), UniformReflectionUnavailable, UniformTypeMismatch({ name : Str, expected : ShaderUniformType, actual : ShaderUniformType })])

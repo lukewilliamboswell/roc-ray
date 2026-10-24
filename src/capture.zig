@@ -500,7 +500,7 @@ pub fn planDownscale(
     if (target_width == source_width and target_height == source_height) return null;
 
     var plan = DownscalePlan{
-        .levels = [_]Extent{.{ .width = 0, .height = 0 }} ** max_downscale_levels,
+        .levels = @as([max_downscale_levels]Extent, @splat(.{ .width = 0, .height = 0 })),
         .count = 1,
     };
     plan.levels[0] = .{ .width = source_width, .height = source_height };

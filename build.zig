@@ -51,11 +51,20 @@ pub fn build(b: *std.Build) void {
 
     // Cleanup step: remove the host archives this build writes.
     const cleanup_step = b.step("clean", "Remove the built host libraries");
+    const remove_files = b.addRunArtifact(b.addExecutable(.{
+        .name = "remove_files",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci/remove_files.zig"),
+            .target = b.graph.host,
+            .optimize = .debug,
+        }),
+    }));
+    remove_files.setCwd(b.path("."));
+    remove_files.has_side_effects = true;
     for (all_native_targets) |roc_target| {
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
-        )).step);
+        remove_files.addArg(b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }));
     }
+    cleanup_step.dependOn(&remove_files.step);
 
     // Producer-only: ordinary builds never run the linker-input recipes.
     _ = link_inputs.addProducerStep(b);
@@ -122,7 +131,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/tidy.zig"),
             .target = native_target,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const run_tidy = b.addRunArtifact(tidy);
@@ -135,7 +144,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/zig_lints.zig"),
             .target = native_target,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const run_lints = b.addRunArtifact(zig_lints);
@@ -234,7 +243,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
-        native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        native_tests.root_module.addImport("raylib_c", raylibCModule(b, native_target, optimize));
         addBuildMetadata(b, native_tests.root_module, roc_compiler);
         native_tests.root_module.link_libc = true;
         native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
@@ -327,7 +336,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
-        graphical_smoke.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        graphical_smoke.root_module.addImport("raylib_c", raylibCModule(b, graphical_smoke_target, optimize));
         graphical_smoke.root_module.addLibraryPath(b.path(raylib_lib_dir));
         graphical_smoke.root_module.linkSystemLibrary("raylib", .{ .use_pkg_config = .no });
         switch (native_target.result.os.tag) {
@@ -398,16 +407,32 @@ pub fn build(b: *std.Build) void {
 
 /// The zio module for one target.
 ///
-/// `task-migration` off: tasks stay on the executor that spawned them, which
-/// with one executor means the frame thread. Work stealing would be a way for
-/// Roc code to run on another thread, and nothing in the host is safe for that.
-fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+/// Scheduling is `single_executor`: the one executor is the frame thread, and
+/// no task can move off it. Work stealing would be a way for Roc code to run on
+/// another thread, and nothing in the host is safe for that. The host root
+/// module declares the same `zio_options`, which is what a library build reads;
+/// this build option is the default the test runner root falls back to.
+fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.Optimize) *std.Build.Module {
     const dep = b.dependency("zio", .{
         .target = target,
         .optimize = optimize,
-        .@"task-migration" = false,
+        .scheduling = .single_executor,
     });
     return dep.module("zio");
+}
+
+/// The raylib C API for one target, translated from src/raylib_c.h.
+///
+/// Only src/backend_raylib.zig imports this module (ci/tidy.zig enforces it):
+/// that file is the host's sole C-import boundary into raylib.
+fn raylibCModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.Optimize) *std.Build.Module {
+    const translate = b.addTranslateC(.{
+        .root_source_file = b.path("src/raylib_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate.addIncludePath(b.path("vendor/raylib/include"));
+    return translate.createModule();
 }
 
 /// Detect which RocTarget matches the native platform
@@ -430,46 +455,13 @@ fn detectNativeRocTarget(target: std.Target) ?RocTarget {
     };
 }
 
-/// Custom step to remove a single file if it exists
-const CleanupStep = struct {
-    step: std.Build.Step,
-    path: std.Build.LazyPath,
-
-    fn create(b: *std.Build, path: std.Build.LazyPath) *CleanupStep {
-        const self = b.allocator.create(CleanupStep) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "cleanup",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .path = path,
-        };
-        return self;
-    }
-
-    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
-        _ = options;
-        const self: *CleanupStep = @fieldParentPtr("step", step);
-        const io = step.owner.graph.io;
-        const path = self.path.getPath2(step.owner, null);
-        std.Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
-            error.FileNotFound => {},
-            else => return err,
-        };
-    }
-};
-
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.builtin.Optimize,
     macos_interfaces_path: []const u8,
     roc_compiler: []const u8,
 ) *std.Build.Step.Compile {
-    const raylib_include_path = b.path("vendor/raylib/include");
-
     const host_lib = b.addLibrary(.{
         .name = "host",
         .linkage = .static,
@@ -477,7 +469,7 @@ fn buildHostLib(
             .root_source_file = b.path("src/host_native.zig"),
             .target = target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
+            .strip = optimize != .debug,
             .pic = true,
             // On MSVC targets LLVM implements the stack protector with its own
             // `__security_cookie` global, which collides with the definition in
@@ -494,12 +486,12 @@ fn buildHostLib(
         }),
     });
 
-    host_lib.root_module.addIncludePath(raylib_include_path);
+    host_lib.root_module.addImport("raylib_c", raylibCModule(b, target, optimize));
     addBuildMetadata(b, host_lib.root_module, roc_compiler);
 
     // Coroutine runtime for app tasks. Configured to a single executor on the
-    // frame thread at runtime; task migration is compiled out so the
-    // scheduler cannot move a Roc call onto another thread.
+    // frame thread; zio is built single-executor so the scheduler cannot move
+    // a Roc call onto another thread.
     host_lib.root_module.addImport("zio", zioModule(b, target, optimize));
 
     if (target.result.os.tag == .macos) {
@@ -515,10 +507,6 @@ fn buildHostLib(
             b.path(library_path);
         host_lib.root_module.addSystemFrameworkPath(sysroot_frameworks);
         host_lib.root_module.addLibraryPath(sysroot_lib);
-    }
-
-    if (target.result.os.tag == .linux) {
-        host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
     // The glibc 2.38 C23 aliases the prebuilt Linux raylib references, resolved

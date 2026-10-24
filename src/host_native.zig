@@ -55,6 +55,11 @@ pub const std_options: std.Options = .{
     .log_scope_levels = &.{.{ .scope = .zio, .level = .warn }},
 };
 
+/// One executor, on the frame thread, and no task migration: work stealing
+/// would be a way for Roc code to run on another thread, and nothing in the
+/// host is safe for that. build.zig sets the same default for test roots.
+pub const zio_options: zio.Options = .{ .scheduling = .single_executor };
+
 // Type aliases
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
@@ -292,9 +297,9 @@ var last_wall_nanos: u64 = 0;
 /// collide with a new app.
 fn beginAppLifetime() void {
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
-    trace_tracks = [_]TraceTrack{.{}} ** TRACE_TRACK_CAPACITY;
-    task_trace_owners = [_]TaskTraceOwner{.{}} ** tasks_mod.max_live_tasks;
-    resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+    trace_tracks = @as([TRACE_TRACK_CAPACITY]TraceTrack, @splat(.{}));
+    task_trace_owners = @as([tasks_mod.max_live_tasks]TaskTraceOwner, @splat(.{}));
+    resource_correlations = @as([resource_correlation_capacity]ResourceCorrelation, @splat(.{}));
     observatory_next_resource_id = 1;
     active_trace_owner = 0;
     exit_requested = null;
@@ -366,7 +371,7 @@ fn taskStagingQueueEvent(operation: TaskStagingQueueOperation, amount: usize, cu
     return .{
         .cycle = observatory_cycle,
         .timestamp_ns = now,
-        .kind = @intFromEnum(operation),
+        .kind = @backingInt(operation),
         .subject_id = high_water,
         // Zero deliberately means application-proportional: there is no
         // platform admission cap and therefore no saturation/refusal row.
@@ -415,7 +420,7 @@ var observatory_next_effect_id: u64 = 1;
 var observatory_current_input_id: u64 = 0;
 const task_finish_correlation_capacity: usize = 256;
 const TaskFinishCorrelation = struct { id: u64 = 0, at_ns: u64 = 0 };
-var task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+var task_finish_correlations = @as([task_finish_correlation_capacity]TaskFinishCorrelation, @splat(.{}));
 
 fn rememberTaskFinish(id: u64, at_ns: u64) bool {
     for (&task_finish_correlations) |*slot| {
@@ -442,7 +447,7 @@ var observatory_next_resource_id: u64 = 1;
 
 const resource_correlation_capacity: usize = 4096;
 const ResourceCorrelation = struct { token: u64 = 0, id: u64 = 0 };
-var resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+var resource_correlations = @as([resource_correlation_capacity]ResourceCorrelation, @splat(.{}));
 
 fn resourceCorrelation(token: u64, create: bool) u64 {
     if (token == 0) return 0;
@@ -465,10 +470,10 @@ fn forgetResourceCorrelation(token: u64) void {
 }
 
 test "resource correlations replace lifecycle tokens with bounded private IDs" {
-    resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+    resource_correlations = @as([resource_correlation_capacity]ResourceCorrelation, @splat(.{}));
     observatory_next_resource_id = 1;
     defer {
-        resource_correlations = [_]ResourceCorrelation{.{}} ** resource_correlation_capacity;
+        resource_correlations = @as([resource_correlation_capacity]ResourceCorrelation, @splat(.{}));
         observatory_next_resource_id = 1;
     }
     const first = resourceCorrelation(0xABCD_1234, true);
@@ -482,7 +487,7 @@ test "resource correlations replace lifecycle tokens with bounded private IDs" {
 const allocation_identity_capacity: usize = 4096;
 const AllocationIdentity = struct { pointer: usize = 0, id: u64 = 0, bytes: usize = 0, state: enum(u8) { empty, live, tombstone } = .empty };
 const AllocationIdentities = struct {
-    slots: [allocation_identity_capacity]AllocationIdentity = [_]AllocationIdentity{.{}} ** allocation_identity_capacity,
+    slots: [allocation_identity_capacity]AllocationIdentity = @as([allocation_identity_capacity]AllocationIdentity, @splat(.{})),
     live: usize = 0,
 
     fn reset(self: *@This()) void {
@@ -745,29 +750,29 @@ fn observatoryTaskEvent(event: tasks_mod.ObserverEvent) observatory.TaskEvent {
         .value_b = packedTaskCounters(event.counters),
     };
     switch (event.kind) {
-        .spawned => detail.kind = @intFromEnum(ObservatoryTaskKind.spawned),
+        .spawned => detail.kind = @backingInt(ObservatoryTaskKind.spawned),
         .queued => |queued| {
-            detail.kind = @intFromEnum(ObservatoryTaskKind.queued);
+            detail.kind = @backingInt(ObservatoryTaskKind.queued);
             detail.value_a = queued.tasks_ahead;
         },
         .started => |started| {
-            detail.kind = @intFromEnum(ObservatoryTaskKind.started);
+            detail.kind = @backingInt(ObservatoryTaskKind.started);
             detail.value_a = started.queued_cycles;
         },
         .parked => |parked| {
-            detail.kind = @intFromEnum(ObservatoryTaskKind.parked);
+            detail.kind = @backingInt(ObservatoryTaskKind.parked);
             detail.value_a = parked.millis_hint;
             detail.name = parked.effect;
         },
         .resumed => |resumed| {
-            detail.kind = @intFromEnum(ObservatoryTaskKind.resumed);
+            detail.kind = @backingInt(ObservatoryTaskKind.resumed);
             detail.name = resumed.effect;
         },
-        .finished => detail.kind = @intFromEnum(ObservatoryTaskKind.finished),
-        .delivered => detail.kind = @intFromEnum(ObservatoryTaskKind.delivered),
+        .finished => detail.kind = @backingInt(ObservatoryTaskKind.finished),
+        .delivered => detail.kind = @backingInt(ObservatoryTaskKind.delivered),
         .cancelled => |stage| {
-            detail.kind = @intFromEnum(ObservatoryTaskKind.cancelled);
-            detail.value_a = @intFromEnum(stage);
+            detail.kind = @backingInt(ObservatoryTaskKind.cancelled);
+            detail.value_a = @backingInt(stage);
             detail.name = @tagName(stage);
         },
     }
@@ -811,7 +816,7 @@ fn recordObservatoryTaskQueue(context: *anyopaque, event: tasks_mod.QueueObserva
     _ = sessionFromContext(context).recordQueue(.{
         .cycle = event.cycle,
         .timestamp_ns = event.timestamp_ns,
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = event.high_water,
         .parent_id = if (event.capacity) |capacity| capacity else 0,
         .duration_ns = if (event.oldest_at_ns != 0) event.timestamp_ns -| event.oldest_at_ns else 0,
@@ -822,8 +827,8 @@ fn recordObservatoryTaskQueue(context: *anyopaque, event: tasks_mod.QueueObserva
 }
 
 test "task finish correlations are bounded private identities consumed once" {
-    task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
-    defer task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+    task_finish_correlations = @as([task_finish_correlation_capacity]TaskFinishCorrelation, @splat(.{}));
+    defer task_finish_correlations = @as([task_finish_correlation_capacity]TaskFinishCorrelation, @splat(.{}));
     try std.testing.expect(rememberTaskFinish(41, 900));
     try std.testing.expectEqual(@as(u64, 900), takeTaskFinish(41).?);
     try std.testing.expect(takeTaskFinish(41) == null);
@@ -882,7 +887,7 @@ test "task observer adapter preserves identity timing kinds waits and bounded co
     event.kind = .{ .cancelled = .live };
     const cancelled = observatoryTaskEvent(event);
     try std.testing.expectEqual(@as(u8, 7), cancelled.kind);
-    try std.testing.expectEqual(@as(u64, @intFromEnum(tasks_mod.CancellationStage.live)), cancelled.value_a);
+    try std.testing.expectEqual(@as(u64, @backingInt(tasks_mod.CancellationStage.live)), cancelled.value_a);
     try std.testing.expectEqualStrings("live", cancelled.name);
 }
 
@@ -1545,7 +1550,7 @@ fn resolveBeneathCover(io: std.Io, allocator: std.mem.Allocator, request: *const
     var dir = try confined_path.openDir(io, root_dir, rest, .{ .create = request.create });
     dir.close(io);
     return if (rest.len == 0)
-        allocator.dupeZ(u8, canonical_root)
+        allocator.dupeSentinel(u8, canonical_root, 0)
     else
         std.fs.path.joinZ(allocator, &.{ canonical_root, rest });
 }
@@ -3318,13 +3323,13 @@ const TraceTrack = struct {
     cancelling: bool = false,
     zones: [TRACE_ZONE_DEPTH]TraceZoneEntry = undefined,
 };
-var trace_tracks: [TRACE_TRACK_CAPACITY]TraceTrack = [_]TraceTrack{.{}} ** TRACE_TRACK_CAPACITY;
+var trace_tracks: [TRACE_TRACK_CAPACITY]TraceTrack = @as([TRACE_TRACK_CAPACITY]TraceTrack, @splat(.{}));
 var active_trace_owner: u32 = 0;
 var next_trace_owner: u32 = 1;
 var next_trace_token: u32 = 1;
 var last_trace_violation: ?[]const u8 = null;
 const TaskTraceOwner = struct { task_id: u64 = 0, owner: u32 = 0 };
-var task_trace_owners: [tasks_mod.max_live_tasks]TaskTraceOwner = [_]TaskTraceOwner{.{}} ** tasks_mod.max_live_tasks;
+var task_trace_owners: [tasks_mod.max_live_tasks]TaskTraceOwner = @as([tasks_mod.max_live_tasks]TaskTraceOwner, @splat(.{}));
 
 fn rememberTaskTraceOwner(task_id: u64, owner: u32) void {
     if (task_id == 0) return;
@@ -3356,7 +3361,7 @@ fn abortTaskTraceOwner(task_id: u64, session: *observatory.Session) void {
             _ = session.recordAnnotation(.{
                 .cycle = observatory_cycle,
                 .timestamp_ns = ended_ns,
-                .phase = @intFromEnum(Phase.task),
+                .phase = @backingInt(Phase.task),
                 .kind = .zone_abort,
                 .name = entry.label[0..entry.label_len],
                 .integer = @bitCast(entry.token),
@@ -3478,7 +3483,7 @@ fn traceEmit(kind: observatory.AnnotationKind, label: []const u8, integer: i64, 
     _ = session.recordAnnotation(.{
         .cycle = observatory_cycle,
         .timestamp_ns = traceNowNs(),
-        .phase = @intFromEnum(active_phase),
+        .phase = @backingInt(active_phase),
         .kind = kind,
         .name = label,
         .integer = integer,
@@ -3507,7 +3512,7 @@ fn observeHostResource(event: host_resource.Observation) u64 {
     _ = session.recordResource(.{
         .cycle = observatory_cycle,
         .timestamp_ns = now,
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = private_id,
         .duration_ns = if (event.retired_at != 0) now -| event.retired_at else 0,
         .value_a = @intCast(event.active),
@@ -3526,7 +3531,7 @@ fn observeCommandQueue(event: cmd_effect.QueueObservation) u64 {
     _ = session.recordQueue(.{
         .cycle = observatory_cycle,
         .timestamp_ns = now,
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = @intCast(event.high_water),
         .parent_id = @intCast(event.capacity),
         .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
@@ -3549,7 +3554,7 @@ fn observeCaptureQueue(event: capture.StillBudget.QueueObservation) u64 {
     _ = session.recordQueue(.{
         .cycle = observatory_cycle,
         .timestamp_ns = now,
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = event.high_water,
         .parent_id = event.capacity,
         .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
@@ -3572,7 +3577,7 @@ fn observeStdioQueue(event: stdio_effect.QueueObservation) void {
     _ = session.recordQueue(.{
         .cycle = observatory_cycle,
         .timestamp_ns = @intCast(@max(at - observatory_origin_ns, 0)),
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = event.high_water,
         .parent_id = event.capacity_bytes,
         .duration_ns = if (event.oldest_at_ns != 0) event.timestamp_ns -| event.oldest_at_ns else 0,
@@ -3594,7 +3599,7 @@ fn observeInputQueue(event: raylib.InputQueueObservation) u64 {
     _ = session.recordQueue(.{
         .cycle = observatory_cycle,
         .timestamp_ns = now,
-        .kind = @intFromEnum(event.operation),
+        .kind = @backingInt(event.operation),
         .subject_id = event.high_water,
         .parent_id = event.capacity,
         .duration_ns = if (event.oldest_at != 0) now -| event.oldest_at else 0,
@@ -3731,7 +3736,7 @@ const EffectScope = struct {
         _ = session.recordEffect(.{
             .cycle = observatory_cycle,
             .timestamp_ns = @intCast(@max(self.started_ns - observatory_origin_ns, 0)),
-            .kind = @intFromEnum(self.phase),
+            .kind = @backingInt(self.phase),
             .effect_id = self.effect_id,
             .correlation_id = self.correlation_id,
             .duration_ns = @intCast(@max(observatoryAwakeNs() - self.started_ns, 0)),
@@ -3889,7 +3894,7 @@ fn hostedTraceEnd(token: u64) callconv(.c) void {
         _ = recorder.recordAnnotation(.{
             .cycle = observatory_cycle,
             .timestamp_ns = ended_ns,
-            .phase = @intFromEnum(active_phase),
+            .phase = @backingInt(active_phase),
             .kind = .zone_end,
             .name = entry.label[0..entry.label_len],
             .integer = @bitCast(token),
@@ -5033,7 +5038,7 @@ fn convertTilemapObjects(host: *RocHost, objects: []const tmx_loader.Object) abi
                 .width = object.width,
                 .x = object.x,
                 .y = object.y,
-                .kind = @intFromEnum(object.kind),
+                .kind = @backingInt(object.kind),
             };
         }
     }
@@ -6792,7 +6797,7 @@ test "texture updates validate native dimensions instead of public metadata" {
         active_roc_host = null;
     }
 
-    const pixels = [_]Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }} ** 6;
+    const pixels = @as([6]Color, @splat(.{ .r = 1, .g = 2, .b = 3, .a = 255 }));
     const whole_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
     const whole_err = hostedTextureUpdateRawCode(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).fromSlice(&pixels, &roc_host),
@@ -9907,8 +9912,8 @@ fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
 }
 
 fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
-    if (code > @intFromEnum(raylib.MouseCursor.not_allowed)) return .default;
-    return @enumFromInt(code);
+    if (code > @backingInt(raylib.MouseCursor.not_allowed)) return .default;
+    return @fromBackingInt(@intCast(code));
 }
 
 fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
@@ -9917,7 +9922,7 @@ fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
     defer effect.end();
     if (active_headless) return;
     const next = mouseCursorFromCode(cursor);
-    const next_code: u8 = @intCast(@intFromEnum(next));
+    const next_code: u8 = @intCast(@backingInt(next));
     if (active_mouse_cursor_code == next_code) return;
     raylib.setMouseCursor(next);
     active_mouse_cursor_code = next_code;
@@ -10002,7 +10007,7 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 
     // A write that cannot fit leaves the previous contents intact, and still
     // releases the Roc string it was handed.
-    const oversized = abi.RocStr.fromSlice(&([_]u8{'x'} ** (HEADLESS_CLIPBOARD_CAPACITY + 1)), &roc_host);
+    const oversized = abi.RocStr.fromSlice(&(@as([(HEADLESS_CLIPBOARD_CAPACITY + 1)]u8, @splat('x'))), &roc_host);
     hostedSetClipboardText(&roc_host, oversized);
     const unchanged = hostedReadClipboard(&roc_host);
     try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, unchanged.tag);
@@ -13739,7 +13744,7 @@ fn initModel() RocResult {
     const phase = PhaseScope.enter(.startup);
     defer phase.leave();
     const init_result = init_for_host(active_io_authority);
-    if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
+    if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@backingInt(init_result.tag)});
     return init_result;
 }
 
@@ -14144,9 +14149,9 @@ fn recordObservatoryCallback(
     _ = session.recordCallback(.{
         .cycle = cycle,
         .timestamp_ns = @intCast(@max(started_ns - observatory_origin_ns, 0)),
-        .kind = @intFromEnum(phase),
+        .kind = @backingInt(phase),
         .duration_ns = duration_ns,
-        .value_a = @intFromEnum(outcome),
+        .value_a = @backingInt(outcome),
         .name = name,
     });
 }
@@ -14288,7 +14293,7 @@ fn recordAllocationEvent(kind: u8, id: u64, bytes: usize, prior_bytes: usize) vo
     _ = session.recordAllocation(.{
         .cycle = observatory_cycle,
         .timestamp_ns = traceNowNs(),
-        .kind = kind | (@as(u8, @intFromEnum(active_phase)) << 4),
+        .kind = kind | (@as(u8, @backingInt(active_phase)) << 4),
         .subject_id = id,
         .parent_id = AppTasks.executingTaskId(),
         .duration_ns = activeTraceZoneToken(),
@@ -14865,7 +14870,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         host_environ = @as([*]const [*:0]u8, @ptrCast(std.c.environ))[0..n];
     }
 
-    const use_debug_allocator = builtin.mode == .Debug and options.debug_allocator;
+    const use_debug_allocator = builtin.mode == .debug and options.debug_allocator;
     var debug_allocator: std.heap.DebugAllocator(.{}) = .{};
     defer if (use_debug_allocator) {
         if (debug_allocator.deinit() == .leak) std.log.warn("Memory leak detected", .{});
@@ -14974,7 +14979,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         observatory_next_input_id = 1;
         observatory_next_effect_id = 1;
         observatory_current_input_id = 0;
-        task_finish_correlations = [_]TaskFinishCorrelation{.{}} ** task_finish_correlation_capacity;
+        task_finish_correlations = @as([task_finish_correlation_capacity]TaskFinishCorrelation, @splat(.{}));
         observatory_next_allocation_id = 1;
         allocation_identities.reset();
         recordObservatoryBackendFacts(app_config, options.headless);
@@ -15936,7 +15941,7 @@ fn releaseDeniedArgument(value: anytype) void {
             if (@hasDecl(T, "decref")) {
                 value.decref(activeHost());
             } else {
-                inline for (std.meta.fields(T)) |field| releaseDeniedArgument(@field(value, field.name));
+                inline for (@typeInfo(T).@"struct".field_names) |name| releaseDeniedArgument(@field(value, name));
             }
         },
         else => {},
@@ -16269,7 +16274,8 @@ fn deniedTestArgument(comptime T: type) T {
     if (@typeInfo(T) == .@"struct" and @hasDecl(T, "empty")) return T.empty();
     if (@typeInfo(T) == .@"struct") {
         var value: T = undefined;
-        inline for (std.meta.fields(T)) |field| @field(value, field.name) = deniedTestArgument(field.type);
+        const info = @typeInfo(T).@"struct";
+        inline for (info.field_names, info.field_types) |name, Field| @field(value, name) = deniedTestArgument(Field);
         return value;
     }
     return std.mem.zeroes(T);

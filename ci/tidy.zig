@@ -477,14 +477,14 @@ fn tidyAst(
         const node: u32 = @intCast(node_usize);
         if (isBinOp(tag)) { // Forbid mixing bitops and arithmetics without parentheses.
             // In Zig 0.15, binary operations use node_and_node data layout
-            const data = tree.nodeData(@enumFromInt(node));
+            const data = tree.nodeData(@fromBackingInt(@intCast(node)));
             const children = data.node_and_node;
             inline for (children) |child| {
-                const child_tag = tags[@intFromEnum(child)];
+                const child_tag = tags[@backingInt(child)];
                 if ((isBinOpBitwise(tag) and isBinOpArithmetic(child_tag)) or
                     (isBinOpArithmetic(tag) and isBinOpBitwise(child_tag)))
                 {
-                    const token_opening = tree.nodeMainToken(@enumFromInt(node));
+                    const token_opening = tree.nodeMainToken(@fromBackingInt(@intCast(node)));
                     const line_opening = tree.tokenLocation(0, token_opening).line;
                     errors.addAmbiguousPrecedence(file, line_opening);
                 }

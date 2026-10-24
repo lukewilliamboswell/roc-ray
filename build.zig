@@ -52,11 +52,20 @@ pub fn build(b: *std.Build) void {
 
     // Cleanup step: remove the host archives this build writes.
     const cleanup_step = b.step("clean", "Remove the built host libraries");
+    const remove_files = b.addRunArtifact(b.addExecutable(.{
+        .name = "remove_files",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci/remove_files.zig"),
+            .target = b.graph.host,
+            .optimize = .debug,
+        }),
+    }));
+    remove_files.setCwd(b.path("."));
+    remove_files.has_side_effects = true;
     for (all_native_targets) |roc_target| {
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
-        )).step);
+        remove_files.addArg(b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }));
     }
+    cleanup_step.dependOn(&remove_files.step);
 
     // Producer-only: ordinary builds never run the linker-input recipes.
     _ = link_inputs.addProducerStep(b);
@@ -123,7 +132,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/tidy.zig"),
             .target = native_target,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const run_tidy = b.addRunArtifact(tidy);
@@ -136,7 +145,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/zig_lints.zig"),
             .target = native_target,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const run_lints = b.addRunArtifact(zig_lints);
@@ -415,7 +424,7 @@ pub fn build(b: *std.Build) void {
 /// `task-migration` off: tasks stay on the executor that spawned them, which
 /// with one executor means the frame thread. Work stealing would be a way for
 /// Roc code to run on another thread, and nothing in the host is safe for that.
-fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.Optimize) *std.Build.Module {
     const dep = b.dependency("zio", .{
         .target = target,
         .optimize = optimize,
@@ -444,41 +453,10 @@ fn detectNativeRocTarget(target: std.Target) ?RocTarget {
     };
 }
 
-/// Custom step to remove a single file if it exists
-const CleanupStep = struct {
-    step: std.Build.Step,
-    path: std.Build.LazyPath,
-
-    fn create(b: *std.Build, path: std.Build.LazyPath) *CleanupStep {
-        const self = b.allocator.create(CleanupStep) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "cleanup",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .path = path,
-        };
-        return self;
-    }
-
-    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
-        _ = options;
-        const self: *CleanupStep = @fieldParentPtr("step", step);
-        const io = step.owner.graph.io;
-        const path = self.path.getPath2(step.owner, null);
-        std.Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
-            error.FileNotFound => {},
-            else => return err,
-        };
-    }
-};
-
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.builtin.Optimize,
     macos_interfaces_path: []const u8,
 ) *std.Build.Step.Compile {
     const raylib_include_path = b.path("vendor/raylib/include");
@@ -490,7 +468,7 @@ fn buildHostLib(
             .root_source_file = b.path("src/host_native.zig"),
             .target = target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
+            .strip = optimize != .debug,
             .pic = true,
             // Selects Zig's pthread path for std.Thread. The native path
             // depends on TLS that Zig's start code sets up, and the start code

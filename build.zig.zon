@@ -7,8 +7,8 @@
     // dependency on the Roc compiler.
     .dependencies = .{
         .zio = .{
-            .url = "git+https://github.com/lalinsky/zio?ref=v0.17.0#9711d68104946a457f151776000210d8adca3f3e",
-            .hash = "zio-0.17.0-xHbVVI_jJQC3YbgU7JydwAV7MuASkOTd73YqBaKlFFUz",
+            .url = "git+https://github.com/lalinsky/zio#be65431ba2f9aa91232cac89a3e76b4480d15689",
+            .hash = "zio-0.19.0-xHbVVOZILQDHwvSkKoyueGl29__yoF4DRzNDIEzjgprv",
         },
     },
     .fingerprint = 0x508f9eda9b4ae618,

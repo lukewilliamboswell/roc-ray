@@ -381,7 +381,7 @@ pub fn open(
     // The placeholder goes in right after its own ID and size, so the current
     // length is its offset within Info's body.
     const duration_offset_in_info = info_body.len;
-    info_body.raw(&[_]u8{0} ** 8);
+    info_body.raw(&@as([8]u8, @splat(0)));
 
     var info = Builder{};
     info.id(id_info);

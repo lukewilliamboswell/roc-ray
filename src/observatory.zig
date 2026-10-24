@@ -75,15 +75,15 @@ pub const Submitted = struct {
 
 /// Refused admissions accumulated since the preceding snapshot.
 pub const LossSnapshot = struct {
-    counts: [family_count]u64 = [_]u64{0} ** family_count,
-    first_cycles: [family_count]u64 = [_]u64{0} ** family_count,
-    last_cycles: [family_count]u64 = [_]u64{0} ** family_count,
-    started_ns: [family_count]u64 = [_]u64{0} ** family_count,
-    ended_ns: [family_count]u64 = [_]u64{0} ** family_count,
-    producers: [family_count]Producer = [_]Producer{.unknown} ** family_count,
+    counts: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    first_cycles: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    last_cycles: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    started_ns: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    ended_ns: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    producers: [family_count]Producer = @as([family_count]Producer, @splat(.unknown)),
 
     pub fn count(self: LossSnapshot, family: Family) u64 {
-        return self.counts[@intFromEnum(family)];
+        return self.counts[@backingInt(family)];
     }
 
     pub fn total(self: LossSnapshot) u64 {
@@ -133,12 +133,12 @@ pub const Pool = struct {
     ready_head: usize = 0,
     ready_len: usize = 0,
     summary_reserve: usize,
-    losses: [family_count]u64 = [_]u64{0} ** family_count,
-    loss_first_cycles: [family_count]u64 = [_]u64{0} ** family_count,
-    loss_last_cycles: [family_count]u64 = [_]u64{0} ** family_count,
-    loss_started_ns: [family_count]u64 = [_]u64{0} ** family_count,
-    loss_ended_ns: [family_count]u64 = [_]u64{0} ** family_count,
-    loss_producers: [family_count]Producer = [_]Producer{.unknown} ** family_count,
+    losses: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    loss_first_cycles: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    loss_last_cycles: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    loss_started_ns: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    loss_ended_ns: [family_count]u64 = @as([family_count]u64, @splat(0)),
+    loss_producers: [family_count]Producer = @as([family_count]Producer, @splat(.unknown)),
     refused_total: u64 = 0,
     ready_high_water: usize = 0,
     mutex: Lock = .{},
@@ -184,7 +184,7 @@ pub const Pool = struct {
             .detail => self.free_len > self.summary_reserve,
         };
         if (!admitted) {
-            const index = @intFromEnum(family);
+            const index = @backingInt(family);
             const loss = &self.losses[index];
             if (loss.* == 0) {
                 self.loss_first_cycles[index] = context.cycle;
@@ -308,12 +308,12 @@ pub const Pool = struct {
             .ended_ns = self.loss_ended_ns,
             .producers = self.loss_producers,
         };
-        self.losses = [_]u64{0} ** family_count;
-        self.loss_first_cycles = [_]u64{0} ** family_count;
-        self.loss_last_cycles = [_]u64{0} ** family_count;
-        self.loss_started_ns = [_]u64{0} ** family_count;
-        self.loss_ended_ns = [_]u64{0} ** family_count;
-        self.loss_producers = [_]Producer{.unknown} ** family_count;
+        self.losses = @as([family_count]u64, @splat(0));
+        self.loss_first_cycles = @as([family_count]u64, @splat(0));
+        self.loss_last_cycles = @as([family_count]u64, @splat(0));
+        self.loss_started_ns = @as([family_count]u64, @splat(0));
+        self.loss_ended_ns = @as([family_count]u64, @splat(0));
+        self.loss_producers = @as([family_count]Producer, @splat(.unknown));
         return snapshot;
     }
 
@@ -350,7 +350,7 @@ pub const Pool = struct {
     }
 
     fn noteLossLocked(self: *Pool, family: Family, count: u64, context: LossContext) void {
-        const index = @intFromEnum(family);
+        const index = @backingInt(family);
         if (self.losses[index] == 0) {
             self.loss_first_cycles[index] = context.cycle;
             self.loss_started_ns[index] = context.timestamp_ns;
@@ -632,7 +632,7 @@ pub const Session = struct {
         if (!self.shared.accepting.load(.acquire)) return false;
         var encoded: [chunk_bytes - 2]u8 = undefined;
         const out = encoded[0..];
-        out[0] = @intFromEnum(EventKind.cycle);
+        out[0] = @backingInt(EventKind.cycle);
         var at: usize = 1;
         inline for (.{ value.cycle, value.start_ns, value.duration_ns, value.update_ns, value.render_callback_ns, value.task_executor_ns, value.host_other_ns, value.alloc_bytes, value.alloc_calls, value.free_bytes, value.free_calls, value.live_bytes, value.peak_live_bytes, value.update_alloc_bytes, value.update_alloc_calls, value.task_events, value.effect_calls, value.draw_calls, value.resource_events, value.queue_events }) |field| {
             std.mem.writeInt(u64, out[at..][0..8], field, .little);
@@ -651,11 +651,11 @@ pub const Session = struct {
         var encoded: [chunk_bytes - 2]u8 = undefined;
         const out = encoded[0..];
         const kept = @min(value.name.len, encoded.len - 62);
-        out[0] = @intFromEnum(EventKind.annotation);
+        out[0] = @backingInt(EventKind.annotation);
         std.mem.writeInt(u64, out[1..9], value.cycle, .little);
         std.mem.writeInt(u64, out[9..17], value.timestamp_ns, .little);
         out[17] = value.phase;
-        out[18] = @intFromEnum(value.kind);
+        out[18] = @backingInt(value.kind);
         out[19] = value.unit;
         std.mem.writeInt(i64, out[20..28], value.integer, .little);
         std.mem.writeInt(u16, out[28..30], @intCast(kept), .little);
@@ -685,8 +685,8 @@ pub const Session = struct {
         var encoded: [chunk_bytes - 2]u8 = undefined;
         const out = encoded[0..];
         const kept = @min(value.name.len, encoded.len - 61);
-        out[0] = @intFromEnum(EventKind.detail);
-        out[1] = @intFromEnum(family);
+        out[0] = @backingInt(EventKind.detail);
+        out[1] = @backingInt(family);
         out[2] = value.kind;
         var at: usize = 3;
         inline for (.{ value.cycle, value.timestamp_ns, value.subject_id, value.parent_id, value.duration_ns, value.value_a, value.value_b }) |field| {
@@ -712,11 +712,11 @@ pub const Session = struct {
         var encoded: [chunk_bytes - 2]u8 = undefined;
         const out = encoded[0..];
         const kept = @min(value.name.len, encoded.len - 117);
-        out[0] = @intFromEnum(EventKind.detail);
-        out[1] = @intFromEnum(DetailFamily.effect);
+        out[0] = @backingInt(EventKind.detail);
+        out[1] = @backingInt(DetailFamily.effect);
         out[2] = value.kind;
         var at: usize = 3;
-        inline for (.{ value.cycle, value.timestamp_ns, value.effect_id, value.correlation_id, value.duration_ns, value.inbound_copied_bytes, @intFromEnum(value.outcome) }) |field| {
+        inline for (.{ value.cycle, value.timestamp_ns, value.effect_id, value.correlation_id, value.duration_ns, value.inbound_copied_bytes, @backingInt(value.outcome) }) |field| {
             std.mem.writeInt(u64, out[at..][0..8], field, .little);
             at += 8;
         }
@@ -787,7 +787,7 @@ pub const Session = struct {
             if (lost == 0) continue;
             var encoded: [59]u8 = undefined;
             const out = encoded[0..];
-            out[0] = @intFromEnum(EventKind.gap);
+            out[0] = @backingInt(EventKind.gap);
             std.mem.writeInt(u64, out[1..9], losses.last_cycles[family_index], .little);
             std.mem.writeInt(u64, out[9..17], losses.ended_ns[family_index], .little);
             out[17] = @intCast(family_index);
@@ -796,13 +796,13 @@ pub const Session = struct {
             std.mem.writeInt(u64, out[34..42], losses.last_cycles[family_index], .little);
             std.mem.writeInt(u64, out[42..50], losses.started_ns[family_index], .little);
             std.mem.writeInt(u64, out[50..58], losses.ended_ns[family_index], .little);
-            out[58] = @intFromEnum(losses.producers[family_index]);
-            if (!self.shared.pool.appendEncoded(.summary, @enumFromInt(family_index), out, .{
+            out[58] = @backingInt(losses.producers[family_index]);
+            if (!self.shared.pool.appendEncoded(.summary, @fromBackingInt(@intCast(family_index)), out, .{
                 .cycle = cycle,
                 .timestamp_ns = timestamp_ns,
                 .producer = .frame_thread,
             })) {
-                restoreLoss(&self.shared.pool, @enumFromInt(family_index), losses, family_index);
+                restoreLoss(&self.shared.pool, @fromBackingInt(@intCast(family_index)), losses, family_index);
                 all_written = false;
             }
         }
@@ -892,7 +892,7 @@ test "summary standard and full have explicit family admission" {
 fn restoreLoss(self: *Pool, family: Family, snapshot: LossSnapshot, snapshot_index: usize) void {
     self.mutex.lock();
     defer self.mutex.unlock();
-    const index = @intFromEnum(family);
+    const index = @backingInt(family);
     const current_count = self.losses[index];
     const current_last_cycle = self.loss_last_cycles[index];
     const current_ended_ns = self.loss_ended_ns[index];
@@ -1272,16 +1272,16 @@ fn bindU64(stmt: ?*anyopaque, index: c_int, value: u64) bool {
 fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?*anyopaque, detail_stmts: *const [9]?*anyopaque, bytes: []const u8) bool {
     if (bytes.len == 0) return false;
     switch (bytes[0]) {
-        @intFromEnum(EventKind.cycle) => {
+        @backingInt(EventKind.cycle) => {
             if (bytes.len != 161) return false;
             for (1..21) |index| {
                 if (!bindU64(cycle_stmt, @intCast(index), std.mem.readInt(u64, bytes[1 + (index - 1) * 8 ..][0..8], .little))) return false;
             }
             return finishStatement(cycle_stmt);
         },
-        @intFromEnum(EventKind.annotation) => {
+        @backingInt(EventKind.annotation) => {
             if (bytes.len < 62) return false;
-            if (bytes[18] > @intFromEnum(AnnotationKind.zone_abort)) return false;
+            if (bytes[18] > @backingInt(AnnotationKind.zone_abort)) return false;
             if (!bindU64(annotation_stmt, 1, std.mem.readInt(u64, bytes[1..9], .little))) return false;
             if (!bindU64(annotation_stmt, 2, std.mem.readInt(u64, bytes[9..17], .little))) return false;
             if (rocray_sqlite_bind_int64(annotation_stmt, 3, bytes[17]) != SQLITE_OK) return false;
@@ -1289,7 +1289,7 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
             const name_len = std.mem.readInt(u16, bytes[28..30], .little);
             if (30 + name_len + 32 != bytes.len) return false;
             if (rocray_sqlite_bind_text(annotation_stmt, 5, bytes[30 .. 30 + name_len].ptr, name_len) != SQLITE_OK) return false;
-            const annotation_kind: AnnotationKind = @enumFromInt(bytes[18]);
+            const annotation_kind: AnnotationKind = @fromBackingInt(@intCast(bytes[18]));
             if (annotation_kind == .sample_i64 or
                 annotation_kind == .zone_begin or
                 annotation_kind == .zone_end or
@@ -1310,8 +1310,8 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
             }
             return finishStatement(annotation_stmt);
         },
-        @intFromEnum(EventKind.gap) => {
-            if (bytes.len != 59 or bytes[58] > @intFromEnum(Producer.multiple)) return false;
+        @backingInt(EventKind.gap) => {
+            if (bytes.len != 59 or bytes[58] > @backingInt(Producer.multiple)) return false;
             if (!bindU64(gap_stmt, 1, std.mem.readInt(u64, bytes[1..9], .little))) return false;
             if (!bindU64(gap_stmt, 2, std.mem.readInt(u64, bytes[9..17], .little))) return false;
             if (rocray_sqlite_bind_int64(gap_stmt, 3, bytes[17]) != SQLITE_OK) return false;
@@ -1322,14 +1322,14 @@ fn writeEvent(cycle_stmt: ?*anyopaque, annotation_stmt: ?*anyopaque, gap_stmt: ?
             if (rocray_sqlite_bind_int64(gap_stmt, 9, bytes[58]) != SQLITE_OK) return false;
             return finishStatement(gap_stmt);
         },
-        @intFromEnum(EventKind.detail) => {
-            if (bytes.len < 61 or bytes[1] > @intFromEnum(DetailFamily.callback)) return false;
+        @backingInt(EventKind.detail) => {
+            if (bytes.len < 61 or bytes[1] > @backingInt(DetailFamily.callback)) return false;
             const name_len = std.mem.readInt(u16, bytes[59..61], .little);
-            const is_effect = bytes[1] == @intFromEnum(DetailFamily.effect);
+            const is_effect = bytes[1] == @backingInt(DetailFamily.effect);
             const expected_len: usize = 61 + name_len + (if (is_effect) @as(usize, 56) else 0);
             if (expected_len != bytes.len) return false;
             const stmt = detail_stmts[bytes[1]];
-            if (bytes[1] == @intFromEnum(DetailFamily.allocation)) {
+            if (bytes[1] == @backingInt(DetailFamily.allocation)) {
                 if (!bindU64(stmt, 1, std.mem.readInt(u64, bytes[3..11], .little)) or
                     !bindU64(stmt, 2, std.mem.readInt(u64, bytes[11..19], .little)) or
                     rocray_sqlite_bind_int64(stmt, 3, bytes[2]) != SQLITE_OK or
@@ -1460,11 +1460,11 @@ test "loss snapshots are per-family saturating and drain once" {
 
     const losses = pool.takeLosses();
     try std.testing.expectEqual(@as(u64, 2), losses.count(.allocation_lifecycle));
-    try std.testing.expectEqual(@as(u64, 4), losses.first_cycles[@intFromEnum(Family.allocation_lifecycle)]);
-    try std.testing.expectEqual(@as(u64, 7), losses.last_cycles[@intFromEnum(Family.allocation_lifecycle)]);
-    try std.testing.expectEqual(@as(u64, 40), losses.started_ns[@intFromEnum(Family.allocation_lifecycle)]);
-    try std.testing.expectEqual(@as(u64, 90), losses.ended_ns[@intFromEnum(Family.allocation_lifecycle)]);
-    try std.testing.expectEqual(Producer.multiple, losses.producers[@intFromEnum(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 4), losses.first_cycles[@backingInt(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 7), losses.last_cycles[@backingInt(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 40), losses.started_ns[@backingInt(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(@as(u64, 90), losses.ended_ns[@backingInt(Family.allocation_lifecycle)]);
+    try std.testing.expectEqual(Producer.multiple, losses.producers[@backingInt(Family.allocation_lifecycle)]);
     try std.testing.expectEqual(@as(u64, 1), losses.count(.cycle_summary));
     try std.testing.expectEqual(@as(u64, 3), losses.total());
     try std.testing.expectEqual(@as(u64, 0), pool.takeLosses().total());
@@ -1500,16 +1500,16 @@ test "summary starvation restores gap counts until capacity returns" {
     try std.testing.expect(!session.flushGaps(9, 10));
     // The failed attempt to reserve the gap row is itself disclosed, so the
     // restored count includes the three original omissions plus that refusal.
-    try std.testing.expectEqual(@as(u64, 4), shared.pool.losses[@intFromEnum(Family.draw_observation)]);
+    try std.testing.expectEqual(@as(u64, 4), shared.pool.losses[@backingInt(Family.draw_observation)]);
 
     shared.pool.cancel(occupied_a);
     try std.testing.expect(session.flushGaps(9, 10));
-    try std.testing.expectEqual(@as(u64, 0), shared.pool.losses[@intFromEnum(Family.draw_observation)]);
+    try std.testing.expectEqual(@as(u64, 0), shared.pool.losses[@backingInt(Family.draw_observation)]);
     const gap = shared.pool.take().?;
     const framed = gap.chunk(&shared.pool).written();
     const encoded_len: usize = std.mem.readInt(u16, framed[0..2], .little);
     const bytes = framed[2 .. 2 + encoded_len];
-    try std.testing.expectEqual(@intFromEnum(EventKind.gap), bytes[0]);
+    try std.testing.expectEqual(@backingInt(EventKind.gap), bytes[0]);
     try std.testing.expectEqual(@as(u64, 4), std.mem.readInt(u64, bytes[18..26], .little));
     shared.pool.release(gap);
     shared.pool.cancel(occupied_b);
@@ -1521,23 +1521,23 @@ test "capacity validation rejects unusable pools" {
 }
 
 test "malformed event bytes are refused without interpreting an invalid tag" {
-    const details = [_]?*anyopaque{null} ** 9;
+    const details: [9]?*anyopaque = @splat(null);
     try std.testing.expect(!writeEvent(null, null, null, &details, &.{}));
     try std.testing.expect(!writeEvent(null, null, null, &details, &.{255}));
-    try std.testing.expect(!writeEvent(null, null, null, &details, &.{@intFromEnum(EventKind.cycle)}));
-    try std.testing.expect(!writeEvent(null, null, null, &details, &.{ @intFromEnum(EventKind.detail), 99 }));
-    var truncated_cycle = [_]u8{0} ** 152;
-    truncated_cycle[0] = @intFromEnum(EventKind.cycle);
+    try std.testing.expect(!writeEvent(null, null, null, &details, &.{@backingInt(EventKind.cycle)}));
+    try std.testing.expect(!writeEvent(null, null, null, &details, &.{ @backingInt(EventKind.detail), 99 }));
+    var truncated_cycle = @as([152]u8, @splat(0));
+    truncated_cycle[0] = @backingInt(EventKind.cycle);
     try std.testing.expect(!writeEvent(null, null, null, &details, &truncated_cycle));
-    var truncated_annotation = [_]u8{0} ** 61;
-    truncated_annotation[0] = @intFromEnum(EventKind.annotation);
+    var truncated_annotation = @as([61]u8, @splat(0));
+    truncated_annotation[0] = @backingInt(EventKind.annotation);
     try std.testing.expect(!writeEvent(null, null, null, &details, &truncated_annotation));
-    var truncated_gap = [_]u8{0} ** 65;
-    truncated_gap[0] = @intFromEnum(EventKind.gap);
+    var truncated_gap = @as([65]u8, @splat(0));
+    truncated_gap[0] = @backingInt(EventKind.gap);
     try std.testing.expect(!writeEvent(null, null, null, &details, &truncated_gap));
     inline for (0..9) |family| {
-        var truncated_detail = [_]u8{0} ** 60;
-        truncated_detail[0] = @intFromEnum(EventKind.detail);
+        var truncated_detail = @as([60]u8, @splat(0));
+        truncated_detail[0] = @backingInt(EventKind.detail);
         truncated_detail[1] = family;
         try std.testing.expect(!writeEvent(null, null, null, &details, &truncated_detail));
     }
@@ -1617,9 +1617,9 @@ test "session writer creates and finalizes a queryable stage one database" {
     try std.testing.expect(session.recordCallback(.{
         .cycle = 0,
         .timestamp_ns = 1,
-        .kind = @intFromEnum(CallbackPhase.init),
+        .kind = @backingInt(CallbackPhase.init),
         .duration_ns = 99,
-        .value_a = @intFromEnum(CallbackOutcome.success),
+        .value_a = @backingInt(CallbackOutcome.success),
         .name = "init!",
     }));
     _ = session.stop();
@@ -1741,7 +1741,7 @@ test "blocked writer saturation persists an explicit gap without borrowing summa
         .test_fault = .block_after_start,
     });
 
-    const long_label = [_]u8{'x'} ** 255;
+    const long_label = @as([255]u8, @splat('x'));
     var admitted: u64 = 0;
     while (admitted < 10_000) : (admitted += 1) {
         if (!session.recordAnnotation(.{

@@ -315,7 +315,7 @@ fn run(exchange: *Exchange) ExchangeError!void {
         var response = request.receiveHead(redirect_buffer) catch |err| return translate(err);
         if (try followRedirect(exchange, &response.head, &hops)) continue;
 
-        exchange.status = @intFromEnum(response.head.status);
+        exchange.status = @backingInt(response.head.status);
 
         // `readerDecompressing` invalidates the head's string pointers, so the
         // headers have to be copied out of it first.

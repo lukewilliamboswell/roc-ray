@@ -48,7 +48,10 @@ pub fn main(init: std.process.Init) !void {
 
     // NB: all checks are intentionally implemented in a streaming fashion,
     // such that we only need to read the files once.
-    const file_buffer = try gpa.alloc(u8, MiB + MiB / 2); // 1.5 MiB
+    // Generated asset data is tracked and text, so it flows through tidy like
+    // any other file. E1M1's map.json alone is over 1.5 MiB and grows when the
+    // map is regenerated, so keep comfortable headroom above it.
+    const file_buffer = try gpa.alloc(u8, 8 * MiB);
     defer gpa.free(file_buffer);
 
     const paths = try listFilePaths(gpa, io);
@@ -69,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
         }).len;
         if (bytes_read >= file_buffer.len - 1) {
             std.debug.panic(
-                \\File exceeds 1.5 MiB buffer limit: {s}
+                \\File exceeds the 8 MiB buffer limit: {s}
                 \\
                 \\If this is a binary file, add its extension to `binary_extensions` in ci/tidy.zig
                 \\to exclude it from tidy checks.

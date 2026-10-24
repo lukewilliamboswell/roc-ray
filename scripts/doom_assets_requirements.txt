@@ -1,0 +1,2 @@
+# Pinned because the PNG encoder is part of the reproducible atlas output.
+Pillow==10.2.0

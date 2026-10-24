@@ -128,7 +128,7 @@ the X11 libraries, and runs only on Linux. xref:reference.adoc#reference[Referen
 [#run-an-example]
 == Run an example
 
-Each release attaches a zip of the examples, named `examples-<version>.zip`,
+Each release attaches a zip of the examples, named `roc-ray-examples-<version>.zip`,
 whose files already name that release's bundle.
 
 . Open the https://github.com/lukewilliamboswell/roc-ray/releases[RocRay releases page] and choose the newest release

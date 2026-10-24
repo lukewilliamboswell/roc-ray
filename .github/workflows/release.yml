@@ -194,23 +194,31 @@ jobs:
           bundle_glob: dist/*.tar.zst
           bundle_manifest_path: .release/bundle-manifest.json
 
-      # Dry-run cover for the asset the publish job attaches. A pull request
-      # never reaches `publish-release`, so without this a broken example
-      # header or a new example directory would only be found mid-release.
-      # The URL is a placeholder and the archive is thrown away.
-      - name: Check the examples archive can be built
+      # The examples archive is built here, from the tested commit, with every
+      # header naming the default bundle URL this release will publish. The
+      # test jobs run these bytes and the publish job attaches them unchanged.
+      # A pull request builds it for the synthetic dry-run version.
+      - name: Package the examples archive
         run: |
           python3 scripts/release_helpers.py package-examples \
-            --bundle-url "https://github.com/${{ github.repository }}/releases/download/0.0.0/dry-run.tar.zst" \
-            --tag dry-run \
-            --output .release/examples-dry-run.zip
-          rm -f .release/examples-dry-run.zip
+            --release-version "${{ steps.validate.outputs.release_version }}" \
+            --release-bundles .release/release-bundles.json \
+            --repo "${{ github.repository }}" \
+            --output-dir .release/examples
 
       - name: Upload release bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-bundles
           path: .release/bundles/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the examples archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: examples-archive
+          path: .release/examples/*.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -361,6 +369,23 @@ jobs:
           bundle_name: ${{ matrix.bundle_name }}
           release_version: ${{ needs.build.outputs.release_version }}
 
+      - name: Download the examples archive
+        if: matrix.bundle_name == 'default'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: examples-archive
+          path: .release/examples
+
+      # The archive exactly as it will be published: every recorded case in its
+      # spec.json, with the release URL served from loopback. See
+      # scripts/test_examples_archive.py.
+      - name: Test the examples archive
+        if: matrix.bundle_name == 'default'
+        run: |
+          scripts/test_examples_archive.py \
+            --archive ".release/examples/roc-ray-examples-${{ needs.build.outputs.release_version }}.zip" \
+            --bundle ".release/test-bundles/${{ matrix.artifact_file }}"
+
   required:
     name: Release required
     if: always()
@@ -417,16 +442,11 @@ jobs:
           release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL" --notes-dir docs/releases --roc-version "${{ needs.resolve.outputs.nightly-tag }}"
           github_token: ${{ github.token }}
 
-      # The examples are packaged with their headers pointing at the default
-      # bundle URL this release is about to publish, so an unzipped copy builds
-      # without any local platform checkout.
-      - name: Package examples archive
-        run: |
-          python3 scripts/release_helpers.py package-examples \
-            --release-version "${{ needs.build.outputs.release_version }}" \
-            --release-bundles .release/release-bundles.json \
-            --repo "${{ github.repository }}" \
-            --output ".release/examples-${{ needs.build.outputs.release_version }}.zip"
+      - name: Download the tested examples archive
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: examples-archive
+          path: .release
 
       - name: Download the documentation assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -439,7 +459,7 @@ jobs:
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           additional_assets: |
-            .release/examples-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-ray-examples-${{ needs.build.outputs.release_version }}.zip
             .release/roc-ray-docs-${{ needs.build.outputs.release_version }}.zip
             .release/roc-ray-${{ needs.build.outputs.release_version }}.pdf
           github_token: ${{ github.token }}

@@ -1,22 +1,10 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-ifndef::langref[]
-:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
-endif::[]
-
 [#roc-primer]
 = Roc for RocRay
 
 This chapter teaches the parts of Roc that a small RocRay app uses, and no
-more. Read it once before <<first-game>>, and come back to it when you do not
+more. Read it once before xref:first-game.adoc#first-game[Your first game], and come back to it when you do not
 understand a line of code. Each section links to the matching page of the
-{langref}/README.md[Roc language reference], which covers the whole language.
+https://github.com/roc-lang/roc/blob/main/docs/langref/README.md[Roc language reference], which covers the whole language.
 
 Roc is a _functional_ language. A value never changes once it exists. To
 "change" something, such as your app's model, you build a new value from the
@@ -30,7 +18,7 @@ written for an older version of the language with different syntax. If an
 example uses `+\x ->+` for a function, `+when ... is+` for matching, `Result`,
 `Task`, or calls functions without parentheses (`f x y`), it will not compile
 with the compiler RocRay uses. The syntax in this manual and in the
-{langref}/README.md[language reference] is current.
+https://github.com/roc-lang/roc/blob/main/docs/langref/README.md[language reference] is current.
 ====
 
 == Values and blocks
@@ -46,8 +34,8 @@ include::tutorial/primer.roc[tag=values,indent=0]
 `480.F32` is the number 480 as an `F32`, a 32-bit floating-point number.
 RocRay uses `F32` for positions, sizes and times, `U64` for counts, and `I64`
 for exit codes. A string goes in double quotes.
-See {langref}/naming.md#constants[Constants] and
-{langref}/numbers.md[Numbers].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/naming.md#constants[Constants] and
+https://github.com/roc-lang/roc/blob/main/docs/langref/numbers.md[Numbers].
 
 A _block_ is a pair of braces holding some lines of code. It evaluates to its
 last line, and the names defined inside it are not visible outside:
@@ -58,7 +46,7 @@ include::tutorial/primer.roc[tag=block,indent=0]
 ----
 
 A line starting with `+#+` is a comment; `+##+` starts a documentation comment.
-See {langref}/expressions.md[Expressions].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/expressions.md[Expressions].
 
 == Records
 
@@ -94,7 +82,7 @@ field per line:
 include::tutorial/primer.roc[tag=single-field,indent=0]
 ----
 
-See {langref}/records.md[Records].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/records.md[Records].
 
 == Types, type aliases, and nominal types
 
@@ -131,8 +119,8 @@ small app, but you use the platform's all the time. `Draw.Frame`,
 `Audio.Sound`, `App.Config` and `App.Input` are nominal types. You cannot
 build one from its contents; the platform gives you one, such as
 `App.default`, and you change it with its methods.
-See {langref}/types.md#type-aliases[Type aliases] and
-{langref}/types.md#nominal-types[Nominal types].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/types.md#type-aliases[Type aliases] and
+https://github.com/roc-lang/roc/blob/main/docs/langref/types.md#nominal-types[Nominal types].
 
 == Tags, tag unions, and match
 
@@ -157,8 +145,8 @@ include::tutorial/primer.roc[tag=payloads,indent=0]
 
 RocRay uses tags throughout: keys (`KeySpace`), options
 (`Capped(60)`), and outcomes (`Exit(0)`). `Msg : []` is a tag union with no
-tags. See {langref}/tag-unions.md[Tag unions] and
-{langref}/pattern-matching.md[Pattern matching].
+tags. See https://github.com/roc-lang/roc/blob/main/docs/langref/tag-unions.md[Tag unions] and
+https://github.com/roc-lang/roc/blob/main/docs/langref/pattern-matching.md[Pattern matching].
 
 `if` and `else` choose between two values. Both branches must have the same
 type:
@@ -168,7 +156,7 @@ type:
 include::tutorial/primer.roc[tag=if,indent=0]
 ----
 
-See {langref}/if-else.md[if and else].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/if-else.md[if and else].
 
 == Functions
 
@@ -180,7 +168,7 @@ an arrow, and the result type. Call it with parentheses:
 include::tutorial/primer.roc[tag=functions,indent=0]
 ----
 
-`double(21)` is `42`. See {langref}/functions.md[Functions].
+`double(21)` is `42`. See https://github.com/roc-lang/roc/blob/main/docs/langref/functions.md[Functions].
 
 === Pure and effectful functions
 
@@ -206,8 +194,8 @@ the platform's effectful functions, such as `frame.circle!` and
 through the speakers.
 
 Keep your game logic in pure functions and call them from `update!`. Pure
-functions are easy to test, as <<primer-expect>> shows.
-See {langref}/functions.md#effectful-functions[Effectful functions].
+functions are easy to test, as xref:roc-primer.adoc#primer-expect[Tests with expect] shows.
+See https://github.com/roc-lang/roc/blob/main/docs/langref/functions.md#effectful-functions[Effectful functions].
 
 == Try, Ok, Err, and ?
 
@@ -234,7 +222,7 @@ That is how `init! : App.Init(Model, [])` grows into
 RocRay treats one error specially. A callback that returns `Err(Exit(code))`
 ends the app with that exit code. Any other error returned to the host
 also ends the app, with a message naming the callback and the error.
-See {langref}/operators.md#-unwrap-if-ok-early-return-if-err[The ? operator].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/operators.md#-unwrap-if-ok-early-return-if-err[The ? operator].
 
 == Tuples
 
@@ -247,7 +235,7 @@ same shape on the left of `=`:
 include::tutorial/primer.roc[tag=tuples,indent=0]
 ----
 
-See {langref}/tuples.md[Tuples].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/tuples.md[Tuples].
 
 == Methods and static dispatch
 
@@ -268,7 +256,7 @@ include::tutorial/primer.roc[tag=methods,indent=0]
 
 The same holds for the platform's effects: `+frame.circle!(...)+` calls the
 `circle!` method of `Draw.Frame` with `frame` as its first argument.
-See {langref}/static-dispatch.md#methods[Methods].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/static-dispatch.md#methods[Methods].
 
 A string can include a value with `+${...}+`. RocRay's text drawing uses this
 with `to_str` to show a number:
@@ -278,7 +266,7 @@ with `to_str` to show a number:
 include::tutorial/primer.roc[tag=interpolation,indent=0]
 ----
 
-See {langref}/strings.md[Strings].
+See https://github.com/roc-lang/roc/blob/main/docs/langref/strings.md[Strings].
 
 == Imports
 
@@ -292,8 +280,8 @@ module's name in front of what it provides, such as `Draw.filled` or
 include::tutorial/primer.roc[tag=imports,indent=0]
 ----
 
-The {api}[API reference] lists every RocRay module and what each provides.
-See {langref}/modules.md#import-statements[Imports].
+The https://lukewilliamboswell.github.io/roc-ray/api/[API reference] lists every RocRay module and what each provides.
+See https://github.com/roc-lang/roc/blob/main/docs/langref/modules.md#import-statements[Imports].
 
 [#primer-expect]
 == Tests with expect
@@ -308,11 +296,11 @@ include::tutorial/primer.roc[tag=expect,indent=0]
 
 `roc test main.roc` runs every `expect` and reports the ones that fail. An
 `expect` cannot call an effectful function, which is one more reason to keep
-your game logic pure. <<testing>> shows how to test an app's logic.
-See {langref}/statements.md[Statements].
+your game logic pure. xref:testing.adoc#testing[Testing your app] shows how to test an app's logic.
+See https://github.com/roc-lang/roc/blob/main/docs/langref/statements.md[Statements].
 
 == What this chapter leaves out
 
 Roc has more: lists and their functions, `for` and `while` loops, variables
 with `var`, dictionaries, and more. The RocRay examples use them, and the
-{langref}/README.md[language reference] explains them when you meet them.
+https://github.com/roc-lang/roc/blob/main/docs/langref/README.md[language reference] explains them when you meet them.

@@ -1,18 +1,9 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#maintaining]
 = Dependencies, bundles, and releases
 
 This chapter is for maintainers: how the platform's native dependencies are
 produced and pinned, how bundles are assembled, how a release is published,
-and how RocRay follows the Roc nightly. It assumes <<contributing>>.
+and how RocRay follows the Roc nightly. It assumes xref:contributing.adoc#contributing[Contributing to RocRay].
 
 [#maintaining-link-inputs]
 == Linker inputs
@@ -30,8 +21,8 @@ A missing, stale, or mismatched input fails the build; it never falls back to a
 local rebuild. The producer workflow that builds new archives, the publisher
 that releases them, and the procedure for changing one are documented beside
 the recipes, in
-{src}/dependencies/link-inputs/README.md[`dependencies/link-inputs/README.md`].
-{src}/dependencies/README.md[`dependencies/README.md`] explains why linker
+https://github.com/lukewilliamboswell/roc-ray/blob/main/dependencies/link-inputs/README.md[`dependencies/link-inputs/README.md`].
+https://github.com/lukewilliamboswell/roc-ray/blob/main/dependencies/README.md[`dependencies/README.md`] explains why linker
 inputs and the macOS interfaces are separate trust boundaries with separate
 locks.
 
@@ -63,7 +54,7 @@ Use `scripts/audit_macos_archives.py` only to inventory unresolved references
 in RocRay's five macOS archives. An archive reference does not establish public
 API status or library ownership; additions to
 `dependencies/macos-interfaces/interfaces.json` require the evidence described
-in {src}/dependencies/macos-interfaces/README.md[`dependencies/macos-interfaces/README.md`].
+in https://github.com/lukewilliamboswell/roc-ray/blob/main/dependencies/macos-interfaces/README.md[`dependencies/macos-interfaces/README.md`].
 
 The independent producer workflow generates the archive twice, validates the
 exact candidate on Intel and Apple Silicon, attests it with GitHub build
@@ -186,26 +177,27 @@ Besides the bundles, every GitHub release includes:
   the publish job attaches those bytes. `nightly.yml` runs the latest
   release's archive against each new nightly through roc-automation's shared
   nightly-compatibility workflow;
-* `roc-ray-manual-<version>.pdf`: this manual as one PDF;
-* `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
-  it;
-* `roc-ray-api-docs-<version>.zip`: the `roc docs` API reference.
+* `roc-ray-<version>.pdf`: this manual as one PDF;
+* `roc-ray-docs-<version>.zip`: this manual as a static site, with the PDF
+  beside it and the `roc docs` API reference under `api/`.
 
-`scripts/release_helpers.py package-examples` and `package-docs` build them,
-and the workflow's build job dry-runs both on every pull request. Pages serves
-only the current release's documentation; the release assets keep each
-release's own copy.
+`scripts/release_helpers.py package-examples` builds the examples archive, and
+the workflow's build job dry-runs it on every pull request. The `build-docs`
+job builds the documentation and `package-docs` packages it, on every pull
+request as well as for a release. Pages serves only the current release's
+documentation; the release assets keep each release's own copy.
 
 === Release notes
 
-Write the notes for a release in `docs/releases/<version>.adoc` and add it to
-`docs/releases/index.adoc`, newest first, so it appears in this manual. The
+Write the notes for a release in `docs/releases/<version>.adoc` and add an
+include for it to `docs/releases.adoc`, newest first, so it appears in this
+manual. Link within the notes with `+xref:releases.adoc#id[text]+`. The
 release workflow converts the same file to Markdown for the GitHub release
 page, then appends the nightly it was built and tested with, the `roc-stable` tag,
 the bundle URLs, and links to the
 examples archive and the docs. The conversion accepts the subset of AsciiDoc
 the notes need (section titles, paragraphs, lists, `[source]` blocks, tables,
-links, and inline emphasis), and fails on anything else rather than publishing
+links, cross references, and inline emphasis), and fails on anything else rather than publishing
 it garbled. Check a draft with:
 
 [source,bash]
@@ -216,18 +208,27 @@ python3 scripts/release_helpers.py preview-release-notes docs/releases/<version>
 [#maintaining-docs]
 === Publishing the documentation
 
-GitHub Pages serves the documentation for the current release only, from the
-release workflow's `publish-docs` job: this manual at the site's root, built by
-`scripts/build_manual.py --pdf`, and the API reference that
-`scripts/build_docs.py` generates under `api/`.
-`scripts/release_helpers.py assemble-pages` lays the site out, redirects the
-old `manual/` address to the root, and gives it a 404 page that sends readers
-of an earlier version to the releases page. Each release has its own copy
-of both as attached assets, so nothing generated is committed and old versions
-never accumulate on the site.
-The `docs` workflow builds the manual as HTML and PDF on every pull request and
-push to `main` and uploads it as a workflow artifact, so a change can be
-reviewed before it is released.
+GitHub Pages serves the documentation for the current release only. The
+release workflow's `build-docs` job builds it with read-only permissions: this
+manual, rendered by roc-automation's `actions/build-docs` with the `roc-docs`
+binary Blueprint verifies, and the API reference that `scripts/build_docs.py`
+generates. `scripts/release_helpers.py assemble-pages` lays the site out with
+the manual at the root and the API reference under `api/`, redirects the old
+`manual/` address to the root, and gives it a 404 page that sends readers of
+an earlier version to the releases page. The `publish-docs` job, which holds
+only the Pages permissions and checks nothing out, deploys that site after the
+release is published. Each release has its own copy of both as attached
+assets, so nothing generated is committed and old versions never accumulate on
+the site.
+The `docs` workflow builds the manual as HTML, PDF and Markdown on every pull
+request and push to `main` and uploads it as a workflow artifact, so a change
+can be reviewed before it is released.
+
+To move to a new `roc-docs` release, change the release in the `docs`
+environment of `Blueprint.roc`, run `blueprint update roc-docs`, compare the
+digests it writes to `Blueprint.lock` with the ones the release lists, and
+pin `actions/build-docs` in both workflows to the commit that release was
+built from.
 
 [#maintaining-nightly]
 == The Roc nightly
@@ -269,7 +270,7 @@ manual] describes them:
 * *Regenerate the host ABI* when the `Checks and generated ABI` CI job reports
   that the latest nightly generates a different `src/roc_platform_abi.zig`:
   review the diff, run `blueprint run glue-update`, and release. See
-  <<host-development>>.
+  xref:host-development.adoc#host-development[Working on the host].
 * *Change the tooling compiler* when the scripts need a newer `roc-stable`:
   change the tag in `Blueprint.roc`, run `blueprint update` if the locked
   revision predates it, and fix any script the new compiler breaks in the same

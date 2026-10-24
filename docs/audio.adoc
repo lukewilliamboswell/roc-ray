@@ -1,18 +1,9 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#audio]
 = Audio
 
 RocRay plays short sound effects, streams music, and can generate tones in
-code. This chapter assumes <<app-model>>; loading sounds from disk also uses
-the asset stores described in <<files-and-assets>>.
+code. This chapter assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!]; loading sounds from disk also uses
+the asset stores described in xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases].
 
 == Sounds and music
 
@@ -57,8 +48,8 @@ the compiler tells you which are missing.
 generated sound lasts from 1 millisecond to `Audio.max_generated_ms` (5
 seconds). Asking for any other length is a mistake in the program, so the app
 stops with a message naming the fix; load a file for anything longer.
-{src}/examples/pong/main.roc[Pong] and
-{src}/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc[Pong] and
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/generated_assets/main.roc[Pixel Workshop] make all their sounds
 this way.
 
 == Loading from disk
@@ -69,7 +60,7 @@ jump = Audio.load_sound!(store, "jump.wav")?
 theme = Audio.load_music!(store, "theme.ogg")?
 ----
 
-Here `store` is an asset store opened in `init!`; <<drawing-first-sprite>>
+Here `store` is an asset store opened in `init!`; xref:drawing.adoc#drawing-first-sprite[Load your first sprite]
 shows how to set one up for your own project.
 
 The format is taken from the file's extension. Sounds and music read WAV, OGG
@@ -113,6 +104,6 @@ in any callback, `render!` included: `Sound.is_playing!`, `Music.is_playing!`,
 
 == Further reading
 
-* The `Audio` page of the {api}[API reference].
-* {src}/examples/top_down/main.roc[Spark Run] loads music and sound effects and
+* The `Audio` page of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference].
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/top_down/main.roc[Spark Run] loads music and sound effects and
   switches tracks with the game state.

@@ -115,7 +115,7 @@ jobs:
       - name: Run Zig tests
         run: zig build test -Droc-tests=false
 
-      - name: Validate Roc examples and docs
+      - name: Validate Roc examples
         run: |
           # The examples are checked against a locally bundled and served
           # platform, which is the shape they will be released in; bundle mode
@@ -127,7 +127,6 @@ jobs:
           scripts/all_tests.py --only roc-doom-e1m1 --skip-platform-build --skip-roc-test \
             --skip-bundle-test --skip-integration-probes \
             --platform-mode=bundle --skip-windowed --headless-frames=3
-          python3 scripts/build_docs.py --check
 
       - name: Verify release hosts
         run: scripts/check_release_hosts.py
@@ -207,16 +206,6 @@ jobs:
             --repo "${{ github.repository }}" \
             --output-dir .release/examples
 
-      # The same cover for the documentation assets: the manual (HTML and PDF)
-      # and the `roc docs` API reference, built exactly as the publish job
-      # builds them, then thrown away.
-      - name: Check the documentation assets can be built
-        run: |
-          python3 scripts/release_helpers.py package-docs \
-            --release-version dry-run \
-            --output-dir .release/docs-dry-run
-          rm -rf .release/docs-dry-run
-
       - name: Upload release bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -243,6 +232,99 @@ jobs:
             .release/release-bundles.json
             .release/test-matrix.json
           if-no-files-found: error
+          retention-days: 7
+
+  # Every release carries its own documentation: the manual as a static site
+  # and as a PDF, with the `roc docs` API reference beside it, and Pages shows
+  # the same build. It is built here, read-only, for a pull request too, so a
+  # broken manual or API reference fails before a release is attempted; only
+  # the publish jobs use what it uploads.
+  build-docs:
+    name: Build the documentation
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `roc docs` generates the API reference; the platform names no
+      # compiler, so it is the nightly this release is built with.
+      - name: Install the compiler
+        uses: ./.github/actions/setup-toolchain
+        with:
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+          zig: "false"
+
+      # Blueprint downloads roc-docs and checks its bytes against the digest
+      # Blueprint.lock records before handing out the path.
+      - name: Set up Blueprint
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+
+      - id: renderer
+        name: Get the verified renderer
+        run: echo "path=$(blueprint run docs-renderer)" >> "$GITHUB_OUTPUT"
+
+      - name: Check the prepared images
+        run: python3 scripts/prepare_docs_images.py
+
+      - id: manual
+        name: Build the manual
+        uses: lukewilliamboswell/roc-automation/actions/build-docs@7aff4132691ad4fc348abe9df146a57512b49bd6
+        with:
+          renderer-binary: ${{ steps.renderer.outputs.path }}
+          pdf-filename: roc-ray.pdf
+          site-url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          docs-version: ${{ needs.build.outputs.release_version }}
+
+      # Not the action's `api-entrypoint`: build_docs.py also hides the
+      # compiler-required private adapter entries from the reference and
+      # checks every effect's phase sentence, which plain `roc docs` does not.
+      - name: Build the API reference
+        env:
+          DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
+        run: python3 scripts/build_docs.py --docs-root .docs-api --version "$DOCS_VERSION"
+
+      - name: Package the documentation
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
+          SITE: ${{ steps.manual.outputs.site-directory }}
+          PDF: ${{ steps.manual.outputs.pdf-path }}
+        run: |
+          python3 scripts/release_helpers.py package-docs \
+            --release-version "$RELEASE_VERSION" \
+            --manual "$SITE" \
+            --api ".docs-api/$DOCS_VERSION" \
+            --pdf "$PDF" \
+            --output-dir .release/docs
+          # Pages shows the current release only: the manual at the root and
+          # the API reference under api/. Each release carries its own copy
+          # of both as attached assets, so nothing old accumulates there.
+          python3 scripts/release_helpers.py assemble-pages \
+            --manual "$SITE" \
+            --api ".docs-api/$DOCS_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --output .pages
+
+      - name: Upload the documentation assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-docs
+          path: .release/docs/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: .pages
           retention-days: 7
 
   test-bundles:
@@ -310,6 +392,7 @@ jobs:
     needs:
       - resolve
       - build
+      - build-docs
       - test-bundles
     runs-on: ubuntu-latest
     steps:
@@ -317,14 +400,16 @@ jobs:
         env:
           RESOLVE_RESULT: ${{ needs.resolve.result }}
           BUILD_RESULT: ${{ needs.build.result }}
+          DOCS_RESULT: ${{ needs.build-docs.result }}
           BUNDLES_RESULT: ${{ needs.test-bundles.result }}
-        run: test "$RESOLVE_RESULT" = success && test "$BUILD_RESULT" = success && test "$BUNDLES_RESULT" = success
+        run: test "$RESOLVE_RESULT" = success && test "$BUILD_RESULT" = success && test "$DOCS_RESULT" = success && test "$BUNDLES_RESULT" = success
 
   publish-release:
     name: Publish GitHub release
     needs:
       - resolve
       - build
+      - build-docs
       - test-bundles
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -363,21 +448,11 @@ jobs:
           name: examples-archive
           path: .release
 
-      - name: Install the compiler
-        uses: ./.github/actions/setup-toolchain
+      - name: Download the documentation assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-          zig: "false"
-
-      # Every release carries its own documentation: the manual as a static
-      # site and as a PDF, and the `roc docs` API reference. Pages serves the
-      # latest; these keep each release's copy with the release.
-      - name: Package documentation
-        run: |
-          python3 scripts/release_helpers.py package-docs \
-            --release-version "${{ needs.build.outputs.release_version }}" \
-            --docs-version "${{ needs.build.outputs.docs_version }}" \
-            --output-dir .release
+          name: release-docs
+          path: .release
 
       - name: Publish release
         uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
@@ -385,21 +460,19 @@ jobs:
           release_version: ${{ needs.build.outputs.release_version }}
           additional_assets: |
             .release/roc-ray-examples-${{ needs.build.outputs.release_version }}.zip
-            .release/roc-ray-manual-${{ needs.build.outputs.release_version }}.zip
-            .release/roc-ray-manual-${{ needs.build.outputs.release_version }}.pdf
-            .release/roc-ray-api-docs-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-ray-docs-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-ray-${{ needs.build.outputs.release_version }}.pdf
           github_token: ${{ github.token }}
 
+  # Deploys the site build-docs assembled; it checks out and builds nothing.
   publish-docs:
     name: Publish the docs
     needs:
-      - resolve
-      - build
+      - build-docs
       - publish-release
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       pages: write
       id-token: write
     environment:
@@ -407,38 +480,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install the compiler
-        uses: ./.github/actions/setup-toolchain
-        with:
-          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-          zig: "false"
-
-      # Pages shows the current release only: the manual at the root and the
-      # API reference under api/. Each release carries its own copy of both as
-      # attached assets (package-docs), so nothing old accumulates here.
-      - name: Build the site
-        run: |
-          python3 scripts/build_docs.py --docs-root .docs-api --version "${{ needs.build.outputs.docs_version }}"
-          python3 scripts/build_manual.py --pdf \
-            --docs-version "${{ needs.build.outputs.release_version }}" \
-            --output .docs-out
-          python3 scripts/release_helpers.py assemble-pages \
-            --manual .docs-out/site \
-            --api ".docs-api/${{ needs.build.outputs.docs_version }}" \
-            --repo "${{ github.repository }}" \
-            --output .pages
-
-      - name: Setup Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: .pages
-
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

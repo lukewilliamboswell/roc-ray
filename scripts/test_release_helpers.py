@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import os
+import shutil
 import unittest
 import unittest.mock
 import zipfile
@@ -344,6 +345,52 @@ class AssemblePagesTests(unittest.TestCase):
                 helpers.cmd_assemble_pages(args)
 
 
+class PackageDocsTests(unittest.TestCase):
+    def make_inputs(self, root: Path) -> argparse.Namespace:
+        (root / "site" / "images").mkdir(parents=True)
+        (root / "site" / "index.html").write_text("manual", encoding="utf-8")
+        (root / "site" / "images" / "a.png").write_bytes(b"png")
+        (root / "api" / "App").mkdir(parents=True)
+        (root / "api" / "index.html").write_text("api", encoding="utf-8")
+        (root / "api" / "App" / "index.html").write_text("app", encoding="utf-8")
+        (root / "roc-ray.pdf").write_bytes(b"%PDF-2.0")
+        return argparse.Namespace(
+            release_version="0.11.0", manual=str(root / "site"), api=str(root / "api"),
+            pdf=str(root / "roc-ray.pdf"), output_dir=str(root / "out"),
+        )
+
+    def test_one_site_archive_and_one_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            helpers.cmd_package_docs(self.make_inputs(root))
+            out = root / "out"
+            self.assertEqual(sorted(path.name for path in out.iterdir()), ["roc-ray-0.11.0.pdf", "roc-ray-docs-0.11.0.zip"])
+            self.assertEqual((out / "roc-ray-0.11.0.pdf").read_bytes(), b"%PDF-2.0")
+            with zipfile.ZipFile(out / "roc-ray-docs-0.11.0.zip") as archive:
+                self.assertEqual(archive.namelist(), [
+                    "roc-ray-docs-0.11.0/api/App/index.html",
+                    "roc-ray-docs-0.11.0/api/index.html",
+                    "roc-ray-docs-0.11.0/images/a.png",
+                    "roc-ray-docs-0.11.0/index.html",
+                ])
+
+    def test_missing_pdf_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args = self.make_inputs(root)
+            (root / "roc-ray.pdf").unlink()
+            with self.assertRaisesRegex(RuntimeError, "no manual PDF"):
+                helpers.cmd_package_docs(args)
+
+    def test_missing_api_reference_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args = self.make_inputs(root)
+            shutil.rmtree(root / "api")
+            with self.assertRaisesRegex(RuntimeError, "API reference"):
+                helpers.cmd_package_docs(args)
+
+
 class ZipTreeTests(unittest.TestCase):
     def test_files_sit_under_one_prefix_in_a_stable_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -426,8 +473,10 @@ class ReleaseNotesTests(unittest.TestCase):
             self.assertIn("Built and tested with Roc `nightly-2026-10-24-0123456`", body)
             self.assertIn("`roc-stable` `nightly-2026-10-23-18478ff`", body)
             self.assertNotIn("Supported compiler", body)
-            for asset in ("roc-ray-manual-0.10.0.pdf", "roc-ray-manual-0.10.0.zip", "roc-ray-api-docs-0.10.0.zip"):
+            for asset in ("roc-ray-0.10.0.pdf", "roc-ray-docs-0.10.0.zip"):
                 self.assertIn(f"https://github.com/owner/repo/releases/download/0.10.0/{asset}", body)
+            for retired in ("roc-ray-manual-", "roc-ray-api-docs-"):
+                self.assertNotIn(retired, body)
 
     def test_missing_versioned_notes_uses_generated_intro(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -528,6 +577,17 @@ class AsciiDocToMarkdownTests(unittest.TestCase):
             self.convert(source),
             "See [the guide](#upgrading) and [`a`](https://example.com/a).\n\n---\n",
         )
+
+    def test_xref_macros_keep_only_the_section(self) -> None:
+        source = "See xref:releases.adoc#upgrading-from-09[the upgrade guide] and xref:#fixes[fixes].\n"
+        self.assertEqual(
+            self.convert(source),
+            "See [the upgrade guide](#upgrading-from-09) and [fixes](#fixes).\n",
+        )
+
+    def test_xref_without_text_fails(self) -> None:
+        with self.assertRaises(markdown.ConversionError):
+            self.convert("See xref:releases.adoc#fixes[].\n")
 
     def test_code_spans_are_left_alone(self) -> None:
         self.assertEqual(self.convert("Use `+*_from_bytes!*+` and `gen_*`.\n"), "Use `*_from_bytes!*` and `gen_*`.\n")

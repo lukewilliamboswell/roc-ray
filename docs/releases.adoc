@@ -1,0 +1,14 @@
+[#release-notes]
+= Release notes
+
+Each RocRay release has its notes here, newest first. Earlier releases are
+described on their
+https://github.com/lukewilliamboswell/roc-ray/releases[GitHub release pages].
+
+// One include per file in releases/, newest first. Each file is also the
+// source of its GitHub release page: the release workflow converts it to
+// Markdown with `scripts/release_helpers.py make-release-notes`.
+
+include::releases/0.11.0.adoc[leveloffset=+1]
+
+include::releases/0.10.0.adoc[leveloffset=+1]

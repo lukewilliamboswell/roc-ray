@@ -8,7 +8,8 @@ workflow converts the same file.
 Only the subset of AsciiDoc that release notes need is accepted: section
 titles, paragraphs, bulleted and numbered lists (with `+` continuations),
 `[source]` listing blocks, simple tables, thematic breaks, block ids, links,
-`<<id,text>>` cross references, and constrained `*bold*` and `_emphasis_`.
+`xref:file.adoc#id[text]` and `<<id,text>>` cross references, and constrained
+`*bold*` and `_emphasis_`.
 Anything else is an error rather than a page that renders garbled, so a new
 construct has to be taught here before it can be published.
 """
@@ -36,6 +37,9 @@ COMMENT = re.compile(r"^//(?!/)")
 # Inline patterns, applied outside code spans only.
 URL_LINK = re.compile(r"(?:link:)?((?:https?://|#)[^\s\[\]]+)\[([^\]]*)\]")
 XREF = re.compile(r"<<([\w.-]+),([^>]+)>>")
+# A cross reference to a section of the notes themselves. On the release page
+# the notes are one Markdown document, so only the section id is kept.
+XREF_MACRO = re.compile(r"xref:(?:[\w./-]+\.adoc)?#([\w.-]+)\[([^\]]+)\]")
 BARE_XREF = re.compile(r"<<[^>]*>>")
 BOLD = re.compile(r"(?<![\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])")
 EMPHASIS = re.compile(r"(?<![\w_])_(?=\S)([^_]*?\S)_(?![\w_])")
@@ -57,12 +61,13 @@ def convert_inline(text: str, line: int) -> str:
 
     text = re.sub(r"`([^`]*)`", hold, text)
     text = XREF.sub(lambda m: f"[{m.group(2)}](#{m.group(1)})", text)
+    text = XREF_MACRO.sub(lambda m: f"[{m.group(2)}](#{m.group(1)})", text)
     if BARE_XREF.search(text):
         raise ConversionError(f"line {line}: a cross reference needs link text")
     text = URL_LINK.sub(lambda m: f"[{m.group(2) or m.group(1)}]({m.group(1)})", text)
     text = BOLD.sub(r"**\1**", text)
     text = EMPHASIS.sub(r"*\1*", text)
-    for macro in ("link:", "image:", "footnote:", "pass:", "kbd:", "btn:", "menu:"):
+    for macro in ("link:", "xref:", "image:", "footnote:", "pass:", "kbd:", "btn:", "menu:"):
         if macro in text:
             raise ConversionError(f"line {line}: unsupported inline macro {macro}")
     return re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)

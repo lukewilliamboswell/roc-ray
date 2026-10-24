@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#tasks]
 = Tasks: operations that wait
 
@@ -14,7 +5,7 @@ Some operations take longer than a frame: waiting two seconds before the next
 level starts, reading a level file, fetching a high-score table. If `update!`
 waited for one, the window would freeze. This chapter shows how to run such an
 operation as a _task_, so the game keeps updating and drawing while it waits, and
-how the result comes back. It assumes <<app-model>>.
+how the result comes back. It assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!].
 
 == A first task: wait, then start the next level
 
@@ -72,7 +63,7 @@ it. It is there so the compiler can check that the task returns your app's
 `Msg` type: the input's type, `App.Input(Msg)`, names that type, and the body
 must return a value of it. Pass the `input` your `update!` received.
 
-{src}/examples/task_sleep/main.roc[Task Sleep] is this pattern as a complete
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/task_sleep/main.roc[Task Sleep] is this pattern as a complete
 app.
 
 == Waiting effects
@@ -90,7 +81,7 @@ two places:
 Calling one from `update!` or `render!` stops the app with a message naming
 the effect and where it belongs. The rule exists so that a slow disk or
 network can never freeze the window: a cycle can only be as slow as your own
-code. See <<app-model-why>>.
+code. See xref:app-model.adoc#app-model-why[Why it is shaped this way].
 
 == Load a level file
 
@@ -117,7 +108,7 @@ Task.spawn!(input, || LevelLoaded(load_level!(levels, "level-2.txt")))
 ----
 
 Here `model.levels` is a directory handle opened in `init!` (see
-<<files-and-assets>>), and `+parse_level : Str -> Try(Level, LoadError)+` is the
+xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases]), and `+parse_level : Str -> Try(Level, LoadError)+` is the
 app's own pure parser. `? |err| ReadFailed(err)` wraps a read error in the
 app's own error type before returning it. The message contains the whole
 result, errors included, so `apply_message` decides what a failed load
@@ -152,7 +143,7 @@ tasks _finished_, which need not be the order they were started. When more
 than one task of the same kind can be running, for example because the user
 pressed "reload" twice, an older reply can arrive after a newer one. Put an id or generation counter
 in the message and ignore replies that do not match the latest;
-{src}/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/http_fetch/main.roc[HTTP Fetch] shows the shape.
 
 == Tasks are for waiting, not for computing
 
@@ -180,7 +171,7 @@ messages never arrive. A task that must finish, such as writing a save file,
 needs the app to wait for its message before exiting. With
 `with_close_request(Deliver)`, closing the window becomes a message to
 `update!` rather than an immediate exit, so the app can start the save and
-exit when the save's message arrives. <<app-model-closing>> shows the whole
+exit when the save's message arrives. xref:app-model.adoc#app-model-closing[Closing the window] shows the whole
 pattern.
 
 == Components with their own messages
@@ -224,9 +215,9 @@ function, `|m| CounterMsg(m)`.
 
 == Further reading
 
-* {src}/examples/async_read/main.roc[Async Read] runs three file operations
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/async_read/main.roc[Async Read] runs three file operations
   at once, each with its own message.
-* {src}/examples/sqlite_scores/main.roc[SQLite Scores] writes and reads back in
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sqlite_scores/main.roc[SQLite Scores] writes and reads back in
   one task.
-* <<architecture>> explains why tasks run on the frame thread and why each
+* xref:architecture.adoc#architecture[Architecture] explains why tasks run on the frame thread and why each
   delivers exactly one message.

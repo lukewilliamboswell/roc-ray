@@ -1,0 +1,68 @@
+{
+  "position": 0.5,
+  "stills": [
+    {
+      "recording": "examples/gallery/breakout.webp",
+      "recording_sha256": "f6fdb8161dd3e11ecf63c3a5b1d112576ca19710d15ccb0dd394763fc5587241",
+      "frame": 75,
+      "png": "images/gallery/breakout.png",
+      "png_sha256": "779f06009b7a7a0b7f5ec8039d143baea2d71e6086eac53ae2028f02289f177d"
+    },
+    {
+      "recording": "examples/gallery/capture_ui_demo.webp",
+      "recording_sha256": "5e41291d2f08781f322272fedb89fa3b75b2adb4534ab719b2c03ce5cb12a1bd",
+      "frame": 75,
+      "png": "images/gallery/capture_ui_demo.png",
+      "png_sha256": "e3fba0408d7b678dacdf8766827283c59038e43bb2ed5b610166dd9e21e65a16"
+    },
+    {
+      "recording": "examples/gallery/cave_climb.webp",
+      "recording_sha256": "073d3723263af741028851b08f2000a33905b447e12436d32f9b0e89fda81cd8",
+      "frame": 62,
+      "png": "images/gallery/cave_climb.png",
+      "png_sha256": "138c8b441c26f7931453da1efe4dd65eb1b694572a43770c6e91f21e665e5c15"
+    },
+    {
+      "recording": "examples/gallery/generated_assets.webp",
+      "recording_sha256": "16ca5dd5c2ca7d73fb25c24150ef62876ee8cfc7654f952ef8729e7f249040e3",
+      "frame": 50,
+      "png": "images/gallery/generated_assets.png",
+      "png_sha256": "b03cc024f0d5638813fc60525ac9afe29f8774202f378ef9aa021fc0ae6586e9"
+    },
+    {
+      "recording": "examples/gallery/live_plot.webp",
+      "recording_sha256": "657d83f9cef0cba13a2b7bddbc442ed5ce5ad3fabcefdcb88d8be512917fe298",
+      "frame": 75,
+      "png": "images/gallery/live_plot.png",
+      "png_sha256": "93aa4f273c152eb5aa4190378f9f7f15eece4da336fdd5f0abed789c493b2d24"
+    },
+    {
+      "recording": "examples/gallery/particles.webp",
+      "recording_sha256": "536a48943e7cde9caf689c32cf5e5a038f49808fa0910e8dffb16302b9a0282a",
+      "frame": 62,
+      "png": "images/gallery/particles.png",
+      "png_sha256": "411226b6d4e32998ed9673489ef54f4ece157c9aec52f73d142787885b2b8bce"
+    },
+    {
+      "recording": "examples/gallery/postcard_studio.webp",
+      "recording_sha256": "c4f1cbfe6919224d2ebd5fa1db6f969d2da2d34a1ac49c20caac3a8fceaa9aa9",
+      "frame": 62,
+      "png": "images/gallery/postcard_studio.png",
+      "png_sha256": "30b4dbd49a893e7fe4afa8c8ff84ac8003ee70bf6a7908bd8dd3e6f7a8635094"
+    },
+    {
+      "recording": "examples/gallery/responsive_ui.webp",
+      "recording_sha256": "3e7305a20376bb20d50702fb640e67eb3ade45d214f1b6725dcdce172882712d",
+      "frame": 20,
+      "png": "images/gallery/responsive_ui.png",
+      "png_sha256": "72dc0f175e5ac14433b91b01ae26560d07800e46daa55e2363bfa987d426ab9d"
+    },
+    {
+      "recording": "examples/gallery/top_down.webp",
+      "recording_sha256": "5d05f92cb75e8b5d23121303a62405bb0e5d826f21b976feeca3238083b0876a",
+      "frame": 75,
+      "png": "images/gallery/top_down.png",
+      "png_sha256": "6df404d9144bb163cc435e204b095a4dc048a8922ae77854b6fdd3f6c539f5c8"
+    }
+  ]
+}

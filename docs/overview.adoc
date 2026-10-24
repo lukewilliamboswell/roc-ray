@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#overview]
 = What RocRay is
 
@@ -34,7 +25,7 @@ RocRay is also not a GUI toolkit. For desktop applications built from widgets
 such as buttons, text fields, and layouts, see
 https://github.com/lukewilliamboswell/roc-gui[roc-gui].
 
-If you already know raylib, <<coming-from-raylib>> shows how its functions and
+If you already know raylib, xref:coming-from-raylib.adoc#coming-from-raylib[Coming from raylib] shows how its functions and
 habits map onto RocRay.
 
 == What you write
@@ -61,8 +52,8 @@ Reading a file or waiting for a network reply can take longer than one host
 cycle. Slow operations like these run as a _task_, so the app keeps updating
 and drawing while it waits. When the task finishes, its result arrives in a later `update!`.
 
-<<app-model>> explains these pieces in full. You do not need them to run your
-first example. <<glossary>> defines every term the manual uses.
+xref:app-model.adoc#app-model[The app model: init!, update!, and render!] explains these pieces in full. You do not need them to run your
+first example. xref:glossary.adoc#glossary[Glossary] defines every term the manual uses.
 
 == What an app can access
 
@@ -71,57 +62,59 @@ itself. Anything more, such as a network service, a directory, another
 program, an environment variable, or the clipboard, must be declared in the
 app's startup settings. So you can see what an app can access by reading its
 source.
-<<permissions>> explains how.
+xref:permissions.adoc#permissions[Permissions: what your app can access] explains how.
 
 == What it looks like
 
 Three short examples are the best place to start:
-{src}/examples/hello_world/main.roc[Hello World], a circle that follows the
-mouse; {src}/examples/pong/main.roc[Pong], a complete game in one file; and
-{src}/examples/snake/main.roc[Snake], a grid game you can restart.
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/hello_world/main.roc[Hello World], a circle that follows the
+mouse; https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc[Pong], a complete game in one file; and
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/snake/main.roc[Snake], a grid game you can restart.
 
 These larger apps are also in the repository's `examples/` directory, roughly
 from simplest to most involved. Each links to its complete Roc source.
 
-// The gallery images are WebP, which the PDF converter cannot embed, so the
-// printed manual lists the same apps instead.
-ifdef::backend-html5[]
-[cols="1,1,1",frame=none,grid=none]
-|===
-a|image::breakout.webp[Breakout gameplay,link={src}/examples/breakout/main.roc]
-*Breakout*: arcade gameplay, sounds made in code, recording
-a|image::generated_assets.webp[Painting in Pixel Workshop,link={src}/examples/generated_assets/main.roc]
-*Pixel Workshop*: drawing pixels and creating sounds in code
-a|image::responsive_ui.webp[Navigating the responsive settings interface,link={src}/examples/responsive_ui/main.roc]
-*Responsive Settings*: keyboard, mouse, resizing, display scaling
-a|image::postcard_studio.webp[An animated postcard composition,link={src}/examples/postcard_studio/main.roc]
-*Postcard Studio*: generative art and saving larger images
-a|image::particles.webp[A moving fountain of particles,link={src}/examples/particles/main.roc]
-*Particles*: thousands of moving images at once
-a|image::capture_ui_demo.webp[A scripted responsive interface demonstration,link={src}/examples/capture_ui_demo/main.roc]
-*Capture UI Demo*: automated controls and GIF recording
-a|image::live_plot.webp[Source files appearing in Live Plot,link={src}/examples/live_plot/main.roc]
-*Live Plot*: loading and drawing hundreds of thousands of lines
-a|image::top_down.webp[Spark Run gameplay,link={src}/examples/top_down/main.roc]
-*Spark Run*: a designed map, characters, music, game states
-a|image::cave_climb.webp[Cave Climb gameplay,link={src}/examples/cave_climb/main.roc]
-*Cave Climb*: a designed level, jumping, camera, sound
-|===
-endif::[]
-ifndef::backend-html5[]
-* {src}/examples/breakout/main.roc[Breakout]: arcade gameplay, sounds made in code, recording
-* {src}/examples/generated_assets/main.roc[Pixel Workshop]: drawing pixels and creating sounds in code
-* {src}/examples/responsive_ui/main.roc[Responsive Settings]: keyboard, mouse, resizing, display scaling
-* {src}/examples/postcard_studio/main.roc[Postcard Studio]: generative art and saving larger images
-* {src}/examples/particles/main.roc[Particles]: thousands of moving images at once
-* {src}/examples/capture_ui_demo/main.roc[Capture UI Demo]: automated controls and GIF recording
-* {src}/examples/live_plot/main.roc[Live Plot]: loading and drawing hundreds of thousands of lines
-* {src}/examples/top_down/main.roc[Spark Run]: a designed map, characters, music, game states
-* {src}/examples/cave_climb/main.roc[Cave Climb]: a designed level, jumping, camera, sound
-endif::[]
+// Each picture is a still from the app's recording in examples/gallery/,
+// which the README shows. scripts/prepare_docs_images.py makes the stills.
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[*Breakout*]: arcade gameplay, sounds made in code, recording. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/breakout.webp[Watch the recording].
+
+image::images/gallery/breakout.png[Breakout gameplay]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/generated_assets/main.roc[*Pixel Workshop*]: drawing pixels and creating sounds in code. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/generated_assets.webp[Watch the recording].
+
+image::images/gallery/generated_assets.png[Painting in Pixel Workshop]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/responsive_ui/main.roc[*Responsive Settings*]: keyboard, mouse, resizing, display scaling. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/responsive_ui.webp[Watch the recording].
+
+image::images/gallery/responsive_ui.png[Navigating the responsive settings interface]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/postcard_studio/main.roc[*Postcard Studio*]: generative art and saving larger images. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/postcard_studio.webp[Watch the recording].
+
+image::images/gallery/postcard_studio.png[An animated postcard composition]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/particles/main.roc[*Particles*]: thousands of moving images at once. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/particles.webp[Watch the recording].
+
+image::images/gallery/particles.png[A moving fountain of particles]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_ui_demo/main.roc[*Capture UI Demo*]: automated controls and GIF recording. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/capture_ui_demo.webp[Watch the recording].
+
+image::images/gallery/capture_ui_demo.png[A scripted responsive interface demonstration]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/live_plot/main.roc[*Live Plot*]: loading and drawing hundreds of thousands of lines. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/live_plot.webp[Watch the recording].
+
+image::images/gallery/live_plot.png[Source files appearing in Live Plot]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/top_down/main.roc[*Spark Run*]: a designed map, characters, music, game states. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/top_down.webp[Watch the recording].
+
+image::images/gallery/top_down.png[Spark Run gameplay]
+
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/cave_climb/main.roc[*Cave Climb*]: a designed level, jumping, camera, sound. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/cave_climb.webp[Watch the recording].
+
+image::images/gallery/cave_climb.png[Cave Climb gameplay]
 
 An app can also record itself to a video file, such as this
-{src}/examples/gallery/capture_plot.webm[WebM plot recording].
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/gallery/capture_plot.webm[WebM plot recording].
 
 == Stability
 
@@ -129,4 +122,4 @@ RocRay follows the latest nightly build of the Roc compiler: neither the
 platform nor its examples name a compiler, and they are tested with the latest
 nightly every day. Because Roc is still changing, RocRay's API may also change.
 Each RocRay release's notes name the nightly it was built and tested with. Bug reports, documentation
-improvements, and focused new capabilities are welcome; see <<contributing>>.
+improvements, and focused new capabilities are welcome; see xref:contributing.adoc#contributing[Contributing to RocRay].

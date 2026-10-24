@@ -46,6 +46,10 @@ Math := [].{
 			Encoding : encoding
 			|value, state| Encoding.encode_vec3(value, state)
 		}
+
+		## Compare two of these values.
+		is_eq : Vec3, Vec3 -> Bool
+		is_eq = |a, b| a.x == b.x and a.y == b.y and a.z == b.z
 	}
 
 	## Construct a three-dimensional vector.

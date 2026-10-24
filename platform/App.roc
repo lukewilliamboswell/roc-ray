@@ -367,7 +367,9 @@ App := [].{
 		with_close_request : Config, CloseRequest -> Config
 		with_close_request = |cfg, value| { ..cfg, close_request: value }
 
-		## Return a config with a different initial cursor mode.
+		## Return a config with a different initial cursor mode. `Locked` is
+		## retained by the host and reasserted when the real window first gains or
+		## later regains focus; the app does not need to repeat it from `init!`.
 		with_cursor_mode : Config, Mouse.CursorMode -> Config
 		with_cursor_mode = |cfg, value| { ..cfg, cursor: value }
 

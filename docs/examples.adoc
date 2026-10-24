@@ -142,6 +142,8 @@ Use these to see several systems working together in one app.
 `cave_climb` |A platformer with a mirror-bouncing laser and a spring grapple: tilemaps, collision, and camera tracking, split across two modules
 |{src}/examples/live_plot/main.roc[Live Plot] +
 `live_plot` |A whole source tree listed, read, and parsed through a bounded queue of tasks, and drawn as a scrolling strip of a quarter of a million points
+|{src}/examples/roc-doom-e1m1/main.roc[RocDOOM E1M1] +
+`roc-doom-e1m1` |A Doom-compatible game built over pinned Freedoom E1M1 data: a fixed-tic simulation, BSP-tree rendering through a 3D camera and textured triangle batches, enemies, combat, and line specials
 |===
 
 [#examples-recipes]
@@ -227,6 +229,7 @@ own resources, as <<permissions>> describes. Nothing is passed on the command li
 |`post_process` |`Directory("examples/post_process/assets", ReadOnly)` |Loads its shader from that directory
 |`top_down` |`Directory("examples/top_down/assets", ReadOnly)` |Loads its map, textures, music, and sounds
 |`cave_climb` |`Directory("examples/cave_climb/assets", ReadOnly)` |Loads its map and textures
+|`roc-doom-e1m1` |`Directory("examples/roc-doom-e1m1/assets", ReadOnly)` |Loads its texture atlases, sounds, and music
 |`async_read` |`WorkingDirectory(ReadOnly)` |Reads files beneath the directory it runs from
 |`live_plot` |`WorkingDirectory(ReadOnly)` |Lists and reads the whole tree it runs from
 |`input_inspector` |`ClipboardRead`, `ClipboardWrite` |Copies and pastes text

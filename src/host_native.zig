@@ -4732,6 +4732,9 @@ comptime {
         if (builtin.os.tag == .windows) {
             @export(&__main, .{ .name = "__main" });
         }
+
+        // The x64win process entry point that calls `main`.
+        _ = @import("windows_crt.zig");
     }
 }
 

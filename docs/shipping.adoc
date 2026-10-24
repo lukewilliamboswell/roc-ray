@@ -185,7 +185,7 @@ another:
 |Linux x86-64 |`x64v1glibc` |Runs on any x86-64 processor. The default bundle uses X11, which also runs under XWayland; the Wayland bundle, a separate platform URL, uses Wayland directly.
 |macOS, Intel |`x64mac` |
 |macOS, Apple silicon |`arm64mac` |
-|Windows x86-64 |`x64win` |Build on Windows, with Microsoft's C++ build tools installed. Building a Windows executable from macOS or Linux fails, because the linker needs the Windows SDK's libraries.
+|Windows x86-64 |`x64win` |Needs no Microsoft build tools or Windows SDK: the platform bundle contains what the linker needs. The executable depends only on libraries that are part of Windows.
 |===
 
 For example, on Linux:

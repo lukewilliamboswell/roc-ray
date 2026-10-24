@@ -110,7 +110,7 @@ particles_config = |args| {
 		.with_title("RocRay Particles")
 		.with_size({ width: 800, height: 600 })
 		.with_frame_pacing(Capped(120))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## Where the demo's fountain sits on a given cycle: a slow figure-of-eight
@@ -195,7 +195,7 @@ update! = |model, input, _io| {
 	devices = input.devices
 	# A long first cycle or a resize stall must not teleport the fountain.
 	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.05)
-	spread = if model.demo or devices.key_down(KeySpace) 1.9 else 0.7
+	spread = if (model.demo or devices.key_down(KeySpace)) 1.9 else 0.7
 	pointer = devices.mouse.position()
 	emitter =
 		if model.demo {

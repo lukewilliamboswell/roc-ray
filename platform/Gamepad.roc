@@ -166,12 +166,12 @@ Gamepad := [].{
 			Connected(pad) =>
 				pad.id() == One
 					and pad.button_down(DpadRight)
-						and !(pad.button_up(DpadRight))
-							and pad.button_pressed(DpadRight)
-								and pad.button_released(DpadRight)
-									and pad.axis(LeftY) == -0.5
-										and pad.left_stick() == { x: 0.25, y: -0.5 }
-											and pad.right_stick() == { x: 0.75, y: 1 }
+					and !(pad.button_up(DpadRight))
+					and pad.button_pressed(DpadRight)
+					and pad.button_released(DpadRight)
+					and pad.axis(LeftY) == -0.5
+					and pad.left_stick() == { x: 0.25, y: -0.5 }
+					and pad.right_stick() == { x: 0.75, y: 1 }
 			Disconnected => False
 		}
 	}

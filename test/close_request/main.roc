@@ -64,7 +64,7 @@ update! = |model, input, io| {
 	if typed > 0 {
 		_ = out.line!("text ${U64.to_str(typed)}")
 	}
-	requests = if input.window.close_requested model.requests.append(cycle) else model.requests
+	requests = if (input.window.close_requested) model.requests.append(cycle) else model.requests
 	if model.mode == "exit" {
 		if cycle == 0 {
 			# Never answers: the host must cancel it at shutdown, not wait.
@@ -86,7 +86,7 @@ update! = |model, input, io| {
 		if saved {
 			# Each request on its own cycle, once, and the app kept running
 			# between them.
-			Err(Exit(if requests == [3, 5] and cycle > 5 0 else 3))
+			Err(Exit(if (requests == [3, 5] and cycle > 5) 0 else 3))
 		} else if input.window.close_requested and requests == [3, 5] {
 			# Parks, so the message arrives on a later cycle, with the window
 			# still open.

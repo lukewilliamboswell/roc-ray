@@ -105,7 +105,7 @@ TextureDrawBuilder(field) := {
 	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
+		source = if (options.source_set) options.source else Math.rect(0, 0, texture.width, texture.height)
 
 		dest = if options.dest_set {
 			options.dest
@@ -460,8 +460,8 @@ Draw := [].{
 		from_corners = |corners| {
 			finite = vec_is_finite(corners.top_left)
 				and vec_is_finite(corners.bottom_left)
-					and vec_is_finite(corners.bottom_right)
-						and vec_is_finite(corners.top_right)
+				and vec_is_finite(corners.bottom_right)
+				and vec_is_finite(corners.top_right)
 			if !finite {
 				Err(NonFiniteQuad)
 			} else {
@@ -498,8 +498,8 @@ Draw := [].{
 						normalized_bottom_right = q_bottom_right / q_max
 						bounded = normalized_top_left > 0.000001
 							and normalized_top_right > 0.000001
-								and normalized_bottom_left > 0.000001
-									and normalized_bottom_right > 0.000001
+							and normalized_bottom_left > 0.000001
+							and normalized_bottom_right > 0.000001
 						if !weights_finite or !bounded {
 							Err(ProjectiveHorizon)
 						} else {

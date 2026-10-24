@@ -883,4 +883,4 @@ perform_open! = |authority, handle, path, config| {
 }
 
 joined_path : Str, Str -> Str
-joined_path = |prefix, path| if prefix == "" path else "${prefix}/${path}"
+joined_path = |prefix, path| if (prefix == "") path else "${prefix}/${path}"

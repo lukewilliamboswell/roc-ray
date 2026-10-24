@@ -51,7 +51,7 @@ update! = |model, program_input, _io| {
 
 	outcome =
 		match check(cycle, input, input.text_input) {
-			Ok({}) => if cycle + 1 >= scripted_cycles Passed else Pending
+			Ok({}) => if (cycle + 1 >= scripted_cycles) Passed else Pending
 			Err(reason) => FailedWith(reason)
 		}
 

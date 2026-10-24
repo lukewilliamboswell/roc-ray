@@ -189,8 +189,8 @@ update! = |model, input, _io| {
 	# produces real pressed-this-frame bits, so this needs no special
 	# casing.
 	pressed = devices.mouse.button_pressed(Left)
-	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
-	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
+	clicks = if (pressed and over_increment and model.clicks < max_clicks) model.clicks + 1 else model.clicks
+	toggled = if (pressed and over_toggle) !(model.toggled) else model.toggled
 
 	held = devices.mouse.button_down(Left)
 	slider =
@@ -201,7 +201,7 @@ update! = |model, input, _io| {
 		}
 
 	# Ordinary focus handling: a click puts the keyboard wherever it landed.
-	focused = if pressed inside(mouse, text_field) else model.focused
+	focused = if (pressed) inside(mouse, text_field) else model.focused
 
 	# Ordinary text entry, from the two channels a keyboard has. Codepoints
 	# arrive on `text_input`; backspace is key state, and its edge is produced
@@ -216,9 +216,9 @@ update! = |model, input, _io| {
 	# The scripted devices are installed here, before anything is drawn, and a
 	# cycle before the host samples them back.
 	Mouse.set_source!(
-		if pointer_step.clicking Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
+		if (pointer_step.clicking) Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
 	)
-	Keys.set_source!(if model.frame == backspace_frame Keys.holding([KeyBackspace]) else Keys.holding([]))
+	Keys.set_source!(if (model.frame == backspace_frame) Keys.holding([KeyBackspace]) else Keys.holding([]))
 	next_char = typed_char(model.frame)
 	if !Str.is_empty(next_char) {
 		Keys.set_text!(Keys.typing(next_char))
@@ -252,8 +252,8 @@ field_after_input = |typed, focused, entered, backspace|
 		typed
 	} else {
 		grown = typed + entered
-		filled = if grown > List.len(field_text) List.len(field_text) else grown
-		if backspace and filled > 0 filled - 1 else filled
+		filled = if (grown > List.len(field_text)) List.len(field_text) else grown
+		if (backspace and filled > 0) filled - 1 else filled
 	}
 
 ## Text arriving while the field is not focused goes nowhere.
@@ -388,7 +388,7 @@ ease = |from, to, raw| {
 }
 
 clamp_unit : F32 -> F32
-clamp_unit = |value| if value < 0 0 else if value > 1 1 else value
+clamp_unit = |value| if (value < 0) 0 else if (value > 1) 1 else value
 
 inside : { x : F32, y : F32 }, { x : F32, y : F32, width : F32, height : F32 } -> Bool
 inside = |point, box|
@@ -436,13 +436,13 @@ draw_button! = |frame, box, hovered, active, label| {
 		height: box.height,
 		radius: 10,
 		segments: 8,
-		style: Draw.filled_and_outlined(fill, if active or hovered theme.accent else theme.edge, 2),
+		style: Draw.filled_and_outlined(fill, if (active or hovered) theme.accent else theme.edge, 2),
 	})
 	label.draw!(
 		frame,
 		{
 			pos: { x: box.x + box.width / 2, y: box.y + box.height / 2 - 10 },
-			color: if active Color.from_hex_rgb(0x08131f) else theme.ink,
+			color: if (active) Color.from_hex_rgb(0x08131f) else theme.ink,
 			align: (Top, Center),
 		},
 	)
@@ -456,7 +456,7 @@ field_text_origin = { x: text_field.x + 14, y: text_field.y + 12 }
 ## one is anywhere else, so the recording shows the keyboard's whereabouts.
 draw_field_box! : Draw.Frame, Bool => {}
 draw_field_box! = |frame, focused| {
-	outline = if focused theme.accent else theme.edge
+	outline = if (focused) theme.accent else theme.edge
 	frame.rounded_rectangle!({
 		x: text_field.x,
 		y: text_field.y,

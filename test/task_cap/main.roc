@@ -38,7 +38,7 @@ ids : List(U64)
 ids = build_ids([], 1)
 
 build_ids : List(U64), U64 -> List(U64)
-build_ids = |acc, n| if n > wanted acc else build_ids(List.append(acc, n), n + 1)
+build_ids = |acc, n| if (n > wanted) acc else build_ids(List.append(acc, n), n + 1)
 
 expect List.len(ids) == wanted
 expect List.fold(ids, 0, |acc, n| acc + n) == expected_sum

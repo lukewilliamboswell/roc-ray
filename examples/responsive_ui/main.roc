@@ -110,7 +110,7 @@ responsive_config = |args| {
 			.with_resizable(Bool.True)
 			.with_min_size({ width: 480, height: 400 })
 			.with_frame_pacing(Capped(120))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## The keys the demo presses, by cycle: down, down, then back up, so the
@@ -241,13 +241,13 @@ theme = {
 ## without shouting over the panel it sits in.
 draw_menu_item! : Draw.Frame, Math.Rect, Text.Prepared, Bool, Bool => {}
 draw_menu_item! = |frame, bounds, label, selected, hovered| {
-	fill = if selected theme.accent_soft else if hovered theme.panel_high else Color.from_hex_rgb(0x141d2f)
-	outline = if selected theme.accent else if hovered theme.edge else Color.with_alpha(theme.edge, 140)
-	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, if selected 2 else 1) })
+	fill = if (selected) theme.accent_soft else if (hovered) theme.panel_high else Color.from_hex_rgb(0x141d2f)
+	outline = if (selected) theme.accent else if (hovered) theme.edge else Color.with_alpha(theme.edge, 140)
+	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, if (selected) 2 else 1) })
 	if selected {
 		frame.rounded_rectangle!({ x: bounds.x + 8, y: bounds.y + 10, width: 4, height: bounds.height - 20, radius: 2, segments: 4, style: Draw.filled(theme.accent) })
 	}
-	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: (Middle, Left) })
+	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if (selected) theme.ink else theme.muted, align: (Middle, Left) })
 }
 
 draw_key! : Draw.Frame, Text.Font, F32, F32, Str => {}
@@ -322,13 +322,13 @@ Layout := {
 		screen_w = F32.max(screen.width, 360)
 		screen_h = F32.max(screen.height, 360)
 		compact = screen_w < 700
-		margin = if compact 16 else 30
+		margin = if (compact) 16 else 30
 		content_top = 104
 		content_w = screen_w - margin * 2
 		content_h = F32.max(screen_h - content_top - 52, 220)
 
-		nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
-		preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
+		nav = if (compact) Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
+		preview = if (compact) Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
 		item_w = nav.width - 24
 
 		{
@@ -347,7 +347,7 @@ Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
-	devices = if model.demo demo_input(input.devices, input.time.cycle_count) else input.devices
+	devices = if (model.demo) demo_input(input.devices, input.time.cycle_count) else input.devices
 
 	# Layout follows the window, pointing follows the mouse, and the preview
 	# animates on the clock -- three separate observations off one input.
@@ -356,7 +356,7 @@ update! = |model, input, _io| {
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
-	Mouse.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+	Mouse.set_cursor!(if (hover_display or hover_audio or hover_controls) PointingHand else Arrow)
 
 	from_keyboard = model.selection.from_keyboard(devices)
 	selection = if devices.mouse.button_pressed(Left) and hover_display {
@@ -371,7 +371,7 @@ update! = |model, input, _io| {
 
 	# Enumerating displays allocates, so it happens on the keypress that acts
 	# on the answer rather than every cycle.
-	display = if devices.key_pressed(KeyM) next_monitor!(model) else { monitors: model.monitors, choice: model.monitor_choice }
+	display = if (devices.key_pressed(KeyM)) next_monitor!(model) else { monitors: model.monitors, choice: model.monitor_choice }
 
 	if model.demo {
 		demo_finished(input.capture)?

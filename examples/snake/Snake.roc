@@ -20,7 +20,7 @@ Snake := { cells : List(Board.Cell), direction : Direction, pending_direction : 
 	## Queues a direction unless it would reverse into the snake's neck.
 	request_turn : Snake, Direction -> Snake
 	request_turn = |snake, requested| {
-		pending_direction = if can_turn_to(snake.direction, requested) requested else snake.pending_direction
+		pending_direction = if (can_turn_to(snake.direction, requested)) requested else snake.pending_direction
 		{ ..snake, pending_direction }
 	}
 
@@ -35,14 +35,14 @@ Snake := { cells : List(Board.Cell), direction : Direction, pending_direction : 
 	## Reports whether entering a cell collides with the body that will remain.
 	hits_self : Snake, Board.Cell, Bool -> Bool
 	hits_self = |snake, next, growing| {
-		body = if growing snake.cells else List.drop_last(snake.cells, 1)
+		body = if (growing) snake.cells else List.drop_last(snake.cells, 1)
 		List.contains(body, next)
 	}
 
 	## Moves into a cell, retaining the tail only when food was eaten.
 	advance : Snake, Board.Cell, Bool -> Snake
 	advance = |snake, next, growing| {
-		body = if growing snake.cells else List.drop_last(snake.cells, 1)
+		body = if (growing) snake.cells else List.drop_last(snake.cells, 1)
 		{ cells: List.prepend(body, next), direction: snake.pending_direction, pending_direction: snake.pending_direction }
 	}
 }

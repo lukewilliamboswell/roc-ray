@@ -85,8 +85,8 @@ init! = App.init(
 		.with_title("RocRay Input Inspector")
 		.with_size({ width: 820, height: 700 })
 		.with_resizable(Bool.True)
-	# Without this raylib closes the window on Escape, so the Esc indicator
-	# below could never light up. Q exits instead.
+		# Without this raylib closes the window on Escape, so the Esc indicator
+		# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120))
 		.with_permissions([ClipboardRead, ClipboardWrite]),
@@ -155,7 +155,7 @@ update! = |model, input, io| {
 	devices = input.devices
 
 	ctrl_held = devices.key_down(KeyLeftControl) or devices.key_down(KeyRightControl)
-	typed_this_frame = if ctrl_held "" else ascii_typed(devices.text_input)
+	typed_this_frame = if (ctrl_held) "" else ascii_typed(devices.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
 	# One chain, so two shortcuts pressed together still resolve in this order.
@@ -193,7 +193,7 @@ update! = |model, input, io| {
 	if devices.key_pressed(KeyL) {
 		Mouse.set_cursor_mode!(Visible)
 	}
-	Mouse.set_cursor!(if devices.mouse.button_down(Left) Crosshair else Arrow)
+	Mouse.set_cursor!(if (devices.mouse.button_down(Left)) Crosshair else Arrow)
 
 	# The eyedropper. One point of the frame the player is looking at, read
 	# here rather than in `render!`, where reading the pixels this frame has
@@ -251,7 +251,7 @@ button_label = |button|
 describe_events : List(Devices.Event), Bool -> Str
 describe_events = |events, overflowed| {
 	labels = Str.join_with(List.map(events, event_label), " ")
-	if overflowed "events: ${labels} (overflowed)" else "events: ${labels}"
+	if (overflowed) "events: ${labels} (overflowed)" else "events: ${labels}"
 }
 
 expect event_label(KeyPressed(KeyA)) == "KeyPressed(65)"
@@ -349,9 +349,9 @@ panel! = |frame, font, cfg| {
 ## One indicator chip, lit while the snapshot says its input is active.
 chip! : Draw.Frame, Text.Prepared, { x : F32, y : F32, width : F32, on : Bool } => {}
 chip! = |frame, label, cfg| {
-	fill = if cfg.on theme.active else theme.idle
-	edge = if cfg.on theme.active else theme.edge
-	ink = if cfg.on theme.active_ink else theme.idle_ink
+	fill = if (cfg.on) theme.active else theme.idle
+	edge = if (cfg.on) theme.active else theme.edge
+	ink = if (cfg.on) theme.active_ink else theme.idle_ink
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
 	label.draw!(frame, { pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, color: ink, align: (Middle, Center) })
 }
@@ -361,8 +361,8 @@ chip! = |frame, label, cfg| {
 light! : Draw.Frame, Text.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
 light! = |frame, font, cfg| {
 	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font })
-	fill = if cfg.on theme.active else theme.idle
-	frame.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if cfg.on theme.active else theme.edge, 1) })
+	fill = if (cfg.on) theme.active else theme.idle
+	frame.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if (cfg.on) theme.active else theme.edge, 1) })
 }
 
 ## A line of body text inside a panel.

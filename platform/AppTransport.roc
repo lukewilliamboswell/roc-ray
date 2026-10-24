@@ -50,15 +50,15 @@ AppTransport := [].{
 		if raw.status == capture_status_active {
 			Active({ frames: raw.frames, dropped: raw.dropped })
 		}
-			else if raw.status == capture_status_failed {
-				Failed({ frames: raw.frames, reason: capture_failure(raw.err) })
-			}
-				else if raw.status == capture_status_finished {
-					Finished({ frames: raw.frames, bytes: raw.bytes })
-				}
-					else {
-						Idle
-					}
+		else if raw.status == capture_status_failed {
+			Failed({ frames: raw.frames, reason: capture_failure(raw.err) })
+		}
+		else if raw.status == capture_status_finished {
+			Finished({ frames: raw.frames, bytes: raw.bytes })
+		}
+		else {
+			Idle
+		}
 }
 
 ## `status` code for a running recording. Mirrored in `src/capture.zig`.

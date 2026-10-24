@@ -57,7 +57,7 @@ demo_recording =
 breakout_config : List(Str) -> App.Config
 breakout_config = |args| {
 	base = App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## Loads presentation assets and creates the first ready-to-launch world.
@@ -82,7 +82,7 @@ read_controls = |devices| {
 	left = devices.key_down(KeyLeft) or devices.key_down(KeyA)
 	right = devices.key_down(KeyRight) or devices.key_down(KeyD)
 	{
-		move: if left Left else if right Right else Still,
+		move: if (left) Left else if (right) Right else Still,
 		action_pressed: devices.key_pressed(KeySpace),
 	}
 }
@@ -93,7 +93,7 @@ demo_controls = |world| {
 	paddle_center = Math.center(world.paddle.rect()).x
 	delta = world.ball.pos.x - paddle_center
 	{
-		move: if delta < -8 Left else if delta > 8 Right else Still,
+		move: if (delta < -8) Left else if (delta > 8) Right else Still,
 		action_pressed: match world.state {
 			Playing => Bool.False
 			_ => Bool.True
@@ -132,7 +132,7 @@ update! = |model, input, _io| {
 	# Seconds since the previous cycle, clamped so a stall (dragging the
 	# window, a breakpoint) cannot carry the ball through a brick.
 	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)
-	controls = if model.demo demo_controls(model.world) else read_controls(input.devices)
+	controls = if (model.demo) demo_controls(model.world) else read_controls(input.devices)
 	(world, events) = Game.update(model.world, controls, dt)
 
 	for event in events {

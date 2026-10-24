@@ -230,7 +230,7 @@ Camera := [].{
 
 ## A finite scalar is itself; anything else is `0`.
 sane_scalar : F32 -> F32
-sane_scalar = |value| if F32.is_finite(value) value else 0
+sane_scalar = |value| if (F32.is_finite(value)) value else 0
 
 ## Sanitizing is per component, so one bad axis does not discard the good one.
 sane_vec : Math.Vec2 -> Math.Vec2
@@ -258,8 +258,8 @@ expect {
 	camera.target()
 		== { x: 10, y: -5 }
 		and camera.offset() == { x: 320, y: 240 }
-			and camera.rotation() == 37
-				and camera.zoom() == 2.5
+		and camera.rotation() == 37
+		and camera.zoom() == 2.5
 }
 expect Camera.default.with_target({ x: 3, y: -4 }).target() == { x: 3, y: -4 }
 expect Camera.default.with_offset({ x: 3, y: -4 }).offset() == { x: 3, y: -4 }

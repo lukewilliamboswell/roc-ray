@@ -174,7 +174,7 @@ object_center_or = |tilemap, object_result, fallback|
 object_radius_or : Try(Tilemap.RawObject, [NotFound]), F32 -> F32
 object_radius_or = |object_result, fallback|
 	match object_result {
-		Ok(object) => if object.width == 0 and object.height == 0 fallback else F32.max(object.width, object.height) * 0.5
+		Ok(object) => if (object.width == 0 and object.height == 0) fallback else F32.max(object.width, object.height) * 0.5
 		Err(_) => fallback
 	}
 
@@ -186,7 +186,7 @@ sparks_from_tilemap = |tilemap| {
 		pos = tilemap.object_world_center(object)
 		$sparks = List.append($sparks, Spark.{ id: object.id, pos })
 	}
-	if List.len($sparks) == 0 fallback_sparks else $sparks
+	if (List.len($sparks) == 0) fallback_sparks else $sparks
 }
 
 ## Reads solid obstacles from the map or uses the fallback arrangement.
@@ -199,7 +199,7 @@ obstacles_from_tilemap = |raw, tilemap| {
 		rotation = Tilemap.property_f32(raw, object, "rotation", object.rotation)
 		$items = List.append($items, Level.Obstacle.{ rect, tile, rotation })
 	}
-	if List.len($items) == 0 fallback_obstacles else $items
+	if (List.len($items) == 0) fallback_obstacles else $items
 }
 
 ## Reads moving hazards from the map or uses the fallback lanes.
@@ -214,7 +214,7 @@ hazards_from_tilemap = |raw, tilemap| {
 		radius = Tilemap.property_f32(raw, object, "radius", 30)
 		$items = List.append($items, Hazard.{ center, span, lane, offset, radius, color: hazard_color(object.id) })
 	}
-	if List.len($items) == 0 fallback_hazards else $items
+	if (List.len($items) == 0) fallback_hazards else $items
 }
 
 ## Reads decorative props from the map or uses the fallback scenery.
@@ -232,7 +232,7 @@ decorations_from_tilemap = |raw, tilemap| {
 			},
 		)
 	}
-	if List.len($items) == 0 fallback_decorations else $items
+	if (List.len($items) == 0) fallback_decorations else $items
 }
 
 ## Decodes an authored tile name into the renderable tile tag.
@@ -266,7 +266,7 @@ tile_from_name = |name|
 
 ## Decodes an authored lane name into a hazard lane.
 lane_from_name : Str -> Hazard.Lane
-lane_from_name = |name| if name == "Vertical" Vertical else Horizontal
+lane_from_name = |name| if (name == "Vertical") Vertical else Horizontal
 
 ## Chooses a hazard color deterministically from its map identifier.
 hazard_color : U64 -> Color.Rgba

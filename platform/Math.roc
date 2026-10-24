@@ -117,7 +117,7 @@ Math := [].{
 
 	## Clamp a value to inclusive lower and upper bounds.
 	clamp : F32, F32, F32 -> F32
-	clamp = |value, lo, hi| if value < lo lo else if value > hi hi else value
+	clamp = |value, lo, hi| if (value < lo) lo else if (value > hi) hi else value
 
 	## Clamp a value to the inclusive 0-to-1 range.
 	clamp01 : F32 -> F32
@@ -135,7 +135,7 @@ Math := [].{
 			0
 		} else {
 			step = |guess| (guess + value / guess) * 0.5
-			guess0 = if value >= 1 value else 1
+			guess0 = if (value >= 1) value else 1
 			guess1 = step(guess0)
 			guess2 = step(guess1)
 			guess3 = step(guess2)
@@ -190,7 +190,7 @@ Math := [].{
 	normalize : Vec2 -> Vec2
 	normalize = |v| {
 		len = Math.length(v)
-		if len == 0 Math.zero else Math.scale(v, 1 / len)
+		if (len == 0) Math.zero else Math.scale(v, 1 / len)
 	}
 
 	## Linearly interpolate between two vectors.

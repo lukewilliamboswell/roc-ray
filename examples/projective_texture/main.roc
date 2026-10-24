@@ -38,7 +38,7 @@ drag_corner = |model, devices| {
 	mouse = devices.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = devices.mouse.button_down(Left) and (model.dragging or (devices.mouse.button_pressed(Left) and handle_near))
-	cursor = if handle_near or dragging ResizeAll else Arrow
+	cursor = if (handle_near or dragging) ResizeAll else Arrow
 
 	candidate = if devices.key_pressed(KeyR) {
 		initial_corners
@@ -127,7 +127,7 @@ render! = |model, frame| {
 
 	# The handle pulses until it is grabbed, which is the only hint the scene
 	# needs about where to put the pointer.
-	halo = if model.dragging 0 else 10 * pulse
+	halo = if (model.dragging) 0 else 10 * pulse
 	frame.circle!({ center: model.corners.top_right, radius: 15 + halo, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x2f80ed), 70)) })
 	frame.circle!({ center: model.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
 
@@ -175,10 +175,10 @@ expect
 			idle.cursor
 				== Arrow
 				and !idle.model.dragging
-					and grabbed.model.dragging
-						and grabbed.cursor == ResizeAll
-							and grabbed.model.corners.top_right == { x: 600, y: 160 }
-								and far.model.corners.top_right == { x: 750, y: 390 }
-									and reset.model.corners == initial_corners
+				and grabbed.model.dragging
+				and grabbed.cursor == ResizeAll
+				and grabbed.model.corners.top_right == { x: 600, y: 160 }
+				and far.model.corners.top_right == { x: 750, y: 390 }
+				and reset.model.corners == initial_corners
 		}
 	}

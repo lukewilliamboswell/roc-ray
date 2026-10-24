@@ -207,7 +207,7 @@
           "name": "headless",
           "args": [
             "--host-headless",
-            "--host-headless-frames=60"
+            "--host-headless-frames=300"
           ],
           "stdin": "",
           "stdout": "",

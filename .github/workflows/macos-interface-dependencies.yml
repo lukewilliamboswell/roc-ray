@@ -38,7 +38,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
-          version: 0.16.0
+          version: 0.17.0
       - name: Test catalog, archive, audit, and admission contracts
         run: python3 -m unittest scripts/test_dependency_artifacts.py scripts/test_macos_archive_audit.py scripts/test_macos_interfaces.py
       - name: Generate the release candidate twice

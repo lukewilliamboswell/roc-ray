@@ -38,7 +38,7 @@ the smallest app or example that shows the problem.
 
 Install:
 
-* https://ziglang.org/download/[Zig] 0.16.0
+* https://ziglang.org/download/[Zig] 0.17.0
 * The exact Roc nightly named in {src}/platform/main.roc[`platform/main.roc`],
   available as `roc` on `PATH`
 * Python 3 and `zstd` for the full test and bundle checks

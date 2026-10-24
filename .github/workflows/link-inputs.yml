@@ -55,7 +55,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.0
           use-cache: false
       - name: Test the producer and consumer contracts
         run: python3 -m unittest scripts/test_link_inputs.py
@@ -92,7 +92,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.0
       - run: zig build libvpx-parity
 
   # Final-links every example against the exact candidate bytes and runs it
@@ -118,7 +118,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.0
       - name: Read pinned Roc version
         run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(python3 -c 'from scripts.roc_platform_abi import read_pin; print(read_pin().nightly)')" >> "$GITHUB_ENV"
       - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427

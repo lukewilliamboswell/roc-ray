@@ -1,6 +1,6 @@
 name: Install the pinned RocRay toolchain
 description: >-
-  Install Zig 0.16.0 and the exact Roc nightly pinned by platform/main.roc, and
+  Install Zig 0.17.0 and the exact Roc nightly pinned by platform/main.roc, and
   fail unless the compiler on PATH is that nightly.
 
 inputs:
@@ -20,7 +20,7 @@ runs:
     - if: inputs.zig == 'true'
       uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       with:
-        version: 0.16.0
+        version: 0.17.0
 
     - name: Read pinned Roc version
       id: pin

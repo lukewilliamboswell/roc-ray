@@ -1,7 +1,7 @@
 [#release-0-10-0]
 = RocRay 0.10.0
 
-0.10.0 is the largest change to RocRay so far. The application model has been rebuilt: state changes and drawing are now separate callbacks, slow work runs as tasks without stalling the frame, and the platform gains files, HTTP, UDP, SQLite, subprocesses, screen capture and more. Every 0.9 app needs to be migrated. The <<upgrading-from-09,upgrade guide>> at the end covers each step.
+0.10.0 is the largest change to RocRay so far. The application model has been rebuilt: state changes and drawing are now separate callbacks, slow work runs as tasks without stalling the frame, and the platform gains files, HTTP, UDP, SQLite, subprocesses, screen capture and more. Every 0.9 app needs to be migrated. The xref:releases.adoc#upgrading-from-09[upgrade guide] at the end covers each step.
 
 The reasoning behind these changes is written down in https://github.com/lukewilliamboswell/roc-ray/blob/0.10.0/docs/architecture.adoc[the architecture chapter of the RocRay manual]. These notes summarise it.
 
@@ -186,7 +186,7 @@ program = { init!, update!, render! }
 [cols="1,1",options="header"]
 |===
 |0.9 |0.10
-|``init!``'s `run!` receives `Host` |`+App.init(config, \|io\| ...)+`, and `run!` receives `App.Io`
+|``init!``'s `run!` receives `Host` |`App.init(config, run!)`, and `run!` receives `App.Io`
 |`host.key_pressed(k)`, `host.key_down(k)` |`input.devices.key_pressed(k)`, `input.devices.key_down(k)`
 |`host.mouse`, `host.gamepads` |`input.devices.mouse`, `input.devices.gamepads`
 |`host.frame_time` |`input.time.elapsed_seconds`

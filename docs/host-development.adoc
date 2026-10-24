@@ -2,7 +2,7 @@
 = Working on the host
 
 This chapter is for contributors changing the native host, the Roc/host
-boundary, or a hosted effect. It assumes <<contributing>> and <<architecture>>:
+boundary, or a hosted effect. It assumes xref:contributing.adoc#contributing[Contributing to RocRay] and xref:architecture.adoc#architecture[Architecture]:
 every rule here exists to keep one of the architecture's invariants true.
 
 == ABI and host changes
@@ -40,7 +40,7 @@ doc comment in step with it.
 already holds, such as `Assets.texture_from_bytes!`,
 `Shader.from_source!`, and `Audio.gen_sound!`. A loader that opens a
 directory or reads a file is `during_wait`, however small the file: touching
-the filesystem from `update!` is exactly what invariant 4 in <<architecture>>
+the filesystem from `update!` is exactly what invariant 4 in xref:architecture.adoc#architecture[Architecture]
 forbids. Where the resource can be built without
 touching the filesystem, give the effect a `*_from_bytes!` sibling in
 `during_load` so an app can still finish in `update!` a load a task started.

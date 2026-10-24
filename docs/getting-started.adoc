@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#getting-started]
 = Getting started
 
@@ -26,7 +17,7 @@ builds the app.
 Host:: The native program inside the bundle that runs your app: it opens the
 window, calls your code, and carries out what your code asks for.
 
-<<glossary>> defines these and the other terms the manual uses.
+xref:glossary.adoc#glossary[Glossary] defines these and the other terms the manual uses.
 
 [#install]
 == Install the Roc compiler
@@ -132,7 +123,7 @@ installation has all of these; a minimal or server installation may not.
 Each release also publishes a _Wayland bundle_ for Linux. Use the default
 bundle unless you specifically want native Wayland windows on Linux; the
 Wayland bundle needs `libwayland-client`, `libxkbcommon`, and EGL instead of
-the X11 libraries, and runs only on Linux. <<reference>> lists both bundles.
+the X11 libraries, and runs only on Linux. xref:reference.adoc#reference[Reference] lists both bundles.
 
 [#run-an-example]
 == Run an example
@@ -140,7 +131,7 @@ the X11 libraries, and runs only on Linux. <<reference>> lists both bundles.
 Each release attaches a zip of the examples, named `examples-<version>.zip`,
 whose files already name that release's bundle.
 
-. Open the {repo}/releases[RocRay releases page] and choose the newest release
+. Open the https://github.com/lukewilliamboswell/roc-ray/releases[RocRay releases page] and choose the newest release
   whose name is a version number, such as `0.10.0`. The page also lists
   dependency releases, such as "macOS linker interfaces"; skip those.
 . Download the zip from that release and extract it.
@@ -180,7 +171,7 @@ roc build examples/hello_world/main.roc --output=hello_world
 ----
 
 On Windows, write `--output=hello_world.exe` and run `.\hello_world.exe`.
-<<shipping>> explains how to give an app to other people.
+xref:shipping.adoc#shipping[Ship your game] explains how to give an app to other people.
 
 [#smallest-app]
 == The smallest app
@@ -197,8 +188,13 @@ app [Model, program] { rr: platform "BUNDLE-URL" }
 ----
 
 Replace `BUNDLE-URL` with the default bundle's URL from the release notes. It
-looks like
-`+https://github.com/lukewilliamboswell/roc-ray/releases/download/<version>/<hash>.tar.zst+`.
+looks like this, with a release's version and the bundle's hash filled in:
+
+[source]
+----
+https://github.com/lukewilliamboswell/roc-ray/releases/download/<version>/<hash>.tar.zst
+----
+
 The simplest way to get it right is to copy the first line of
 `examples/hello_world/main.roc` from the examples zip.
 
@@ -265,17 +261,17 @@ step it depends on fails.
 The `!` at the end of a name, and the `+=>+` in its type, mark a function that
 has _effects_: besides returning a value, it does something, such as drawing
 or reading the keyboard.
-<<roc-primer>> explains this and the rest of the syntax.
+xref:roc-primer.adoc#roc-primer[Roc for RocRay] explains this and the rest of the syntax.
 
 You do not need to check for Escape yourself. The default settings quit on
-Escape; <<app-model-closing>> shows how to change that.
+Escape; xref:app-model.adoc#app-model-closing[Closing the window] shows how to change that.
 
 == Where to go next
 
-. Read <<roc-primer>> if Roc is new to you. It covers exactly the syntax a
+. Read xref:roc-primer.adoc#roc-primer[Roc for RocRay] if Roc is new to you. It covers exactly the syntax a
   small RocRay app uses.
-. Follow <<first-game>>, which grows this app into a small game in six steps.
-. Then read <<app-model>>, and the guides for the features your app needs.
+. Follow xref:first-game.adoc#first-game[Your first game], which grows this app into a small game in six steps.
+. Then read xref:app-model.adoc#app-model[The app model: init!, update!, and render!], and the guides for the features your app needs.
 
-<<examples>> suggests which examples to read, and the {api}[API reference]
+xref:examples.adoc#examples[Example gallery] suggests which examples to read, and the https://lukewilliamboswell.github.io/roc-ray/api/[API reference]
 documents every module, type, and function.

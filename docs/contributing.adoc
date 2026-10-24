@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#contributing]
 = Contributing to RocRay
 
@@ -21,16 +12,16 @@ an editor, a scene graph, or the many subsystems of a large engine. Open an issu
 before a broad API change or a substantial new subsystem so its shape can be
 discussed first.
 
-This chapter covers the development workflow. <<host-development>> covers
-changes to the native host and the Roc/host boundary, and <<maintaining>>
-covers dependencies, bundles, and releases. Read <<architecture>> before
+This chapter covers the development workflow. xref:host-development.adoc#host-development[Working on the host] covers
+changes to the native host and the Roc/host boundary, and xref:maintaining.adoc#maintaining[Dependencies, bundles, and releases]
+covers dependencies, bundles, and releases. Read xref:architecture.adoc#architecture[Architecture] before
 proposing a change to a public API, platform behaviour, host integration,
 ownership, scheduling, resource limits, targets, or application lifecycle.
 
 == Report a problem or propose a change
 
 Report bugs and propose changes in the
-{repo}/issues[GitHub issue tracker]. For a bug, include the RocRay release or
+https://github.com/lukewilliamboswell/roc-ray/issues[GitHub issue tracker]. For a bug, include the RocRay release or
 commit, the Roc compiler version (`roc version`), your operating system, and
 the smallest app or example that shows the problem.
 
@@ -83,7 +74,7 @@ stub, and import libraries) from the immutable release that
 `link-inputs.lock.json` selects. The first build downloads those archives into
 `~/.cache/roc-ray/link-inputs`. Every build rehashes them against the lock and
 never compiles them. When you change a linker input, follow the producer
-procedure in <<maintaining-link-inputs>>.
+procedure in xref:maintaining.adoc#maintaining-link-inputs[Linker inputs].
 
 [#development-checkout]
 === Run examples against your checkout
@@ -119,7 +110,7 @@ To check the platform's own Roc code, run `roc check platform/main.roc`.
 a bundled copy of the platform, as a release ships it.
 
 The host reserves switches beginning `--host-` for unattended runs;
-<<reference-switches>> lists them all. The windowed sweep described below
+xref:reference.adoc#reference-switches[Host switches] lists them all. The windowed sweep described below
 drives the examples with these:
 
 * `--host-frames=N` ends a real windowed run after N cycles, and
@@ -220,7 +211,7 @@ zig build -Doptimize=ReleaseFast observatory-bench
 
 The JSON and Markdown reports are written under `zig-out/`. Timing is not a CI
 pass/fail threshold; deterministic recorder invariants remain in the ordinary
-test suite. See <<observatory-methodology>>.
+test suite. See xref:host-development.adoc#observatory-methodology[Testing and benchmarking the Observatory recorder].
 
 === How the apps find the platform
 
@@ -276,7 +267,7 @@ and lifecycle behavior, not framebuffer pixels.
 == Design principles
 
 These constraints are more important than mirroring raylib function for
-function. <<architecture>> states the architecture they serve.
+function. xref:architecture.adoc#architecture[Architecture] states the architecture they serve.
 
 === Shape the API for app authors
 
@@ -370,7 +361,7 @@ internals. Exhaustive edge-case coverage belongs in tests.
 
 When adding an example:
 
-* Add it to <<examples>> (`docs/examples.adoc`) with its purpose and reusable
+* Add it to xref:examples.adoc#examples[Example gallery] (`docs/examples.adoc`) with its purpose and reusable
   patterns.
 * Add a case for it to `scripts/test_spec.json`.
 * Run it from the repository root so asset paths match how users invoke it.
@@ -397,7 +388,7 @@ type's methods to the module that declares it: for example, `Text.Font` aliases
 Document each method where its type is declared.
 
 The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
-opened with `+```roc+`. It does not take markdown headings, bullet lists,
+opened with three backticks followed by `roc`. It does not take markdown headings, bullet lists,
 `+**bold**+`, or four-space indented code: each of those appears on the page
 as literal text. Write examples in fences and structure a long module comment with
 short paragraphs.
@@ -412,39 +403,66 @@ scripts/build_docs.py --version 0.10.0     # writes .docs-api/0.10.0
 
 `--check` fails on a module missing a page, a broken relative link, missing
 representative pure methods, an effect whose documentation does not state its
-phases, or prose that would render as something else. The release workflow
-runs `--check` before building and the versioned form when publishing.
+phases, or prose that would render as something else. The versioned form
+validates the same way. The release workflow runs it on every pull request
+and release, and places the result under `api/` beside the manual.
 
 [#contributing-manual]
 === This manual
 
 This manual is AsciiDoc under `docs/`. `docs/index.adoc` is the book; each
-chapter is a file it includes, and release notes live in `docs/releases/`.
-It is rendered to a website and a PDF with Asciidoctor, Asciidoctor PDF, and
-Mermaid inside a Docker image, so only Docker is needed locally:
+chapter is a file directly under `docs/` that it includes, and
+`docs/releases.adoc` includes the release notes in `docs/releases/`. It is
+rendered by `roc-docs`, the documentation renderer roc-automation shares
+between Roc repositories, into a website with one page per chapter, a PDF,
+and a Markdown copy of every page. Blueprint fetches the renderer and checks
+it against the digest in `Blueprint.lock`; nothing else is needed:
 
 [source,bash]
 ----
-python3 scripts/build_manual.py          # HTML into .docs-out/site
-python3 scripts/build_manual.py --pdf    # and .docs-out/roc-ray.pdf
+blueprint run docs    # .docs-out/site/index.html and .docs-out/roc-ray.pdf
 ----
 
-The build fails if the theme was not embedded, a Mermaid diagram did not render,
-or Roc source was not highlighted. The `docs` workflow runs the same command on
-every pull request and uploads the result.
+The build fails on any renderer warning: a cross reference that does not
+resolve, an unprepared image, or a construct the renderer does not support.
+The `docs` workflow builds the manual the same way on every pull request,
+with roc-automation's `actions/build-docs`, and uploads the result.
 
 Write each chapter for one audience, and introduce a concept before relying on
 it. The getting-started chapters assume nothing beyond an installed compiler;
-guides may assume <<app-model>>; contributor chapters may assume everything.
+guides may assume xref:app-model.adoc#app-model[The app model: init!, update!, and render!]; contributor chapters may assume everything.
 Open each chapter by saying what it covers and what it assumes. Use the terms
-in <<glossary>> with the meanings given there, write headings in sentence
+in xref:glossary.adoc#glossary[Glossary] with the meanings given there, write headings in sentence
 case, and start the heading of a reference section a first reading can skip
 with `Details:`.
-Link to the source with the `+{src}+` and `+{tree}+` attributes, to the API
-reference with `+{api}+`, and between chapters with `+<<id>>+` cross references to
-the explicit ids on each chapter. Use `[source,roc]` blocks for Roc, which the
-manual highlights with its own lexer (`docs/rouge_roc.rb`), and `[mermaid]`
-blocks for diagrams.
+
+The renderer builds each chapter as its own page as well as part of the book,
+which sets a few rules:
+
+* Link between chapters with
+  `+xref:chapter.adoc#id[link text]+`, always with an id and link text. Give
+  each chapter, and each section other chapters link to, an explicit
+  `+[#id]+`. `+<<id>>+` resolves only inside one page, so it is used only in
+  `docs/index.adoc`.
+* Write links to the source and to the API reference as full URLs, such as
+  `+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc+`:
+  an attribute set in `index.adoc` does not reach a chapter's own page.
+* Give every table explicit column widths and a header row. A table cell
+  cannot span columns or contain a `|`, even escaped: put code with a closure
+  in a listing next to the table instead. In the PDF, a column is at least
+  as wide as its longest code span, so keep long code out of tables.
+* Use `[source,roc]` blocks for Roc. Include code from `docs/tutorial/` with
+  `+include::tutorial/<file>.roc[tag=<name>,indent=0]+`, where the tagged
+  region ends on code rather than a blank line;
+  `scripts/check_tutorial.py` compiles, tests and runs those files.
+* Images must be non-interlaced 8-bit RGB or RGBA PNGs. Write diagrams as
+  `[mermaid]` blocks and run `scripts/prepare_docs_images.py --update`, which
+  renders each to a PNG and registers it by the digest of its source in
+  `docs/prepared-diagrams.json`; the renderer refuses a diagram that changed
+  without being prepared again. The same command makes the example gallery's
+  stills from the recordings in `examples/gallery/`, which the manual links
+  to. It needs Node, Chrome and Pillow; checking that everything is current,
+  which the `docs` workflow does, needs only Python.
 
 == Pull request checklist
 

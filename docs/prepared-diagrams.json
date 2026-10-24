@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "recipe": {
+    "mermaid_cli": "@mermaid-js/mermaid-cli@11.16.0",
+    "config": "scripts/docs/mermaid-config.json",
+    "config_sha256": "f8191f14c225d50ccc3d7e94f3b37b9b2df6ee17f2d5920a20ca2052bec4a039",
+    "background": "FAFAF7",
+    "scale": 2,
+    "command": "scripts/prepare_docs_images.py --update"
+  },
+  "diagrams": [
+    {
+      "source": "app-model.adoc",
+      "source_sha256": "c870a83e5dde8b0b85b1dd04704d01345e162718b24126e64508c8e207ff1515",
+      "href": "images/diagrams/c870a83e5dde8b0b.png",
+      "png": "images/diagrams/c870a83e5dde8b0b.png",
+      "png_sha256": "0682be187cf533fe93d74af7e6d2762dfc6d43138b36080625f9e94870fa9031",
+      "svg": "",
+      "svg_sha256": ""
+    },
+    {
+      "source": "architecture.adoc",
+      "source_sha256": "bb51b5c5d7f4f9784ece2fa498277b828e34a12226fe5f91d02548d865f1c715",
+      "href": "images/diagrams/bb51b5c5d7f4f978.png",
+      "png": "images/diagrams/bb51b5c5d7f4f978.png",
+      "png_sha256": "0cd31377dd33591af486db80ca59b0f042fba24618db641ce856319e3d474044",
+      "svg": "",
+      "svg_sha256": ""
+    }
+  ]
+}

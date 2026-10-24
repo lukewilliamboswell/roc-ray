@@ -1,18 +1,9 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#drawing]
 = Drawing
 
 `render!` draws the model through a `Draw.Frame`. This chapter covers shapes,
 colours, images, and text first, then the tools for larger scenes: cameras,
-clipping, blending, shaders, and offscreen drawing. It assumes <<app-model>>.
+clipping, blending, shaders, and offscreen drawing. It assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!].
 
 == The frame
 
@@ -50,7 +41,7 @@ thickness)`.
 Coordinates are in logical window units: x grows to the right, y grows
 downward, `{ x: 0, y: 0 }` is the top-left corner, and they match mouse
 positions. On a high-DPI display one logical unit may cover several physical
-pixels; RocRay scales for you (see <<input-window>>). `frame.size!()` returns
+pixels; RocRay scales for you (see xref:input.adoc#input-window[The window]). `frame.size!()` returns
 the size of the surface being drawn to.
 
 == Colours
@@ -130,7 +121,7 @@ Step by step:
 
 . `with_permission(Directory("assets", ReadOnly))` declares that the app may
   read the `assets` directory. A RocRay app cannot access files it has not
-  declared; <<permissions>> explains why.
+  declared; xref:permissions.adoc#permissions[Permissions: what your app can access] explains why.
 . `io.files().open_dir_read!("assets")` opens that directory. The path is
   relative, so it is found in the _working directory_: the directory you run
   the app from.
@@ -158,7 +149,7 @@ A built app finds `assets` the same way when you run it from `my-game`.
 This is the setup to use while you develop. When you give the game to other
 people, its assets are placed next to the executable instead, and the game opens
 them with `io.files().beside_executable!()`, which needs no declaration.
-<<shipping>> shows one `init!` that does both.
+xref:shipping.adoc#shipping[Ship your game] shows one `init!` that does both.
 
 `load_texture!` reads PNG (recommended), JPEG, BMP, GIF (the first frame),
 and QOI images, and chooses the decoder by the file's extension.
@@ -222,7 +213,7 @@ frame.texture_instances!(model.spark, model.particles)
 
 Each `Draw.TextureInstance` is a record with `source`, `dest`, `origin`,
 `rotation`, and `tint`, the same fields as a single draw. See
-{src}/examples/particles/main.roc[Particles] for thousands of sprites a frame.
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/particles/main.roc[Particles] for thousands of sprites a frame.
 
 == Text
 
@@ -350,16 +341,16 @@ the outer record when the inner scope ends. Supported values are `F32`, `I32`,
 most 32 application uniforms. Encoding a scope currently allocates bounded
 transient lists, so it is not an allocation-free drawing operation.
 
-See {src}/examples/post_process/main.roc[Post Process] for render textures,
+See https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/post_process/main.roc[Post Process] for render textures,
 blend scopes, shaders, and a typed uniform record, and
-{src}/examples/postcard_studio/main.roc[Postcard Studio] for exporting an
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/postcard_studio/main.roc[Postcard Studio] for exporting an
 offscreen target larger than the window.
 
 == Tilemaps
 
 The `Tilemap` module draws maps made in the https://www.mapeditor.org/[Tiled]
 editor. Load the `.tmx` file with `Tilemap.load_tmx!` (see
-<<files-and-assets>>), bind each tileset to a loaded texture, and keep the
+xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases]), bind each tileset to a loaded texture, and keep the
 built map in the model:
 
 [source,roc]
@@ -372,11 +363,11 @@ tilemap = Tilemap.from_raw(raw)
 
 `tilemap.draw_all!(frame)` draws it. Grid queries and coordinate conversions
 are pure, so `update!` can use them for collision and picking. See
-{src}/examples/top_down/main.roc[Spark Run] and
-{src}/examples/cave_climb/main.roc[Cave Climb].
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/top_down/main.roc[Spark Run] and
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/cave_climb/main.roc[Cave Climb].
 
 == Further reading
 
 * The `Draw`, `Text`, `Color`, `Camera`, `Sprite`, `Texture`, `Tilemap`, and
-  `Math` pages of the {api}[API reference].
-* <<capture>> to save what you draw as images and video.
+  `Math` pages of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference].
+* xref:capture.adoc#capture[Screenshots and recordings] to save what you draw as images and video.

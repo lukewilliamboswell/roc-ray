@@ -1,19 +1,10 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#input]
 = Input, time, and the window
 
 Each host cycle, `update!` receives an `App.Input` describing what
 happened since the previous cycle. This chapter covers the keyboard,
 mouse, gamepads, typed text, time, the window, and dropped files. It assumes
-<<app-model>>.
+xref:app-model.adoc#app-model[The app model: init!, update!, and render!].
 
 == Two kinds of information
 
@@ -43,19 +34,19 @@ released = devices.key_released(KeyW)    # came up this cycle
 ----
 
 Keys are tags such as `KeySpace`, `KeyW`, `KeyLeft`, and `KeyEnter`; the
-`Keys` page of the {api}[API reference] lists them all.
+`Keys` page of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference] lists them all.
 
 `key_pressed` and `key_released` mean "at least once since the previous
 input". Several presses of the same key in one interval count as one. When the
 count or the order matters, read `devices.events` instead (see
-<<input-events>>). A double tap is one example. Text editing is another,
+xref:input.adoc#input-events[The ordered event record]). A double tap is one example. Text editing is another,
 where a key press can come between two typed characters.
 
 By default, Escape is the _exit key_: it ends the app before `update!` sees
 the press, so you do not check for it yourself. An app that wants Escape for
 something else, such as a pause menu, turns that off with
 `App.default.with_exit_key(NoExitKey)`. The window's close button still ends
-the app; <<app-model-closing>> shows how to handle it yourself.
+the app; xref:app-model.adoc#app-model-closing[Closing the window] shows how to handle it yourself.
 
 === Typed text
 
@@ -187,7 +178,7 @@ because only the app knows how it should handle a long pause. So a simple
 
 The simplest protection is to clamp the elapsed time before you use it, so
 one cycle never advances the game by more than a limit you choose. Paddle in
-<<first-game>> uses a twentieth of a second, and most examples use a quarter:
+xref:first-game.adoc#first-game[Your first game] uses a twentieth of a second, and most examples use a quarter:
 
 [source,roc]
 ----
@@ -230,13 +221,13 @@ Ok({ ..model, world: world, accumulator: accumulator })
 Here `World` is the part of your model that the game logic updates, and
 `simulate` is
 your own pure function that advances it by one step.
-{src}/examples/snake/Game.roc[Snake] moves its snake this way. <<architecture>>
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/snake/Game.roc[Snake] moves its snake this way. xref:architecture.adoc#architecture[Architecture]
 explains the difference between a host cycle and a simulation step.
 
 Some runs report a fixed `elapsed_seconds` rather than a measured one. A
-headless run (see <<testing>>) reports exactly 1/60 of a second every cycle,
+headless run (see xref:testing.adoc#testing[Testing your app]) reports exactly 1/60 of a second every cycle,
 and a recording with `FixedStep` timing reports exactly one recording frame's
-worth (see <<capture>>). Those are the runs you can repeat and get the same
+worth (see xref:capture.adoc#capture[Screenshots and recordings]). Those are the runs you can repeat and get the same
 result, provided the input, the random seed, and any task results are the same
 too.
 
@@ -278,7 +269,7 @@ before mixing it with positions, for example `I32.to_f32(column.value) * 60`.
   so an app that should pause while minimized checks this.
 * `close_requested`, whether the user asked to close it this cycle. It is only
   ever set when the app asked for close requests with
-  `with_close_request(Deliver)`; see <<app-model-closing>>, which shows how to
+  `with_close_request(Deliver)`; see xref:app-model.adoc#app-model-closing[Closing the window], which shows how to
   save before the app ends.
 
 The size is in _logical units_: the same units as mouse coordinates and
@@ -326,14 +317,14 @@ cycle, each with its path and the pointer position where it landed, and
 A dropped path is only information; it does not give the app access to the
 file. To read the file, turn the path
 into a handle in the same `update!` that received it; see
-<<files-designated>>.
+xref:files-and-assets.adoc#files-designated[Files the user chooses].
 
 == Further reading
 
-* {src}/examples/input_inspector/main.roc[Input Inspector] shows every device
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] shows every device
   snapshot live.
-* {src}/examples/responsive_ui/main.roc[Responsive Settings] handles resizing,
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/responsive_ui/main.roc[Responsive Settings] handles resizing,
   display scaling, and monitor placement.
 * The `Devices`, `Keys`, `Mouse`, `Gamepad`, `Window`, `Time`, `Math`, and
-  `Random` pages of the {api}[API reference].
-* The input guarantees are stated precisely in <<architecture>>.
+  `Random` pages of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference].
+* The input guarantees are stated precisely in xref:architecture.adoc#architecture[Architecture].

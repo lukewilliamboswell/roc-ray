@@ -1,24 +1,15 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#examples]
 = Example gallery
 
 The repository's `examples/` directory holds complete apps and focused
 recipes. This chapter helps you choose which to read. It assumes you have run
-an example, as <<run-an-example>> shows.
+an example, as xref:getting-started.adoc#run-an-example[Run an example] shows.
 
 Each example is a directory with a `main.roc`. Choose the one closest to
 what you want to build and copy its directory. For the released examples,
-download the examples zip described in <<run-an-example>>. The examples in
+download the examples zip described in xref:getting-started.adoc#run-an-example[Run an example]. The examples in
 the repository name the platform in the checkout instead, and may use APIs
-that have not been released yet; <<development-checkout>> shows how to run
+that have not been released yet; xref:contributing.adoc#development-checkout[Run examples against your checkout] shows how to run
 them.
 
 Run every command from the directory that contains `examples/`, so the paths
@@ -44,64 +35,64 @@ Every example quits when you press Escape unless its header says otherwise.
 
 Work through these in order. Each one adds a little to the one before it.
 
-. {src}/examples/hello_world/main.roc[Hello World] (`hello_world`): the
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/hello_world/main.roc[Hello World] (`hello_world`): the
   complete app loop (`init!`, `update!`, and `render!`) with drawing and the
   pointer, and nothing else.
-. {src}/examples/move_box/main.roc[Move Box] (`move_box`): a box moved with
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/move_box/main.roc[Move Box] (`move_box`): a box moved with
   the arrow keys. It introduces moving by speed times elapsed time, and a pure
-  function tested with `expect`. <<first-game>> grows the same idea into a
+  function tested with `expect`. xref:first-game.adoc#first-game[Your first game] grows the same idea into a
   whole game, one step at a time; Move Box shows the finished result on one
   page, ready to copy.
-. {src}/examples/sprite_and_sound/main.roc[Sprite and Sound]
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sprite_and_sound/main.roc[Sprite and Sound]
   (`sprite_and_sound`): a picture and a sound loaded from files. It introduces
   a permission, an asset store, and loaded resources.
-. {src}/examples/pong/main.roc[Pong] (`pong`): one player against a computer
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc[Pong] (`pong`): one player against a computer
   paddle. It combines movement, collision, input, scoring, and sounds made in
   code in one approachable file.
-. {src}/examples/snake/main.roc[Snake] (`snake`): a grid game split across a
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/snake/main.roc[Snake] (`snake`): a grid game split across a
   few modules, with a fixed simulation step and seeded randomness.
-. {src}/examples/task_sleep/main.roc[Task Sleep] (`task_sleep`): one task that
+. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/task_sleep/main.roc[Task Sleep] (`task_sleep`): one task that
   waits, and the message it sends back. Read it before adding files,
   networking, or any other operation that waits.
 
 Then pick a direction:
 
-* *A game:* {src}/examples/breakout/main.roc[Breakout], then
-  {src}/examples/top_down/main.roc[Spark Run] or
-  {src}/examples/cave_climb/main.roc[Cave Climb].
+* *A game:* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[Breakout], then
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/top_down/main.roc[Spark Run] or
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/cave_climb/main.roc[Cave Climb].
 * *A tool or an app interface:*
-  {src}/examples/generated_assets/main.roc[Pixel Workshop],
-  {src}/examples/responsive_ui/main.roc[Responsive Settings], or
-  {src}/examples/input_inspector/main.roc[Input Inspector].
-* *Files, networking, or storage:* the examples under <<examples-waiting>>.
-* *A particular drawing technique:* the <<examples-recipes>>.
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/generated_assets/main.roc[Pixel Workshop],
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/responsive_ui/main.roc[Responsive Settings], or
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector].
+* *Files, networking, or storage:* the examples under xref:examples.adoc#examples-waiting[Tasks that wait].
+* *A particular drawing technique:* the xref:examples.adoc#examples-recipes[Focused recipes].
 
 == Small apps worth copying
 
 [cols="2,3,4",options="header"]
 |===
 |Example |What it is |Patterns to reuse
-|{src}/examples/hello_world/main.roc[Hello World] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/hello_world/main.roc[Hello World] +
 `hello_world` |A polished minimal interactive scene |App lifecycle, prepared text, pointer input
-|{src}/examples/move_box/main.roc[Move Box] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/move_box/main.roc[Move Box] +
 `move_box` |A box you steer with the arrow keys |Movement by elapsed time, clamping the time step, keeping an object inside the window, testing a pure function
-|{src}/examples/sprite_and_sound/main.roc[Sprite and Sound] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sprite_and_sound/main.roc[Sprite and Sound] +
 `sprite_and_sound` |A pixel-art blob that hops and plays a sound |Declaring a directory, opening an asset store, loading a PNG texture and a WAV sound
-|{src}/examples/pong/main.roc[Pong] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc[Pong] +
 `pong` |One player against a computer paddle |Movement by elapsed time, collision, scoring, sounds made in code
-|{src}/examples/snake/main.roc[Snake] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/snake/main.roc[Snake] +
 `snake` |A grid-based game with restartable state |Fixed simulation step, keyboard control, seeded randomness in the model
-|{src}/examples/breakout/main.roc[Breakout] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[Breakout] +
 `breakout` |A complete game that can record its own demo |Separating game logic from effects, sounds played from game events, a recording mode
-|{src}/examples/generated_assets/main.roc[Pixel Workshop] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/generated_assets/main.roc[Pixel Workshop] +
 `generated_assets` |A tiny paint program with a texture it changes as you paint |Textures and sounds made in code, uploading one changed cell, a pure editor returning edits
-|{src}/examples/responsive_ui/main.roc[Responsive Settings] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/responsive_ui/main.roc[Responsive Settings] +
 `responsive_ui` |A resizable settings screen |Pure layout shared by `update!` and `render!`, mouse and keyboard navigation, minimum window size, display scale and monitors
-|{src}/examples/postcard_studio/main.roc[Postcard Studio] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/postcard_studio/main.roc[Postcard Studio] +
 `postcard_studio` |A generative postcard editor that exports at twice the window size |Drawing into an offscreen texture, exporting it from a task, output directories
-|{src}/examples/input_inspector/main.roc[Input Inspector] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] +
 `input_inspector` |A live view of every input device, and the clipboard |Device snapshots, the ordered event record, clipboard, window changes, reading the pixel under the pointer, an app that keeps Escape for itself
-|{src}/examples/drop_viewer/main.roc[Drop Viewer] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/drop_viewer/main.roc[Drop Viewer] +
 `drop_viewer` |An image viewer whose only control is dropping a file on it |Accepting a dropped file, reading it in a task, choosing a decoder from the bytes
 |===
 
@@ -109,23 +100,23 @@ Then pick a direction:
 == Tasks that wait
 
 Use these when copying the `+Task.spawn!(input, || ...)+` pattern described in
-<<tasks>>. A task's return value arrives as one `Msg` on a later
+xref:tasks.adoc#tasks[Tasks: operations that wait]. A task's return value arrives as one `Msg` on a later
 `input.messages`.
 
 [cols="2,5",options="header"]
 |===
 |Example |What it is
-|{src}/examples/task_sleep/main.roc[Task Sleep] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/task_sleep/main.roc[Task Sleep] +
 `task_sleep` |One task, one `Task.sleep!`, and one message back, which is the shape of every other task on this page. It also prints straight from `update!`
-|{src}/examples/async_read/main.roc[Async Read] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/async_read/main.roc[Async Read] +
 `async_read` |Two file reads and a `metadata!` call running at once, each with its own `Msg` variant, so none of them needs an id
-|{src}/examples/capture_screenshot/main.roc[Capture Screenshot] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_screenshot/main.roc[Capture Screenshot] +
 `capture_screenshot` |A screenshot saved in a task, and the output directory refusing a path that climbs out of it
-|{src}/examples/http_fetch/main.roc[HTTP Fetch] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/http_fetch/main.roc[HTTP Fetch] +
 `http_fetch` |An HTTP GET in a task, which you can restart while it is still running; each reply includes the id of the fetch it belongs to
-|{src}/examples/udp_cursor/main.roc[UDP Cursor] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/udp_cursor/main.roc[UDP Cursor] +
 `udp_cursor` |Two instances showing each other's pointer: a receiving task that is started again each time it returns, and sends made straight from `update!`
-|{src}/examples/sqlite_scores/main.roc[SQLite Scores] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sqlite_scores/main.roc[SQLite Scores] +
 `sqlite_scores` |A high-score board that survives a restart: the write and the re-read share one task, so the model always gets what the database actually contains
 |===
 
@@ -136,13 +127,13 @@ Use these to see several systems working together in one app.
 [cols="2,5",options="header"]
 |===
 |Example |What it demonstrates
-|{src}/examples/top_down/main.roc[Spark Run] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/top_down/main.roc[Spark Run] +
 `top_down` |A top-down game: a level made in the Tiled map editor, sprites, collision, music, sound effects, a following camera, and several game states
-|{src}/examples/cave_climb/main.roc[Cave Climb] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/cave_climb/main.roc[Cave Climb] +
 `cave_climb` |A platformer with a mirror-bouncing laser and a spring grapple: tilemaps, collision, and camera tracking, split across two modules
-|{src}/examples/live_plot/main.roc[Live Plot] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/live_plot/main.roc[Live Plot] +
 `live_plot` |A whole source tree listed, read, and parsed through a bounded queue of tasks, and drawn as a scrolling strip of a quarter of a million points
-|{src}/examples/roc-doom-e1m1/main.roc[RocDOOM E1M1] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/roc-doom-e1m1/main.roc[RocDOOM E1M1] +
 `roc-doom-e1m1` |A Doom-compatible game built over pinned Freedoom E1M1 data: a fixed-tic simulation, BSP-tree rendering through a 3D camera and textured triangle batches, enemies, combat, and line specials
 |===
 
@@ -154,17 +145,17 @@ Use these as focused references, not starter projects.
 [cols="2,5",options="header"]
 |===
 |Example |Use it when you need...
-|{src}/examples/camera/main.roc[Camera World] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/camera/main.roc[Camera World] +
 `camera` |World and screen coordinates, a following camera, zoom, and rotation
-|{src}/examples/projective_texture/main.roc[Projective Texture] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/projective_texture/main.roc[Projective Texture] +
 `projective_texture` |A draggable perspective-correct quad and points placed with the same projection
-|{src}/examples/post_process/main.roc[Post Process] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/post_process/main.roc[Post Process] +
 `post_process` |Offscreen textures, blend modes, shaders, and shader settings
-|{src}/examples/particles/main.roc[Particles] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/particles/main.roc[Particles] +
 `particles` |Thousands of sprites drawn in one batch rather than one call each
-|{src}/examples/capture_plot/main.roc[Capture Plot] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_plot/main.roc[Capture Plot] +
 `capture_plot` |A repeatable WebM recording made in a hidden window
-|{src}/examples/capture_ui_demo/main.roc[Capture UI Demo] +
+|https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_ui_demo/main.roc[Capture UI Demo] +
 `capture_ui_demo` |A repeatable interface recording driven through the real pointer and keyboard
 |===
 
@@ -196,7 +187,7 @@ Use these as focused references, not starter projects.
   interactive run.
 
 Exhaustive API probes and invalid-input cases belong in the repository's
-{tree}/test[`test/`] directory, where they can be explicit without making an
+https://github.com/lukewilliamboswell/roc-ray/tree/main/test[`test/`] directory, where they can be explicit without making an
 example harder to understand.
 
 == Recording the gallery
@@ -220,7 +211,7 @@ reports the recording `Finished` or `Failed`.
 == Permissions in the examples
 
 An example declares, in its startup config, anything it accesses beyond its
-own resources, as <<permissions>> describes. Nothing is passed on the command line.
+own resources, as xref:permissions.adoc#permissions[Permissions: what your app can access] describes. Nothing is passed on the command line.
 
 [cols="2,5,3",options="header"]
 |===

@@ -24,7 +24,7 @@ them all from one place; the linked files remain authoritative.
 
 | Component | Version | Licence | Text |
 | --- | --- | --- | --- |
-| [raylib](https://github.com/raysan5/raylib) | 6.0 | zlib/libpng | [upstream `LICENSE`](https://github.com/raysan5/raylib/blob/6.0/LICENSE) |
+| [raylib](https://github.com/raysan5/raylib) | 6.0 | zlib/libpng | [`vendor/raylib/LICENSE`](vendor/raylib/LICENSE) |
 | [libvpx](https://github.com/webmproject/libvpx) | vendored | BSD 3-Clause + [additional patent grant](vendor/libvpx/PATENTS) | [`vendor/libvpx/LICENSE`](vendor/libvpx/LICENSE) |
 | [SQLite](https://sqlite.org) | vendored amalgamation | Public domain | [`vendor/sqlite/sqlite3.h`](vendor/sqlite/sqlite3.h) (header notice) |
 | [msf_gif](https://github.com/notnullnotvoid/msf_gif) | vendored | Dual: MIT **or** Unlicense (public domain), at your option | [`vendor/msf_gif/msf_gif.h`](vendor/msf_gif/msf_gif.h) (end of file) |
@@ -32,9 +32,7 @@ them all from one place; the linked files remain authoritative.
 
 `vendor/raylib/` ships prebuilt static libraries for four targets. The zlib
 licence permits static linking into closed-source software and does not require
-attribution for binary redistribution. `vendor/raylib/` is a linker-input
-producer input, so its licence text is added there together with a linker-input
-release rather than on its own.
+attribution for binary redistribution.
 
 ## Example assets
 

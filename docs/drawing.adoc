@@ -87,7 +87,7 @@ in `init!`:
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+app [Model, program] { rr: platform "BUNDLE-URL" }
 
 import rr.App
 import rr.Assets

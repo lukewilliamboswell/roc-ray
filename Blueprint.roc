@@ -1,7 +1,7 @@
 # Development environment and tasks for RocRay, realised by roc-blueprint.
 #
-#     blueprint run check        # what a pull request must pass that runs once, on one machine
-#     blueprint run test-scripts # the pure parts of the Roc scripts
+#     blueprint run check        # pins, the scripts and the lints: what runs once, on one machine
+#     blueprint run pins         # no compiler pin outside scripts/
 #     blueprint run glue         # compare the committed host ABI with what `roc` generates
 #     blueprint run glue-update  # regenerate the committed host ABI
 #     blueprint run test         # build every host, then check, test, build and run every example
@@ -42,8 +42,9 @@ config = [
 		],
 	),
 	Shell("default", [Use("dev")]),
-	Task("check", [Use("dev"), Run(["zig", "build", "lint"])]),
-	Task("test-scripts", [Use("scripts"), Run(["roc-stable", "test", "scripts/src/Glue.roc"])]),
+	# The pin check, the scripts' tests, checks and formatting, and `zig build lint`.
+	Task("check", [Use("dev"), Run(["scripts/check_all.roc"])]),
+	Task("pins", [Use("scripts"), Run(["scripts/check_no_pins.roc"])]),
 	Task("glue", [Use("dev"), Run(["scripts/check_glue.roc"])]),
 	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--update"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),

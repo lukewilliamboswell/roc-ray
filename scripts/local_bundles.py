@@ -74,97 +74,6 @@ class LocalBundleError(RuntimeError):
 
 
 # --------------------------------------------------------------------------
-# Pinned compiler
-# --------------------------------------------------------------------------
-
-
-def read_roc_pin(root: Path) -> str:
-    """The development compiler declared by the platform header."""
-    from roc_platform_abi import GlueError, read_pin
-    try:
-        return read_pin(root / "platform" / "main.roc").nightly
-    except GlueError:
-        return ""
-
-
-
-def rewrite_compiler_pin(source: str, pin: str) -> str:
-    """Pin an application header to `pin`, replacing its `roc:` field or adding one.
-
-    The checked-in examples name the working tree's platform by path and carry
-    no pin, because that platform's own header pins the compiler. A copy that
-    points at a bundle needs the pin that bundle was built for, so the field is
-    added after the platform reference: on its own line in a multi-line header,
-    inline in a one-line header.
-    """
-    rewritten, count = re.subn(
-        r'(?m)^([^#\n]*\broc\s*:\s*)"[^"\n]+"',
-        lambda match: match.group(1) + '"' + pin + '"',
-        source,
-        count=1,
-    )
-    if count == 1:
-        return rewritten
-    line = re.search(r'(?m)^(?P<indent>[ \t]*)(?P<before>[^#\n]*\bplatform\s+"[^"\n]*")(?P<after>[^\n]*)$', source)
-    if line is None:
-        raise LocalBundleError("application header has no platform reference to pin a compiler beside")
-    if line.group("after").strip() == ",":
-        # A multi-line header: one field per line, each with a trailing comma.
-        added = f'{line.group(0)}\n{line.group("indent")}roc: "{pin}",'
-    else:
-        added = f'{line.group("indent")}{line.group("before")}, roc: "{pin}"{line.group("after")}'
-    return source[:line.start()] + added + source[line.end():]
-
-
-def roc_version(roc: str = "roc") -> str:
-    try:
-        result = subprocess.run(
-            [roc, "version"], capture_output=True, text=True, timeout=60, shell=IS_WINDOWS
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
-
-
-def check_roc_pin(root: Path, roc: str = "roc") -> str | None:
-    """Return a warning when the compiler on PATH is not the pinned nightly.
-
-    A mismatched compiler is the usual cause of "mysterious" panics and of
-    errors that look like they come from the package under test, so say so
-    loudly. This is advisory rather than fatal: platform work routinely runs
-    against a locally built compiler.
-
-    A build of the pinned revision counts as a match even though it reports its
-    build mode instead of the tag -- `release-fast-fb208ba` is the compiler
-    `nightly-2026-08-23-fb208ba` names. `roc_platform_abi.compiler_matches_pin`
-    is the shared rule; this falls back to a plain comparison if that module
-    cannot parse the pin.
-    """
-    pinned = read_roc_pin(root)
-    if not pinned:
-        return None
-    observed = roc_version(roc)
-    if observed and _matches_pin(observed, pinned):
-        return None
-    return (
-        f"WARNING: the Roc compiler on PATH does not match platform/main.roc ({pinned}); "
-        f"found {observed or '<unknown>'}. Failures below may be the compiler, "
-        "not this repository."
-    )
-
-
-def _matches_pin(observed: str, pinned: str) -> bool:
-    try:
-        import roc_platform_abi
-
-        return roc_platform_abi.compiler_matches_pin(
-            observed, roc_platform_abi.read_pin()
-        )
-    except Exception:  # noqa: BLE001 - never let a version hint break the run
-        return pinned in observed
-
-
-# --------------------------------------------------------------------------
 # Header rewriting
 # --------------------------------------------------------------------------
 
@@ -436,7 +345,6 @@ class ServedPackages:
     platform_source: Path | None  # staged main.roc, set in "source" mode
     served_dir: Path
     scratch_dir: Path
-    compiler_pin: str = ""
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -537,7 +445,6 @@ def serve_packages(
                 platform_source=platform_source,
                 served_dir=served,
                 scratch_dir=scratch,
-                compiler_pin=read_roc_pin(root),
                 notes=notes,
             )
     finally:
@@ -546,7 +453,7 @@ def serve_packages(
 
 
 def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
-    """Copy the app rooted at `entry.parent` to `dest`, pinned to the served packages.
+    """Copy the app rooted at `entry.parent` to `dest`, pointed at the served packages.
 
     Every `.roc` file under the app directory comes along, because an app is a
     directory here: `cave_climb` has a sibling `Cave.roc`, and
@@ -581,7 +488,6 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
     )
     if not did_rewrite:
         raise LocalBundleError(f"no platform reference to rewrite in {entry}")
-    rewritten = rewrite_compiler_pin(rewritten, packages.compiler_pin)
     staged_entry.write_text(rewritten, encoding="utf-8")
     return staged_entry
 
@@ -686,9 +592,6 @@ def _main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     root = Path(__file__).resolve().parent.parent
-    warning = check_roc_pin(root)
-    if warning:
-        print(warning, file=sys.stderr)
 
     with terminating_signals(), serve_packages(
         root,

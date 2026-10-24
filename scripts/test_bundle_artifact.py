@@ -74,12 +74,9 @@ def roc_version(roc: str) -> str | None:
 
 
 def find_roc(root: Path) -> str | None:
-    """Resolve the compiler, preferring one that matches the pin.
+    """Resolve the compiler: a local `roc-src` build if there is one, else `roc` on PATH.
 
-    A local `roc-src` build at a different revision than `platform/main.roc` used to
-    be picked silently, and produced a run of SIGSEGVs that looked like a fault
-    in the bundle under test. Prefer a matching compiler, and say so loudly when
-    falling back to one that does not match.
+    The platform names no compiler; it is tested with the latest nightly.
     """
     exe_name = "roc.exe" if IS_WINDOWS else "roc"
     path_roc = shutil.which("roc")
@@ -87,29 +84,9 @@ def find_roc(root: Path) -> str | None:
         return path_roc
 
     built_roc = root / "roc-src" / "zig-out" / "bin" / exe_name
-    candidates = [str(built_roc)] if built_roc.is_file() else []
-    if path_roc:
-        candidates.append(path_roc)
-    if not candidates:
-        return None
-
-    pinned = local_bundles.read_roc_pin(root)
-    if not pinned:
-        return candidates[0]
-
-    for candidate in candidates:
-        version = roc_version(candidate)
-        if version and pinned in version:
-            return candidate
-
-    chosen = candidates[0]
-    print(
-        f"WARNING: no compiler matches platform/main.roc ({pinned}); using {chosen} "
-        f"({roc_version(chosen) or 'unknown version'}). Failures below may be the "
-        "compiler, not the bundle.",
-        file=sys.stderr,
-    )
-    return chosen
+    if built_roc.is_file():
+        return str(built_roc)
+    return path_roc
 
 
 def build_example(roc: str, example: Path) -> bool:
@@ -151,7 +128,7 @@ def main() -> int:
         expected = root / "roc-src" / "zig-out" / "bin" / ("roc.exe" if IS_WINDOWS else "roc")
         print(f"Could not find Roc executable at {expected} or on PATH", file=sys.stderr)
         return 1
-    print(f"Using Roc executable: {roc}")
+    print(f"Using Roc executable: {roc} ({roc_version(roc) or 'unknown version'})")
 
     httpd, port = serve_dir(bundle_path.parent, args.port)
     bundle_url = f"http://127.0.0.1:{port}/{bundle_path.name}"
@@ -170,7 +147,6 @@ def main() -> int:
                 print(f"Skipping rewrite for {example}: no platform reference")
                 continue
 
-            rewritten = local_bundles.rewrite_compiler_pin(rewritten, local_bundles.read_roc_pin(root))
             example.write_text(rewritten)
 
         for example in examples:

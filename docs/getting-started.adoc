@@ -31,19 +31,16 @@ window, calls your code, and carries out what your code asks for.
 [#install]
 == Install the Roc compiler
 
-Roc is a young language that is still changing. Each RocRay release is built
-and tested with one specific _nightly_ build of the Roc compiler, and the
-release notes name that build on a line that reads
-`Supported compiler: nightly-<date>-<commit>`. Install exactly that one.
+Roc is a young language that is still changing, and it is distributed as
+_nightly_ builds. RocRay follows the latest one: the latest RocRay release is
+tested with each new nightly, and its release notes also name the nightly it
+was built and tested with, on a line that begins `Built and tested with Roc`.
+Install the latest nightly.
 
-. Open the {repo}/releases[RocRay releases page] and choose the newest release
-  whose name is a version number, such as `0.10.0`. The page also lists
-  dependency releases, such as "macOS linker interfaces"; skip those.
-. In that release's notes, note the compiler name after "Supported compiler".
-. Open the https://github.com/roc-lang/nightlies/releases[Roc nightlies page]
-  and find the release with exactly that name.
+. Open the https://github.com/roc-lang/nightlies/releases/latest[latest Roc
+  nightly]. Its name looks like `nightly-<date>-<commit>`.
 . Download the file for your computer. The date and commit in its name match
-  the compiler's name:
+  the nightly's name:
 +
 [cols="1,2",options="header"]
 |===
@@ -110,8 +107,7 @@ Run:
 roc version
 ----
 
-It prints the compiler's name, which must match the one the release notes
-name:
+It prints the compiler's name:
 
 [source]
 ----
@@ -142,9 +138,12 @@ the X11 libraries, and runs only on Linux. <<reference>> lists both bundles.
 == Run an example
 
 Each release attaches a zip of the examples, named `examples-<version>.zip`,
-whose files already name that release's bundle and compiler.
+whose files already name that release's bundle.
 
-. Download the zip from the same release and extract it.
+. Open the {repo}/releases[RocRay releases page] and choose the newest release
+  whose name is a version number, such as `0.10.0`. The page also lists
+  dependency releases, such as "macOS linker interfaces"; skip those.
+. Download the zip from that release and extract it.
 . Open a terminal in the extracted folder: the one that contains `examples/`.
 . Run:
 +
@@ -164,9 +163,10 @@ RocRay app quits on Escape unless the app turns this off.
 Run examples from the extracted folder, as shown. The examples that load
 images or sounds find them by paths relative to that folder.
 
-If `roc` warns "This header pins Roc version ..., but you are running ...",
-the compiler on your `PATH` is not the one the release names. Install that
-one.
+If an example fails to compile with errors in RocRay's own modules, a new
+nightly may have changed something the release relies on. Check that `roc
+version` is the latest nightly; if it is, install the nightly the release notes
+name after "Built and tested with Roc", and report the failure.
 
 == Build an executable
 
@@ -188,21 +188,19 @@ On Windows, write `--output=hello_world.exe` and run `.\hello_world.exe`.
 Make a new folder for your app, anywhere you like, such as `hello` in your
 home directory. Create a file named `main.roc` in it.
 
-The file starts with a _header_. The header says this file is an app, names
-the platform it runs on by its bundle URL, and names the compiler it was
-written for:
+The file starts with a _header_. The header says this file is an app and names
+the platform it runs on by its bundle URL:
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+app [Model, program] { rr: platform "BUNDLE-URL" }
 ----
 
 Replace `BUNDLE-URL` with the default bundle's URL from the release notes. It
 looks like
 `+https://github.com/lukewilliamboswell/roc-ray/releases/download/<version>/<hash>.tar.zst+`.
-Replace `COMPILER` with the compiler the notes name, the same name
-`roc version` prints. The simplest way to get both right is to copy
-the first line of `examples/hello_world/main.roc` from the examples zip.
+The simplest way to get it right is to copy the first line of
+`examples/hello_world/main.roc` from the examples zip.
 
 Below the header, add the rest of the app:
 

@@ -8,8 +8,8 @@ Thank you for helping. The contributor guide is part of the RocRay manual:
 - [Working on the host](docs/host-development.adoc): the Roc/host boundary,
   hosted effects, phases, declared permissions, and performance work
 - [Dependencies, bundles, and releases](docs/maintaining.adoc): linker inputs,
-  macOS interfaces, vendored C libraries, bundles, releases, and compiler
-  updates
+  macOS interfaces, vendored C libraries, bundles, releases, and the Roc
+  nightly
 - [Architecture](docs/architecture.adoc): read this before proposing a change
   to a public API, platform behaviour, host integration, ownership, scheduling,
   resource limits, targets, or application lifecycle
@@ -21,6 +21,8 @@ Open an issue before a broad API change or a substantial new subsystem so its
 shape can be discussed first. Before opening a pull request, run:
 
 ```bash
-zig build lint
+blueprint run check
 zig build test
 ```
+
+Use the latest Roc nightly as `roc`; the platform names no compiler.

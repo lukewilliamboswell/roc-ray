@@ -28,7 +28,7 @@ markdown = sys.modules["release_notes_markdown"]
 BUNDLE_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/roc-ray-0.9.0.tar.zst"
 NEXT_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"
 
-APP_HEADER = 'app [init!, render!] {{ rr: platform "{ref}", roc: "nightly-2026-08-23-fb208ba" }}\n\nmain = 1\n'
+APP_HEADER = 'app [init!, render!] {{ rr: platform "{ref}" }}\n\nmain = 1\n'
 
 
 def git(root: Path, *arguments: str) -> None:
@@ -48,7 +48,7 @@ class PackageExamplesTests(unittest.TestCase):
     def make_repo(self, root: Path) -> Path:
         """A miniature repository with two examples, an asset, and junk to exclude."""
         (root / "platform").mkdir()
-        (root / "platform" / "main.roc").write_text('platform "" packages { roc: "nightly-2026-09-18-1d982dc" }\n')
+        (root / "platform" / "main.roc").write_text('platform "" packages {}\n')
         examples = root / "examples"
         (examples / "pong" / "assets").mkdir(parents=True)
         (examples / "gallery").mkdir(parents=True)
@@ -131,9 +131,14 @@ class PackageExamplesTests(unittest.TestCase):
             self.assertIn(f'platform "{NEXT_URL}"', snake)
             self.assertNotIn("../../platform/main.roc", pong)
             self.assertNotIn(BUNDLE_URL, snake)
-            self.assertIn('roc: "nightly-2026-09-18-1d982dc"', pong)
-            self.assertIn('roc: "nightly-2026-09-18-1d982dc"', snake)
-            self.assertIn('nightly-2026-08-23-fb208ba', (root / "examples/pong/main.roc").read_text())
+            # The archive differs from the checkout only in the platform URL.
+            self.assertEqual(APP_HEADER.format(ref=NEXT_URL), pong)
+            self.assertEqual(APP_HEADER.format(ref=NEXT_URL), snake)
+            self.assertNotIn("roc:", pong)
+            self.assertEqual(
+                APP_HEADER.format(ref="../../platform/main.roc"),
+                (root / "examples/pong/main.roc").read_text(),
+            )
             self.assertEqual(b"\x89PNG ball", ball)
             self.assertNotIn("examples/gallery/pong.webp", names)
             self.assertEqual({(1980, 1, 1, 0, 0, 0)}, stamps)
@@ -302,6 +307,39 @@ class ZipTreeTests(unittest.TestCase):
                 helpers.zip_tree(root / "site", root / "out.zip", "manual")
 
 
+class CompilerVersionTests(unittest.TestCase):
+    def test_tested_compiler_prefers_the_resolved_tag(self) -> None:
+        self.assertEqual("nightly-2026-10-24-0123456", helpers.tested_compiler(" nightly-2026-10-24-0123456 "))
+
+    def test_tested_compiler_asks_roc_on_path(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["roc", "version"], 0, stdout="Roc compiler version nightly-2026-10-24-0123456\n", stderr=""
+        )
+        with unittest.mock.patch.object(helpers.subprocess, "run", return_value=completed):
+            self.assertEqual("nightly-2026-10-24-0123456", helpers.tested_compiler(""))
+
+    def test_tested_compiler_without_roc_fails(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "--roc-version"):
+            helpers.tested_compiler("", roc="definitely-not-a-roc-binary")
+
+    def test_stable_compiler_reads_blueprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "Blueprint.roc").write_text(
+                'Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-23-18478ff"))]),\n',
+                encoding="utf-8",
+            )
+            self.assertEqual("nightly-2026-10-23-18478ff", helpers.stable_compiler("", root))
+            self.assertEqual("given", helpers.stable_compiler("given", root))
+            (root / "Blueprint.roc").write_text("config = []\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "roc-stable"):
+                helpers.stable_compiler("", root)
+
+    def test_stable_compiler_matches_this_repository(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        self.assertTrue(helpers.stable_compiler("", root).startswith("nightly-"))
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def make_notes(self, root: Path, version: str) -> str:
         bundles = root / "bundles.json"
@@ -313,6 +351,7 @@ class ReleaseNotesTests(unittest.TestCase):
         args = argparse.Namespace(
             release_version=version, release_bundles=str(bundles), output_file=str(output),
             docs_url="https://example.com/docs/", notes_dir=str(root / "notes"),
+            roc_version="nightly-2026-10-24-0123456", roc_stable_version="nightly-2026-10-23-18478ff",
         )
         with unittest.mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}):
             helpers.cmd_make_release_notes(args)
@@ -327,6 +366,9 @@ class ReleaseNotesTests(unittest.TestCase):
             self.assertTrue(body.startswith("# Highlights\n\nNew API.\n"))
             self.assertIn('platform "https://github.com/owner/repo/releases/download/0.10.0/roc-ray-0.10.0.tar.zst"', body)
             self.assertIn("https://example.com/docs/", body)
+            self.assertIn("Built and tested with Roc `nightly-2026-10-24-0123456`", body)
+            self.assertIn("`roc-stable` `nightly-2026-10-23-18478ff`", body)
+            self.assertNotIn("Supported compiler", body)
             for asset in ("roc-ray-manual-0.10.0.pdf", "roc-ray-manual-0.10.0.zip", "roc-ray-api-docs-0.10.0.zip"):
                 self.assertIn(f"https://github.com/owner/repo/releases/download/0.10.0/{asset}", body)
 

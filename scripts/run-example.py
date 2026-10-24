@@ -66,10 +66,6 @@ def main() -> int:
     except ValueError:
         parser.error(f"example must be inside {root / 'examples'}")
 
-    warning = local_bundles.check_roc_pin(root)
-    if warning:
-        print(warning, file=sys.stderr)
-
     if not args.skip_platform_build:
         build_command = ["zig", "build"]
         if macos_interfaces := os.environ.get("ROC_RAY_MACOS_INTERFACES_DIR"):

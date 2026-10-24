@@ -864,7 +864,7 @@ Draw := [].{
 	## Legal in `render!` only. Normally called inside `with_camera_3d!`.
 	textured_triangles_3d! : Frame, TexturedTriangles3D => {}
 	textured_triangles_3d! = |_frame, cfg|
-		if List.len(cfg.indices) == 0 {} else Host.draw_draw_textured_triangles_3d!(cfg)
+		if (List.len(cfg.indices) == 0) {} else Host.draw_draw_textured_triangles_3d!(cfg)
 
 	## Draw many instances of one texture, in list order, with a single hosted
 	## call.

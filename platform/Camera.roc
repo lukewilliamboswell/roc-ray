@@ -326,4 +326,4 @@ sane_vec3 : Math.Vec3 -> Math.Vec3
 sane_vec3 = |vec| { x: sane_scalar(vec.x), y: sane_scalar(vec.y), z: sane_scalar(vec.z) }
 
 sane_fovy : F32 -> F32
-sane_fovy = |value| if F32.is_finite(value) and value > 0 and value < 180 value else 60
+sane_fovy = |value| if (F32.is_finite(value) and value > 0 and value < 180) value else 60

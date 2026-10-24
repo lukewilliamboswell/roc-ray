@@ -4108,6 +4108,18 @@
           ]
         },
         {
+          "name": "_if_indextoname",
+          "sources": [
+            {
+              "url": "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/if_nametoindex.3.html",
+              "documented_modules": [],
+              "evidence_kind": "exact_function_name_in_manpage_synopsis",
+              "retrieved_at": "2026-09-09T10:07:01.919691+00:00",
+              "response_sha256": "d98c0a52074ba93b944c833d8e85cb5b25ebba9ba7f3b5ad38e0f8e244f69063"
+            }
+          ]
+        },
+        {
           "name": "_ioctl",
           "sources": [
             {
@@ -4678,6 +4690,174 @@
               "revision": "71bbe350ab79eef58113991d817ccc6165061a64",
               "source_license": "APSL-2.0; additional source notices may apply",
               "response_sha256": "e03cd70f7fc6c8658c4fb245fb53456506deeff751af80af165b509835545ab4"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn",
+              "line": 60,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_addchdir_np",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_addchdir_np",
+              "line": 182,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_addclose",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_addclose",
+              "line": 78,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_adddup2",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_adddup2",
+              "line": 80,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_addfchdir_np",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_addfchdir_np",
+              "line": 185,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_addinherit_np",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_addinherit_np",
+              "line": 179,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_destroy",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_destroy",
+              "line": 87,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawn_file_actions_init",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawn_file_actions_init",
+              "line": 89,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawnattr_destroy",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawnattr_destroy",
+              "line": 91,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawnattr_init",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawnattr_init",
+              "line": 105,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawnattr_setflags",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawnattr_setflags",
+              "line": 110,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
+            }
+          ]
+        },
+        {
+          "name": "_posix_spawnattr_setpgroup",
+          "sources": [
+            {
+              "url": "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/libsyscall/wrappers/spawn/spawn.h",
+              "evidence_kind": "public_open_source_identifier",
+              "identifier": "posix_spawnattr_setpgroup",
+              "line": 112,
+              "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea",
+              "source_license": "APSL-2.0",
+              "response_sha256": "4b196764e478b25c2fdfcdd240b2f1601fbc59410ce9c8cb59780354ff1ebf3e"
             }
           ]
         },

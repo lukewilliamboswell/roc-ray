@@ -215,7 +215,7 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 232, y: 126 }, text: "peer", size: 13, color: faint })
 	frame.text_at!({ pos: { x: 232, y: 144 }, text: "127.0.0.1:${U16.to_str(model.peer.port)}", size: 17, color: accent_peer })
 	frame.text_at!({ pos: { x: 64, y: 178 }, text: "${U64.to_str(model.received)} received", size: 14, color: muted })
-	frame.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if model.dropped == 0 muted else accent_bad })
+	frame.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if (model.dropped == 0) muted else accent_bad })
 
 	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint })
 	Ok({})

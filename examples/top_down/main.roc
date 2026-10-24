@@ -80,7 +80,7 @@ top_down_config = |args| {
 		.with_title("RocRay Spark Run")
 		.with_frame_pacing(Capped(120))
 		.with_permission(Directory(GameAssets.assets_dir, ReadOnly))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## A demo run is over once its recording has been written, or has failed.
@@ -111,7 +111,7 @@ init! = App.init_for_args(
 
 ## Converts two opposing keys into one signed movement axis.
 axis : Bool, Bool -> F32
-axis = |negative, positive| if negative -1 else if positive 1 else 0
+axis = |negative, positive| if (negative) -1 else if (positive) 1 else 0
 
 ## Translates keyboard bindings into semantic Spark Run controls.
 read_controls : Devices.Snapshot -> Controls
@@ -187,7 +187,7 @@ Msg : []
 ## closes the window when it is pressed.
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
-	controls = if model.demo demo_controls(model.demo_frame) else read_controls(input.devices)
+	controls = if (model.demo) demo_controls(model.demo_frame) else read_controls(input.devices)
 	# Seconds since the previous cycle, clamped so a stall (dragging the
 	# window, a breakpoint) cannot carry the player through a wall.
 	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.25)

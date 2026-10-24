@@ -468,10 +468,10 @@ WorkQueue := { pending : List(Work), in_flight : U64 }.{
 
 	enqueue = |queue, work| WorkQueue.{ pending: List.append(queue.pending, work), in_flight: queue.in_flight }
 
-	completed = |queue| WorkQueue.{ pending: queue.pending, in_flight: if queue.in_flight == 0 0 else queue.in_flight - 1 }
+	completed = |queue| WorkQueue.{ pending: queue.pending, in_flight: if (queue.in_flight == 0) 0 else queue.in_flight - 1 }
 
 	take_ready = |queue| {
-		room = if queue.in_flight >= max_in_flight 0 else max_in_flight - queue.in_flight
+		room = if (queue.in_flight >= max_in_flight) 0 else max_in_flight - queue.in_flight
 		split = List.split_at(queue.pending, U64.min(room, List.len(queue.pending)))
 		{
 			queue: WorkQueue.{ pending: split.others, in_flight: queue.in_flight + List.len(split.before) },
@@ -516,9 +516,9 @@ live_plot_config = |args| {
 		.with_min_size({ width: 980, height: 640 })
 		.with_resizable(Bool.True)
 		.with_frame_pacing(VSync)
-	# The plot walks and reads the directory it was launched from.
+		# The plot walks and reads the directory it was launched from.
 		.with_permission(WorkingDirectory(ReadOnly))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## A demo run is over once its recording has been written, or has failed.
@@ -1760,7 +1760,7 @@ update! = |model, input, _io| {
 	}
 
 	# Decided before the zone closes, so an exit still ends the trace zone.
-	finished = if model.demo demo_finished(input.capture) else Ok({})
+	finished = if (model.demo) demo_finished(input.capture) else Ok({})
 	Trace.end!(update_zone)
 	finished?
 	Ok({ ..refetched, queue: ready.queue })
@@ -2952,7 +2952,7 @@ expect {
 	trimmed = trim(sample_points, sample_runs, 5)
 	trimmed.runs == [{ lane: 1, count: 3 }, { lane: 2, count: 2 }]
 		and List.len(trimmed.instances) == 5
-			and trimmed.instances == List.drop_first(sample_points, 4)
+		and trimmed.instances == List.drop_first(sample_points, 4)
 }
 
 ## It drops as many as it takes, not one.
@@ -3207,8 +3207,8 @@ expect {
 		{ first: Ok(counted), second: Ok(untouched) } =>
 			List.get(counted.hist, 0) == Ok(2)
 				and List.get(counted.hist, hist_buckets - 1) == Ok(2)
-					and hist_peak(counted.hist) == 2
-						and untouched.hist == List.repeat(0, hist_buckets)
+				and hist_peak(counted.hist) == 2
+				and untouched.hist == List.repeat(0, hist_buckets)
 
 		_ => Bool.False
 	}

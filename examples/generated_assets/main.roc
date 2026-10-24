@@ -79,7 +79,7 @@ demo_recording =
 generated_assets_config : List(Str) -> App.Config
 generated_assets_config = |args| {
 	base = App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))
-	if List.contains(args, record_demo_flag) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
+	if (List.contains(args, record_demo_flag)) base.with_visible(Bool.False).with_output_dir("examples/gallery") else base
 }
 
 ## A demo run is over once its recording has been written, or has failed.
@@ -159,7 +159,7 @@ init! = App.init_for_args(
 
 palette_from_input : U64, Devices.Snapshot -> U64
 palette_from_input = |current, input|
-	if input.key_pressed(Key1) 0 else if input.key_pressed(Key2) 1 else if input.key_pressed(Key3) 2 else if input.key_pressed(Key4) 3 else current
+	if (input.key_pressed(Key1)) 0 else if (input.key_pressed(Key2)) 1 else if (input.key_pressed(Key3)) 2 else if (input.key_pressed(Key4)) 3 else current
 
 ## Paints a deterministic ribbon through the editor's normal device-input
 ## path, changing colour as it crosses each quarter of the grid.
@@ -168,7 +168,7 @@ demo_input = |frame| {
 	cell = frame % (grid_side * grid_side)
 	row = cell // grid_side
 	zigzag_col = cell % grid_side
-	col = if row % 2 == 0 zigzag_col else grid_side - 1 - zigzag_col
+	col = if (row % 2 == 0) zigzag_col else grid_side - 1 - zigzag_col
 	point = {
 		x: canvas_x + (U64.to_f32(col) + 0.5) * cell_size,
 		y: canvas_y + (U64.to_f32(row) + 0.5) * cell_size,
@@ -195,7 +195,7 @@ cell_at = |point| {
 		row = F32.to_u64_try((point.y - canvas_y) / cell_size)
 		match (column, row) {
 			(Ok(col), Ok(line)) =>
-				if col < grid_side and line < grid_side Ok(line * grid_side + col) else Err(Outside)
+				if (col < grid_side and line < grid_side) Ok(line * grid_side + col) else Err(Outside)
 			_ => Err(Outside)
 		}
 	}
@@ -297,15 +297,15 @@ draw_swatch! = |frame, font, index, selected, mouse| {
 	bounds = swatch_bounds(index)
 	chosen = index == selected
 	hovered = bounds.contains(mouse)
-	edge = if chosen Color.white else if hovered Color.with_alpha(Color.white, 150) else theme.edge
+	edge = if (chosen) Color.white else if (hovered) Color.with_alpha(Color.white, 150) else theme.edge
 	# The selected swatch gets a lit ring outside it as well as a bright edge,
 	# so which colour the brush carries survives a glance.
 	if chosen {
 		frame.rounded_rectangle!({ x: bounds.x - 5, y: bounds.y - 5, width: bounds.width + 10, height: bounds.height + 10, radius: 11, segments: 8, style: Draw.outlined(theme.accent, 2) })
 	}
-	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
+	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if (chosen) 3 else 2) })
 	Text.from(U64.to_str(index + 1), font)
-		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if chosen theme.ink else theme.faint, align: (Middle, Center) })
+		.draw!(frame, { pos: { x: 752, y: bounds.y + 25 }, color: if (chosen) theme.ink else theme.faint, align: (Middle, Center) })
 }
 
 ## Perform one edit. A mismatched upload is a programmer error -- the editor
@@ -332,7 +332,7 @@ Msg : []
 
 update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
 update! = |model, input, _io| {
-	devices = if model.demo demo_input(model.demo_frame) else input.devices
+	devices = if (model.demo) demo_input(model.demo_frame) else input.devices
 
 	next = update_editor(model, devices)
 	for edit in next.edits {

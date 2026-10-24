@@ -42,7 +42,7 @@ probe_bytes : List(U8)
 probe_bytes = List.repeat(0xa5, 5000)
 
 score : Bool, U64 -> U64
-score = |held, bit| if held bit else 0
+score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 4) == 4
 expect score(Bool.False, 4) == 0

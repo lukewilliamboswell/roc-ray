@@ -71,7 +71,7 @@ draw_hud! = |frame, assets, world, demo| {
 	assets.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon })
 	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(world.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
 	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(world.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: assets.font })
-	if demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
+	if (demo) {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
 	frame.line!({ start: { x: 44, y: 58 }, end: { x: 756, y: 58 }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
 	assets.hint.draw!(frame, { pos: { x: 400, y: 580 }, color: hint_color, align: (Middle, Center) })
 }

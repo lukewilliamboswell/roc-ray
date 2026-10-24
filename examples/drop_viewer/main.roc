@@ -105,7 +105,7 @@ update! = |model, input, io| {
 		..model,
 		status: next.status,
 		image: next.image,
-		partial_drop: if List.is_empty(input.dropped) model.partial_drop else input.dropped_overflow,
+		partial_drop: if (List.is_empty(input.dropped)) model.partial_drop else input.dropped_overflow,
 	})
 }
 

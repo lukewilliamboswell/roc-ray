@@ -99,6 +99,6 @@ build_row = |kind| [
 find_hit_from : List(Bricks.Brick), Math.Circle, U64 -> Try(Bricks.Brick, [NotFound])
 find_hit_from = |bricks, ball, index|
 	match List.get(bricks, index) {
-		Ok(brick) => if Math.circle_rect(ball, brick.rect) Ok(brick) else find_hit_from(bricks, ball, index + 1)
+		Ok(brick) => if (Math.circle_rect(ball, brick.rect)) Ok(brick) else find_hit_from(bricks, ball, index + 1)
 		Err(_) => Err(NotFound)
 	}

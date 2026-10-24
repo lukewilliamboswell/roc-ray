@@ -84,7 +84,7 @@ update! = |model, input, io| {
 			} else {
 				Err(Exit(3))
 			}
-		_ => if input.time.cycle_count > 120 Err(Exit(4)) else Ok(next)
+		_ => if (input.time.cycle_count > 120) Err(Exit(4)) else Ok(next)
 	}
 }
 

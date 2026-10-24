@@ -88,7 +88,7 @@ update_playing = |world, controls, dt| {
 
 ## Holds a crashed world or starts a fresh run when restart is pressed.
 update_game_over : Game.World, Game.Controls -> (Game.World, List(Game.Event))
-update_game_over = |world, controls| if controls.restart_pressed (Game.new_world(world.rng), [GameStarted]) else (world, [])
+update_game_over = |world, controls| if (controls.restart_pressed) (Game.new_world(world.rng), [GameStarted]) else (world, [])
 
 no_controls : Game.Controls
 no_controls = { requested_direction: KeepDirection, restart_pressed: Bool.False }

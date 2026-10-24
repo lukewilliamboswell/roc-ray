@@ -49,8 +49,8 @@ hazard_circle = |hazard, phase| Math.circle(hazard.pos(phase), hazard.radius)
 
 ## Wraps an animation phase into the unit interval.
 wrap_unit : F32 -> F32
-wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
+wrap_unit = |value| if (value >= 1) value - 1 else if (value < 0) value + 1 else value
 
 ## Maps a wrapped phase to a back-and-forth lane amount.
 ping_pong : F32 -> F32
-ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
+ping_pong = |phase| if (phase < 0.5) phase * 2 else (1 - phase) * 2

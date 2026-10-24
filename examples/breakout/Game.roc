@@ -62,19 +62,19 @@ respawn_ball = |world, paddle| {
 
 ## Produces a single gameplay event only when its condition occurred.
 event_when : Bool, Game.Event -> List(Game.Event)
-event_when = |condition, event| if condition [event] else []
+event_when = |condition, event| if (condition) [event] else []
 
 ## Moves the waiting paddle and launches the attached ball on request.
 update_ready : Game.World, Game.Controls, F32 -> (Game.World, List(Game.Event))
 update_ready = |world, controls, dt| {
 	paddle = world.paddle.move(controls.move, dt)
 	ready_world = respawn_ball(world, paddle)
-	if controls.action_pressed ({ ..ready_world, state: Playing }, [GameStarted]) else (ready_world, [])
+	if (controls.action_pressed) ({ ..ready_world, state: Playing }, [GameStarted]) else (ready_world, [])
 }
 
 ## Holds a finished match or replaces it with a fresh one on request.
 update_finished : Game.World, Game.Controls -> (Game.World, List(Game.Event))
-update_finished = |world, controls| if controls.action_pressed (Game.new_world(), [GameStarted]) else (world, [])
+update_finished = |world, controls| if (controls.action_pressed) (Game.new_world(), [GameStarted]) else (world, [])
 
 ## Moves the ball and resolves life, wall, paddle, and brick interactions.
 update_playing : Game.World, Game.Controls, F32 -> (Game.World, List(Game.Event))
@@ -85,8 +85,8 @@ update_playing = |world, controls, dt| {
 	lost_life = candidate_ball.pos.y - Ball.radius > 600
 
 	if lost_life {
-		next_lives = if world.lives > 0 world.lives - 1 else 0
-		next_state = if world.lives <= 1 GameOver else Ready
+		next_lives = if (world.lives > 0) world.lives - 1 else 0
+		next_state = if (world.lives <= 1) GameOver else Ready
 		next_world = respawn_ball({ ..world, lives: next_lives, state: next_state }, paddle)
 		(next_world, [LifeLost(next_state)])
 	} else {
@@ -98,17 +98,17 @@ update_playing = |world, controls, dt| {
 		wall_ball : Ball
 		wall_ball = Ball.{
 			pos: {
-				x: if hit_left Ball.radius else if hit_right 800 - Ball.radius else candidate_ball.pos.x,
-				y: if hit_top 58 + Ball.radius else candidate_ball.pos.y,
+				x: if (hit_left) Ball.radius else if (hit_right) 800 - Ball.radius else candidate_ball.pos.x,
+				y: if (hit_top) 58 + Ball.radius else candidate_ball.pos.y,
 			},
 			velocity: {
-				x: if hit_left or hit_right world.ball.velocity.x * -1 else world.ball.velocity.x,
-				y: if hit_top world.ball.velocity.y * -1 else world.ball.velocity.y,
+				x: if (hit_left or hit_right) world.ball.velocity.x * -1 else world.ball.velocity.x,
+				y: if (hit_top) world.ball.velocity.y * -1 else world.ball.velocity.y,
 			},
 		}
 
 		hit_paddle = wall_ball.velocity.y > 0 and Math.circle_rect(wall_ball.circle(), paddle_rect)
-		paddle_ball = if hit_paddle paddle.bounce(wall_ball) else wall_ball
+		paddle_ball = if (hit_paddle) paddle.bounce(wall_ball) else wall_ball
 
 		hit_result = Bricks.find_hit(world.bricks, paddle_ball.circle())
 		collision_events = List.concat(event_when(hit_wall, WallHit), event_when(hit_paddle, PaddleHit))
@@ -117,7 +117,7 @@ update_playing = |world, controls, dt| {
 			Ok(hit_brick) => {
 				remaining = Bricks.remove(world.bricks, hit_brick)
 				cleared = List.len(remaining) == 0
-				state = if cleared Won else Playing
+				state = if (cleared) Won else Playing
 				events = List.concat(collision_events, List.concat([BrickHit(hit_brick)], event_when(cleared, WallCleared)))
 				(
 					{

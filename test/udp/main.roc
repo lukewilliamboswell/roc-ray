@@ -95,7 +95,7 @@ init! = App.init_for_args(
 	|_args| App.default.with_permission(UdpLoopback),
 	|io| {
 		args = io.args!()
-		mode = if List.contains(args, "--udp-expect-timeout") ExpectTimeout else RoundTrip
+		mode = if (List.contains(args, "--udp-expect-timeout")) ExpectTimeout else RoundTrip
 		match (io.udp().bind!(loopback(0)), io.udp().bind!(loopback(0))) {
 			(Ok(socket_a), Ok(socket_b)) =>
 				Ok({

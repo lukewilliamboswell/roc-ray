@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Task
@@ -38,7 +38,7 @@ ids : List(U64)
 ids = build_ids([], 1)
 
 build_ids : List(U64), U64 -> List(U64)
-build_ids = |acc, n| if n > wanted acc else build_ids(List.append(acc, n), n + 1)
+build_ids = |acc, n| if (n > wanted) acc else build_ids(List.append(acc, n), n + 1)
 
 expect List.len(ids) == wanted
 expect List.fold(ids, 0, |acc, n| acc + n) == expected_sum

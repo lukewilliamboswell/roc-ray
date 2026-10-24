@@ -67,7 +67,7 @@ init! = App.init(
 ## down to 0 over `hop_seconds`. No effects, so the `expect`s below test it.
 step_hop : F32, Bool, F32 -> F32
 step_hop = |hop, space_pressed, dt|
-	if space_pressed 1 else F32.max(hop - dt / hop_seconds, 0)
+	if (space_pressed) 1 else F32.max(hop - dt / hop_seconds, 0)
 
 ## How high the blob is above its resting place, in logical units, at a point
 ## in its hop: up and back down along half a sine wave.

@@ -34,7 +34,7 @@ init! = App.init(
 ## Turn two opposite keys into one number: -1, 0, or 1. Holding both cancels.
 axis : Bool, Bool -> F32
 axis = |negative, positive|
-	if negative and !positive -1 else if positive and !negative 1 else 0
+	if (negative and !positive) -1 else if (positive and !negative) 1 else 0
 
 ## Which way the arrow keys point. Up is negative because screen y grows
 ## downwards.

@@ -87,8 +87,8 @@ move_ball = |ball, paddle_x, dt| {
 	y = ball.pos.y + ball.velocity.y * dt
 	off_left = x < ball_radius and ball.velocity.x < 0
 	off_right = x > screen_width - ball_radius and ball.velocity.x > 0
-	vx = if off_left or off_right -ball.velocity.x else ball.velocity.x
-	vy = if y < ball_radius and ball.velocity.y < 0 -ball.velocity.y else ball.velocity.y
+	vx = if (off_left or off_right) -ball.velocity.x else ball.velocity.x
+	vy = if (y < ball_radius and ball.velocity.y < 0) -ball.velocity.y else ball.velocity.y
 	paddle = Math.rect(paddle_x, paddle_y, paddle_width, paddle_height)
 	touching = Math.circle_rect(Math.circle({ x, y }, ball_radius), paddle)
 	if vy > 0 and touching {

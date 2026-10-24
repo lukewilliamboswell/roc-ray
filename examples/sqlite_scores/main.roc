@@ -347,9 +347,9 @@ draw_entry! = |frame, index, entry, best, width| {
 	if index % 2 == 1 {
 		frame.rectangle!({ x: 45, y: y - 6, width: width - 2, height: 30, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
 	}
-	medal = if index == 0 gold else if index < 3 silver else faint
+	medal = if (index == 0) gold else if (index < 3) silver else faint
 	frame.circle!({ center: { x: 74, y: y + 9 }, radius: 11, style: Draw.filled(Color.with_alpha(medal, 40)) })
-	frame.text_at!({ pos: { x: if index < 9 70 else 66, y: y }, text: U64.to_str(index + 1), size: 16, color: medal })
+	frame.text_at!({ pos: { x: if (index < 9) 70 else 66, y: y }, text: U64.to_str(index + 1), size: 16, color: medal })
 	frame.text_at!({ pos: { x: 104, y: y }, text: entry.name, size: 19, color: ink })
 
 	# The bar is the row's score against the board's best, so the shape of the

@@ -757,17 +757,17 @@ default_height = 600
 normalize_pacing : AppFramePacing -> AppFramePacing
 normalize_pacing = |value|
 	match value {
-		Capped(fps) => if fps <= 0 Uncapped else value
+		Capped(fps) => if (fps <= 0) Uncapped else value
 		_ => value
 	}
 
 normalize_dimension : I32, I32 -> I32
-normalize_dimension = |value, fallback| if value > 0 value else fallback
+normalize_dimension = |value, fallback| if (value > 0) value else fallback
 
 ## Unlike `normalize_dimension`, `0` is a meaningful minimum: raylib maps it to
 ## GLFW_DONT_CARE, leaving that axis unconstrained. Only negatives are clamped.
 normalize_min_dimension : I32 -> I32
-normalize_min_dimension = |value| if value > 0 value else 0
+normalize_min_dimension = |value| if (value > 0) value else 0
 
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
@@ -947,8 +947,8 @@ app_suggest_window_size! = |_startup, size|
 app_suggest_window_min_size! : App.Io, { width : I32, height : I32 } => {}
 app_suggest_window_min_size! = |_startup, size|
 	Host.window_suggest_min_size!({
-		width: if size.width > 0 size.width else 0,
-		height: if size.height > 0 size.height else 0,
+		width: if (size.width > 0) size.width else 0,
+		height: if (size.height > 0) size.height else 0,
 	})
 
 app_set_target_fps! : App.Io, I32 => {}

@@ -565,11 +565,11 @@ Capture := [].{
 }
 
 normalize_fps : I32 -> I32
-normalize_fps = |value| if value > 0 value else 25
+normalize_fps = |value| if (value > 0) value else 25
 
 ## `0` and `1` both mean "keep every frame"; the host divides by this value.
 normalize_every_nth : U32 -> U32
-normalize_every_nth = |value| if value > 0 value else 1
+normalize_every_nth = |value| if (value > 0) value else 1
 
 expect Capture.default.format() == Gif
 expect Capture.default.fps() == 25

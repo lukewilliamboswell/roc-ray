@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Devices
@@ -51,7 +51,7 @@ update! = |model, program_input, _io| {
 
 	outcome =
 		match check(cycle, input, input.text_input) {
-			Ok({}) => if cycle + 1 >= scripted_cycles Passed else Pending
+			Ok({}) => if (cycle + 1 >= scripted_cycles) Passed else Pending
 			Err(reason) => FailedWith(reason)
 		}
 

@@ -77,7 +77,7 @@ DamageResult : { world : Game.World, damaged : Bool }
 
 ## Restarts a finished run when the semantic restart control is pressed.
 restart_if_requested : Level, Game.World, Game.Controls -> (Game.World, List(Game.Event))
-restart_if_requested = |level, world, controls| if controls.restart_pressed (Game.new(level), [GameStarted]) else (world, [])
+restart_if_requested = |level, world, controls| if (controls.restart_pressed) (Game.new(level), [GameStarted]) else (world, [])
 
 ## Keeps a proposed player center inside the authored world bounds.
 clamp_to_world : Level, Math.Vec2 -> Math.Vec2
@@ -106,28 +106,28 @@ move_player_speed : Level, Math.Vec2, Math.Vec2, F32, F32 -> Math.Vec2
 move_player_speed = |level, player, raw_dir, dt, speed| {
 	dir = Math.normalize(raw_dir)
 	candidate = clamp_to_world(level, Math.add(player, Math.scale(dir, speed * dt)))
-	if any_obstacle_hit(level, Math.circle(candidate, Player.radius)) player else candidate
+	if (any_obstacle_hit(level, Math.circle(candidate, Player.radius))) player else candidate
 }
 
 ## Wraps the shared hazard phase into the unit interval.
 wrap_unit : F32 -> F32
-wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
+wrap_unit = |value| if (value >= 1) value - 1 else if (value < 0) value + 1 else value
 
 ## Counts a positive feedback timer down without crossing below zero.
 tick_timer : F32, F32 -> F32
-tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
+tick_timer = |timer, dt| if (timer <= dt) 0 else timer - dt
 
 ## Finds the first remaining spark touched by the player circle.
 find_hit_spark : List(Spark), Math.Circle, U64 -> Try(Spark, [NoSpark])
 find_hit_spark = |sparks, player_circle, index|
 	match List.get(sparks, index) {
-		Ok(spark) => if spark.hit_by(player_circle) Ok(spark) else find_hit_spark(sparks, player_circle, index + 1)
+		Ok(spark) => if (spark.hit_by(player_circle)) Ok(spark) else find_hit_spark(sparks, player_circle, index + 1)
 		Err(_) => Err(NoSpark)
 	}
 
 ## Chooses the gate state from the remaining collectible sparks.
 gate_after_collect : List(Spark) -> Game.Gate
-gate_after_collect = |remaining| if List.len(remaining) == 0 GateOpen else GateLocked
+gate_after_collect = |remaining| if (List.len(remaining) == 0) GateOpen else GateLocked
 
 ## Removes a touched spark, scores it, and opens the gate when it was last.
 collect_spark : Game.World -> CollectResult
@@ -147,7 +147,7 @@ collect_spark = |world|
 					burst_pos: spark.pos,
 					burst_timer: Game.burst_duration,
 					gate: next_gate,
-					gate_flash: if gate_opened 1 else world.gate_flash,
+					gate_flash: if (gate_opened) 1 else world.gate_flash,
 					state: Playing,
 				},
 				collected: Ok(spark),
@@ -173,8 +173,8 @@ any_hazard_hit = |level, circle, phase| {
 damage_if_needed : Level, Game.World -> DamageResult
 damage_if_needed = |level, world| {
 	if world.player.invuln <= 0 and any_hazard_hit(level, world.player.circle(), world.phase) {
-		next_lives = if world.lives > 0 world.lives - 1 else 0
-		next_state = if world.lives <= 1 GameOver else Playing
+		next_lives = if (world.lives > 0) world.lives - 1 else 0
+		next_state = if (world.lives <= 1) GameOver else Playing
 		{
 			world: {
 				..world,
@@ -216,7 +216,7 @@ escape_if_needed = |level, world| {
 
 ## Includes a gameplay event only when its rule fired.
 event_when : Bool, Game.Event -> List(Game.Event)
-event_when = |condition, event| if condition [event] else []
+event_when = |condition, event| if (condition) [event] else []
 
 ## Converts an optional collected spark into its gameplay event.
 spark_collected_events : Try(Spark, [NoSpark]) -> List(Game.Event)
@@ -243,8 +243,8 @@ advance_world = |level, world, controls, dt| {
 	moving = controls.move.x != 0 or controls.move.y != 0
 	dash_started = controls.dash_pressed and world.player.dash_ready()
 	dash_active = dash_started or world.player.dash_active()
-	move_dir = if dash_active and !(moving) world.player.facing_dir() else controls.move
-	speed = if dash_active Player.dash_speed else Player.speed
+	move_dir = if (dash_active and !(moving)) world.player.facing_dir() else controls.move
+	speed = if (dash_active) Player.dash_speed else Player.speed
 	player_pos = move_player_speed(level, world.player.pos, move_dir, dt, speed)
 	player = world.player.step({ pos: player_pos, raw_dir: controls.move, move_dir, dash_started, dash_active, dt })
 	hazard_speed = 0.15 + U64.to_f32(world.score) * 0.012
@@ -261,7 +261,7 @@ advance_world = |level, world, controls, dt| {
 	}
 	collect_result = collect_spark(moved)
 	escape_result = escape_if_needed(level, collect_result.world)
-	damage_result = if escape_result.world.state == Won { world: escape_result.world, damaged: Bool.False } else damage_if_needed(level, escape_result.world)
+	damage_result = if (escape_result.world.state == Won) { world: escape_result.world, damaged: Bool.False } else damage_if_needed(level, escape_result.world)
 	(
 		damage_result.world,
 		game_events(

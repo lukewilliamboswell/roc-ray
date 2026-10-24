@@ -38,11 +38,11 @@ screen_h = 600.F32
 
 ## Wraps a visual animation phase into the unit interval.
 wrap_unit : F32 -> F32
-wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
+wrap_unit = |value| if (value >= 1) value - 1 else if (value < 0) value + 1 else value
 
 ## Maps a wrapped visual phase to a back-and-forth amount.
 ping_pong : F32 -> F32
-ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
+ping_pong = |phase| if (phase < 0.5) phase * 2 else (1 - phase) * 2
 
 ## Derives the camera target and deterministic screen shake from the world.
 shaken_target : Game.World -> Math.Vec2
@@ -138,11 +138,11 @@ draw_spawn! = |frame, level, font| {
 draw_exit! : Draw.Frame, Level, Game.World, Text.Font => {}
 draw_exit! = |frame, level, world, font| {
 	is_open = world.gate.is_open()
-	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
-	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
+	color = if (is_open) Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
+	halo = if (is_open) Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
 	frame.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
 	frame.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
-	Text.from(if is_open "EXIT OPEN" else "LOCKED EXIT", font)
+	Text.from(if (is_open) "EXIT OPEN" else "LOCKED EXIT", font)
 		.size(19)
 		.draw!(frame, { pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, color: Color.white, align: (Top, Center) })
 }
@@ -180,7 +180,7 @@ draw_props! = |frame, level, tiles, viewport| {
 ## Draws one rotating collectible spark and its glow.
 draw_spark! : Draw.Frame, Draw.Texture, Spark, F32 => {}
 draw_spark! = |frame, tiles, spark, phase| {
-	tile = if spark.id % 2 == 0 TileSparkA else TileSparkB
+	tile = if (spark.id % 2 == 0) TileSparkA else TileSparkB
 	rotation = phase * 160 + U64.to_f32(spark.id) * 19
 	pulse = 1 + ping_pong(wrap_unit(phase * 2 + U64.to_f32(spark.id) * 0.09)) * 0.1
 	frame.circle_gradient!({ center: spark.pos, radius: Spark.radius * 2 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 0) })
@@ -265,7 +265,7 @@ draw_burst! = |frame, world| {
 			dir = burst_dir(index)
 			pos = Math.add(world.burst_pos, Math.scale(dir, 18 + progress * 58))
 			size = 6 + ping_pong(wrap_unit(world.phase * 5 + U64.to_f32(index) * 0.11)) * 3
-			frame.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if world.burst_timer > 0.18 135 else 70)) })
+			frame.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if (world.burst_timer > 0.18) 135 else 70)) })
 		}
 	}
 }
@@ -276,8 +276,8 @@ player_source = Math.rect(0, 0, 52, 43)
 ## Draws the player sprite, dash glow, and collision outline.
 draw_player! : Draw.Frame, Draw.Texture, Player => {}
 draw_player! = |frame, characters, player| {
-	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
-	scale = if player.dash_active() 1.3 else 1.22
+	tint = if (player.invuln > 0) Color.with_alpha(Color.white, 150) else Color.white
+	scale = if (player.dash_active()) 1.3 else 1.22
 	sprite = Sprite.from_texture(characters)
 		.source(
 			player_source,
@@ -324,14 +324,14 @@ draw_hud! = |frame, level, world, font| {
 	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
 	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font })
 	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
+	frame.text!({ pos: { x: 510, y: 18 }, text: if (is_open) "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if (is_open) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 	draw_bar!(frame, 196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
 	draw_bar!(frame, 510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
-	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
+	frame.text!({ pos: { x: 640, y: 43 }, text: if (world.player.dash_ready()) "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
 
 	if world.flash > 0 {
-		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })
+		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if (world.flash > 0.45) 120 else 70)) })
 	} else {
 		{}
 	}

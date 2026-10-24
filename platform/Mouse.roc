@@ -138,8 +138,8 @@ Mouse := [].{
 		mouse = { buttons: [7], left: True, middle: False, right: False, wheel: -2, wheel_x: 1, wheel_y: -2, delta_x: 3, delta_y: 4, x: 10, y: 20 }
 		mouse.position() == { x: 10, y: 20 }
 			and mouse.delta() == { x: 3, y: 4 }
-				and mouse.wheel_delta() == { x: 1, y: -2 }
-					and mouse.button_pressed(Left)
+			and mouse.wheel_delta() == { x: 1, y: -2 }
+			and mouse.button_pressed(Left)
 	}
 
 	## Hand pointer input to a scripted source, or back to the hardware mouse.

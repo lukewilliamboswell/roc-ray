@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -116,9 +116,9 @@ scoped! = |io| {
 	own =
 		io.stdout().line!("OWN_STDOUT_WRITTEN") == Ok({})
 			and !denied(io.sqlite().open_memory!())
-				and !denied(Assets.open!(bundle, IgnoreManifest))
-					and !denied(io.capture().start!(Capture.default))
-						and !denied(io.capture().stop!())
+			and !denied(Assets.open!(bundle, IgnoreManifest))
+			and !denied(io.capture().start!(Capture.default))
+			and !denied(io.capture().stop!())
 	if !own {
 		return Err(Failed("an app-scoped effect was refused"))
 	}
@@ -127,9 +127,9 @@ scoped! = |io| {
 	outside =
 		denied(io.http().get_utf8!("http://127.0.0.1:1/"))
 			and denied(io.udp().bind!({ ip: "127.0.0.1", port: 40001 }))
-				and denied(io.commands().run!(Cmd.new("roc-ray-caps-command-must-not-run")))
-					and denied(io.env().read!("PATH"))
-						and denied(io.files().open_dir_read!("/etc"))
+			and denied(io.commands().run!(Cmd.new("roc-ray-caps-command-must-not-run")))
+			and denied(io.env().read!("PATH"))
+			and denied(io.files().open_dir_read!("/etc"))
 	if !outside {
 		return Err(Failed("an out-of-scope effect was admitted"))
 	}
@@ -139,7 +139,7 @@ scoped! = |io| {
 	shapes =
 		invalid(work.read_text!("../outside.txt"))
 			and invalid(work.write_text!("/tmp/roc-ray-caps-must-not-exist.txt", "must never be written"))
-				and invalid(io.files().open_dir_read!("../outside"))
+			and invalid(io.files().open_dir_read!("../outside"))
 	if !shapes {
 		return Err(Failed("a refused path shape was not PathInvalid"))
 	}
@@ -168,7 +168,7 @@ update! = |model, input, _io| {
 	match List.first(input.messages) {
 		Ok(Checked(Bool.True)) => Err(Exit(0))
 		Ok(Checked(Bool.False)) => Err(Exit(3))
-		Err(_) => if input.time.cycle_count > 120 Err(Exit(4)) else Ok(model)
+		Err(_) => if (input.time.cycle_count > 120) Err(Exit(4)) else Ok(model)
 	}
 }
 

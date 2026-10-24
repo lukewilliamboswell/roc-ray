@@ -110,7 +110,7 @@ Font := {
 							Err(NotFound) => List.get(font.metrics.glyphs, font.metrics.fallback_index)
 						}
 						advance_x = match glyph_result {
-							Ok(glyph) => if glyph.advance_x > 0 glyph.advance_x else glyph.width + glyph.offset_x
+							Ok(glyph) => if (glyph.advance_x > 0) glyph.advance_x else glyph.width + glyph.offset_x
 							Err(_) => 0
 						}
 						{ ..current, line_width: current.line_width + advance_x, line_count: current.line_count + 1 }
@@ -122,7 +122,7 @@ Font := {
 			# - height: use the accumulated line height.
 			width = max_f32($state.widest_width, $state.line_width)
 			count = max_u64($state.widest_count, $state.line_count)
-			spacing_width = if count > 0 (U64.to_f32(count) - 1) * spacing else 0
+			spacing_width = if (count > 0) (U64.to_f32(count) - 1) * spacing else 0
 			{
 				width: width * (size / font.metrics.base_size) + spacing_width,
 				height: $state.height,
@@ -149,15 +149,15 @@ text_codepoints = |text| {
 					(width, prefix) = if first < 128 {
 						(1.U64, first.to_u32())
 					}
-						else if first < 224 {
-							(2, first.to_u32() - 192)
-						}
-							else if first < 240 {
-								(3, first.to_u32() - 224)
-							}
-								else {
-									(4, first.to_u32() - 240)
-								}
+					else if first < 224 {
+						(2, first.to_u32() - 192)
+					}
+					else if first < 240 {
+						(3, first.to_u32() - 224)
+					}
+					else {
+						(4, first.to_u32() - 240)
+					}
 					var $scalar = prefix
 					var $index = 1.U64
 					while $index < width {
@@ -209,10 +209,10 @@ binary_search_range = |items, needle, key_of, low, high| {
 }
 
 max_f32 : F32, F32 -> F32
-max_f32 = |a, b| if a > b a else b
+max_f32 = |a, b| if (a > b) a else b
 
 max_u64 : U64, U64 -> U64
-max_u64 = |a, b| if a > b a else b
+max_u64 = |a, b| if (a > b) a else b
 
 iterator_done : Iter(a) -> Bool
 iterator_done = |iter| match Iter.next(iter) {

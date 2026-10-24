@@ -62,7 +62,7 @@ Player := {
 
 	## Returns normalized dash recharge progress for the HUD.
 	dash_charge : Player -> F32
-	dash_charge = |player| if player.dash_ready() 1 else 1 - player.dash_cooldown / dash_cooldown_time
+	dash_charge = |player| if (player.dash_ready()) 1 else 1 - player.dash_cooldown / dash_cooldown_time
 
 	## Applies one movement result to timers, animation, and facing.
 	step : Player, Step -> Player
@@ -73,10 +73,10 @@ Player := {
 			..player,
 			pos: frame.pos,
 			invuln: tick_timer(player.invuln, frame.dt),
-			dash_cooldown: if frame.dash_started dash_cooldown_time else tick_timer(player.dash_cooldown, frame.dt),
-			dash_timer: if frame.dash_started dash_duration else tick_timer(player.dash_timer, frame.dt),
-			animation: if move_moving Sprite.step(player.animation, frame.dt) else idle_animation(player.animation),
-			facing: if frame.dash_active and !(raw_moving) player.facing else facing_from_input(frame.raw_dir, player.facing),
+			dash_cooldown: if (frame.dash_started) dash_cooldown_time else tick_timer(player.dash_cooldown, frame.dt),
+			dash_timer: if (frame.dash_started) dash_duration else tick_timer(player.dash_timer, frame.dt),
+			animation: if (move_moving) Sprite.step(player.animation, frame.dt) else idle_animation(player.animation),
+			facing: if (frame.dash_active and !(raw_moving)) player.facing else facing_from_input(frame.raw_dir, player.facing),
 		}
 	}
 
@@ -153,4 +153,4 @@ idle_animation = |animation| { frame: 0, frame_count: animation.frame_count, fps
 
 ## Counts a positive timer down without crossing below zero.
 tick_timer : F32, F32 -> F32
-tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
+tick_timer = |timer, dt| if (timer <= dt) 0 else timer - dt

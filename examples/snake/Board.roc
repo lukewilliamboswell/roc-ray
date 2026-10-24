@@ -39,7 +39,7 @@ find_open_cell = |seed, occupied, attempt| {
 	} else {
 		flat_index = (seed.y * Board.columns + seed.x + attempt) % cell_count
 		candidate = { x: flat_index % Board.columns, y: flat_index // Board.columns }
-		if List.contains(occupied, candidate) find_open_cell(seed, occupied, attempt + 1) else candidate
+		if (List.contains(occupied, candidate)) find_open_cell(seed, occupied, attempt + 1) else candidate
 	}
 }
 

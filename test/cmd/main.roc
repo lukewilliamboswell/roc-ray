@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Cmd
@@ -29,7 +29,7 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default
 		.with_title("cmd")
-	# The shell is stat'd to decide which one this machine has.
+		# The shell is stat'd to decide which one this machine has.
 		.with_permissions([
 			Directory("/bin", ReadOnly),
 			Command("/bin/sh"),
@@ -67,7 +67,7 @@ deadline_cycles : U64
 deadline_cycles = 400
 
 score : Bool, U64 -> U64
-score = |held, bit| if held bit else 0
+score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 4) == 4
 expect score(Bool.False, 4) == 0
@@ -85,10 +85,10 @@ check! = |io| {
 			Err(_) => Bool.False
 		}
 
-	shell = if posix "/bin/sh" else "cmd.exe"
-	echo_args = if posix ["-c", "printf ${probe_text}"] else ["/c", "echo", probe_text]
-	exit_args = if posix ["-c", "exit 3"] else ["/c", "exit", "3"]
-	sleep_args = if posix ["-c", "sleep 30"] else ["/c", "ping", "-n", "30", "127.0.0.1"]
+	shell = if (posix) "/bin/sh" else "cmd.exe"
+	echo_args = if (posix) ["-c", "printf ${probe_text}"] else ["/c", "echo", probe_text]
+	exit_args = if (posix) ["-c", "exit 3"] else ["/c", "exit", "3"]
+	sleep_args = if (posix) ["-c", "sleep 30"] else ["/c", "ping", "-n", "30", "127.0.0.1"]
 
 	# A program runs, and what it wrote comes back. `echo` adds a line ending
 	# on Windows, so this asks whether the text is in the output rather than

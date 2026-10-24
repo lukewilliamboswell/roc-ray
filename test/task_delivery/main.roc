@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Task
@@ -56,12 +56,12 @@ score = |msg|
 				0
 			}
 
-		Text(text) => if text == "the quick brown fox" 2 else 0
-		Bytes(bytes) => if bytes == [1, 2, 3, 4, 5, 6, 7, 8] 4 else 0
-		Nested(Ok(text)) => if text == "nested ok" 8 else 0
+		Text(text) => if (text == "the quick brown fox") 2 else 0
+		Bytes(bytes) => if (bytes == [1, 2, 3, 4, 5, 6, 7, 8]) 4 else 0
+		Nested(Ok(text)) => if (text == "nested ok") 8 else 0
 		Nested(Err(Bad)) => 16
-		Child(Loaded(text)) => if text == "child payload" 64 else 0
-		Child(Ticked(n)) => if n == 4242 128 else 0
+		Child(Loaded(text)) => if (text == "child payload") 64 else 0
+		Child(Ticked(n)) => if (n == 4242) 128 else 0
 	}
 
 expect score(Num(77)) == 1

@@ -582,10 +582,10 @@ Tilemap :: {
 	## Remove Tiled flip flags from a packed global tile ID.
 	clean_gid : U64 -> U64
 	clean_gid = |gid| {
-		without_h = if gid >= 2_147_483_648 gid - 2_147_483_648 else gid
-		without_v = if without_h >= 1_073_741_824 without_h - 1_073_741_824 else without_h
-		without_d = if without_v >= 536_870_912 without_v - 536_870_912 else without_v
-		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
+		without_h = if (gid >= 2_147_483_648) gid - 2_147_483_648 else gid
+		without_v = if (without_h >= 1_073_741_824) without_h - 1_073_741_824 else without_h
+		without_d = if (without_v >= 536_870_912) without_v - 536_870_912 else without_v
+		if (without_d >= 268_435_456) without_d - 268_435_456 else without_d
 	}
 
 	## Parse a Tiled TMX map from an asset store.
@@ -615,13 +615,13 @@ layer_role_for_rules = |rules, layer_name| {
 }
 
 layer_role_code : TilemapLayerRole -> U8
-layer_role_code = |role| if role == Solid 1 else if role == Hidden 2 else 0
+layer_role_code = |role| if (role == Solid) 1 else if (role == Hidden) 2 else 0
 
 layer_role_from_code : U8 -> TilemapLayerRole
-layer_role_from_code = |code| if code == 1 Solid else if code == 2 Hidden else Drawn
+layer_role_from_code = |code| if (code == 1) Solid else if (code == 2) Hidden else Drawn
 
 draw_role_code : TilemapDrawRole -> U64
-draw_role_code = |role| if role == Solid 1 else 0
+draw_role_code = |role| if (role == Solid) 1 else 0
 
 make_render_layers : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> List(Host.TilemapRenderLayer)
 make_render_layers = |layers, rules|
@@ -775,7 +775,7 @@ validate_object_role_ambiguity = |objects, rules| {
 	for object in objects {
 		match $result {
 			Ok(_) => if count_object_role_matches(rules, object) > 1 {
-				identifier = if Str.is_empty(object.name) object.type_name else object.name
+				identifier = if (Str.is_empty(object.name)) object.type_name else object.name
 				$result = Err(AmbiguousObjectRole(identifier))
 			}
 			Err(_) => {}
@@ -820,7 +820,7 @@ object_role_target_exists = |objects, key| {
 first_object_at : Tilemap, TilemapObjectRole, U64 -> Try(TilemapRawObject, [NotFound])
 first_object_at = |map, role, index|
 	match List.get(map.raw.objects, index) {
-		Ok(object) => if Tilemap.object_role_for(map, object) == role Ok(object) else first_object_at(map, role, index + 1)
+		Ok(object) => if (Tilemap.object_role_for(map, object) == role) Ok(object) else first_object_at(map, role, index + 1)
 		Err(_) => Err(NotFound)
 	}
 
@@ -839,7 +839,7 @@ resolve_tilesets = |tilesets, textures| {
 									first_gid: tileset.first_gid,
 									tile_width: tileset.tile_width,
 									tile_height: tileset.tile_height,
-									columns: if tileset.columns == 0 1 else tileset.columns,
+									columns: if (tileset.columns == 0) 1 else tileset.columns,
 									texture,
 								},
 							),
@@ -889,7 +889,7 @@ find_layer_index = |layers, name| find_layer_index_at(layers, name, 0)
 find_layer_index_at : List(TilemapRawLayer), Str, U64 -> Try(U64, [NotFound])
 find_layer_index_at = |layers, name, index|
 	match List.get(layers, index) {
-		Ok(layer) => if layer.name == name Ok(index) else find_layer_index_at(layers, name, index + 1)
+		Ok(layer) => if (layer.name == name) Ok(index) else find_layer_index_at(layers, name, index + 1)
 		Err(_) => Err(NotFound)
 	}
 
@@ -914,7 +914,7 @@ solid_cell_at_layer = |map, cell, layer_index|
 				match List.get(map.raw.layers, layer_index) {
 					Ok(layer) =>
 						match gid_at_layer(map.raw, layer, cell) {
-							Ok(gid) => if Tilemap.clean_gid(gid) != 0 Bool.True else solid_cell_at_layer(map, cell, layer_index + 1)
+							Ok(gid) => if (Tilemap.clean_gid(gid) != 0) Bool.True else solid_cell_at_layer(map, cell, layer_index + 1)
 							Err(_) => solid_cell_at_layer(map, cell, layer_index + 1)
 						}
 					Err(_) => Bool.False
@@ -1024,9 +1024,9 @@ draw_selection_in! = |map, _frame, selector_kind, selector_value, range|
 transformed_corner : Math.Rect, Math.Vec2, TilemapFlip -> Math.Vec2
 transformed_corner = |dest, corner, flip| {
 	## Tiled applies the anti-diagonal transform before horizontal/vertical flips.
-	diagonal = if flip.diagonal { x: 1 - corner.y, y: 1 - corner.x } else corner
-	x = if flip.horizontal 1 - diagonal.x else diagonal.x
-	y = if flip.vertical 1 - diagonal.y else diagonal.y
+	diagonal = if (flip.diagonal) { x: 1 - corner.y, y: 1 - corner.x } else corner
+	x = if (flip.horizontal) 1 - diagonal.x else diagonal.x
+	y = if (flip.vertical) 1 - diagonal.y else diagonal.y
 	{ x: dest.x + x * dest.width, y: dest.y + y * dest.height }
 }
 
@@ -1120,15 +1120,15 @@ expect match test_map_result {
 	Ok(test_map) =>
 		test_map.layer_role_for(test_walls_layer) == Solid
 			and test_map.object_role_for(test_spawn_object) == Spawn
-				and test_map.world_rect_for_cell({ col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
-					and test_map.gid_at("Walls", { col: 1, row: 0 }) == Ok(2)
-						and test_map.solid_cell({ col: 1, row: 0 })
-							and test_map.solid_at_world({ x: 20, y: 4 })
-								and test_map.circle_touches_solid(Math.circle({ x: 24, y: 8 }, 7))
-									and test_map.circle_touches_solid(Math.circle({ x: 8, y: 8 }, 8))
-										and test_map.cell_at_world({ x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
-											and test_map.cell_at_world({ x: -0.01, y: 0 }) == Err(OutOfBounds)
-												and test_map.cell_range_for_world_rect(Math.rect(15, 0, 18, 17)) == Ok({ min_col: 0, min_row: 0, max_col: 2, max_row: 1 })
+			and test_map.world_rect_for_cell({ col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
+			and test_map.gid_at("Walls", { col: 1, row: 0 }) == Ok(2)
+			and test_map.solid_cell({ col: 1, row: 0 })
+			and test_map.solid_at_world({ x: 20, y: 4 })
+			and test_map.circle_touches_solid(Math.circle({ x: 24, y: 8 }, 7))
+			and test_map.circle_touches_solid(Math.circle({ x: 8, y: 8 }, 8))
+			and test_map.cell_at_world({ x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
+			and test_map.cell_at_world({ x: -0.01, y: 0 }) == Err(OutOfBounds)
+			and test_map.cell_range_for_world_rect(Math.rect(15, 0, 18, 17)) == Ok({ min_col: 0, min_row: 0, max_col: 2, max_row: 1 })
 	Err(_) => False
 }
 expect Tilemap.property_f32(test_raw, test_spawn_object, "speed", 0) == 12.5

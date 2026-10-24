@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 
@@ -30,10 +30,10 @@ update! = |model, program_input, _io| {
 	passed =
 		List.len(model.args) == 3
 			and List.contains(model.args, config_flag)
-				and List.contains(model.args, passthrough_flag)
-					and program_input.window.size == { width: 321, height: 123 }
+			and List.contains(model.args, passthrough_flag)
+			and program_input.window.size == { width: 321, height: 123 }
 
-	Err(Exit(if passed 0 else 1))
+	Err(Exit(if (passed) 0 else 1))
 }
 
 render! : Model, _ => Try({}, [Exit(I64)])

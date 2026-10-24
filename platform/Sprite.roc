@@ -158,7 +158,7 @@ Sprite := {
 	## Return the current frame's source rectangle for a spritesheet row.
 	animation_source : Animation, { frame_size : Math.Vec2, row : U64 } -> Math.Rect
 	animation_source = |animation_state, cfg| {
-		frame = if animation_state.frame_count == 0 0 else animation_state.frame % animation_state.frame_count
+		frame = if (animation_state.frame_count == 0) 0 else animation_state.frame % animation_state.frame_count
 		Sprite.sheet_frame({ frame_size: cfg.frame_size, row: cfg.row, col: frame })
 	}
 

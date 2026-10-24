@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-09-258ab27", rr: platform "../../platform/main.roc" }
+app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Files
@@ -84,7 +84,7 @@ update! = |model, input, io| {
 			} else {
 				Err(Exit(3))
 			}
-		_ => if input.time.cycle_count > 120 Err(Exit(4)) else Ok(next)
+		_ => if (input.time.cycle_count > 120) Err(Exit(4)) else Ok(next)
 	}
 }
 

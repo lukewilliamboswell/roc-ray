@@ -1,0 +1,444 @@
+{
+  "_readme": [
+    "Expected output of every example in the released examples archive.",
+    "scripts/release_helpers.py package-examples copies these apps into the archive's spec.json,",
+    "adding the release and its bundle URL; scripts/test_examples_archive.py runs that exact",
+    "archive before publication, and roc-automation's nightly compatibility workflow runs the",
+    "published one against each new Roc nightly. Each case runs from the archive root, compares",
+    "stdout, stderr and the exit code exactly, and must finish within ten seconds."
+  ],
+  "apps": [
+    {
+      "path": "examples/async_read/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/breakout/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/camera/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_plot/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_screenshot/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_ui_demo/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/cave_climb/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/drop_viewer/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/generated_assets/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/hello_world/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/http_fetch/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/input_inspector/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/live_plot/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=300"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/move_box/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/particles/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/pong/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/post_process/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/postcard_studio/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/projective_texture/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/responsive_ui/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/roc-doom-e1m1/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/snake/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/sprite_and_sound/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/sqlite_scores/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/task_sleep/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=240"
+          ],
+          "stdin": "",
+          "stdout": "task_sleep: sleeping 1200 ms on a task while the frame loop keeps drawing\ntask_sleep: slept 1200 ms; the message came back while the frame loop kept drawing\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/top_down/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/udp_cursor/main.roc",
+      "cases": [
+        {
+          "name": "headless",
+          "args": [
+            "--host-headless",
+            "--host-headless-frames=60"
+          ],
+          "stdin": "",
+          "stdout": "",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    }
+  ]
+}

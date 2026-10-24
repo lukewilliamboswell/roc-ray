@@ -31,6 +31,13 @@ NEXT_URL = "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10
 APP_HEADER = 'app [init!, render!] {{ rr: platform "{ref}" }}\n\nmain = 1\n'
 
 
+ARCHIVE = "roc-ray-examples-0.10.0"
+
+
+def SPEC_CASE(path: str) -> dict:
+    return {"path": path, "cases": [{"name": "headless", "args": ["--host-headless"], "stdin": "", "stdout": "", "stderr": "", "exit_code": 0}]}
+
+
 def git(root: Path, *arguments: str) -> None:
     subprocess.run(["git", *arguments], cwd=root, check=True, capture_output=True, text=True)
 
@@ -63,11 +70,16 @@ class PackageExamplesTests(unittest.TestCase):
         )
         (examples / "snake" / "Board.roc").write_text("module []\n", encoding="utf-8")
         (examples / "gallery" / "pong.webp").write_bytes(b"RIFF gallery")
+        (root / "test").mkdir()
+        (root / "test" / "examples-spec.json").write_text(
+            json.dumps({"_readme": ["recorded output"], "apps": [SPEC_CASE("examples/pong/main.roc"), SPEC_CASE("examples/snake/main.roc")]}),
+            encoding="utf-8",
+        )
 
         git(root, "init", "-q")
         git(root, "config", "user.email", "test@example.com")
         git(root, "config", "user.name", "Test")
-        git(root, "add", "examples")
+        git(root, "add", "examples", "test")
         git(root, "commit", "-qm", "examples")
 
         # Untracked build output and capture junk must not reach the archive.
@@ -94,7 +106,7 @@ class PackageExamplesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.make_repo(root)
-            output = root / "out" / "examples-0.10.0.zip"
+            output = root / "out" / f"{ARCHIVE}.zip"
 
             # The helper reads the working tree it is run from, so the scratch
             # repository stands in for a release checkout.
@@ -112,18 +124,24 @@ class PackageExamplesTests(unittest.TestCase):
 
             with zipfile.ZipFile(output) as archive:
                 names = sorted(archive.namelist())
-                pong = archive.read("examples/pong/main.roc").decode("utf-8")
-                snake = archive.read("examples/snake/main.roc").decode("utf-8")
-                ball = archive.read("examples/pong/assets/ball.png")
+                pong = archive.read(f"{ARCHIVE}/examples/pong/main.roc").decode("utf-8")
+                snake = archive.read(f"{ARCHIVE}/examples/snake/main.roc").decode("utf-8")
+                ball = archive.read(f"{ARCHIVE}/examples/pong/assets/ball.png")
+                spec = json.loads(archive.read(f"{ARCHIVE}/spec.json"))
+                readme = archive.read(f"{ARCHIVE}/README.md").decode("utf-8")
                 stamps = {info.date_time for info in archive.infolist()}
 
+            # One root folder, named for the archive, as the nightly
+            # compatibility runner requires.
             self.assertEqual(
                 [
-                    "examples/README.md",
-                    "examples/pong/assets/ball.png",
-                    "examples/pong/main.roc",
-                    "examples/snake/Board.roc",
-                    "examples/snake/main.roc",
+                    f"{ARCHIVE}/README.md",
+                    f"{ARCHIVE}/examples/README.md",
+                    f"{ARCHIVE}/examples/pong/assets/ball.png",
+                    f"{ARCHIVE}/examples/pong/main.roc",
+                    f"{ARCHIVE}/examples/snake/Board.roc",
+                    f"{ARCHIVE}/examples/snake/main.roc",
+                    f"{ARCHIVE}/spec.json",
                 ],
                 names,
             )
@@ -140,8 +158,47 @@ class PackageExamplesTests(unittest.TestCase):
                 (root / "examples/pong/main.roc").read_text(),
             )
             self.assertEqual(b"\x89PNG ball", ball)
-            self.assertNotIn("examples/gallery/pong.webp", names)
+            self.assertNotIn(f"{ARCHIVE}/examples/gallery/pong.webp", names)
             self.assertEqual({(1980, 1, 1, 0, 0, 0)}, stamps)
+            self.assertEqual(
+                {
+                    "schema_version": 1,
+                    "release": "0.10.0",
+                    "dependencies": [NEXT_URL],
+                    "apps": [SPEC_CASE("examples/pong/main.roc"), SPEC_CASE("examples/snake/main.roc")],
+                },
+                spec,
+            )
+            self.assertIn(NEXT_URL, readme)
+
+    def test_other_app_roots_are_rewritten_too(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            examples = self.make_repo(root)
+            (examples / "pong" / "replay.roc").write_text(
+                APP_HEADER.format(ref="../../platform/main.roc"), encoding="utf-8"
+            )
+            git(root, "add", "examples")
+            git(root, "commit", "-qm", "replay")
+            output = root / f"{ARCHIVE}.zip"
+            self.assertEqual(0, self.package(root, output).returncode)
+            with zipfile.ZipFile(output) as archive:
+                replay = archive.read(f"{ARCHIVE}/examples/pong/replay.roc").decode("utf-8")
+            self.assertEqual(APP_HEADER.format(ref=NEXT_URL), replay)
+
+    def test_spec_must_list_every_packaged_app(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            (root / "test" / "examples-spec.json").write_text(
+                json.dumps({"apps": [SPEC_CASE("examples/pong/main.roc"), SPEC_CASE("examples/gone/main.roc")]}),
+                encoding="utf-8",
+            )
+            result = self.package(root, root / f"{ARCHIVE}.zip")
+            self.assertEqual(1, result.returncode)
+            self.assertIn("examples/snake/main.roc", result.stderr)
+            self.assertIn("examples/gone/main.roc", result.stderr)
+            self.assertFalse((root / f"{ARCHIVE}.zip").exists())
 
     def test_default_output_name_uses_the_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -158,7 +215,7 @@ class PackageExamplesTests(unittest.TestCase):
                 cwd=root,
             )
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertTrue((root / ".release" / "examples-0.10.0.zip").is_file())
+            self.assertTrue((root / ".release" / f"{ARCHIVE}.zip").is_file())
 
     def test_unrecognized_header_fails_loudly(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -167,7 +224,7 @@ class PackageExamplesTests(unittest.TestCase):
             (examples / "snake" / "main.roc").write_text(
                 APP_HEADER.format(ref="https://example.com/other.tar.zst"), encoding="utf-8"
             )
-            output = root / "examples-0.10.0.zip"
+            output = root / f"{ARCHIVE}.zip"
             result = self.package(root, output)
             self.assertEqual(1, result.returncode)
             self.assertIn("examples/snake/main.roc", result.stderr)
@@ -182,7 +239,7 @@ class PackageExamplesTests(unittest.TestCase):
             git(root, "add", "examples")
             git(root, "commit", "-qm", "orphan")
 
-            output = root / "examples-0.10.0.zip"
+            output = root / f"{ARCHIVE}.zip"
             result = self.package(root, output)
             self.assertEqual(1, result.returncode)
             self.assertIn("orphan", result.stderr)
@@ -210,7 +267,7 @@ class PackageExamplesTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            output = root / "examples-0.10.0.zip"
+            output = root / f"{ARCHIVE}.zip"
             result = self.run_cli(
                 "package-examples",
                 "--release-version",
@@ -225,7 +282,7 @@ class PackageExamplesTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr)
             with zipfile.ZipFile(output) as archive:
-                pong = archive.read("examples/pong/main.roc").decode("utf-8")
+                pong = archive.read(f"{ARCHIVE}/examples/pong/main.roc").decode("utf-8")
             self.assertIn(f'platform "{NEXT_URL}"', pong)
 
 

@@ -177,9 +177,15 @@ untested local bundle as a release artifact.
 
 Besides the bundles, every GitHub release includes:
 
-* `examples-<version>.zip`: every example, its header rewritten to point at
-  this release's default bundle and otherwise unchanged, so an unzipped copy
-  builds with no checkout;
+* `roc-ray-examples-<version>.zip`: one `roc-ray-examples-<version>` folder
+  holding every example, each `platform` reference rewritten to point at this
+  release's default bundle and otherwise unchanged, so an unzipped copy builds
+  with no checkout; a short README; and `spec.json`, the expected output of
+  each example from `test/examples-spec.json`. The build job packages it, every
+  default-bundle test job runs it with `scripts/test_examples_archive.py`, and
+  the publish job attaches those bytes. `nightly.yml` runs the latest
+  release's archive against each new nightly through roc-automation's shared
+  nightly-compatibility workflow;
 * `roc-ray-manual-<version>.pdf`: this manual as one PDF;
 * `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
   it;

@@ -1,0 +1,38 @@
+name: Nightly compatibility
+
+# Does the latest RocRay release still work with the latest Roc nightly? The
+# shared roc-automation workflow resolves that pair once, downloads the
+# release's roc-ray-examples-<version>.zip, and on every runner checks, builds
+# and runs each archived example headlessly against the published bundle,
+# comparing its output with the archive's spec.json. One tracking issue
+# records a failure and the next pass closes it. It changes nothing in this
+# repository: a failure means the released platform needs a patch release.
+#
+# macos-15-intel (x64mac) is a release target the shared runner does not
+# accept, so it is covered by release.yml only.
+on:
+  schedule:
+    - cron: '41 14 * * *'
+  workflow_dispatch:
+    inputs:
+      nightly-tag:
+        description: Reproduce with this roc-lang/nightlies tag instead of the latest
+        type: string
+        default: ''
+      release-tag:
+        description: Reproduce with this RocRay release instead of the latest
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  compatibility:
+    permissions:
+      contents: read
+      issues: write
+    uses: lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@7aff4132691ad4fc348abe9df146a57512b49bd6
+    with:
+      nightly-tag: ${{ inputs.nightly-tag || '' }}
+      release-tag: ${{ inputs.release-tag || '' }}
+      runners: '["ubuntu-22.04", "ubuntu-24.04", "macos-15", "windows-2022"]'

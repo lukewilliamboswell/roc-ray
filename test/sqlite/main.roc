@@ -1,4 +1,4 @@
-app [Model, program] { roc: "nightly-2026-10-23-18478ff", rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Draw
@@ -32,7 +32,7 @@ expected_score : U64
 expected_score = 4095
 
 score : Bool, U64 -> U64
-score = |held, bit| if held bit else 0
+score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 8) == 8
 expect score(Bool.False, 8) == 0

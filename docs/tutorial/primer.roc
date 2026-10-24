@@ -131,7 +131,7 @@ double : F32 -> F32
 double = |x| x * 2
 
 clamp_speed : F32, F32 -> F32
-clamp_speed = |value, limit| if value > limit limit else value
+clamp_speed = |value, limit| if (value > limit) limit else value
 
 # end::functions[]
 

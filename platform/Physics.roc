@@ -138,7 +138,7 @@ Physics := [].{
 	## Return normalized x, y, and z coordinates for a point.
 	coords : Point -> Coords
 	coords = |p| {
-		w = if p.e123 == 0 1 else p.e123
+		w = if (p.e123 == 0) 1 else p.e123
 		{ x: p.e032 / w, y: p.e013 / w, z: p.e021 / w }
 	}
 
@@ -230,7 +230,7 @@ Physics := [].{
 	normalize : Vector -> Vector
 	normalize = |v| {
 		len = Physics.length(v)
-		if len == 0 Physics.zero else Physics.scale(v, 1 / len)
+		if (len == 0) Physics.zero else Physics.scale(v, 1 / len)
 	}
 
 	## Reflect a vector around a surface normal.
@@ -249,7 +249,7 @@ Physics := [].{
 	plane = |normal, distance_to_origin| {
 		n = Physics.normalize(normal)
 		len = Physics.length(normal)
-		d = if len == 0 0 else distance_to_origin / len
+		d = if (len == 0) 0 else distance_to_origin / len
 		{ e0: 0 - d, e1: n.e032, e2: n.e013, e3: n.e021 }
 	}
 

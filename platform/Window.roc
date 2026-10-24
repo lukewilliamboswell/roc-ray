@@ -69,8 +69,8 @@ Window := [].{
 	suggest_min_size! : { width : I32, height : I32 } => {}
 	suggest_min_size! = |size|
 		Host.window_suggest_min_size!({
-			width: if size.width > 0 size.width else 0,
-			height: if size.height > 0 size.height else 0,
+			width: if (size.width > 0) size.width else 0,
+			height: if (size.height > 0) size.height else 0,
 		})
 
 	## Why the clipboard held no text for `read_clipboard!`.

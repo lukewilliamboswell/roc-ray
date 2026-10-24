@@ -1,6 +1,5 @@
 app [Model, program] {
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-	roc: "nightly-2026-10-23-18478ff",
 	rr: platform "../../platform/main.roc",
 }
 
@@ -68,7 +67,7 @@ init! = App.init_for_args(
 				timeout_ms: flag_number(args, "--http-timeout-ms", Http.default_config.timeout_ms),
 				max_response_bytes: flag_number(args, "--http-max-bytes", Http.default_config.max_response_bytes),
 			},
-			expectation: if expected_error == "" Body(flag_value(args, "--http-expect", "")) else Failure(expected_error),
+			expectation: if (expected_error == "") Body(flag_value(args, "--http-expect", "")) else Failure(expected_error),
 			cycle: 0,
 			outcome: Pending,
 		})

@@ -1,0 +1,97 @@
+(
+	(fetched ((
+		(name "roc-stable")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "c283ae01e758b9d64002d72b8e4ad776466e7e6e5f495fd466e274afbd25ce7f")
+		(size 73616283)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-23-18478ff/roc_nightly-linux_x86_64-2026-10-23-18478ff.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-23-18478ff")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "668b2731c62ac9054ecf5cd4d483638c237626517df6c076204870065a103b38")
+		(size 70519866)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-23-18478ff/roc_nightly-macos_apple_silicon-2026-10-23-18478ff.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-23-18478ff"))))
+	(format (
+		(major 2)
+		(minor 0)))
+	(hints ((
+		(provider "nix")
+		(value (Attrs ((
+			(name "identity")
+			(value (Attrs ((
+				(name "inputs")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "ref")
+						(value (Str "github:NixOS/nixpkgs/nixos-unstable"))) (
+						(name "kind")
+						(value (Str "packages"))) (
+						(name "flake")
+						(value (Bool true))))))))))) (
+				(name "overlays")
+				(value (Attrs ()))))))) (
+			(name "graph")
+			(value (Attrs ((
+				(name "root")
+				(value (Str "root"))) (
+				(name "version")
+				(value (Int 7))) (
+				(name "nodes")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1792502884))) (
+							(name "narHash")
+							(value (Str "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA="))) (
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "02c087f3fe673c9e317f206a627cb6b910336dbe"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "ref")
+							(value (Str "nixos-unstable"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "root")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "nix")
+							(value (Str "nix"))) (
+							(name "nixpkgs")
+							(value (List ((Str "nix")))))))))))))))))))))))))))
+	(intent (
+		(build_sources ())
+		(inputs ())
+		(overlays ())
+		(resolvers ())
+		(sources ((
+			(name "nix")
+			(provider (
+				(name "nix")
+				(ref "github:NixOS/nixpkgs/nixos-unstable")
+				(version 1))))))))
+	(sources ((
+		(digest "sha256:228362b0a7066d48dd778e6a0aacb018c098999e449e4c5ecef2c8234156c0d0")
+		(name "nix")
+		(provider "nix")
+		(ref "github:NixOS/nixpkgs/nixos-unstable")
+		(rev "02c087f3fe673c9e317f206a627cb6b910336dbe")))))

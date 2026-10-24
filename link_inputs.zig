@@ -292,6 +292,16 @@ pub const windows_import_libs = [_][]const u8{
     "gdi32", "user32", "winmm", "opengl32", "shell32", "ws2_32", "crypt32", "shlwapi", "bcryptprimitives",
 };
 
+/// The C runtime and core system DLLs every Windows executable imports from.
+///
+/// `roc build` links exactly the inputs the platform lists and takes nothing
+/// from a Visual Studio or Windows SDK install, so the import libraries a
+/// toolchain would otherwise supply by default ship with the platform too.
+/// `ucrtbase` is the Universal CRT that the MSVC-built raylib and the host
+/// call into; `kernel32` and `ntdll` serve the host, its dependencies, and
+/// Roc's own runtime.
+pub const windows_runtime_import_libs = [_][]const u8{ "ucrtbase", "kernel32", "ntdll" };
+
 /// Generate one Windows import library from its MinGW DEF file.
 ///
 /// The DEF files are vendored from MinGW-w64 (Zope Public License) in
@@ -649,7 +659,7 @@ pub fn addProducerStep(b: *std.Build) *std.Build.Step {
                     install(b, step, generateX11SoStub(b, target).getEmittedBin(), b.fmt("{s}/libX11.so", .{dir}));
                 }
             },
-            .x64win => for (windows_import_libs) |lib_name| {
+            .x64win => for (windows_import_libs ++ windows_runtime_import_libs) |lib_name| {
                 install(b, step, windowsImportLib(b, lib_name), b.fmt("{s}/{s}.lib", .{ dir, lib_name }));
             },
             .x64mac, .arm64mac => {},

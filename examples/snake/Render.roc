@@ -64,7 +64,7 @@ draw_cell! = |frame, cell, fill, outline| {
 ## Blends the snake color from its bright head toward its blue tail.
 segment_color : U64, U64 -> Color.Rgba
 segment_color = |index, length| {
-	t = if length <= 1 0 else U64.to_f32(index) / U64.to_f32(length - 1)
+	t = if (length <= 1) 0 else U64.to_f32(index) / U64.to_f32(length - 1)
 	mix = |from, to| F32.to_u8_wrap(U8.to_f32(from) + (U8.to_f32(to) - U8.to_f32(from)) * t)
 	Color.rgba(mix(snake_head.r, snake_tail.r), mix(snake_head.g, snake_tail.g), mix(snake_head.b, snake_tail.b), 255)
 }

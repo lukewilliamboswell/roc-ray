@@ -36,17 +36,37 @@ the smallest app or example that shows the problem.
 
 == Development setup
 
-Install:
+On x86_64 Linux and Apple Silicon macOS, `Blueprint.roc` declares the
+development environment and `Blueprint.lock` fixes it. With
+https://github.com/lukewilliamboswell/roc-blueprint[Blueprint] and Nix
+installed, and the Roc nightly as `roc` on `PATH`, run:
+
+[source,bash]
+----
+blueprint shell              # Zig, Python, zstd and roc-stable on PATH
+blueprint run glue           # the committed host ABI matches `roc glue`
+blueprint run check          # no compiler pins, the Roc scripts, zig build lint
+blueprint run test           # zig build test
+----
+
+`roc-stable` is the compiler that runs the Roc scripts under `scripts/`, the
+nightly `Blueprint.roc` names; it is not the compiler the platform is tested
+with. The platform, its examples and its tests name no compiler: they are
+tested with the latest Roc nightly, which you install yourself as `roc`.
+Elsewhere, or without Nix, install:
 
 * https://ziglang.org/download/[Zig] 0.17.0
-* The exact Roc nightly named in {src}/platform/main.roc[`platform/main.roc`],
+* The https://github.com/roc-lang/nightlies/releases/latest[latest Roc nightly],
   available as `roc` on `PATH`
 * Python 3 and `zstd` for the full test and bundle checks
 * SQLite's `sqlite3` command-line tool for inspecting Observatory captures
 * Docker, to build this manual locally
 
-`scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
-come first on it. A local debug build of the compiler is not a substitute: it
+`scripts/all_tests.py` resolves `roc` from `PATH`, so the latest nightly has to
+come first on it. CI resolves the latest nightly once per run, so a pull
+request can turn red when a new nightly lands; update your nightly first when a
+failure has nothing to do with your change. A local debug build of the
+compiler is not a substitute: it
 trips SpecConstr invariants on this platform's code and fails in ways that look
 like platform bugs.
 
@@ -70,8 +90,8 @@ procedure in <<maintaining-link-inputs>>.
 
 The `main` branch holds development source, including examples of APIs that
 have not been released yet. So each checked-in example names the platform in
-your checkout by path, `rr: platform "../../platform/main.roc"`, and carries no
-compiler pin: the platform's own header pins the compiler. Build the host once,
+your checkout by path, `rr: platform "../../platform/main.roc"`. Neither the
+example nor the platform names a compiler. Build the host once,
 then run or check an example directly, from the repository root:
 
 [source,bash]
@@ -83,8 +103,8 @@ roc check examples/cave_climb/main.roc
 
 Run `zig build` again after changing host code. CI checks every example exactly
 as it is written, and any warning fails. The release's examples zip rewrites
-each header to point at that release's bundle and pins the compiler it was
-built for, so a downloaded example needs no checkout.
+each header to point at that release's bundle and changes nothing else, so a
+downloaded example needs no checkout.
 
 `scripts/run-example.py examples/cave_climb` builds the host and runs the
 example in one step. Arguments after `--` go to the app.
@@ -154,6 +174,12 @@ Run formatting and repository tidiness checks:
 zig build lint
 ----
 
+`blueprint run check` runs these lints too, after `scripts/check_no_pins.roc`,
+which fails when any Roc file outside `scripts/` names a compiler (a `roc:`
+header field), when a `.roc-version` file exists, or when a script under
+`scripts/` does not start with the `roc-stable` shebang, and after the tests,
+checks and formatting of the Roc scripts.
+
 Run the main test suite:
 
 [source,bash]
@@ -198,11 +224,10 @@ test suite. See <<observatory-methodology>>.
 
 === How the apps find the platform
 
-Development checks use the compiler declared in the platform headers. They
-point temporary copies of each app at a bundle of the working tree and pin that
-compiler; the checked-in files are never rewritten. A release's examples zip is
-pinned to the release's compiler and bundle, and the "Published quickstart" CI
-job runs the latest release's zip unchanged.
+Development checks use the `roc` on `PATH`, the latest nightly. They point
+temporary copies of each app at a bundle of the working tree; the checked-in
+files are never rewritten. A release's examples zip differs from `examples/`
+only in the platform URL.
 
 Every development app stage resolves the platform over localhost. `scripts/bundle.sh`
 bundles the platform API and native inputs into a scratch directory,
@@ -427,7 +452,8 @@ Before opening a PR:
 
 * Keep the change focused and explain the app-author problem it solves.
 * Add or update tests for behavior and failure paths.
-* Run `zig build lint` and `zig build test`.
+* Run `blueprint run check` (or `zig build lint` without Blueprint) and
+  `zig build test`, with the latest Roc nightly as `roc`.
 * Put every new standalone hosted declaration in private `Host.roc`, and
   keep its one registered privacy fixture passing.
 * Run the graphical smoke test when pixels or drawing state can change.

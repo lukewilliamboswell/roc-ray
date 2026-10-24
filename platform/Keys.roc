@@ -270,7 +270,7 @@ Keys := [].{
 			346 => Ok(KeyRightAlt)
 			347 => Ok(KeyRightSuper)
 			348 => Ok(KeyKbMenu)
-			_ => if code < key_count Ok(Raw(code)) else Err(InvalidKeyCode)
+			_ => if (code < key_count) Ok(Raw(code)) else Err(InvalidKeyCode)
 		}
 
 	## raylib key code for a key (index into the snapshot key-state list).

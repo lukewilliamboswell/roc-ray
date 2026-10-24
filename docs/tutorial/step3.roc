@@ -72,8 +72,8 @@ move_ball = |ball, dt| {
 	y = ball.pos.y + ball.velocity.y * dt
 	off_left = x < ball_radius and ball.velocity.x < 0
 	off_right = x > screen_width - ball_radius and ball.velocity.x > 0
-	vx = if off_left or off_right -ball.velocity.x else ball.velocity.x
-	vy = if y < ball_radius and ball.velocity.y < 0 -ball.velocity.y else ball.velocity.y
+	vx = if (off_left or off_right) -ball.velocity.x else ball.velocity.x
+	vy = if (y < ball_radius and ball.velocity.y < 0) -ball.velocity.y else ball.velocity.y
 	if y > screen_height + ball_radius {
 		serve
 	} else {

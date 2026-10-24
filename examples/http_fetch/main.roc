@@ -100,7 +100,7 @@ chosen_url = |args| {
 		}
 		$index = $index + 1
 	}
-	if $found != "" $found else default_url
+	if ($found != "") $found else default_url
 }
 
 ## Declare the one origin this run fetches from, and nothing else.
@@ -125,7 +125,7 @@ update! = |model, input, io| {
 	# Cycle 0 starts the first fetch; R starts another one. Both are the same
 	# call, and both return immediately -- the task runs after `update!` does.
 	refetch = input.time.cycle_count == 0 or input.devices.key_pressed(KeyR)
-	fetch = if refetch model.fetch + 1 else model.fetch
+	fetch = if (refetch) model.fetch + 1 else model.fetch
 
 	# Folded against the id being waited for, so whatever an abandoned fetch
 	# delivers on this cycle goes the same way the fetch itself did.
@@ -142,8 +142,8 @@ update! = |model, input, io| {
 		..model,
 		fetch,
 		elapsed,
-		state: if refetch Waiting else state,
-		started_waiting: if refetch elapsed else model.started_waiting,
+		state: if (refetch) Waiting else state,
+		started_waiting: if (refetch) elapsed else model.started_waiting,
 	})
 }
 

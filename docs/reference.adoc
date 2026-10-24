@@ -33,7 +33,7 @@ Each release publishes two platform bundles that expose the same API:
 |===
 
 ARM Linux is not supported. The release notes name each bundle's URL and the
-exact Roc compiler the release supports. <<shipping>> explains building for
+Roc nightly the release was built and tested with. <<shipping>> explains building for
 each target.
 
 [#reference-switches]

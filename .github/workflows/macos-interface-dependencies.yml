@@ -29,6 +29,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The platform names no compiler; validation uses the latest nightly,
+  # resolved once so both runners install the same one.
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      nightly-tag: ${{ steps.nightly.outputs.tag }}
+    steps:
+      - id: nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+
   produce:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -53,7 +66,7 @@ jobs:
           retention-days: 30
 
   validate:
-    needs: produce
+    needs: [resolve, produce]
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +82,8 @@ jobs:
           name: macos-interfaces-macos-sysroot
           path: ${{ runner.temp }}/candidate
       - uses: ./.github/actions/setup-toolchain
+        with:
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
       - name: Extract the exact producer candidate
         run: |
           python3 -c 'from pathlib import Path; from scripts.dependency_artifacts import unpack_verified; unpack_verified(next(Path("${{ runner.temp }}/candidate").glob("*.tar")), {"name":"macos-interfaces","target":"macos-sysroot"}, Path("${{ runner.temp }}/unpacked"))'

@@ -81,7 +81,7 @@ render! = |model, frame| {
 	center_x = size.width * 0.5
 	panel = { x: center_x - 280, y: size.height * 0.5 - 150, width: 560, height: 300 }
 
-	accent = if model.accent_on Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
+	accent = if (model.accent_on) Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
 	# One slow sine drives every moving part, so the scene breathes together.
 	pulse = 0.5 + 0.5 * F32.sin(model.elapsed * 1.6)
 

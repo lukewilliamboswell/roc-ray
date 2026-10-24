@@ -28,7 +28,7 @@ whole of `main.roc` except its first line, the header you already have:
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+app [Model, program] { rr: platform "BUNDLE-URL" }
 ----
 
 The listings below start after that line. Paste one in below your header, save

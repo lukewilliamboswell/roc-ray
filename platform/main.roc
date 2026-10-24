@@ -65,7 +65,6 @@ platform ""
 	packages {
 		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.3/HoULZB8QzktiNPYSe9myzy9JQzm1nMbjDPVWoA63QpVf.tar.zst",
-		roc: "nightly-2026-10-23-18478ff",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -216,7 +215,7 @@ platform ""
 		x64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
 		arm64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
 		x64v1glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
-		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "sqlite3.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app] },
+		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "sqlite3.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app, "ucrtbase.lib", "kernel32.lib", "ntdll.lib"] },
 	}
 
 import Draw

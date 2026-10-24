@@ -163,7 +163,7 @@ Cave := [].{
 }
 
 wrap_turn : F32 -> F32
-wrap_turn = |value| if value >= 1 wrap_turn(value - 1) else if value < 0 wrap_turn(value + 1) else value
+wrap_turn = |value| if (value >= 1) wrap_turn(value - 1) else if (value < 0) wrap_turn(value + 1) else value
 
 quarter_wave : F32 -> F32
 quarter_wave = |amount| {

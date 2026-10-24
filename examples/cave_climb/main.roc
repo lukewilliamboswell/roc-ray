@@ -264,7 +264,7 @@ mirrors_from_tilemap = |raw, tilemap| {
 			},
 		)
 	}
-	if List.len($mirrors) == 0 default_mirrors else $mirrors
+	if (List.len($mirrors) == 0) default_mirrors else $mirrors
 }
 
 enemies_from_tilemap : Tilemap.RawMap, Tilemap -> List(Enemy)
@@ -281,7 +281,7 @@ enemies_from_tilemap = |raw, tilemap| {
 			},
 		)
 	}
-	if List.len($enemies) == 0 default_enemies else $enemies
+	if (List.len($enemies) == 0) default_enemies else $enemies
 }
 
 default_mirrors : List(Mirror)
@@ -308,7 +308,7 @@ checkpoints_from_tilemap = |tilemap| {
 }
 
 axis : Bool, Bool -> F32
-axis = |negative, positive| if negative -1 else if positive 1 else 0
+axis = |negative, positive| if (negative) -1 else if (positive) 1 else 0
 
 input_axis : Devices.Snapshot -> F32
 input_axis = |input| {
@@ -321,13 +321,13 @@ physics_distance : Physics.Point, Physics.Point -> F32
 physics_distance = |a, b| Physics.distance(a, b)
 
 tick_timer : F32, F32 -> F32
-tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
+tick_timer = |timer, dt| if (timer <= dt) 0 else timer - dt
 
 wrap_unit : F32 -> F32
-wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
+wrap_unit = |value| if (value >= 1) value - 1 else if (value < 0) value + 1 else value
 
 ping_pong : F32 -> F32
-ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
+ping_pong = |phase| if (phase < 0.5) phase * 2 else (1 - phase) * 2
 
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 screen_to_map = |camera, screen| camera.screen_to_world(screen)
@@ -362,8 +362,8 @@ player_hits_solid = |level, pos, bottom_inset| {
 
 	solid_probe(level, Physics.point(left, top, 0))
 		or solid_probe(level, Physics.point(right, top, 0))
-			or solid_probe(level, Physics.point(left, bottom, 0))
-				or solid_probe(level, Physics.point(right, bottom, 0))
+		or solid_probe(level, Physics.point(left, bottom, 0))
+		or solid_probe(level, Physics.point(right, bottom, 0))
 }
 
 MoveYResult : {
@@ -375,7 +375,7 @@ MoveYResult : {
 move_x : Level, Physics.Point, F32 -> Physics.Point
 move_x = |level, pos, dx| {
 	candidate = Physics.add(pos, Physics.vector(dx, 0, 0))
-	if player_hits_solid(level, candidate, 2) pos else candidate
+	if (player_hits_solid(level, candidate, 2)) pos else candidate
 }
 
 move_y : Level, Physics.Point, F32, F32 -> MoveYResult
@@ -408,7 +408,7 @@ solid_hit_at : Level, Physics.Point, Physics.Vector, F32, F32, F32 -> Try(Physic
 solid_hit_at = |level, origin, direction, max_distance, step, distance| {
 	if distance >= max_distance {
 		end = point_along(origin, direction, max_distance)
-		if solid_probe(level, end) Ok(end) else Err(NoHit)
+		if (solid_probe(level, end)) Ok(end) else Err(NoHit)
 	} else {
 		probe = point_along(origin, direction, distance)
 		if solid_probe(level, probe) {
@@ -460,7 +460,7 @@ laser_probe_hit = |level, enemies, player, probe, phase, can_hit_player| {
 			Err(_) =>
 				match mirror_hit_at(level.mirrors, phase, probe) {
 					Ok(hit) => HitMirror(hit)
-					Err(_) => if solid_probe(level, probe) HitSolid(probe) else HitNone(probe)
+					Err(_) => if (solid_probe(level, probe)) HitSolid(probe) else HitNone(probe)
 				}
 		}
 	}
@@ -551,7 +551,7 @@ solid_hit_between = |level, from, to| {
 	offset = Physics.sub(to, from)
 	distance = Physics.length(offset)
 	if distance == 0 {
-		if solid_probe(level, to) Ok(to) else Err(NoHit)
+		if (solid_probe(level, to)) Ok(to) else Err(NoHit)
 	} else {
 		solid_hit_along(level, from, Physics.scale(offset, 1 / distance), distance, hook_collision_step)
 	}
@@ -581,7 +581,7 @@ advance_hook = |level, player, hook, input, dt| {
 		HookIdle
 	} else {
 		match hook {
-			HookIdle => if input.hook_pressed launch_hook(player, input.aim) else HookIdle
+			HookIdle => if (input.hook_pressed) launch_hook(player, input.aim) else HookIdle
 			HookFlying(projectile) => advance_hook_projectile(level, player, projectile, dt)
 			HookLatched(latch) => HookLatched(latch)
 		}
@@ -612,7 +612,7 @@ steered_x_velocity : F32, F32, Bool, F32 -> F32
 steered_x_velocity = |velocity_x, move_axis, grounded, dt| {
 	if move_axis != 0 {
 		target = move_axis * move_speed
-		rate = if grounded ground_control else air_control
+		rate = if (grounded) ground_control else air_control
 		Math.lerp(velocity_x, target, Math.clamp01(rate * dt))
 	} else if grounded {
 		Math.lerp(velocity_x, 0, Math.clamp01(ground_friction * dt))
@@ -683,13 +683,13 @@ goal_reached = |level, world| {
 
 damage_player : World, Physics.Point -> World
 damage_player = |world, respawn| {
-	next_lives = if world.lives > 0 world.lives - 1 else 0
+	next_lives = if (world.lives > 0) world.lives - 1 else 0
 	{
 		..world,
 		player: { ..Cave.Player.new(respawn), invuln: 1.4 },
 		lives: next_lives,
 		flash: 0.32,
-		state: if next_lives == 0 GameOver else Playing,
+		state: if (next_lives == 0) GameOver else Playing,
 		laser: Cave.LaserState.inactive,
 		hook: HookIdle,
 	}
@@ -702,7 +702,7 @@ advance_player = |level, player, move_axis, jump_pressed, extra_acceleration, dt
 	extra = Physics.components(extra_acceleration)
 	accelerated = Physics.apply_acceleration(Physics.body(player.pos, player.velocity), Physics.vector(extra.x, gravity + extra.y, extra.z), dt)
 	accelerated_velocity = Physics.components(accelerated.velocity)
-	velocity_y = if jumping jump_velocity else Math.clamp(accelerated_velocity.y, max_fall_speed, jump_velocity)
+	velocity_y = if (jumping) jump_velocity else Math.clamp(accelerated_velocity.y, max_fall_speed, jump_velocity)
 	velocity_x = steered_x_velocity(accelerated_velocity.x, move_axis, player.grounded, dt)
 	after_x = move_x(level, player.pos, velocity_x * dt)
 	after_y = move_y(level, after_x, velocity_y * dt, velocity_y)
@@ -713,15 +713,15 @@ advance_player = |level, player, move_axis, jump_pressed, extra_acceleration, dt
 		pos: after_y.pos,
 		velocity: Physics.vector(velocity_x, after_y.velocity_y, current_velocity.z),
 		grounded: after_y.grounded,
-		facing: if moving move_axis else player.facing,
-		animation: if moving Sprite.step(player.animation, dt) else player.animation,
+		facing: if (moving) move_axis else player.facing,
+		animation: if (moving) Sprite.step(player.animation, dt) else player.animation,
 		invuln: tick_timer(player.invuln, dt),
 	}
 }
 
 advance_world : Level, World, F32, Bool, ToolInput, F32 -> World
 advance_world = |level, world, move_axis, jump_pressed, input, dt| {
-	held_hook = if input.hook_down world.hook else HookIdle
+	held_hook = if (input.hook_down) world.hook else HookIdle
 	player = advance_player(level, world.player, move_axis, jump_pressed, hook_acceleration(held_hook, world.player), dt)
 	hook = advance_hook(level, player, held_hook, input, dt)
 	phase = wrap_unit(world.phase + dt * 0.55)
@@ -777,8 +777,8 @@ update! = |model, input, _io| {
 			tools,
 			dt,
 		)
-		Won => if restart new_world(model.level) else model.world
-		GameOver => if restart new_world(model.level) else model.world
+		Won => if (restart) new_world(model.level) else model.world
+		GameOver => if (restart) new_world(model.level) else model.world
 	}
 	Trace.end!(update_zone)
 
@@ -927,7 +927,7 @@ draw_checkpoints! = |frame, tiles, level, world| {
 	for checkpoint in level.checkpoints {
 		checkpoint_pos = Cave.Space.world_to_map(checkpoint)
 		reached = checkpoint_pos.y >= (Cave.Space.world_to_map(world.checkpoint)).y
-		tint = if reached Color.white else Color.with_alpha(Color.white, 120)
+		tint = if (reached) Color.white else Color.with_alpha(Color.white, 120)
 		sprite = Sprite.from_texture(tiles)
 			.source(
 				checkpoint_source,
@@ -950,9 +950,9 @@ draw_goal! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_goal! = |frame, tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
 	pos = Cave.Space.world_to_map(level.goal)
-	color = if ready Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
-	frame.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
-	draw_tile_sprite!(frame, tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
+	color = if (ready) Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
+	frame.circle_gradient!({ center: pos, radius: if (ready) 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
+	draw_tile_sprite!(frame, tiles, goal_source, pos, if (ready) 1.0 else 0.82, 0)
 }
 
 draw_mirrors! : Draw.Frame, List(Mirror), F32, Math.Rect => {}
@@ -979,7 +979,7 @@ draw_mirrors! = |frame, mirrors, phase, viewport| {
 enemy_source : Enemy, F32 -> Math.Rect
 enemy_source = |enemy, phase| {
 	flutter = wrap_unit(phase * 2 + U64.to_f32(enemy.id) * 0.11)
-	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
+	if (flutter < 0.5) enemy_fly_a_source else enemy_fly_b_source
 }
 
 draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32, Math.Rect => {}
@@ -1048,7 +1048,7 @@ player_source = |player| {
 	if !(player.grounded) {
 		player_jump_source
 	} else if F32.abs(velocity.x) > 8 {
-		if player.animation.frame % 2 == 0 player_walk_a_source else player_walk_b_source
+		if (player.animation.frame % 2 == 0) player_walk_a_source else player_walk_b_source
 	} else {
 		player_idle_source
 	}
@@ -1056,7 +1056,7 @@ player_source = |player| {
 
 draw_player! : Draw.Frame, Draw.Texture, Player => {}
 draw_player! = |frame, characters, player| {
-	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
+	tint = if (player.invuln > 0) Color.with_alpha(Color.white, 145) else Color.white
 	pos = Cave.Space.world_to_map(player.pos)
 	Sprite.from_texture(characters)
 		.source(
@@ -1082,7 +1082,7 @@ draw_hud! = |frame, level, world, font| {
 	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font })
 	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font })
 	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font })
-	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
+	frame.text!({ pos: { x: 505, y: 18 }, text: if (world.collected == List.len(level.gems)) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if (world.collected == List.len(level.gems)) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 
 	if world.flash > 0 {

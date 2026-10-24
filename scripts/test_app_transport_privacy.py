@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-from roc_platform_abi import GlueError, read_pin, verify_compiler
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -123,10 +122,9 @@ ONE_ERROR = re.compile(r"\b1 error and \d+ warnings?\b")
 
 
 def main() -> int:
-    try:
-        roc = verify_compiler("roc", read_pin())
-    except GlueError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
+    roc = shutil.which("roc")
+    if roc is None:
+        print("ERROR: required executable not found: roc", file=sys.stderr)
         return 1
 
     failed = False

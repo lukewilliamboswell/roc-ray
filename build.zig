@@ -1,18 +1,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const roc_compiler_pin = blk: {
-    @setEvalBranchQuota(10_000);
-    const source = @embedFile("platform/main.roc");
-    const packages = std.mem.indexOf(u8, source, "\n\tpackages {") orelse @compileError("platform packages missing");
-    const field = packages + (std.mem.indexOf(u8, source[packages..], "roc: \"") orelse @compileError("platform compiler pin missing")) + "roc: \"".len;
-    const end = std.mem.indexOfScalar(u8, source[field..], '"') orelse @compileError("unterminated platform compiler pin");
-    break :blk source[field .. field + end];
-};
-
-fn addBuildMetadata(b: *std.Build, module: *std.Build.Module) void {
+/// Records the compiler a host build was made for, which the Observatory
+/// reports. The platform names no compiler, so a release build passes the
+/// nightly it resolved with `-Droc-compiler=<tag>`.
+fn addBuildMetadata(b: *std.Build, module: *std.Build.Module, roc_compiler: []const u8) void {
     const options = b.addOptions();
-    options.addOption([]const u8, "roc_compiler_pin", roc_compiler_pin);
+    options.addOption([]const u8, "roc_compiler_built_with", roc_compiler);
     module.addOptions("build_metadata", options);
 }
 
@@ -39,6 +33,11 @@ pub fn build(b: *std.Build) void {
         "Path to a generated macOS interface tree (defaults to the locked release)",
     );
     const macos_interfaces_path = configured_macos_interfaces_path orelse "platform/targets/macos-sysroot";
+    const roc_compiler = b.option(
+        []const u8,
+        "roc-compiler",
+        "The Roc nightly tag this host is built for, recorded in Observatory metadata",
+    ) orelse "unavailable";
     const prepare_macos_interfaces = if (configured_macos_interfaces_path == null) b.addSystemCommand(&.{
         "python3",
         "scripts/prepare_dependencies.py",
@@ -107,7 +106,7 @@ pub fn build(b: *std.Build) void {
 
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const host_lib = buildHostLib(b, target, optimize, macos_interfaces_path);
+        const host_lib = buildHostLib(b, target, optimize, macos_interfaces_path, roc_compiler);
         if (prepare_macos_interfaces) |prepare| {
             if (target.result.os.tag == .macos) host_lib.step.dependOn(&prepare.step);
         }
@@ -151,19 +150,6 @@ pub fn build(b: *std.Build) void {
     const run_lints = b.addRunArtifact(zig_lints);
     run_lints.setCwd(b.path(".")); // Run from project root
     lint_step.dependOn(&run_lints.step);
-
-    // Every development compiler pin agrees with platform/main.roc, and the
-    // nightly updater's root list covers every pinned file.
-    const compiler_pins = b.addSystemCommand(&.{ "python3", "scripts/check_compiler_pins.py" });
-    compiler_pins.setCwd(b.path("."));
-    lint_step.dependOn(&compiler_pins.step);
-
-    const glue_helper_tests = b.addSystemCommand(&.{
-        "python3",
-        "scripts/test_roc_platform_abi.py",
-    });
-    glue_helper_tests.setCwd(b.path("."));
-    test_step.dependOn(&glue_helper_tests.step);
 
     const app_transport_privacy_tests = b.addSystemCommand(&.{
         "python3",
@@ -258,7 +244,7 @@ pub fn build(b: *std.Build) void {
             }),
         });
         native_tests.root_module.addImport("raylib_c", raylibCModule(b, native_target, optimize));
-        addBuildMetadata(b, native_tests.root_module);
+        addBuildMetadata(b, native_tests.root_module, roc_compiler);
         native_tests.root_module.link_libc = true;
         native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
         // The sqlite tests in src/sqlite_effect.zig run against a real
@@ -474,6 +460,7 @@ fn buildHostLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.Optimize,
     macos_interfaces_path: []const u8,
+    roc_compiler: []const u8,
 ) *std.Build.Step.Compile {
     const host_lib = b.addLibrary(.{
         .name = "host",
@@ -484,6 +471,12 @@ fn buildHostLib(
             .optimize = optimize,
             .strip = optimize != .debug,
             .pic = true,
+            // On MSVC targets LLVM implements the stack protector with its own
+            // `__security_cookie` global, which collides with the definition in
+            // src/msvc_runtime_stubs.zig and crashes LLVM in Debug builds. The
+            // protector would check nothing there anyway: those stubs accept
+            // every cookie, and they exist only for the MSVC-built raylib.lib.
+            .stack_protector = if (target.result.abi == .msvc) false else null,
             // Selects Zig's pthread path for std.Thread. The native path
             // depends on TLS that Zig's start code sets up, and the start code
             // never runs here: this is a static library that `roc build` links
@@ -494,7 +487,7 @@ fn buildHostLib(
     });
 
     host_lib.root_module.addImport("raylib_c", raylibCModule(b, target, optimize));
-    addBuildMetadata(b, host_lib.root_module);
+    addBuildMetadata(b, host_lib.root_module, roc_compiler);
 
     // Coroutine runtime for app tasks. Configured to a single executor on the
     // frame thread; zio is built single-executor so the scheduler cannot move

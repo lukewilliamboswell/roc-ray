@@ -513,7 +513,7 @@ pub const SessionOptions = struct {
     /// Highest detail the selected host can actually emit.
     effective_detail: ?Detail = null,
     rocray_version: []const u8 = "unavailable",
-    roc_compiler_pin: []const u8 = "unavailable",
+    roc_compiler_built_with: []const u8 = "unavailable",
     target_profile: []const u8 = "unavailable",
     backend: []const u8 = "unavailable",
     executable_name: []const u8 = "unavailable",
@@ -549,7 +549,7 @@ const Shared = struct {
     requested_detail: Detail,
     effective_detail: Detail,
     rocray_version: []const u8,
-    roc_compiler_pin: []const u8,
+    roc_compiler_built_with: []const u8,
     target_profile: []const u8,
     backend: []const u8,
     executable_name: []const u8,
@@ -606,7 +606,7 @@ pub const Session = struct {
             .requested_detail = options.detail,
             .effective_detail = options.effective_detail orelse options.detail,
             .rocray_version = options.rocray_version,
-            .roc_compiler_pin = options.roc_compiler_pin,
+            .roc_compiler_built_with = options.roc_compiler_built_with,
             .target_profile = options.target_profile,
             .backend = options.backend,
             .executable_name = options.executable_name,
@@ -981,7 +981,7 @@ fn writerMain(shared: *Shared) void {
         !insertMetadata(db, "host_os", @tagName(builtin.os.tag)) or
         !insertMetadata(db, "host_arch", @tagName(builtin.cpu.arch)) or
         !insertMetadata(db, "rocray_version", shared.rocray_version) or
-        !insertMetadata(db, "roc_compiler_pin", shared.roc_compiler_pin) or
+        !insertMetadata(db, "roc_compiler_built_with", shared.roc_compiler_built_with) or
         !insertMetadata(db, "target_profile", shared.target_profile) or
         !insertMetadata(db, "backend", shared.backend) or
         !insertMetadata(db, "executable_name", shared.executable_name) or
@@ -1484,7 +1484,7 @@ test "summary starvation restores gap counts until capacity returns" {
         .requested_detail = .standard,
         .effective_detail = .standard,
         .rocray_version = "unavailable",
-        .roc_compiler_pin = "unavailable",
+        .roc_compiler_built_with = "unavailable",
         .target_profile = "unavailable",
         .backend = "unavailable",
         .executable_name = "unavailable",
@@ -1556,7 +1556,7 @@ test "session writer creates and finalizes a queryable stage one database" {
         .transaction_chunks = 2,
         .detail = .full,
         .rocray_version = "unavailable",
-        .roc_compiler_pin = "nightly-test-pin",
+        .roc_compiler_built_with = "nightly-test-compiler",
         .target_profile = "native-headless",
         .backend = "headless_stub",
         .executable_name = "example-app",
@@ -1663,7 +1663,7 @@ test "session writer creates and finalizes a queryable stage one database" {
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='effective_detail' AND value='full'").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='rocray_version' AND value='unavailable'").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='unavailable_sources' AND value LIKE '%gpu_timing%' AND value LIKE '%zio_worker_queue_timing%' AND value LIKE '%writer_thread_cpu_time%'").?);
-    try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='roc_compiler_pin' AND value='nightly-test-pin'").?);
+    try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='roc_compiler_built_with' AND value='nightly-test-compiler'").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='target_profile' AND value='native-headless'").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='backend' AND value='headless_stub'").?);
     try std.testing.expectEqual(@as(i64, 1), queryI64(db, "SELECT count(*) FROM metadata WHERE key='executable_name' AND value='example-app'").?);

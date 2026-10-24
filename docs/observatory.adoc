@@ -151,7 +151,8 @@ assuming table or column meanings.
 
 * `metadata` records schema, requested and effective detail, host environment,
 build identity, configured limits, clean shutdown, and final state. Build
-identity includes the Roc compiler pin embedded from `platform/main.roc`, target
+identity includes `roc_compiler_built_with`, the Roc nightly the host was built
+for (`unavailable` unless the build passed `-Droc-compiler=<tag>`), target
 profile, backend, OS, architecture, and portable executable/application
 identity derived from argument zero. A generically named `main`, `main.exe`,
 or `main.roc` executable uses its parent directory as the application

@@ -15,9 +15,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from local_bundles import rewrite_compiler_pin
 from release_notes_markdown import ConversionError, convert_file
-from roc_platform_abi import read_pin
 
 
 BUNDLE_SUFFIX = ".tar.zst"
@@ -52,6 +50,16 @@ def main() -> int:
     notes.add_argument("--output-file", required=True)
     notes.add_argument("--docs-url", default="")
     notes.add_argument("--notes-dir", default="docs/releases")
+    notes.add_argument(
+        "--roc-version",
+        default="",
+        help="the nightly the release was built and tested with; default: `roc version`",
+    )
+    notes.add_argument(
+        "--roc-stable-version",
+        default="",
+        help="the compiler that ran the release scripts; default: the roc-stable tag in Blueprint.roc",
+    )
     notes.set_defaults(func=cmd_make_release_notes)
 
     preview = subcommands.add_parser(
@@ -166,7 +174,9 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     lines = [
         editorial_notes,
         "",
-        f"Supported compiler: `{read_pin().nightly}`. Install this compiler before running the examples.",
+        f"Built and tested with Roc `{tested_compiler(args.roc_version)}`; the release scripts ran on "
+        f"`roc-stable` `{stable_compiler(args.roc_stable_version)}`. The platform names no "
+        "compiler: use the latest Roc nightly.",
         "",
         "## Bundles",
         "",
@@ -191,7 +201,7 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         "",
         "## Examples",
         "",
-        f"A [zip of the examples]({examples_url}) pinned to this release is attached to every",
+        f"A [zip of the examples]({examples_url}) that use this release is attached to every",
         "release; unzip and `roc examples/<name>/main.roc`.",
     ])
 
@@ -210,6 +220,39 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return 0
+
+
+ROC_VERSION_PREFIX = "Roc compiler version "
+STABLE_TAG_RE = re.compile(r'Fetch\(\s*"roc-stable"\s*,\s*Recipes\.roc_nightly\(\s*"([^"]+)"\s*\)')
+
+
+def tested_compiler(provided: str, roc: str = "roc") -> str:
+    """The Roc nightly a release was built and tested with.
+
+    The release workflow resolves one nightly and passes its tag; a local run
+    asks the compiler on PATH.
+    """
+    if provided.strip():
+        return provided.strip()
+    try:
+        result = subprocess.run([roc, "version"], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError("--roc-version is required when `roc version` cannot run") from error
+    observed = result.stdout.strip()
+    if not observed:
+        raise RuntimeError("`roc version` printed nothing")
+    return observed.removeprefix(ROC_VERSION_PREFIX)
+
+
+def stable_compiler(provided: str, root: Path | None = None) -> str:
+    """The `roc-stable` tag that Blueprint.roc fetches for the scripts."""
+    if provided.strip():
+        return provided.strip()
+    blueprint = (root or repo_root()) / "Blueprint.roc"
+    match = STABLE_TAG_RE.search(blueprint.read_text(encoding="utf-8"))
+    if match is None:
+        raise RuntimeError(f"{blueprint} does not fetch roc-stable with Recipes.roc_nightly(\"<tag>\")")
+    return match.group(1)
 
 
 def read_editorial_notes(notes_dir: Path, release_version: str) -> str:
@@ -408,7 +451,6 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
         raise RuntimeError(f"invalid release tag: {tag!r}")
 
     root = repo_root()
-    compiler = read_pin(root / "platform" / "main.roc").nightly
     examples_dir = Path(args.examples_dir)
     if len(examples_dir.parts) != 1:
         raise RuntimeError(f"examples dir must be a single top-level directory: {examples_dir}")
@@ -447,7 +489,7 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
                     raise RuntimeError(
                         f"expected one recognized platform reference in {entry}, found {count}"
                     )
-                data = rewrite_compiler_pin(rewritten, compiler).encode("utf-8")
+                data = rewritten.encode("utf-8")
                 rewritten_headers += 1
                 packaged_apps.add(parts[1])
             else:

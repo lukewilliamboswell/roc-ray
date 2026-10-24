@@ -125,7 +125,8 @@ An app can also record itself to a video file, such as this
 
 == Stability
 
-RocRay tracks recent nightly builds of the Roc compiler. Because Roc is still
-changing, RocRay's API may also change. Each RocRay release names the exact
-Roc compiler build it was built and tested with. Bug reports, documentation
+RocRay follows the latest nightly build of the Roc compiler: neither the
+platform nor its examples name a compiler, and they are tested with the latest
+nightly every day. Because Roc is still changing, RocRay's API may also change.
+Each RocRay release's notes name the nightly it was built and tested with. Bug reports, documentation
 improvements, and focused new capabilities are welcome; see <<contributing>>.

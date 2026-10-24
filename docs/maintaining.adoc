@@ -12,7 +12,7 @@ endif::[]
 
 This chapter is for maintainers: how the platform's native dependencies are
 produced and pinned, how bundles are assembled, how a release is published,
-and how the compiler pin is kept current. It assumes <<contributing>>.
+and how RocRay follows the Roc nightly. It assumes <<contributing>>.
 
 [#maintaining-link-inputs]
 == Linker inputs
@@ -178,8 +178,8 @@ untested local bundle as a release artifact.
 Besides the bundles, every GitHub release includes:
 
 * `examples-<version>.zip`: every example, its header rewritten to point at
-  this release's default bundle and to pin the compiler the release was built
-  for, so an unzipped copy builds with no checkout;
+  this release's default bundle and otherwise unchanged, so an unzipped copy
+  builds with no checkout;
 * `roc-ray-manual-<version>.pdf`: this manual as one PDF;
 * `roc-ray-manual-<version>.zip`: this manual as a static site, the PDF beside
   it;
@@ -195,7 +195,8 @@ release's own copy.
 Write the notes for a release in `docs/releases/<version>.adoc` and add it to
 `docs/releases/index.adoc`, newest first, so it appears in this manual. The
 release workflow converts the same file to Markdown for the GitHub release
-page, then appends the bundle URLs, the supported compiler, and links to the
+page, then appends the nightly it was built and tested with, the `roc-stable` tag,
+the bundle URLs, and links to the
 examples archive and the docs. The conversion accepts the subset of AsciiDoc
 the notes need (section titles, paragraphs, lists, `[source]` blocks, tables,
 links, and inline emphasis), and fails on anything else rather than publishing
@@ -223,42 +224,49 @@ push to `main` and uploads it as a workflow artifact, so a change can be
 reviewed before it is released.
 
 [#maintaining-nightly]
-== Roc nightly updates
+== The Roc nightly
 
-RocRay tracks recent nightly builds of the Roc compiler, and every development
-Roc root pins the same nightly. `platform/main.roc` holds the development pin; every
-other tracked root that pins a compiler (the Wayland header, the examples, the
-test probes) must name the same one. The automated updater rewrites exactly the
-roots listed under `compiler_roots` in `.github/roc-nightly.json`, and
-`zig build lint` (through `scripts/check_compiler_pins.py`) fails if that list
-misses a pinned root or a pin disagrees. Documented headers inside `##` doc
-comments omit the `roc:` field instead, because nothing rewrites them. The
-published starter's compiler, named in `README.md`, is deliberately separate;
-the "Published quickstart" CI job checks it unchanged.
+RocRay follows the latest nightly build of the Roc compiler. Nothing outside
+`scripts/` names a compiler: `platform/main.roc`, `platform/main-wayland.roc`,
+the examples and the test roots carry no `roc:` header field, and the
+repository has no `.roc-version` file. `scripts/check_no_pins.roc`, part of
+`blueprint run check`, fails when one appears. Nothing bumps a pin, because
+there is none.
 
-The repository checks for a new nightly once daily at 13:40 UTC, about four
-hours after the upstream 09:00 UTC build. If a nightly is published late, the
-update waits until the next day. `.github/roc-nightly.json` also selects the validation workflows,
-including their validation-only release paths. The controller, its tests, and
-job permissions are maintained in
-https://github.com/lukewilliamboswell/roc-automation[roc-automation]. Each
-caller workflow pins the shared code it uses to a full commit hash.
-Dependabot proposes reviewed updates to Actions/workflow references.
+Each CI and release run resolves the latest nightly once, in its first job
+(`resolve`), and every job that installs Roc installs that tag through
+`.github/actions/setup-toolchain`, so one run never mixes compilers. The
+release workflow records the tag in the release notes ("Built and tested
+with Roc ...", beside the `roc-stable` tag), passes it to the host build as
+`-Droc-compiler=<tag>` so Observatory captures name it, and leaves the
+examples zip identical to `examples/` except for the platform URL.
 
-Follow the shared https://github.com/lukewilliamboswell/roc-automation/blob/75f3e1b4f2d6558e631a0d35d739165056b036d2/docs/integration.md[integration and permissions guide]
-for the PR-creation setting, action allowlists, required checks, and first live
-`GITHUB_TOKEN` run. Keep default token permissions read-only. The updater never
-approves or merges PRs and receives no protection bypass.
+Two compilers are in play, and they are not interchangeable:
 
-`automation/roc-nightly` is reserved for the bot's pin-only commits. Put manual
-compatibility changes on a separate branch. Candidate failures require diagnosis;
-do not weaken tests or mechanically replace baselines to accept a compiler.
+* `roc`, the latest nightly, checks, tests and builds the platform, the
+  examples and the test roots.
+* `roc-stable`, the nightly `Blueprint.roc` fetches, runs the Roc scripts
+  under `scripts/`. Every script starts with `#!/usr/bin/env roc-stable`; a
+  script's `roc` field, where it has one, must name the same tag.
 
-The PR configuration check validates the local pin and selected workflow files.
-The shared repository owns the controller regression suite. Project tests remain
-in this repository and run on the exact candidate commit. Scheduled bot-token
-acceptance must be verified after merge; file changes alone cannot prove it.
+A new nightly can turn any pull request red: a formatter change, a new error,
+or a reworded diagnostic in a `test/compile_fail` fixture. That is the
+expected signal. Diagnose it in a pull request of its own, fix the platform or
+the fixture, and cut a patch release when the latest release no longer works
+on the latest nightly. Do not weaken tests or mechanically replace baselines to
+accept a compiler.
 
-Use the shared https://github.com/lukewilliamboswell/roc-automation/blob/75f3e1b4f2d6558e631a0d35d739165056b036d2/docs/openssf.md[OpenSSF rollout checklist]
-to record project-specific evidence. This integration does not establish badge
-compliance or change repository settings.
+The manual maintenance tasks, as the
+https://lukewilliamboswell.github.io/roc-automation/maintenance.html[roc-automation
+manual] describes them:
+
+* *Regenerate the host ABI* when the `Checks and generated ABI` CI job reports
+  that the latest nightly generates a different `src/roc_platform_abi.zig`:
+  review the diff, run `blueprint run glue-update`, and release. See
+  <<host-development>>.
+* *Change the tooling compiler* when the scripts need a newer `roc-stable`:
+  change the tag in `Blueprint.roc`, run `blueprint update` if the locked
+  revision predates it, and fix any script the new compiler breaks in the same
+  pull request.
+* *Update script dependencies*, such as basic-cli, in the script headers and
+  `RocPackages` in `Blueprint.roc` together.

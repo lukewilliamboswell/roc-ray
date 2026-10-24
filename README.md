@@ -41,10 +41,10 @@ larger examples show what else it can do:
 
 ## Try it
 
-1. Open the [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
-   and install the Roc compiler its notes name, as
+1. Install the latest nightly build of the Roc compiler, as
    [Getting started](docs/getting-started.adoc#install) describes.
-2. Download that release's `examples-<version>.zip` and unzip it.
+2. Open the [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest),
+   download its `examples-<version>.zip` and unzip it.
 3. Open a terminal in the extracted directory, the one containing `examples/`,
    and run:
 
@@ -55,11 +55,11 @@ roc examples/hello_world/main.roc
 
 ## A whole app
 
-A red circle that follows the mouse. Replace `BUNDLE-URL` and `COMPILER` with
-the default bundle URL and the compiler the release notes name.
+A red circle that follows the mouse. Replace `BUNDLE-URL` with the default
+bundle URL the release notes name.
 
 ```roc
-app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+app [Model, program] { rr: platform "BUNDLE-URL" }
 
 import rr.App
 import rr.Color
@@ -125,6 +125,7 @@ Vendored libraries and example asset packs keep their own licences and
 copyright holders, all indexed in
 [`THIRD-PARTY-LICENCES.md`](THIRD-PARTY-LICENCES.md).
 
-RocRay tracks recent nightly builds of the Roc compiler. Because Roc is still
-changing, RocRay's API may also change. Bug reports, documentation improvements, and focused new
+RocRay follows the latest nightly build of the Roc compiler, and names no
+compiler of its own. Because Roc is still changing, RocRay's API may also
+change. Bug reports, documentation improvements, and focused new
 capabilities are welcome.

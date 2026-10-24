@@ -280,7 +280,7 @@ def analyze(path: Path, slowest: int = 10) -> str:
             f"schema={metadata['schema_version']} detail={metadata.get('effective_detail', 'unknown')} cycles={len(durations)}",
             "Environment: "
             f"RocRay={metadata.get('rocray_version', 'unknown')} "
-            f"Roc={metadata.get('roc_compiler_pin', 'unknown')} "
+            f"Roc={metadata.get('roc_compiler_built_with', 'unknown')} "
             f"target={metadata.get('target_profile', 'unknown')} "
             f"backend={metadata.get('backend', 'unknown')} "
             f"host={metadata.get('host_os', 'unknown')}/{metadata.get('host_arch', 'unknown')} "

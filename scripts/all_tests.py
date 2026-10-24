@@ -871,7 +871,7 @@ def run_observatory_probe(
                 failures.append("Observatory did not identify GPU timing as unavailable")
 
             for key in (
-                "host_os", "host_arch", "rocray_version", "roc_compiler_pin",
+                "host_os", "host_arch", "rocray_version", "roc_compiler_built_with",
                 "executable_name", "app_name", "unavailable_sources",
                 "chunk_bytes", "chunk_count", "summary_reserve",
                 "transaction_chunks", "max_output_bytes", "clock_source",
@@ -1880,10 +1880,6 @@ def main() -> int:
     if not examples:
         print("Error: No examples/*/main.roc entrypoints found")
         return 1
-
-    warning = local_bundles.check_roc_pin(root)
-    if warning:
-        print(warning, file=sys.stderr)
 
     # SIGTERM/SIGINT become SystemExit so the server and scratch directory are
     # released promptly. Repository safety does not depend on this: no tracked

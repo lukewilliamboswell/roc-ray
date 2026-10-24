@@ -31,7 +31,7 @@ clicks. The rest of this chapter takes it apart.
 
 [source,roc]
 ----
-app [Model, program] { rr: platform "BUNDLE-URL", roc: "COMPILER" }
+app [Model, program] { rr: platform "BUNDLE-URL" }
 
 import rr.App
 import rr.Color
@@ -75,7 +75,7 @@ render! = |model, frame| {
 }
 ----
 
-Replace `BUNDLE-URL` and `COMPILER` as <<smallest-app>> describes. Press
+Replace `BUNDLE-URL` as <<smallest-app>> describes. Press
 Escape or close the window to quit.
 
 The app's header, `app [Model, program]`, gives two things to the platform:

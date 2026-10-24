@@ -29,7 +29,9 @@ const build_metadata = @import("build_metadata");
 // There is not yet an authoritative RocRay release version embedded by the
 // build. Report that absence instead of borrowing unrelated package metadata.
 const rocray_build_version = "unavailable";
-const roc_compiler_pin = build_metadata.roc_compiler_pin;
+// The platform names no compiler; a build records the nightly it was made for
+// with `-Droc-compiler=<tag>`, and is otherwise `unavailable`.
+const roc_compiler_built_with = build_metadata.roc_compiler_built_with;
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -14033,7 +14035,7 @@ fn startObservatory(allocator: std.mem.Allocator, options: RuntimeOptions) !Obse
                 .full => .full,
             },
             .rocray_version = rocray_build_version,
-            .roc_compiler_pin = if (roc_compiler_pin.len == 0) "unavailable" else roc_compiler_pin,
+            .roc_compiler_built_with = if (roc_compiler_built_with.len == 0) "unavailable" else roc_compiler_built_with,
             .target_profile = observatoryTargetProfile(options.headless),
             .backend = observatoryBackendName(options.headless),
             .executable_name = executable_name,

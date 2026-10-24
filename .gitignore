@@ -159,3 +159,6 @@ examples/roc-doom-e1m1/fuzz_*
 !examples/roc-doom-e1m1/fuzz_*.roc
 !examples/roc-doom-e1m1/FUZZ_FINDINGS.md
 examples/roc-doom-e1m1/.roc-fuzz/
+
+# Blueprint state and generated environment
+.blueprint/

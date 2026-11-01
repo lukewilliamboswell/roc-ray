@@ -8291,25 +8291,40 @@ fn drawProgrammerError(comptime format: []const u8, values: anytype) void {
     std.debug.panic("roc-ray: " ++ format, values);
 }
 
-fn validatePoints(points: anytype, operation: []const u8) void {
+fn validatePoints(points: anytype) error{NonFinitePoint}!void {
     for (points) |point| {
         if (!std.math.isFinite(point.x) or !std.math.isFinite(point.y)) {
-            drawProgrammerError("{s} requires finite point coordinates", .{operation});
+            return error.NonFinitePoint;
         }
     }
 }
 
-fn validateArc(center: anytype, inner_radius: f32, outer_radius: f32, start_angle: f32, end_angle: f32, segments: i32, operation: []const u8) void {
+fn validateArc(center: anytype, inner_radius: f32, outer_radius: f32, start_angle: f32, end_angle: f32, segments: i32) error{InvalidArc}!void {
     if (!std.math.isFinite(center.x) or !std.math.isFinite(center.y) or !std.math.isFinite(inner_radius) or !std.math.isFinite(outer_radius) or !std.math.isFinite(start_angle) or !std.math.isFinite(end_angle) or inner_radius < 0 or outer_radius < inner_radius or segments < 3) {
-        drawProgrammerError("{s} requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{operation});
+        return error.InvalidArc;
     }
+}
+
+test "submitted chart geometry rejects nonfinite points and invalid arcs" {
+    const point = abi.MathVec2{ .x = 0, .y = 0 };
+    try validatePoints(&[_]abi.MathVec2{});
+    try validatePoints(&[_]abi.MathVec2{point});
+    try std.testing.expectError(error.NonFinitePoint, validatePoints(&[_]abi.MathVec2{.{ .x = std.math.nan(f32), .y = 0 }}));
+    try std.testing.expectError(error.NonFinitePoint, validatePoints(&[_]abi.MathVec2{.{ .x = 0, .y = std.math.inf(f32) }}));
+    try validateArc(point, 0, 0, 0, 360, 3);
+    try validateArc(point, 2, 4, -90, 90, 16);
+    try std.testing.expectError(error.InvalidArc, validateArc(point, -1, 4, 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 5, 4, 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, 4, 0, 90, 2));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, std.math.inf(f32), 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, 4, std.math.nan(f32), 90, 3));
 }
 
 fn hostedDrawCircleSectorRaw(args: abi.HostDraw_circle_sectorArgs) callconv(.c) void {
     enforcePhase("Draw.circle_sector!", during_render);
     const effect = EffectScope.begin("Draw.circle_sector!", 0);
     defer effect.end();
-    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments, "Draw.circle_sector!");
+    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.circle_sector! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
     if (active_headless) return;
     raylib.drawCircleSector(args);
 }
@@ -8318,7 +8333,7 @@ fn hostedDrawCircleSectorLinesRaw(args: abi.HostDraw_circle_sector_linesArgs) ca
     enforcePhase("Draw.circle_sector!", during_render);
     const effect = EffectScope.begin("Draw.circle_sector!", 0);
     defer effect.end();
-    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments, "Draw.circle_sector!");
+    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.circle_sector! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
     if (active_headless) return;
     raylib.drawCircleSectorLines(args);
 }
@@ -8345,7 +8360,7 @@ fn hostedDrawRingRaw(args: abi.HostDraw_ringArgs) callconv(.c) void {
     enforcePhase("Draw.ring!", during_render);
     const effect = EffectScope.begin("Draw.ring!", 0);
     defer effect.end();
-    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments, "Draw.ring!");
+    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.ring! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
     if (active_headless) return;
     raylib.drawRing(args);
 }
@@ -8354,7 +8369,7 @@ fn hostedDrawRingLinesRaw(args: abi.HostDraw_ring_linesArgs) callconv(.c) void {
     enforcePhase("Draw.ring!", during_render);
     const effect = EffectScope.begin("Draw.ring!", 0);
     defer effect.end();
-    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments, "Draw.ring!");
+    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.ring! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
     if (active_headless) return;
     raylib.drawRingLines(args);
 }
@@ -8409,7 +8424,7 @@ fn hostedDrawLineStripRaw(host: *RocHost, args: abi.HostDraw_line_stripArgs) cal
     effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
     defer effect.end();
     defer args.decref(host);
-    validatePoints(args.points.items(), "Draw.line_strip!");
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.line_strip! requires finite point coordinates", .{});
     if (active_headless) return;
     raylib.drawLineStrip(args.points.items(), args.thickness, args.color);
 }
@@ -8450,7 +8465,7 @@ fn hostedDrawTrianglesRaw(host: *RocHost, args: abi.HostDraw_trianglesArgs) call
     effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
     defer effect.end();
     defer args.decref(host);
-    validatePoints(args.points.items(), "Draw.triangles!");
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangles! requires finite point coordinates", .{});
     if (args.points.len() != 0 and args.points.len() % 3 != 0) drawProgrammerError("Draw.triangles! requires a point count divisible by three", .{});
     if (active_headless) return;
     raylib.drawTriangles(args.points.items(), args.color);
@@ -8466,7 +8481,7 @@ fn hostedDrawTriangleFanRaw(host: *RocHost, args: abi.HostDraw_triangle_fanArgs)
     effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
     defer effect.end();
     defer args.decref(host);
-    validatePoints(args.points.items(), "Draw.triangle_fan!");
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangle_fan! requires finite point coordinates", .{});
     if (active_headless) return;
     raylib.drawTriangleFan(args.points.items(), args.color);
 }
@@ -8481,7 +8496,7 @@ fn hostedDrawTriangleStripRaw(host: *RocHost, args: abi.HostDraw_triangle_stripA
     effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
     defer effect.end();
     defer args.decref(host);
-    validatePoints(args.points.items(), "Draw.triangle_strip!");
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangle_strip! requires finite point coordinates", .{});
     if (active_headless) return;
     raylib.drawTriangleStrip(args.points.items(), args.color);
 }

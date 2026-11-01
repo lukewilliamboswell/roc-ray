@@ -46,7 +46,7 @@ config = [
 	Task("check", [Use("dev"), Run(["scripts/check_all.roc"])]),
 	Task("pins", [Use("scripts"), Run(["scripts/check_no_pins.roc"])]),
 	Task("glue", [Use("dev"), Run(["scripts/check_glue.roc"])]),
-	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--update"])]),
+	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--", "--update"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),
 	# Release host libraries carry no Zig debug allocator; run after a ReleaseFast build.
 	Task("check-release-hosts", [Use("scripts"), Run(["scripts/check_release_hosts.roc"])]),

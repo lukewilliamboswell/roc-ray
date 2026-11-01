@@ -211,6 +211,177 @@ Draw := [].{
 	## frame epoch, so do not retain a `Frame` in the model: pass the
 	## callback's own frame down through helpers.
 	Frame :: Host.DrawFrame.{
+
+		## Clear the active drawing target to a solid color.
+		##
+		## Legal in `render!` only.
+		clear! : Frame, Color.Rgba => {}
+		clear! = Draw.clear!
+
+		## Draw a vertical rectangle gradient.
+		##
+		## Legal in `render!` only.
+		rectangle_gradient_v! : Frame, RectangleGradientV => {}
+		rectangle_gradient_v! = Draw.rectangle_gradient_v!
+
+		## Draw a horizontal rectangle gradient.
+		##
+		## Legal in `render!` only.
+		rectangle_gradient_h! : Frame, RectangleGradientH => {}
+		rectangle_gradient_h! = Draw.rectangle_gradient_h!
+
+		## Draw a radial circle gradient.
+		##
+		## Legal in `render!` only.
+		circle_gradient! : Frame, CircleGradient => {}
+		circle_gradient! = Draw.circle_gradient!
+
+		## Draw raylib's current frames-per-second counter.
+		##
+		## Legal in `render!` only.
+		fps! : Frame, Fps => {}
+		fps! = Draw.fps!
+
+		## Draw a filled and/or outlined axis-aligned rectangle.
+		##
+		## Legal in `render!` only.
+		rectangle! : Frame, Rectangle => {}
+		rectangle! = Draw.rectangle!
+
+		## Draw a filled and/or outlined rounded rectangle.
+		##
+		## Legal in `render!` only.
+		rounded_rectangle! : Frame, RoundedRectangle => {}
+		rounded_rectangle! = Draw.rounded_rectangle!
+
+		## Draw a filled and/or outlined circle.
+		##
+		## Legal in `render!` only.
+		circle! : Frame, Circle => {}
+		circle! = Draw.circle!
+
+		## Draw a stroked line segment. `NoStroke` performs no drawing.
+		##
+		## Legal in `render!` only.
+		line! : Frame, Line => {}
+		line! = Draw.line!
+
+		## Draw a filled and/or outlined triangle.
+		##
+		## Legal in `render!` only.
+		triangle! : Frame, Triangle => {}
+		triangle! = Draw.triangle!
+
+		## Draw a convex filled polygon and/or an ordered polygon outline. The host
+		## triangulates the fill without allocating; fewer than three points do not
+		## fill.
+		##
+		## Legal in `render!` only.
+		convex_polygon! : Frame, ConvexPolygon => {}
+		convex_polygon! = Draw.convex_polygon!
+
+		## Draw a texture with explicit source, destination, origin, rotation, and
+		## tint.
+		##
+		## Legal in `render!` only.
+		texture! : Frame, TextureDraw => {}
+		texture! = Draw.texture!
+
+		## Draw one borrowed indexed batch of perspective-correct textured triangles.
+		## The vertex and index list lengths explicitly bound all work in this call;
+		## the host consumes both synchronously and retains no geometry. The index
+		## count must be a multiple of three and every index must name a vertex.
+		## Violating either condition is a programmer error.
+		##
+		## Legal in `render!` only. Normally called inside `with_camera_3d!`.
+		textured_triangles_3d! : Frame, TexturedTriangles3D => {}
+		textured_triangles_3d! = Draw.textured_triangles_3d!
+
+		## Draw many instances of one texture, in list order, with a single hosted
+		## call.
+		##
+		## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
+		## is what caps how many sprites a frame can afford. This crosses once for the
+		## whole batch and lets the host loop over it, so the cost per instance is the
+		## `DrawTexturePro` call alone. Build the list from application state and pass
+		## it straight through; an empty list does not cross at all.
+		##
+		## Legal in `render!` only.
+		texture_instances! : Frame, Texture, List(TextureInstance) => {}
+		texture_instances! = Draw.texture_instances!
+
+		## Project a texture onto a validated planar quad with exact homogeneous UV
+		## interpolation. This remains one hosted call and preserves active shaders.
+		##
+		## Legal in `render!` only.
+		projective_texture! : Frame, ProjectiveTexture => {}
+		projective_texture! = Draw.projective_texture!
+
+		## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
+		## Callback errors are returned only after the native target has been
+		## restored.
+		##
+		## Legal in `render!` only.
+		with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+		with_render_texture! = Draw.with_render_texture!
+
+		## Scope shader application and upload its complete uniform record before the
+		## callback draws. Callback errors are returned only after the previous
+		## shader and all of its uniform values have been restored.
+		##
+		## Legal in `render!` only.
+		with_shader! : Frame, Shader(uniforms), (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+		with_shader! = Draw.with_shader!
+
+		## Scope one of raylib's built-in blend equations. Custom blend factors are
+		## deliberately excluded until they can be represented without global state.
+		##
+		## Legal in `render!` only.
+		with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_blend_mode! = Draw.with_blend_mode!
+
+		## Draw the callback in world space using this camera.
+		##
+		## Legal in `render!` only.
+		with_camera! : Frame, Camera2D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_camera! = Draw.with_camera!
+
+		## Draw the callback in 3D world space using a perspective camera. Depth
+		## testing and depth writes are active until the callback returns.
+		##
+		## Legal in `render!` only.
+		with_camera_3d! : Frame, Camera3D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_camera_3d! = Draw.with_camera_3d!
+
+		## Restrict callback drawing to screen-space `bounds`, and close the scissor
+		## however the callback ends, error included.
+		##
+		## `bounds` is in the same logical coordinates as every other drawing call,
+		## so it is a rectangle on the surface rather than in framebuffer pixels.
+		##
+		## Legal in `render!` only.
+		with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_scissor! = Draw.with_scissor!
+
+		## Draw text using an explicit font, spacing, color, and resolved top-left
+		## origin. This performs no measurement or alignment pass.
+		##
+		## Legal in `render!` only.
+		text! : Frame, Text => {}
+		text! = Draw.text!
+
+		## Draw top-left aligned text with the built-in font and default spacing.
+		##
+		## Legal in `render!` only.
+		debug_text! : Frame, DebugText => {}
+		debug_text! = Draw.debug_text!
+
+		## Draw simple top-left aligned text with the built-in font.
+		##
+		## Legal in `render!` only.
+		text_at! : Frame, SimpleText => {}
+		text_at! = Draw.text_at!
+
 		from_host : Host.DrawFrame -> Frame
 		from_host = |frame| Frame.(frame)
 

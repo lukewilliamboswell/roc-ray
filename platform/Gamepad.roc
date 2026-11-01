@@ -17,6 +17,12 @@ Gamepad := [].{
 		connected : List(U8),
 		buttons : List(U8),
 		axes : List(F32),
+	}.{
+
+		## Resolve a slot into a snapshot-scoped connected view. Callers handle
+		## disconnect once, after which button and axis queries stay allocation-free.
+		lookup : Snapshot, Id -> [Connected(View), Disconnected]
+		lookup = Gamepad.lookup
 	}
 
 	## One of the four gamepad slots sampled by the platform.

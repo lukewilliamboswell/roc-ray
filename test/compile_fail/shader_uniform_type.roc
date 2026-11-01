@@ -15,6 +15,7 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default,
 	|_io| {
+		shader : Shader({ amount : F32 })
 		shader = Shader.stub({ amount: 1.F32 })
 		changed = shader.with_uniforms({ amount: 2.I32 })
 		Ok({ shader: changed })

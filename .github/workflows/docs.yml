@@ -35,14 +35,13 @@ jobs:
       # records before handing out the path. The docs environment fetches one
       # program and needs no Nix.
       - name: Set up Blueprint
-        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@ae089dae16f63f11a754e49c48a9310445e084dd
 
       - id: renderer
         name: Get the verified renderer
         run: echo "path=$(blueprint run docs-renderer)" >> "$GITHUB_OUTPUT"
 
-      # The renderer refuses a Mermaid diagram whose prepared PNG is stale;
-      # this also catches a gallery still whose recording has changed.
+      # Catch a gallery still whose source recording has changed.
       - name: Check the prepared images
         run: python3 scripts/prepare_docs_images.py
 
@@ -52,7 +51,7 @@ jobs:
       # an unsupported construct fails the build.
       - id: docs
         name: Build HTML, PDF and Markdown
-        uses: lukewilliamboswell/roc-automation/actions/build-docs@7aff4132691ad4fc348abe9df146a57512b49bd6
+        uses: lukewilliamboswell/roc-automation/actions/build-docs@ae089dae16f63f11a754e49c48a9310445e084dd
         with:
           renderer-binary: ${{ steps.renderer.outputs.path }}
           pdf-filename: roc-ray.pdf

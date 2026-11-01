@@ -51,7 +51,6 @@ Elsewhere, or without Nix, install:
   available as `roc` on `PATH`
 * Python 3 and `zstd` for the full test and bundle checks
 * SQLite's `sqlite3` command-line tool for inspecting Observatory captures
-* Docker, to build this manual locally
 
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the latest nightly has to
 come first on it. CI resolves the latest nightly once per run, so a pull
@@ -455,14 +454,13 @@ which sets a few rules:
   `+include::tutorial/<file>.roc[tag=<name>,indent=0]+`, where the tagged
   region ends on code rather than a blank line;
   `scripts/check_tutorial.py` compiles, tests and runs those files.
-* Images must be non-interlaced 8-bit RGB or RGBA PNGs. Write diagrams as
-  `[mermaid]` blocks and run `scripts/prepare_docs_images.py --update`, which
-  renders each to a PNG and registers it by the digest of its source in
-  `docs/prepared-diagrams.json`; the renderer refuses a diagram that changed
-  without being prepared again. The same command makes the example gallery's
-  stills from the recordings in `examples/gallery/`, which the manual links
-  to. It needs Node, Chrome and Pillow; checking that everything is current,
-  which the `docs` workflow does, needs only Python.
+* Raster images must be non-interlaced 8-bit RGB or RGBA PNGs. Write diagrams
+  as `[mermaid]` blocks; the renderer produces website SVGs and vector PDF
+  figures during the ordinary build. No separate diagram preparation is needed.
+* Run `scripts/prepare_docs_images.py --update` after changing a gallery
+  recording. It makes PNG stills from `examples/gallery/` for the manual,
+  which links to the original recordings. Updating needs Pillow with WebP
+  support; checking the stills in CI needs only Python.
 
 == Pull request checklist
 

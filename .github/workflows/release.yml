@@ -270,7 +270,7 @@ jobs:
       # Blueprint downloads roc-docs and checks its bytes against the digest
       # Blueprint.lock records before handing out the path.
       - name: Set up Blueprint
-        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@ae089dae16f63f11a754e49c48a9310445e084dd
 
       - id: renderer
         name: Get the verified renderer
@@ -281,7 +281,7 @@ jobs:
 
       - id: manual
         name: Build the manual
-        uses: lukewilliamboswell/roc-automation/actions/build-docs@7aff4132691ad4fc348abe9df146a57512b49bd6
+        uses: lukewilliamboswell/roc-automation/actions/build-docs@ae089dae16f63f11a754e49c48a9310445e084dd
         with:
           renderer-binary: ${{ steps.renderer.outputs.path }}
           pdf-filename: roc-ray.pdf

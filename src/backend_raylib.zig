@@ -2061,25 +2061,39 @@ pub fn drawTriangleLines(args: anytype) void {
     drawSegment(args.c, args.a, args.thickness, args.color);
 }
 
+// 2D geometry accepts either winding, as drawPolygon does. Normalize each
+// triangle separately: strips and tessellator batches can alternate winding.
+fn drawTriangleEitherWinding(a: anytype, b: @TypeOf(a), c: @TypeOf(a), color: Color) void {
+    const area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (area > 0) {
+        rl.DrawTriangle(toVector2(a), toVector2(c), toVector2(b), colorToRl(color));
+    } else {
+        rl.DrawTriangle(toVector2(a), toVector2(b), toVector2(c), colorToRl(color));
+    }
+}
+
 /// Draw independent triangles from consecutive point triples.
 pub fn drawTriangles(points: anytype, color: Color) void {
-    if (points.len == 0) return;
-    rl.rlBegin(rl.RL_TRIANGLES);
-    defer rl.rlEnd();
-    rl.rlColor4ub(color.r, color.g, color.b, color.a);
-    for (points) |point| rl.rlVertex2f(point.x, point.y);
+    var i: usize = 0;
+    while (i + 2 < points.len) : (i += 3) {
+        drawTriangleEitherWinding(points[i], points[i + 1], points[i + 2], color);
+    }
 }
 
-/// Draw a triangle fan directly through raylib's point-list primitive.
+/// Draw a triangle fan without retaining or copying the submitted points.
 pub fn drawTriangleFan(points: anytype, color: Color) void {
-    if (points.len < 3 or points.len > std.math.maxInt(c_int)) return;
-    rl.DrawTriangleFan(@ptrCast(points.ptr), @intCast(points.len), colorToRl(color));
+    var i: usize = 1;
+    while (i + 1 < points.len) : (i += 1) {
+        drawTriangleEitherWinding(points[0], points[i], points[i + 1], color);
+    }
 }
 
-/// Draw a triangle strip directly through raylib's point-list primitive.
+/// Draw a triangle strip without retaining or copying the submitted points.
 pub fn drawTriangleStrip(points: anytype, color: Color) void {
-    if (points.len < 3 or points.len > std.math.maxInt(c_int)) return;
-    rl.DrawTriangleStrip(@ptrCast(points.ptr), @intCast(points.len), colorToRl(color));
+    var i: usize = 2;
+    while (i < points.len) : (i += 1) {
+        drawTriangleEitherWinding(points[i - 2], points[i - 1], points[i], color);
+    }
 }
 
 /// Draw a filled circular sector.

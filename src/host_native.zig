@@ -8288,7 +8288,6 @@ fn hostedDrawCircleLinesRaw(args: abi.HostDraw_circle_linesArgs) callconv(.c) vo
 }
 
 fn drawProgrammerError(comptime format: []const u8, values: anytype) void {
-    if (builtin.is_test) return;
     std.debug.panic("roc-ray: " ++ format, values);
 }
 

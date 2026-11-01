@@ -212,6 +212,41 @@ Draw := [].{
 	## callback's own frame down through helpers.
 	Frame :: Host.DrawFrame.{
 
+		## Draw independent triangles. Every consecutive triple is one triangle.
+		## An empty list is a no-op; a non-empty count not divisible by three is a
+		## programmer error. Legal in `render!` only.
+		triangles! : Frame, TrianglePoints => {}
+		triangles! = Draw.triangles!
+
+		## Draw a triangle fan: the first point is the centre and later points form
+		## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_fan! : Frame, TrianglePoints => {}
+		triangle_fan! = Draw.triangle_fan!
+
+		## Draw a triangle strip. Each point after the first two adds one triangle.
+		## Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_strip! : Frame, TrianglePoints => {}
+		triangle_strip! = Draw.triangle_strip!
+
+		## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+		## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+		line_strip! : Frame, LineStrip => {}
+		line_strip! = Draw.line_strip!
+
+		## Draw a filled and/or outlined circular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		circle_sector! : Frame, CircleSector => {}
+		circle_sector! = Draw.circle_sector!
+
+		## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+		ellipse! : Frame, Ellipse => {}
+		ellipse! = Draw.ellipse!
+
+		## Draw a filled and/or outlined annular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		ring! : Frame, Ring => {}
+		ring! = Draw.ring!
+
 		## Clear the active drawing target to a solid color.
 		##
 		## Legal in `render!` only.

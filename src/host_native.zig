@@ -74,6 +74,7 @@ const Color = abi.ColorRgba;
 const AppReadEnvResult = abi.HostApp_read_envResult;
 const TilemapLoadTmxResult = abi.HostTilemap_load_tmxResult;
 const AppConfig = abi.App_config_for_host;
+
 // One cycle of observations handed to update. Unions do not cross this
 // boundary, so the recording state arrives as a flat record that Roc decodes.
 const InputFromHost = abi.Update_for_hostArg1;
@@ -595,7 +596,6 @@ test "allocation identity registry refuses saturation without overwriting live e
     try std.testing.expectEqual(@as(u64, 1), identities.get(0x1000).?.id);
 }
 var active_cursor_focus = CursorFocusState{};
-
 
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
@@ -8314,6 +8314,93 @@ fn hostedDrawCircleLinesRaw(args: abi.HostDraw_circle_linesArgs) callconv(.c) vo
     raylib.drawCircleLines(args);
 }
 
+fn drawProgrammerError(comptime format: []const u8, values: anytype) void {
+    std.debug.panic("roc-ray: " ++ format, values);
+}
+
+fn validatePoints(points: anytype) error{NonFinitePoint}!void {
+    for (points) |point| {
+        if (!std.math.isFinite(point.x) or !std.math.isFinite(point.y)) {
+            return error.NonFinitePoint;
+        }
+    }
+}
+
+fn validateArc(center: anytype, inner_radius: f32, outer_radius: f32, start_angle: f32, end_angle: f32, segments: i32) error{InvalidArc}!void {
+    if (!std.math.isFinite(center.x) or !std.math.isFinite(center.y) or !std.math.isFinite(inner_radius) or !std.math.isFinite(outer_radius) or !std.math.isFinite(start_angle) or !std.math.isFinite(end_angle) or inner_radius < 0 or outer_radius < inner_radius or segments < 3) {
+        return error.InvalidArc;
+    }
+}
+
+test "submitted chart geometry rejects nonfinite points and invalid arcs" {
+    const point = abi.MathVec2{ .x = 0, .y = 0 };
+    try validatePoints(&[_]abi.MathVec2{});
+    try validatePoints(&[_]abi.MathVec2{point});
+    try std.testing.expectError(error.NonFinitePoint, validatePoints(&[_]abi.MathVec2{.{ .x = std.math.nan(f32), .y = 0 }}));
+    try std.testing.expectError(error.NonFinitePoint, validatePoints(&[_]abi.MathVec2{.{ .x = 0, .y = std.math.inf(f32) }}));
+    try validateArc(point, 0, 0, 0, 360, 3);
+    try validateArc(point, 2, 4, -90, 90, 16);
+    try std.testing.expectError(error.InvalidArc, validateArc(point, -1, 4, 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 5, 4, 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, 4, 0, 90, 2));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, std.math.inf(f32), 0, 90, 3));
+    try std.testing.expectError(error.InvalidArc, validateArc(point, 0, 4, std.math.nan(f32), 90, 3));
+}
+
+fn hostedDrawCircleSectorRaw(args: abi.HostDraw_circle_sectorArgs) callconv(.c) void {
+    enforcePhase("Draw.circle_sector!", during_render);
+    const effect = EffectScope.begin("Draw.circle_sector!", 0);
+    defer effect.end();
+    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.circle_sector! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
+    if (active_headless) return;
+    raylib.drawCircleSector(args);
+}
+
+fn hostedDrawCircleSectorLinesRaw(args: abi.HostDraw_circle_sector_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.circle_sector!", during_render);
+    const effect = EffectScope.begin("Draw.circle_sector!", 0);
+    defer effect.end();
+    validateArc(args.center, 0, args.radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.circle_sector! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
+    if (active_headless) return;
+    raylib.drawCircleSectorLines(args);
+}
+
+fn hostedDrawEllipseRaw(args: abi.HostDraw_ellipseArgs) callconv(.c) void {
+    enforcePhase("Draw.ellipse!", during_render);
+    const effect = EffectScope.begin("Draw.ellipse!", 0);
+    defer effect.end();
+    if (!std.math.isFinite(args.center.x) or !std.math.isFinite(args.center.y) or !std.math.isFinite(args.radius_x) or !std.math.isFinite(args.radius_y) or args.radius_x < 0 or args.radius_y < 0) drawProgrammerError("Draw.ellipse! requires finite coordinates and non-negative radii", .{});
+    if (active_headless) return;
+    raylib.drawEllipse(args);
+}
+
+fn hostedDrawEllipseLinesRaw(args: abi.HostDraw_ellipse_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.ellipse!", during_render);
+    const effect = EffectScope.begin("Draw.ellipse!", 0);
+    defer effect.end();
+    if (!std.math.isFinite(args.center.x) or !std.math.isFinite(args.center.y) or !std.math.isFinite(args.radius_x) or !std.math.isFinite(args.radius_y) or args.radius_x < 0 or args.radius_y < 0) drawProgrammerError("Draw.ellipse! requires finite coordinates and non-negative radii", .{});
+    if (active_headless) return;
+    raylib.drawEllipseLines(args);
+}
+
+fn hostedDrawRingRaw(args: abi.HostDraw_ringArgs) callconv(.c) void {
+    enforcePhase("Draw.ring!", during_render);
+    const effect = EffectScope.begin("Draw.ring!", 0);
+    defer effect.end();
+    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.ring! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
+    if (active_headless) return;
+    raylib.drawRing(args);
+}
+
+fn hostedDrawRingLinesRaw(args: abi.HostDraw_ring_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.ring!", during_render);
+    const effect = EffectScope.begin("Draw.ring!", 0);
+    defer effect.end();
+    validateArc(args.center, args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments) catch drawProgrammerError("Draw.ring! requires finite coordinates and angles, non-negative ordered radii, and at least three segments", .{});
+    if (active_headless) return;
+    raylib.drawRingLines(args);
+}
+
 fn hostedDrawClear(color: Color) callconv(.c) void {
     enforcePhase("Draw.clear!", during_render);
     const effect = EffectScope.begin("Draw.clear!", 0);
@@ -8358,6 +8445,21 @@ fn hostedDrawLineRaw(args: abi.HostDraw_lineArgs) callconv(.c) void {
     raylib.drawLine(args);
 }
 
+fn hostedDrawLineStripRaw(host: *RocHost, args: abi.HostDraw_line_stripArgs) callconv(.c) void {
+    enforcePhase("Draw.line_strip!", during_render);
+    var effect = EffectScope.begin("Draw.line_strip!", 0);
+    effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
+    defer effect.end();
+    defer args.decref(host);
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.line_strip! requires finite point coordinates", .{});
+    if (active_headless) return;
+    raylib.drawLineStrip(args.points.items(), args.thickness, args.color);
+}
+
+fn exportedDrawLineStripRaw(args: abi.HostDraw_line_stripArgs) callconv(.c) void {
+    hostedDrawLineStripRaw(activeHost(), args);
+}
+
 fn hostedDrawPolygonRaw(host: *RocHost, args: abi.HostDraw_polygonArgs) callconv(.c) void {
     enforcePhase("Draw.polygon!", during_render);
     const effect = EffectScope.begin("Draw.polygon!", 0);
@@ -8382,6 +8484,52 @@ fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.HostDraw_polygon_linesArg
 
 fn exportedDrawPolygonLinesRaw(args: abi.HostDraw_polygon_linesArgs) callconv(.c) void {
     hostedDrawPolygonLinesRaw(activeHost(), args);
+}
+
+fn hostedDrawTrianglesRaw(host: *RocHost, args: abi.HostDraw_trianglesArgs) callconv(.c) void {
+    enforcePhase("Draw.triangles!", during_render);
+    var effect = EffectScope.begin("Draw.triangles!", 0);
+    effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
+    defer effect.end();
+    defer args.decref(host);
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangles! requires finite point coordinates", .{});
+    if (args.points.len() != 0 and args.points.len() % 3 != 0) drawProgrammerError("Draw.triangles! requires a point count divisible by three", .{});
+    if (active_headless) return;
+    raylib.drawTriangles(args.points.items(), args.color);
+}
+
+fn exportedDrawTrianglesRaw(args: abi.HostDraw_trianglesArgs) callconv(.c) void {
+    hostedDrawTrianglesRaw(activeHost(), args);
+}
+
+fn hostedDrawTriangleFanRaw(host: *RocHost, args: abi.HostDraw_triangle_fanArgs) callconv(.c) void {
+    enforcePhase("Draw.triangle_fan!", during_render);
+    var effect = EffectScope.begin("Draw.triangle_fan!", 0);
+    effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
+    defer effect.end();
+    defer args.decref(host);
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangle_fan! requires finite point coordinates", .{});
+    if (active_headless) return;
+    raylib.drawTriangleFan(args.points.items(), args.color);
+}
+
+fn exportedDrawTriangleFanRaw(args: abi.HostDraw_triangle_fanArgs) callconv(.c) void {
+    hostedDrawTriangleFanRaw(activeHost(), args);
+}
+
+fn hostedDrawTriangleStripRaw(host: *RocHost, args: abi.HostDraw_triangle_stripArgs) callconv(.c) void {
+    enforcePhase("Draw.triangle_strip!", during_render);
+    var effect = EffectScope.begin("Draw.triangle_strip!", 0);
+    effect.setDrawMetrics(@intCast(args.points.len()), drawByteCount(abi.MathVec2, args.points.items().len));
+    defer effect.end();
+    defer args.decref(host);
+    validatePoints(args.points.items()) catch drawProgrammerError("Draw.triangle_strip! requires finite point coordinates", .{});
+    if (active_headless) return;
+    raylib.drawTriangleStrip(args.points.items(), args.color);
+}
+
+fn exportedDrawTriangleStripRaw(args: abi.HostDraw_triangle_stripArgs) callconv(.c) void {
+    hostedDrawTriangleStripRaw(activeHost(), args);
 }
 
 fn hostedDrawRectangleRaw(args: abi.HostDraw_rectangleArgs) callconv(.c) void {
@@ -10689,12 +10837,16 @@ comptime {
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
         @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
+        @export(&hostedDrawCircleSectorLinesRaw, .{ .name = "roc_draw_circle_sector_lines_raw" });
+        @export(&hostedDrawCircleSectorRaw, .{ .name = "roc_draw_circle_sector_raw" });
         @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
         @export(&exportedDrawPreparedTextRaw, .{ .name = "roc_draw_draw_prepared_text_raw" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&exportedDrawTextureInstancesRaw, .{ .name = "roc_draw_draw_texture_instances_raw" });
         @export(&exportedDrawTexturedTriangles3DRaw, .{ .name = "roc_draw_draw_textured_triangles_3d_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
+        @export(&hostedDrawEllipseLinesRaw, .{ .name = "roc_draw_ellipse_lines_raw" });
+        @export(&hostedDrawEllipseRaw, .{ .name = "roc_draw_ellipse_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndCamera3D, .{ .name = "roc_draw_end_camera_3d" });
         @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });
@@ -10706,6 +10858,7 @@ comptime {
         @export(&capsExportedTextStartupDefaultFontRaw, .{ .name = "roc_text_startup_default_font_raw" });
         @export(&hostedDrawFrameSizeRaw, .{ .name = "roc_draw_frame_size" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
+        @export(&exportedDrawLineStripRaw, .{ .name = "roc_draw_line_strip_raw" });
         @export(&exportedTextLoadFontRaw, .{ .name = "roc_text_load_font_raw" });
         @export(&exportedTextLoadStoreFontRaw, .{ .name = "roc_text_load_store_font_raw" });
         @export(&hostedTextureLoadRenderTargetRaw, .{ .name = "roc_texture_load_render_target_raw" });
@@ -10721,9 +10874,14 @@ comptime {
         @export(&hostedDrawRectangleRaw, .{ .name = "roc_draw_rectangle_raw" });
         @export(&hostedDrawRoundedRectangleLinesRaw, .{ .name = "roc_draw_rounded_rectangle_lines_raw" });
         @export(&hostedDrawRoundedRectangleRaw, .{ .name = "roc_draw_rounded_rectangle_raw" });
+        @export(&hostedDrawRingLinesRaw, .{ .name = "roc_draw_ring_lines_raw" });
+        @export(&hostedDrawRingRaw, .{ .name = "roc_draw_ring_raw" });
         @export(&exportedDrawTextRaw, .{ .name = "roc_draw_text_raw" });
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
+        @export(&exportedDrawTriangleFanRaw, .{ .name = "roc_draw_triangle_fan_raw" });
+        @export(&exportedDrawTriangleStripRaw, .{ .name = "roc_draw_triangle_strip_raw" });
+        @export(&exportedDrawTrianglesRaw, .{ .name = "roc_draw_triangles_raw" });
         @export(&exportedArgs, .{ .name = "roc_app_args" });
         @export(&hostedEntropy, .{ .name = "roc_random_entropy" });
         @export(&hostedExit, .{ .name = "roc_app_exit" });

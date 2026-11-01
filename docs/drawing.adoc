@@ -44,6 +44,26 @@ positions. On a high-DPI display one logical unit may cover several physical
 pixels; RocRay scales for you (see xref:input.adoc#input-window[The window]). `frame.size!()` returns
 the size of the surface being drawn to.
 
+=== Tessellated geometry and charts
+
+Submit tessellator output with `frame.triangles!({ points, color })`: every
+three points form an independent triangle. An empty list draws nothing; any
+other count must be divisible by three. `triangle_fan!` and `triangle_strip!`
+accept the same record and draw nothing with fewer than three points. Both
+windings are accepted. The host consumes the points during the call and
+retains no geometry.
+
+`line_strip!({ points, stroke })` draws an open polyline in one host call.
+Fewer than two points or `NoStroke` draws nothing. Curve flattening, dashes,
+stroke joins, and caps remain application or package policy.
+
+Use `circle_sector!`, `ellipse!`, and `ring!` for pie slices, ellipses, and
+annular arcs. Each uses `ShapeStyle`. Coordinates, radii, and angles must be
+finite; radii must be non-negative, a ring's inner radius cannot exceed its
+outer radius, and arc segment counts must be at least three. Angles are in
+degrees. Invalid geometry is a programmer error. These effects are legal only
+in `render!`; charts still own data, scales, layout, and interaction in Roc.
+
 == Colours
 
 A colour is a plain `Color.Rgba` value with 8-bit red, green, blue, and alpha

@@ -212,6 +212,41 @@ Draw := [].{
 	## callback's own frame down through helpers.
 	Frame :: Host.DrawFrame.{
 
+		## Draw independent triangles. Every consecutive triple is one triangle.
+		## An empty list is a no-op; a non-empty count not divisible by three is a
+		## programmer error. Legal in `render!` only.
+		triangles! : Frame, TrianglePoints => {}
+		triangles! = Draw.triangles!
+
+		## Draw a triangle fan: the first point is the centre and later points form
+		## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_fan! : Frame, TrianglePoints => {}
+		triangle_fan! = Draw.triangle_fan!
+
+		## Draw a triangle strip. Each point after the first two adds one triangle.
+		## Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_strip! : Frame, TrianglePoints => {}
+		triangle_strip! = Draw.triangle_strip!
+
+		## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+		## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+		line_strip! : Frame, LineStrip => {}
+		line_strip! = Draw.line_strip!
+
+		## Draw a filled and/or outlined circular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		circle_sector! : Frame, CircleSector => {}
+		circle_sector! = Draw.circle_sector!
+
+		## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+		ellipse! : Frame, Ellipse => {}
+		ellipse! = Draw.ellipse!
+
+		## Draw a filled and/or outlined annular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		ring! : Frame, Ring => {}
+		ring! = Draw.ring!
+
 		## Clear the active drawing target to a solid color.
 		##
 		## Legal in `render!` only.
@@ -532,6 +567,49 @@ Draw := [].{
 	## supported; outlines accept any ordered point path.
 	ConvexPolygon : {
 		points : List(Vector2),
+		style : ShapeStyle,
+	}
+
+	## Positions already assembled into a triangle topology, all drawn in one color.
+	## `points` is not a path: contour, winding, and hole handling belong to the
+	## pure Roc tessellator that produced this list.
+	TrianglePoints : {
+		points : List(Vector2),
+		color : Color.Rgba,
+	}
+
+	## An ordered, open polyline. Each adjacent pair is drawn with `stroke`.
+	LineStrip : {
+		points : List(Vector2),
+		stroke : Stroke,
+	}
+
+	## A circular sector from `start_angle` to `end_angle`, measured in degrees.
+	CircleSector : {
+		center : Vector2,
+		radius : F32,
+		start_angle : F32,
+		end_angle : F32,
+		segments : I32,
+		style : ShapeStyle,
+	}
+
+	## An axis-aligned ellipse with independent horizontal and vertical radii.
+	Ellipse : {
+		center : Vector2,
+		radius_x : F32,
+		radius_y : F32,
+		style : ShapeStyle,
+	}
+
+	## An annular sector from `start_angle` to `end_angle`, measured in degrees.
+	Ring : {
+		center : Vector2,
+		inner_radius : F32,
+		outer_radius : F32,
+		start_angle : F32,
+		end_angle : F32,
+		segments : I32,
 		style : ShapeStyle,
 	}
 
@@ -969,6 +1047,95 @@ Draw := [].{
 		match cfg.style.stroke {
 			NoStroke => {}
 			Stroke(stroke_cfg) => Host.draw_polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw independent triangles. Every consecutive triple is one triangle.
+	## An empty list is a no-op; a non-empty count not divisible by three is a
+	## programmer error. Legal in `render!` only.
+	triangles! : Frame, TrianglePoints => {}
+	triangles! = |_frame, cfg| {
+		if List.is_empty(cfg.points) {
+			{}
+		} else {
+			Host.draw_triangles!(cfg)
+		}
+	}
+
+	## Draw a triangle fan: the first point is the centre and later points form
+	## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_fan! : Frame, TrianglePoints => {}
+	triangle_fan! = |_frame, cfg| {
+		if List.len(cfg.points) < 3 {
+			{}
+		} else {
+			Host.draw_triangle_fan!(cfg)
+		}
+	}
+
+	## Draw a triangle strip. Each point after the first two adds one triangle.
+	## Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_strip! : Frame, TrianglePoints => {}
+	triangle_strip! = |_frame, cfg| {
+		if List.len(cfg.points) < 3 {
+			{}
+		} else {
+			Host.draw_triangle_strip!(cfg)
+		}
+	}
+
+	## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+	## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+	line_strip! : Frame, LineStrip => {}
+	line_strip! = |_frame, cfg|
+		match cfg.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) =>
+				if List.len(cfg.points) < 2 {
+					{}
+				} else {
+					Host.draw_line_strip!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+				}
+		}
+
+	## Draw a filled and/or outlined circular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	circle_sector! : Frame, CircleSector => {}
+	circle_sector! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_circle_sector!({ center: cfg.center, radius: cfg.radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_circle_sector_lines!({ center: cfg.center, radius: cfg.radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+	ellipse! : Frame, Ellipse => {}
+	ellipse! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_ellipse!({ center: cfg.center, radius_x: cfg.radius_x, radius_y: cfg.radius_y, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_ellipse_lines!({ center: cfg.center, radius_x: cfg.radius_x, radius_y: cfg.radius_y, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw a filled and/or outlined annular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	ring! : Frame, Ring => {}
+	ring! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_ring!({ center: cfg.center, inner_radius: cfg.inner_radius, outer_radius: cfg.outer_radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_ring_lines!({ center: cfg.center, inner_radius: cfg.inner_radius, outer_radius: cfg.outer_radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 

@@ -129,8 +129,11 @@ def main() -> int:
 
     failed = False
     for source, expected_diagnostics in CASES:
+        # Check each deliberately invalid root from source with one worker.
+        # A compiler crash during error recovery cannot establish capability
+        # privacy; keep requiring the exact, single rejection below.
         result = subprocess.run(
-            [str(roc), "check", str(source)],
+            [str(roc), "check", "--jobs=1", "--no-cache", str(source)],
             cwd=ROOT,
             capture_output=True,
             text=True,

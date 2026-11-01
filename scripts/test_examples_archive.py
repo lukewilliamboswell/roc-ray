@@ -20,6 +20,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -81,6 +82,12 @@ def extract(archive: Path, destination: Path) -> Path:
         roots = {name.split("/", 1)[0] for name in zipped.namelist()}
         if roots != {archive.stem}:
             raise SystemExit(f"error: {archive.name} must hold one folder named {archive.stem}, found {sorted(roots)}")
+        # roc-automation's runner admits only regular files and directories,
+        # and reads an entry's type from its Unix mode.
+        for entry in zipped.infolist():
+            kind = stat.S_IFMT(entry.external_attr >> 16)
+            if entry.create_system == 3 and kind != (stat.S_IFDIR if entry.is_dir() else stat.S_IFREG):
+                raise SystemExit(f"error: {entry.filename} is not a regular file or directory in {archive.name}")
         zipped.extractall(destination)
     return destination / archive.stem
 

@@ -47,7 +47,7 @@ config = [
 	Environment(
 		"docs",
 		[
-			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-{system}"))]),
+			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.8.0/roc-docs-{system}"))]),
 			Expect(["sh", "realpath"]),
 		],
 	),
@@ -56,12 +56,14 @@ config = [
 	Task("check", [Use("dev"), Run(["scripts/check_all.roc"])]),
 	Task("pins", [Use("scripts"), Run(["scripts/check_no_pins.roc"])]),
 	Task("glue", [Use("dev"), Run(["scripts/check_glue.roc"])]),
-	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--update"])]),
+	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--", "--update"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),
 	# The manual, as the docs workflow builds it, for previewing locally.
 	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--pdf-filename", "roc-ray.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-ray/"])]),
 	# The verified renderer's path, which CI hands to actions/build-docs.
 	Task("docs-renderer", [Use("docs"), Run(["sh", "-c", "realpath \"$(command -v roc-docs)\""])]),
+	# Release host libraries carry no Zig debug allocator; run after a ReleaseFast build.
+	Task("check-release-hosts", [Use("scripts"), Run(["scripts/check_release_hosts.roc"])]),
 	# The tooling compiler, as release notes record it.
 	Task("compiler-version", [Use("scripts"), Run(["roc-stable", "version"])]),
 ]

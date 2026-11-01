@@ -1,0 +1,6 @@
+[#release-0-11-1]
+= RocRay 0.11.1
+
+0.11.1 republishes 0.11.0 with an examples archive that roc-automation's nightly compatibility runner accepts. The platform is unchanged; an app built against 0.11.0 needs no change.
+
+The `roc-ray-examples-0.11.0.zip` attached to 0.11.0 recorded no file type for its entries, only their permissions. The nightly runner reads the type from those bits and refuses any entry that is not a regular file or a directory, so it rejected the whole archive before running an example. `roc-ray-examples-0.11.1.zip` marks every entry as a regular file, and the release workflow's own archive test now refuses one that does not.

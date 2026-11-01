@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -598,7 +599,9 @@ def write_zip_entry(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
     """Add one file with a fixed timestamp so the archive is reproducible."""
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_DEFLATED
-    info.external_attr = 0o644 << 16
+    # A regular file, rw-r--r--: archive checkers such as roc-automation's
+    # reject an entry whose type bits are not S_IFREG.
+    info.external_attr = (stat.S_IFREG | 0o644) << 16
     archive.writestr(info, data)
 
 

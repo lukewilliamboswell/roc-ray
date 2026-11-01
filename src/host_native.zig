@@ -4249,6 +4249,8 @@ var headless_shader_depth: u8 = 0;
 var shader_value_upload_count: usize = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
 var render_texture_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
+/// Scissors below this depth belong to the parent surface, not this target.
+var render_texture_scissor_bases: [SCOPE_STACK_LIMIT]usize = @splat(0);
 /// Dimensions of each open render-target scope, pushed and popped in step with
 /// `render_texture_leases` so entry `n` describes lease `n`.
 ///
@@ -5167,6 +5169,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_shader_depth = 0;
     shader_value_upload_count = 0;
     render_texture_lease_count = 0;
+    render_texture_scissor_bases = @splat(0);
     render_target_sizes = @splat(.{ .height = 0, .width = 0 });
     shader_lease_count = 0;
     blend_scope_count = 0;
@@ -5459,15 +5462,26 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_target = storeRenderTexture(.headless).?;
     const inner_target = storeRenderTexture(.headless).?;
+    const window_clip = abi.HostDraw_begin_scissorArgs{ .x = 1, .y = 2, .width = 30, .height = 40 };
+    const target_clip = abi.HostDraw_begin_scissorArgs{ .x = 3, .y = 4, .width = 10, .height = 20 };
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRawCode(window_clip));
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = outer_target, .height = 90, .width = 160 }));
+    try std.testing.expect(currentSurfaceScissor() == null);
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRawCode(target_clip));
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRawCode(.{ .handle = inner_target, .height = 45, .width = 80 }));
+    try std.testing.expect(currentSurfaceScissor() == null);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_render_texture_depth);
     hostedDrawEndRenderTextureRaw();
+    try std.testing.expectEqual(target_clip.width, currentSurfaceScissor().?.width);
+    hostedDrawEndScissorRaw();
+    try std.testing.expect(currentSurfaceScissor() == null);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), render_texture_heap.active());
     hostedDrawEndRenderTextureRaw();
+    try std.testing.expectEqual(window_clip.width, currentSurfaceScissor().?.width);
+    hostedDrawEndScissorRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
@@ -8056,6 +8070,12 @@ fn drawScopeResult(comptime Result: type, code: u8) Result {
     };
 }
 
+/// The top scissor applies only when it was opened on the current surface.
+fn currentSurfaceScissor() ?abi.HostDraw_begin_scissorArgs {
+    const base = if (render_texture_lease_count == 0) 0 else render_texture_scissor_bases[render_texture_lease_count - 1];
+    return if (scissor_scope_count > base) scissor_scopes[scissor_scope_count - 1] else null;
+}
+
 fn hostedDrawBeginRenderTextureRawCode(args: abi.HostDraw_begin_render_textureArgs) u8 {
     enforcePhase("Draw.with_render_texture!", during_render);
     const effect = EffectScope.begin("Draw.with_render_texture!", 0);
@@ -8070,12 +8090,14 @@ fn hostedDrawBeginRenderTextureRawCode(args: abi.HostDraw_begin_render_textureAr
         releaseResourceBox(host, owner);
         return SCOPE_UNAVAILABLE;
     };
+    if (!headlessMode() and currentSurfaceScissor() != null) raylib.endScissor();
     switch (resource.*) {
         .headless => headless_render_texture_depth +|= 1,
         .native => |target| if (!builtin.is_test) raylib.beginTextureMode(target),
     }
     render_texture_leases[render_texture_lease_count] = owner;
     render_target_sizes[render_texture_lease_count] = .{ .height = args.height, .width = args.width };
+    render_texture_scissor_bases[render_texture_lease_count] = scissor_scope_count;
     render_texture_lease_count += 1;
     return SCOPE_OK;
 }
@@ -8089,8 +8111,10 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     const effect = EffectScope.begin("Draw.with_render_texture!", 0);
     defer effect.end();
     if (render_texture_lease_count == 0) return;
+    std.debug.assert(currentSurfaceScissor() == null);
     if (headlessMode()) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
     render_texture_lease_count -= 1;
+    render_texture_scissor_bases[render_texture_lease_count] = 0;
     const owner = render_texture_leases[render_texture_lease_count].?;
     render_texture_leases[render_texture_lease_count] = null;
     render_target_sizes[render_texture_lease_count] = .{ .height = 0, .width = 0 };
@@ -8098,6 +8122,9 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
         const outer = render_texture_leases[render_texture_lease_count - 1].?;
         if (render_texture_heap.get(outer.*)) |resource| raylib.beginTextureMode(resource.native);
     }
+    if (!headlessMode()) if (currentSurfaceScissor()) |scissor| {
+        raylib.beginScissor(scissor.x, scissor.y, scissor.width, scissor.height);
+    };
     releaseResourceBox(activeHost(), owner);
 }
 
@@ -8225,12 +8252,12 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
     const effect = EffectScope.begin("Draw.with_scissor!", 0);
     defer effect.end();
     if (scissor_scope_count == 0) return;
+    std.debug.assert(currentSurfaceScissor() != null);
     if (!headlessMode()) raylib.endScissor();
     scissor_scope_count -= 1;
-    if (!headlessMode() and scissor_scope_count > 0) {
-        const outer = scissor_scopes[scissor_scope_count - 1];
+    if (!headlessMode()) if (currentSurfaceScissor()) |outer| {
         raylib.beginScissor(outer.x, outer.y, outer.width, outer.height);
-    }
+    };
 }
 
 fn hostedDrawBeginCameraCode(args: abi.HostDraw_begin_cameraArgs) u8 {

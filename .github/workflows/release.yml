@@ -129,7 +129,7 @@ jobs:
             --platform-mode=bundle --skip-windowed --headless-frames=3
           python3 scripts/build_docs.py --check
 
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@7aff4132691ad4fc348abe9df146a57512b49bd6
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@ae089dae16f63f11a754e49c48a9310445e084dd
         with:
           cache: "true"
           cache-workload: scripts

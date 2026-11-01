@@ -18,8 +18,8 @@ import src/Glue
 ## from a Roc checkout instead, for a compiler built from source.
 ##
 ##   scripts/check_glue.roc                    fail when the ABI differs
-##   scripts/check_glue.roc --update           rewrite the committed ABI
-##   scripts/check_glue.roc --roc-repo ../roc  take the glue spec from a checkout
+##   scripts/check_glue.roc -- --update           rewrite the committed ABI
+##   scripts/check_glue.roc -- --roc-repo ../roc  take the glue spec from a checkout
 ##
 ## A difference with no change to `platform/` means the compiler changed the
 ## ABI: review it, regenerate, and release.
@@ -98,7 +98,7 @@ run! = |options, work| {
 			Ok(0) => say!("PASS ${committed} matches what ${version} generates")
 			Ok(_) => {
 				_ = Cmd.new_str("git").args_str(["--no-pager", "diff", "--no-index", committed, generated]).exec_exit_code!()
-				fail!("${committed} differs from what ${version} generates. If this change did not touch platform/, the compiler changed the ABI: review the diff, run scripts/check_glue.roc --update, and release.")
+				fail!("${committed} differs from what ${version} generates. If this change did not touch platform/, the compiler changed the ABI: review the diff, run scripts/check_glue.roc -- --update, and release.")
 			}
 			Err(_) => fail!("could not run git diff")
 		}

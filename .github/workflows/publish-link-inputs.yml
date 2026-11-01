@@ -40,7 +40,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Publish exact PR-produced bytes and adopt their lock
-        uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@7aff4132691ad4fc348abe9df146a57512b49bd6
+        uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@ae089dae16f63f11a754e49c48a9310445e084dd
         with:
           pull-request: ${{ inputs.pull-request }}
           producer-run: ${{ inputs.producer-run }}

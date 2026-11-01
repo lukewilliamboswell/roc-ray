@@ -5,6 +5,7 @@
 #     blueprint run glue         # compare the committed host ABI with what `roc` generates
 #     blueprint run glue-update  # regenerate the committed host ABI
 #     blueprint run test         # build every host, then check, test, build and run every example
+#     blueprint run docs         # render the manual (HTML, PDF, Markdown) into .docs-out/
 #     blueprint shell            # the development environment
 #     blueprint update           # refresh Blueprint.lock
 #
@@ -41,13 +42,26 @@ config = [
 			Tools(["nix#zig_0_17", "nix#python3", "nix#zstd", "nix#curl", "nix#binutils"]),
 		],
 	),
+	# The shared documentation renderer from roc-automation. Blueprint.lock
+	# records each system's digest, and the bytes are checked before every use.
+	Environment(
+		"docs",
+		[
+			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.8.0/roc-docs-{system}"))]),
+			Expect(["sh", "realpath"]),
+		],
+	),
 	Shell("default", [Use("dev")]),
 	# The pin check, the scripts' tests, checks and formatting, and `zig build lint`.
 	Task("check", [Use("dev"), Run(["scripts/check_all.roc"])]),
 	Task("pins", [Use("scripts"), Run(["scripts/check_no_pins.roc"])]),
 	Task("glue", [Use("dev"), Run(["scripts/check_glue.roc"])]),
-	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--update"])]),
+	Task("glue-update", [Use("dev"), Run(["scripts/check_glue.roc", "--", "--update"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),
+	# The manual, as the docs workflow builds it, for previewing locally.
+	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--pdf-filename", "roc-ray.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-ray/"])]),
+	# The verified renderer's path, which CI hands to actions/build-docs.
+	Task("docs-renderer", [Use("docs"), Run(["sh", "-c", "realpath \"$(command -v roc-docs)\""])]),
 	# Release host libraries carry no Zig debug allocator; run after a ReleaseFast build.
 	Task("check-release-hosts", [Use("scripts"), Run(["scripts/check_release_hosts.roc"])]),
 	# The tooling compiler, as release notes record it.

@@ -1112,6 +1112,36 @@ Host := [].{
 	## Polygon-outline parameters.
 	DrawPolygonLines : { points : List(Math.Vec2), color : Color.Rgba, thickness : F32 }
 
+	## Independent-triangle parameters.
+	DrawTriangles : DrawPolygon
+
+	## Triangle-fan parameters.
+	DrawTriangleFan : DrawPolygon
+
+	## Triangle-strip parameters.
+	DrawTriangleStrip : DrawPolygon
+
+	## Open-polyline parameters.
+	DrawLineStrip : DrawPolygonLines
+
+	## Filled circular-sector parameters.
+	DrawCircleSector : { center : Math.Vec2, radius : F32, start_angle : F32, end_angle : F32, segments : I32, color : Color.Rgba }
+
+	## Circular-sector outline parameters.
+	DrawCircleSectorLines : { center : Math.Vec2, radius : F32, start_angle : F32, end_angle : F32, segments : I32, color : Color.Rgba, thickness : F32 }
+
+	## Filled ellipse parameters.
+	DrawEllipse : { center : Math.Vec2, radius_x : F32, radius_y : F32, color : Color.Rgba }
+
+	## Ellipse-outline parameters.
+	DrawEllipseLines : { center : Math.Vec2, radius_x : F32, radius_y : F32, color : Color.Rgba, thickness : F32 }
+
+	## Filled annular-sector parameters.
+	DrawRing : { center : Math.Vec2, inner_radius : F32, outer_radius : F32, start_angle : F32, end_angle : F32, segments : I32, color : Color.Rgba }
+
+	## Annular-sector outline parameters.
+	DrawRingLines : { center : Math.Vec2, inner_radius : F32, outer_radius : F32, start_angle : F32, end_angle : F32, segments : I32, color : Color.Rgba, thickness : F32 }
+
 	## FPS-counter parameters.
 	DrawFps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 
@@ -1238,6 +1268,46 @@ Host := [].{
 	## Draw a polygon outline.
 	## Legal in `render!` only.
 	draw_polygon_lines! : DrawPolygonLines => {}
+
+	## Draw independent triangles.
+	## Legal in `render!` only.
+	draw_triangles! : DrawTriangles => {}
+
+	## Draw a triangle fan.
+	## Legal in `render!` only.
+	draw_triangle_fan! : DrawTriangleFan => {}
+
+	## Draw a triangle strip.
+	## Legal in `render!` only.
+	draw_triangle_strip! : DrawTriangleStrip => {}
+
+	## Draw an open polyline.
+	## Legal in `render!` only.
+	draw_line_strip! : DrawLineStrip => {}
+
+	## Draw a filled circular sector.
+	## Legal in `render!` only.
+	draw_circle_sector! : DrawCircleSector => {}
+
+	## Draw a circular-sector outline.
+	## Legal in `render!` only.
+	draw_circle_sector_lines! : DrawCircleSectorLines => {}
+
+	## Draw a filled ellipse.
+	## Legal in `render!` only.
+	draw_ellipse! : DrawEllipse => {}
+
+	## Draw an ellipse outline.
+	## Legal in `render!` only.
+	draw_ellipse_lines! : DrawEllipseLines => {}
+
+	## Draw a filled annular sector.
+	## Legal in `render!` only.
+	draw_ring! : DrawRing => {}
+
+	## Draw an annular-sector outline.
+	## Legal in `render!` only.
+	draw_ring_lines! : DrawRingLines => {}
 
 	## Draw a filled rectangle.
 	## Legal in `render!` only.

@@ -1,11 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
 :langref: https://github.com/roc-lang/roc/blob/main/docs/langref
 
 [#app-model]
@@ -20,9 +12,9 @@ things up once. `update!` is the only place where the model changes, so you
 always know where to look for a change. `render!` only draws the model, so
 what you see on screen always matches the app's state. Anything slow runs
 outside `update!` and `render!`, so the window never freezes while the app
-waits. <<app-model-why>> explains each of these rules.
+waits. xref:app-model.adoc#app-model-why[Why it is shaped this way] explains each of these rules.
 
-It assumes you have run the smallest app in <<getting-started>>.
+It assumes you have run the smallest app in xref:getting-started.adoc#getting-started[Getting started].
 
 == A complete app
 
@@ -75,19 +67,19 @@ render! = |model, frame| {
 }
 ----
 
-Replace `BUNDLE-URL` as <<smallest-app>> describes. Press
+Replace `BUNDLE-URL` as xref:getting-started.adoc#smallest-app[The smallest app] describes. Press
 Escape or close the window to quit.
 
 The app's header, `app [Model, program]`, gives two things to the platform:
 the type of its state, `Model`, and `program`, a
-{langref}/records.md[record] of its three callbacks. `Msg` is the type of
+https://github.com/roc-lang/roc/blob/main/docs/langref/records.md[record] of its three callbacks. `Msg` is the type of
 the messages its tasks send back; this app starts no tasks, so `Msg` is
-the empty {langref}/tag-unions.md[tag union] `[]`.
+the empty https://github.com/roc-lang/roc/blob/main/docs/langref/tag-unions.md[tag union] `[]`.
 
 A name ending in `!` is an _effectful function_: calling it can do something
 beyond computing a value, such as drawing or opening a window. Its type uses
 `+=>+` where a pure function's uses `+->+`. See
-{langref}/functions.md[Functions] in the Roc language reference.
+https://github.com/roc-lang/roc/blob/main/docs/langref/functions.md[Functions] in the Roc language reference.
 
 == The loop
 
@@ -150,7 +142,7 @@ init! = App.init(
 
 The function returns a `Try`: `Ok(model)` to start the app, or `+Err(...)+` to
 stop it. The `?` after `prepare!()` returns early with the error if preparing
-the text fails; see {langref}/operators.md[Operators].
+the text fails; see https://github.com/roc-lang/roc/blob/main/docs/langref/operators.md[Operators].
 
 The second type argument of `App.Init` lists every error the function may
 return. Here it is `ResourceLimit`, the one error `prepare!` can produce. When
@@ -165,25 +157,25 @@ naming `init!` and the error.
 second, that quits when Escape is pressed. Change it with its `with_*`
 methods. A _method_ is a function called with a dot on a value, like
 `App.default.with_title("Clicker")`; see
-{langref}/static-dispatch.md[Static dispatch].
+https://github.com/roc-lang/roc/blob/main/docs/langref/static-dispatch.md[Static dispatch].
 
 [cols="2,3",options="header"]
 |===
 |Method |Sets
 |`with_title(str)` |The window title
-|`with_size({ width, height })` |The initial window size, in logical units (see <<input-window>>)
+|`with_size({ width, height })` |The initial window size, in logical units (see xref:input.adoc#input-window[The window])
 |`with_min_size({ width, height })` |A minimum size for a resizable window
 |`with_resizable(bool)`, `with_fullscreen(bool)` |Window behaviour
 |`with_visible(bool)` |Whether the window is shown; a hidden window still renders, which is useful for recording to a file
-|`with_frame_pacing(pacing)` |How often cycles run: `VSync`, `Capped(fps)`, or `Uncapped`; see <<input-frame-pacing>>
-|`with_exit_key(key)` |The key that ends the app at once: `ExitKey(key)`, or `NoExitKey` for none (see <<app-model-closing>>)
-|`with_close_request(mode)` |What closing the window does: `Exit` ends the app (the default); `Deliver` reports the request to `update!` instead (see <<app-model-closing>>)
+|`with_frame_pacing(pacing)` |How often cycles run: `VSync`, `Capped(fps)`, or `Uncapped`; see xref:input.adoc#input-frame-pacing[Frame pacing]
+|`with_exit_key(key)` |The key that ends the app at once: `ExitKey(key)`, or `NoExitKey` for none (see xref:app-model.adoc#app-model-closing[Closing the window])
+|`with_close_request(mode)` |What closing the window does: `Exit` ends the app (the default); `Deliver` reports the request to `update!` instead (see xref:app-model.adoc#app-model-closing[Closing the window])
 |`with_cursor_mode(mode)` |The initial cursor mode
-|`with_default_font({ path, size })` |A font file loaded once at startup for the whole app. Reading it needs a file declaration covering the path, such as `Directory("assets", ReadOnly)`; see <<permissions>>
-|`with_output_dir(path)` |Where captures are written; see <<capture>>
-|`with_recording(recording)` |A recording to describe at startup; see <<capture>>
-|`with_app_id(id)` |The app's name for its private storage; see <<files-and-assets>>
-|`with_permission(p)`, `with_permissions(list)` |What the app can access beyond its own resources; see <<permissions>>
+|`with_default_font({ path, size })` |A font file loaded once at startup for the whole app. Reading it needs a file declaration covering the path, such as `Directory("assets", ReadOnly)`; see xref:permissions.adoc#permissions[Permissions: what your app can access]
+|`with_output_dir(path)` |Where captures are written; see xref:capture.adoc#capture[Screenshots and recordings]
+|`with_recording(recording)` |A recording to describe at startup; see xref:capture.adoc#capture[Screenshots and recordings]
+|`with_app_id(id)` |The app's name for its private storage; see xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases]
+|`with_permission(p)`, `with_permissions(list)` |What the app can access beyond its own resources; see xref:permissions.adoc#permissions[Permissions: what your app can access]
 |===
 
 A configuration that depends on the command line uses `App.init_for_args`
@@ -214,7 +206,7 @@ is fixed when the app starts:
 * `io.args!()` returns the command line, with the host's own `+--host-*+`
   switches removed. Keep what you need from it in the model.
 * `io.entropy!()` gets a random number from the operating system to seed a random
-  generator (see <<input-randomness>>).
+  generator (see xref:input.adoc#input-randomness[Randomness]).
 * `io.default_font!()` returns the font configured with `with_default_font`.
 * `io.env().read!(name)` reads a declared environment variable.
 
@@ -233,17 +225,17 @@ update! = |model, input, _io| {
 `update!` receives the current model, one `App.Input`, and the same `App.Io`
 that `init!` had. It returns `Ok` with the next model, or `Err(Exit(code))` to
 stop the app with that exit code. `+{ ..model, pointer: ... }+` is a copy of
-`model` with some fields replaced; see {langref}/records.md[Records].
+`model` with some fields replaced; see https://github.com/roc-lang/roc/blob/main/docs/langref/records.md[Records].
 
 `App.Input` contains everything the host collected for this cycle:
 
 [cols="1,3",options="header"]
 |===
 |Field |Contains
-|`devices` |The keyboard, mouse, text, and gamepad snapshot; see <<input>>
+|`devices` |The keyboard, mouse, text, and gamepad snapshot; see xref:input.adoc#input[Input, time, and the window]
 |`window` |The window's size, focus, whether it is minimized, and whether the user asked to close it
-|`time` |This cycle's timing, including `elapsed_seconds` for animation; see <<input-time>>
-|`messages` |The results of tasks that finished since the last cycle; see <<tasks>>
+|`time` |This cycle's timing, including `elapsed_seconds` for animation; see xref:input.adoc#input-time[Time]
+|`messages` |The results of tasks that finished since the last cycle; see xref:tasks.adoc#tasks[Tasks: operations that wait]
 |`capture` |The status of any recording in progress
 |`dropped`, `dropped_overflow` |Files dropped on the window this cycle
 |===
@@ -253,7 +245,7 @@ print a line, start a recording. Those happen immediately, in the order they
 are written. What `update!` must _not_ do is wait. An effect that can wait,
 such as reading a file, sending a request, or sleeping, is refused in
 `update!`. Run it in a _task_ instead, and its result arrives in a later
-input. <<tasks>> shows how.
+input. xref:tasks.adoc#tasks[Tasks: operations that wait] shows how.
 
 == render!: draw the model
 
@@ -271,7 +263,7 @@ render! = |model, frame| {
 
 `render!` receives the model `update!` just returned and a `Draw.Frame`.
 Everything it draws goes through that frame. It returns `{}`, not a model: it
-cannot change the app's state. <<drawing>> covers what a frame can draw.
+cannot change the app's state. xref:drawing.adoc#drawing[Drawing] covers what a frame can draw.
 
 Because `render!` gets no input, anything that moves on screen must be read
 from the model. An animation keeps its clock in the model, advanced in
@@ -290,7 +282,7 @@ One rule covers almost every case:
 If you break the rule, the app stops at once with a message that names the
 effect you called, the callback you called it from, and where it belongs. For
 example, reading a file from `update!` stops the app and tells you to move the
-read into a task. <<phases>> lists the rule for every kind of effect.
+read into a task. xref:app-model.adoc#phases[Details: which effects are legal where] lists the rule for every kind of effect.
 
 [#app-model-closing]
 == Closing the window
@@ -335,14 +327,14 @@ update! = |model, input, _io| {
 ----
 
 Here `model.saves` is a writable directory handle opened in `init!` (see
-<<files-and-assets>>), and `encode_save` is the app's own pure function that
-turns the model into text. <<tasks>> explains `Task.spawn!`. An app that must
+xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases]), and `encode_save` is the app's own pure function that
+turns the model into text. xref:tasks.adoc#tasks[Tasks: operations that wait] explains `Task.spawn!`. An app that must
 not lose a save can show an error and keep running on `Saved(Err(_))`
 instead of exiting.
 
 The exit key is not a close request. It ends the app directly, with or
 without `Deliver`, and so does a press of it scripted in a test (see
-<<testing>>). With `App.default`, Escape still quits without saving. An app
+xref:testing.adoc#testing[Testing your app]). With `App.default`, Escape still quits without saving. An app
 that must save on every way out also sets `with_exit_key(NoExitKey)` and
 handles the key it wants in `update!`.
 
@@ -367,7 +359,7 @@ one to the model in turn, usually with `List.fold` and a pure helper:
 Ok(List.fold(input.messages, model, apply_message))
 ----
 
-<<tasks>> explains where messages come from and shows `apply_message` in full.
+xref:tasks.adoc#tasks[Tasks: operations that wait] explains where messages come from and shows `apply_message` in full.
 
 == Keep the decisions pure
 
@@ -375,7 +367,7 @@ Ok(List.fold(input.messages, model, apply_message))
 makes in pure functions that take the model and input: which message changes
 what, whether to quit, and which tasks to start. Then let `update!` carry out
 what they decide. Those functions are ordinary Roc and can be tested with `expect`.
-<<testing>> shows how to build inputs and resources for such tests.
+xref:testing.adoc#testing[Testing your app] shows how to build inputs and resources for such tests.
 
 [#app-model-why]
 == Why it is shaped this way
@@ -430,7 +422,7 @@ read first, do it in `init!`, which is allowed to wait.
 
 This section is a reference; the one-line rule above covers most apps.
 The host checks every effect against the current callback so that the rules
-in <<app-model-why>> always hold: nothing waits in `update!` or `render!`,
+in xref:app-model.adoc#app-model-why[Why it is shaped this way] always hold: nothing waits in `update!` or `render!`,
 and `render!` only draws.
 
 The host always knows which callback it is inside: `init!`, `update!`,
@@ -448,7 +440,7 @@ phases it is legal in, in its API documentation, using one of a few rules:
 |Ends the app with `io.exit!(code)` |`init!`, `update!`, and tasks
 |Reads a startup fact (`io.args!`, `io.entropy!`, `io.default_font!`, `io.env().read!`) |`init!` only
 |Reads a value the host already has, in constant time: `Window.scale!`, `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, `Music.time_played!` |Every callback, `render!` included
-|Diagnostic annotations for <<observatory>> |Every callback and tasks
+|Diagnostic annotations for xref:observatory.adoc#observatory[Measuring performance with Observatory] |Every callback and tasks
 |===
 
 `render!` is deliberately narrow. It must draw exactly the model `update!`
@@ -464,7 +456,7 @@ a task. The app ends after the current cycle finishes.
 
 == Further reading
 
-* <<architecture>> states these rules precisely and explains why RocRay chose
+* xref:architecture.adoc#architecture[Architecture] states these rules precisely and explains why RocRay chose
   them.
-* The `App` page of the {api}[API reference] documents every configuration
+* The `App` page of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference] documents every configuration
   method and `App.Input` field.

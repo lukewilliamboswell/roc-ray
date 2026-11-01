@@ -9,16 +9,9 @@
 :toclevels: 3
 :sectnums:
 :sectanchors:
-:!icons:
-:source-highlighter: rouge
-:imagesdir: images
-// Links into the repository. The manual is published away from the source
-// tree, so a relative link to an example or script would not resolve.
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
+// The chapters link into the repository with absolute URLs: the manual is
+// published away from the source tree, and the renderer builds each chapter
+// as its own page, where an attribute set here would not reach.
 
 [.lead]
 Make 2D games, visual tools, and other interactive programs in Roc. You write
@@ -31,13 +24,12 @@ compiler to a small finished game, and then through each feature as your own
 app needs it.
 
 ifdef::backend-html5[]
-{api}[Browse the API reference] ·
+link:api/index.html[Browse the API reference] ·
 link:roc-ray.pdf[Download this manual as a PDF].
 endif::[]
 
-[discrete]
-== Choose a path
-
+.Choose a path
+****
 New to RocRay:: Follow these in order.
 +
 . <<overview>>: what RocRay is for, and how an app is put together.
@@ -65,8 +57,7 @@ guides introduce one at a time, and explains why RocRay chose them.
 Contributing to RocRay:: Start with <<contributing>>. <<host-development>>
 covers changes to the native host, and <<maintaining>> covers dependencies,
 bundles, and releases.
-
-= Start here
+****
 
 include::overview.adoc[leveloffset=+1]
 
@@ -77,8 +68,6 @@ include::roc-primer.adoc[leveloffset=+1]
 include::first-game.adoc[leveloffset=+1]
 
 include::examples.adoc[leveloffset=+1]
-
-= Guides
 
 include::app-model.adoc[leveloffset=+1]
 
@@ -106,8 +95,6 @@ include::observatory.adoc[leveloffset=+1]
 
 include::shipping.adoc[leveloffset=+1]
 
-= Reference
-
 include::reference.adoc[leveloffset=+1]
 
 include::glossary.adoc[leveloffset=+1]
@@ -116,14 +103,10 @@ include::coming-from-raylib.adoc[leveloffset=+1]
 
 include::architecture.adoc[leveloffset=+1]
 
-= Contributing
-
 include::contributing.adoc[leveloffset=+1]
 
 include::host-development.adoc[leveloffset=+1]
 
 include::maintaining.adoc[leveloffset=+1]
 
-= Release notes
-
-include::releases/index.adoc[leveloffset=+1]
+include::releases.adoc[leveloffset=+1]

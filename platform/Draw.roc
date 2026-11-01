@@ -211,6 +211,212 @@ Draw := [].{
 	## frame epoch, so do not retain a `Frame` in the model: pass the
 	## callback's own frame down through helpers.
 	Frame :: Host.DrawFrame.{
+
+		## Draw independent triangles. Every consecutive triple is one triangle.
+		## An empty list is a no-op; a non-empty count not divisible by three is a
+		## programmer error. Legal in `render!` only.
+		triangles! : Frame, TrianglePoints => {}
+		triangles! = Draw.triangles!
+
+		## Draw a triangle fan: the first point is the centre and later points form
+		## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_fan! : Frame, TrianglePoints => {}
+		triangle_fan! = Draw.triangle_fan!
+
+		## Draw a triangle strip. Each point after the first two adds one triangle.
+		## Fewer than three points are a no-op. Legal in `render!` only.
+		triangle_strip! : Frame, TrianglePoints => {}
+		triangle_strip! = Draw.triangle_strip!
+
+		## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+		## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+		line_strip! : Frame, LineStrip => {}
+		line_strip! = Draw.line_strip!
+
+		## Draw a filled and/or outlined circular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		circle_sector! : Frame, CircleSector => {}
+		circle_sector! = Draw.circle_sector!
+
+		## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+		ellipse! : Frame, Ellipse => {}
+		ellipse! = Draw.ellipse!
+
+		## Draw a filled and/or outlined annular sector. Angles are degrees and
+		## `segments` must be at least three. Legal in `render!` only.
+		ring! : Frame, Ring => {}
+		ring! = Draw.ring!
+
+		## Clear the active drawing target to a solid color.
+		##
+		## Legal in `render!` only.
+		clear! : Frame, Color.Rgba => {}
+		clear! = Draw.clear!
+
+		## Draw a vertical rectangle gradient.
+		##
+		## Legal in `render!` only.
+		rectangle_gradient_v! : Frame, RectangleGradientV => {}
+		rectangle_gradient_v! = Draw.rectangle_gradient_v!
+
+		## Draw a horizontal rectangle gradient.
+		##
+		## Legal in `render!` only.
+		rectangle_gradient_h! : Frame, RectangleGradientH => {}
+		rectangle_gradient_h! = Draw.rectangle_gradient_h!
+
+		## Draw a radial circle gradient.
+		##
+		## Legal in `render!` only.
+		circle_gradient! : Frame, CircleGradient => {}
+		circle_gradient! = Draw.circle_gradient!
+
+		## Draw raylib's current frames-per-second counter.
+		##
+		## Legal in `render!` only.
+		fps! : Frame, Fps => {}
+		fps! = Draw.fps!
+
+		## Draw a filled and/or outlined axis-aligned rectangle.
+		##
+		## Legal in `render!` only.
+		rectangle! : Frame, Rectangle => {}
+		rectangle! = Draw.rectangle!
+
+		## Draw a filled and/or outlined rounded rectangle.
+		##
+		## Legal in `render!` only.
+		rounded_rectangle! : Frame, RoundedRectangle => {}
+		rounded_rectangle! = Draw.rounded_rectangle!
+
+		## Draw a filled and/or outlined circle.
+		##
+		## Legal in `render!` only.
+		circle! : Frame, Circle => {}
+		circle! = Draw.circle!
+
+		## Draw a stroked line segment. `NoStroke` performs no drawing.
+		##
+		## Legal in `render!` only.
+		line! : Frame, Line => {}
+		line! = Draw.line!
+
+		## Draw a filled and/or outlined triangle.
+		##
+		## Legal in `render!` only.
+		triangle! : Frame, Triangle => {}
+		triangle! = Draw.triangle!
+
+		## Draw a convex filled polygon and/or an ordered polygon outline. The host
+		## triangulates the fill without allocating; fewer than three points do not
+		## fill.
+		##
+		## Legal in `render!` only.
+		convex_polygon! : Frame, ConvexPolygon => {}
+		convex_polygon! = Draw.convex_polygon!
+
+		## Draw a texture with explicit source, destination, origin, rotation, and
+		## tint.
+		##
+		## Legal in `render!` only.
+		texture! : Frame, TextureDraw => {}
+		texture! = Draw.texture!
+
+		## Draw one borrowed indexed batch of perspective-correct textured triangles.
+		## The vertex and index list lengths explicitly bound all work in this call;
+		## the host consumes both synchronously and retains no geometry. The index
+		## count must be a multiple of three and every index must name a vertex.
+		## Violating either condition is a programmer error.
+		##
+		## Legal in `render!` only. Normally called inside `with_camera_3d!`.
+		textured_triangles_3d! : Frame, TexturedTriangles3D => {}
+		textured_triangles_3d! = Draw.textured_triangles_3d!
+
+		## Draw many instances of one texture, in list order, with a single hosted
+		## call.
+		##
+		## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
+		## is what caps how many sprites a frame can afford. This crosses once for the
+		## whole batch and lets the host loop over it, so the cost per instance is the
+		## `DrawTexturePro` call alone. Build the list from application state and pass
+		## it straight through; an empty list does not cross at all.
+		##
+		## Legal in `render!` only.
+		texture_instances! : Frame, Texture, List(TextureInstance) => {}
+		texture_instances! = Draw.texture_instances!
+
+		## Project a texture onto a validated planar quad with exact homogeneous UV
+		## interpolation. This remains one hosted call and preserves active shaders.
+		##
+		## Legal in `render!` only.
+		projective_texture! : Frame, ProjectiveTexture => {}
+		projective_texture! = Draw.projective_texture!
+
+		## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
+		## Callback errors are returned only after the native target has been
+		## restored.
+		##
+		## Legal in `render!` only.
+		with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+		with_render_texture! = Draw.with_render_texture!
+
+		## Scope shader application and upload its complete uniform record before the
+		## callback draws. Callback errors are returned only after the previous
+		## shader and all of its uniform values have been restored.
+		##
+		## Legal in `render!` only.
+		with_shader! : Frame, Shader(uniforms), (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+		with_shader! = Draw.with_shader!
+
+		## Scope one of raylib's built-in blend equations. Custom blend factors are
+		## deliberately excluded until they can be represented without global state.
+		##
+		## Legal in `render!` only.
+		with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_blend_mode! = Draw.with_blend_mode!
+
+		## Draw the callback in world space using this camera.
+		##
+		## Legal in `render!` only.
+		with_camera! : Frame, Camera2D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_camera! = Draw.with_camera!
+
+		## Draw the callback in 3D world space using a perspective camera. Depth
+		## testing and depth writes are active until the callback returns.
+		##
+		## Legal in `render!` only.
+		with_camera_3d! : Frame, Camera3D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_camera_3d! = Draw.with_camera_3d!
+
+		## Restrict callback drawing to screen-space `bounds`, and close the scissor
+		## however the callback ends, error included.
+		##
+		## `bounds` is in the same logical coordinates as every other drawing call,
+		## so it is a rectangle on the surface rather than in framebuffer pixels.
+		##
+		## Legal in `render!` only.
+		with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+		with_scissor! = Draw.with_scissor!
+
+		## Draw text using an explicit font, spacing, color, and resolved top-left
+		## origin. This performs no measurement or alignment pass.
+		##
+		## Legal in `render!` only.
+		text! : Frame, Text => {}
+		text! = Draw.text!
+
+		## Draw top-left aligned text with the built-in font and default spacing.
+		##
+		## Legal in `render!` only.
+		debug_text! : Frame, DebugText => {}
+		debug_text! = Draw.debug_text!
+
+		## Draw simple top-left aligned text with the built-in font.
+		##
+		## Legal in `render!` only.
+		text_at! : Frame, SimpleText => {}
+		text_at! = Draw.text_at!
+
 		from_host : Host.DrawFrame -> Frame
 		from_host = |frame| Frame.(frame)
 
@@ -361,6 +567,49 @@ Draw := [].{
 	## supported; outlines accept any ordered point path.
 	ConvexPolygon : {
 		points : List(Vector2),
+		style : ShapeStyle,
+	}
+
+	## Positions already assembled into a triangle topology, all drawn in one color.
+	## `points` is not a path: contour, winding, and hole handling belong to the
+	## pure Roc tessellator that produced this list.
+	TrianglePoints : {
+		points : List(Vector2),
+		color : Color.Rgba,
+	}
+
+	## An ordered, open polyline. Each adjacent pair is drawn with `stroke`.
+	LineStrip : {
+		points : List(Vector2),
+		stroke : Stroke,
+	}
+
+	## A circular sector from `start_angle` to `end_angle`, measured in degrees.
+	CircleSector : {
+		center : Vector2,
+		radius : F32,
+		start_angle : F32,
+		end_angle : F32,
+		segments : I32,
+		style : ShapeStyle,
+	}
+
+	## An axis-aligned ellipse with independent horizontal and vertical radii.
+	Ellipse : {
+		center : Vector2,
+		radius_x : F32,
+		radius_y : F32,
+		style : ShapeStyle,
+	}
+
+	## An annular sector from `start_angle` to `end_angle`, measured in degrees.
+	Ring : {
+		center : Vector2,
+		inner_radius : F32,
+		outer_radius : F32,
+		start_angle : F32,
+		end_angle : F32,
+		segments : I32,
 		style : ShapeStyle,
 	}
 
@@ -798,6 +1047,95 @@ Draw := [].{
 		match cfg.style.stroke {
 			NoStroke => {}
 			Stroke(stroke_cfg) => Host.draw_polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw independent triangles. Every consecutive triple is one triangle.
+	## An empty list is a no-op; a non-empty count not divisible by three is a
+	## programmer error. Legal in `render!` only.
+	triangles! : Frame, TrianglePoints => {}
+	triangles! = |_frame, cfg| {
+		if List.is_empty(cfg.points) {
+			{}
+		} else {
+			Host.draw_triangles!(cfg)
+		}
+	}
+
+	## Draw a triangle fan: the first point is the centre and later points form
+	## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_fan! : Frame, TrianglePoints => {}
+	triangle_fan! = |_frame, cfg| {
+		if List.len(cfg.points) < 3 {
+			{}
+		} else {
+			Host.draw_triangle_fan!(cfg)
+		}
+	}
+
+	## Draw a triangle strip. Each point after the first two adds one triangle.
+	## Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_strip! : Frame, TrianglePoints => {}
+	triangle_strip! = |_frame, cfg| {
+		if List.len(cfg.points) < 3 {
+			{}
+		} else {
+			Host.draw_triangle_strip!(cfg)
+		}
+	}
+
+	## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+	## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+	line_strip! : Frame, LineStrip => {}
+	line_strip! = |_frame, cfg|
+		match cfg.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) =>
+				if List.len(cfg.points) < 2 {
+					{}
+				} else {
+					Host.draw_line_strip!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+				}
+		}
+
+	## Draw a filled and/or outlined circular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	circle_sector! : Frame, CircleSector => {}
+	circle_sector! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_circle_sector!({ center: cfg.center, radius: cfg.radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_circle_sector_lines!({ center: cfg.center, radius: cfg.radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+	ellipse! : Frame, Ellipse => {}
+	ellipse! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_ellipse!({ center: cfg.center, radius_x: cfg.radius_x, radius_y: cfg.radius_y, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_ellipse_lines!({ center: cfg.center, radius_x: cfg.radius_x, radius_y: cfg.radius_y, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+		}
+	}
+
+	## Draw a filled and/or outlined annular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	ring! : Frame, Ring => {}
+	ring! = |_frame, cfg| {
+		match cfg.style.fill {
+			NoFill => {}
+			Fill(color) => Host.draw_ring!({ center: cfg.center, inner_radius: cfg.inner_radius, outer_radius: cfg.outer_radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color })
+		}
+		match cfg.style.stroke {
+			NoStroke => {}
+			Stroke(stroke_cfg) => Host.draw_ring_lines!({ center: cfg.center, inner_radius: cfg.inner_radius, outer_radius: cfg.outer_radius, start_angle: cfg.start_angle, end_angle: cfg.end_angle, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 

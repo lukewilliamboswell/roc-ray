@@ -2040,6 +2040,15 @@ pub fn drawLine(args: anytype) void {
     drawSegment(args.start, args.end, args.thickness, args.color);
 }
 
+/// Draw an open polyline with the platform's thick-line semantics.
+pub fn drawLineStrip(points: anytype, thickness: f32, color: Color) void {
+    if (points.len < 2) return;
+    const thick = positiveThickness(thickness) orelse return;
+    for (points[0 .. points.len - 1], points[1..]) |start, end| {
+        drawSegment(start, end, thick, color);
+    }
+}
+
 /// Draw a triangle from abi args.
 pub fn drawTriangle(args: anytype) void {
     rl.DrawTriangle(toVector2(args.a), toVector2(args.b), toVector2(args.c), colorToRl(args.color));
@@ -2050,6 +2059,105 @@ pub fn drawTriangleLines(args: anytype) void {
     drawSegment(args.a, args.b, args.thickness, args.color);
     drawSegment(args.b, args.c, args.thickness, args.color);
     drawSegment(args.c, args.a, args.thickness, args.color);
+}
+
+// 2D geometry accepts either winding, as drawPolygon does. Normalize each
+// triangle separately: strips and tessellator batches can alternate winding.
+fn drawTriangleEitherWinding(a: anytype, b: @TypeOf(a), c: @TypeOf(a), color: Color) void {
+    const area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (area > 0) {
+        rl.DrawTriangle(toVector2(a), toVector2(c), toVector2(b), colorToRl(color));
+    } else {
+        rl.DrawTriangle(toVector2(a), toVector2(b), toVector2(c), colorToRl(color));
+    }
+}
+
+/// Draw independent triangles from consecutive point triples.
+pub fn drawTriangles(points: anytype, color: Color) void {
+    var i: usize = 0;
+    while (i + 2 < points.len) : (i += 3) {
+        drawTriangleEitherWinding(points[i], points[i + 1], points[i + 2], color);
+    }
+}
+
+/// Draw a triangle fan without retaining or copying the submitted points.
+pub fn drawTriangleFan(points: anytype, color: Color) void {
+    var i: usize = 1;
+    while (i + 1 < points.len) : (i += 1) {
+        drawTriangleEitherWinding(points[0], points[i], points[i + 1], color);
+    }
+}
+
+/// Draw a triangle strip without retaining or copying the submitted points.
+pub fn drawTriangleStrip(points: anytype, color: Color) void {
+    var i: usize = 2;
+    while (i < points.len) : (i += 1) {
+        drawTriangleEitherWinding(points[i - 2], points[i - 1], points[i], color);
+    }
+}
+
+/// Draw a filled circular sector.
+pub fn drawCircleSector(args: anytype) void {
+    rl.DrawCircleSector(toVector2(args.center), args.radius, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+}
+
+/// Draw a circular-sector outline, preserving RocRay's stroke thickness.
+pub fn drawCircleSectorLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    const half = thick * 0.5;
+    const inner = @max(0, args.radius - half);
+    const outer = args.radius + half;
+    rl.DrawRing(toVector2(args.center), inner, outer, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+    const degrees_to_radians: f32 = std.math.pi / 180.0;
+    const start = args.start_angle * degrees_to_radians;
+    const end = args.end_angle * degrees_to_radians;
+    drawSegment(args.center, .{ .x = args.center.x + args.radius * @cos(start), .y = args.center.y + args.radius * @sin(start) }, thick, args.color);
+    drawSegment(args.center, .{ .x = args.center.x + args.radius * @cos(end), .y = args.center.y + args.radius * @sin(end) }, thick, args.color);
+}
+
+/// Draw a filled ellipse.
+pub fn drawEllipse(args: anytype) void {
+    rl.DrawEllipseV(toVector2(args.center), args.radius_x, args.radius_y, colorToRl(args.color));
+}
+
+/// Draw an ellipse outline as a thick 64-segment polyline.
+pub fn drawEllipseLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    const segments: usize = 64;
+    const step: f32 = 2.0 * std.math.pi / @as(f32, @floatFromInt(segments));
+    var previous = rl.Vector2{ .x = args.center.x + args.radius_x, .y = args.center.y };
+    var i: usize = 1;
+    while (i <= segments) : (i += 1) {
+        const angle: f32 = @as(f32, @floatFromInt(i)) * step;
+        const next = rl.Vector2{ .x = args.center.x + args.radius_x * @cos(angle), .y = args.center.y + args.radius_y * @sin(angle) };
+        rl.DrawLineEx(previous, next, thick, colorToRl(args.color));
+        previous = next;
+    }
+}
+
+/// Draw a filled annular sector.
+pub fn drawRing(args: anytype) void {
+    rl.DrawRing(toVector2(args.center), args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+}
+
+/// Draw an annular-sector outline. Raylib supplies the topology; its outline
+/// call has no thickness parameter, so thick strokes use the existing segment
+/// primitive for the two radial edges and raylib's thin arcs otherwise.
+pub fn drawRingLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    if (thick <= 1) {
+        rl.DrawRingLines(toVector2(args.center), args.inner_radius, args.outer_radius, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+        return;
+    }
+    const half = thick * 0.5;
+    rl.DrawRing(toVector2(args.center), @max(0, args.inner_radius - half), args.inner_radius + half, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+    rl.DrawRing(toVector2(args.center), @max(0, args.outer_radius - half), args.outer_radius + half, args.start_angle, args.end_angle, args.segments, colorToRl(args.color));
+    const degrees_to_radians: f32 = std.math.pi / 180.0;
+    for ([_]f32{ args.start_angle, args.end_angle }) |degrees| {
+        const angle = degrees * degrees_to_radians;
+        const direction = rl.Vector2{ .x = @cos(angle), .y = @sin(angle) };
+        drawSegment(.{ .x = args.center.x + args.inner_radius * direction.x, .y = args.center.y + args.inner_radius * direction.y }, .{ .x = args.center.x + args.outer_radius * direction.x, .y = args.center.y + args.outer_radius * direction.y }, thick, args.color);
+    }
 }
 
 fn polygonSignedArea(points: anytype) f32 {

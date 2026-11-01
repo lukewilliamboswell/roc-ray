@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#first-game]
 = Your first game
 
@@ -18,8 +9,8 @@ program to run and play with.
 Along the way you meet the ideas every RocRay game uses: moving things by
 time, keeping them on screen, collision, drawing text, sound, and restarting.
 
-Before you start, run the smallest app from <<smallest-app>>, and read
-<<roc-primer>> if Roc is new to you.
+Before you start, run the smallest app from xref:getting-started.adoc#smallest-app[The smallest app], and read
+xref:roc-primer.adoc#roc-primer[Roc for RocRay] if Roc is new to you.
 
 == How to follow along
 
@@ -34,7 +25,7 @@ app [Model, program] { rr: platform "BUNDLE-URL" }
 The listings below start after that line. Paste one in below your header, save
 the file, and run `roc main.roc`. Press Escape to quit.
 
-The complete files are in the repository's {tree}/docs/tutorial[`docs/tutorial`]
+The complete files are in the repository's https://github.com/lukewilliamboswell/roc-ray/tree/main/docs/tutorial[`docs/tutorial`]
 directory, as `step1.roc` to `step6.roc`. Their headers point at the
 repository's own copy of the platform rather than at a release.
 
@@ -88,7 +79,7 @@ is a small fraction of a second, but when the computer is briefly busy with
 something else, or you drag the window, one cycle can report half a second or
 more. A game that moves by that much in one step makes things jump: a fast ball can pass straight through the
 paddle without ever touching it. With the clamp, the game slows down briefly
-instead. <<input-frame-timing>> shows a fixed-step alternative for games that
+instead. xref:input.adoc#input-frame-timing[Uneven cycle times] shows a fixed-step alternative for games that
 must advance exactly the same way every time.
 
 [#first-game-step3]
@@ -163,7 +154,7 @@ happens, the app stops at startup and prints which one.
 with `play!`, which starts the sound and returns at once. Playing a sound is
 an _effect_: a call into the host. `update!` may call an effect that returns
 at once, like this one. An effect that has to wait, such as reading a file,
-belongs in a _task_ instead; <<tasks>> explains why.
+belongs in a _task_ instead; xref:tasks.adoc#tasks[Tasks: operations that wait] explains why.
 
 [#first-game-step6]
 == Step 6: lives, game over, and tests
@@ -180,7 +171,7 @@ the model to its starting state but keeps the sounds.
 
 `key_pressed(KeySpace)` is true only on the host cycle when Space went down,
 while `key_down` stays true for as long as a key is held. Use `key_pressed`
-for actions that happen once per press. <<input>> covers the keyboard and
+for actions that happen once per press. xref:input.adoc#input[Input, time, and the window] covers the keyboard and
 mouse in full.
 
 `update!` only calls `advance` while at least one life is left, so
@@ -208,20 +199,20 @@ roc build main.roc --output=paddle
 ./paddle --host-headless --host-headless-frames=60
 ----
 
-The repository checks every step of this chapter this way. <<testing>>
+The repository checks every step of this chapter this way. xref:testing.adoc#testing[Testing your app]
 covers headless runs and scripted key presses.
 
 == Where to go next
 
 Some ideas for changing Paddle:
 
-* Make the ball start in a random direction. <<input-randomness>> shows how
+* Make the ball start in a random direction. xref:input.adoc#input-randomness[Randomness] shows how
   to use randomness.
 * Add a row of bricks for the ball to break. The
-  {src}/examples/breakout/main.roc[Breakout] example does this.
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[Breakout] example does this.
 * Draw the paddle with rounded corners using `frame.rounded_rectangle!`. See
-  <<drawing>>.
+  xref:drawing.adoc#drawing[Drawing].
 
-Then read <<app-model>>, which explains `init!`, `update!` and `render!` in
-full, and the {src}/examples/pong/main.roc[Pong] example, a larger game built
+Then read xref:app-model.adoc#app-model[The app model: init!, update!, and render!], which explains `init!`, `update!` and `render!` in
+full, and the https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/pong/main.roc[Pong] example, a larger game built
 the same way.

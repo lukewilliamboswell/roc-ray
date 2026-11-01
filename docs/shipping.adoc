@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#shipping]
 = Ship your game
 
@@ -14,7 +5,7 @@ This chapter shows how to package an app so you can give it to other people:
 one executable and its assets, in a zip file, for each system you support. It covers
 building the executable, where the app finds its assets and keeps its saves,
 and what the person you send it to may need to do. It assumes
-<<files-and-assets>>.
+xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases].
 
 == Build a release executable
 
@@ -39,7 +30,7 @@ system already has:
 * the system's C library;
 * on Linux, the X11 client libraries (or the Wayland libraries, with the
   Wayland bundle), an OpenGL 3.3 driver, and PulseAudio, PipeWire, or ALSA
-  for sound, all loaded when the app starts (see <<system-requirements>>);
+  for sound, all loaded when the app starts (see xref:getting-started.adoc#system-requirements[What your computer needs]);
 * on macOS and Windows, the system's own graphics and audio frameworks.
 
 == Where the assets go
@@ -62,7 +53,7 @@ directory, and a desktop shortcut all find the same `assets`.
 While you develop, the assets are in your source directory, and `roc main.roc`
 builds the executable in the compiler's cache, so there is nothing beside it.
 There the app opens the source directory by path instead, which needs a
-`Directory("assets", ReadOnly)` declaration, as in <<drawing-first-sprite>>.
+`Directory("assets", ReadOnly)` declaration, as in xref:drawing.adoc#drawing-first-sprite[Load your first sprite].
 
 === One `init!` for both
 
@@ -214,8 +205,8 @@ rocket-1.0-windows-x64.zip
 ----
 
 The executable contains code under other licences. Put their notices in
-`LICENSES/`: RocRay's {src}/LICENSE[licence] and libvpx's
-{src}/vendor/libvpx/LICENSE[licence] ask to be included with a binary copy.
+`LICENSES/`: RocRay's https://github.com/lukewilliamboswell/roc-ray/blob/main/LICENSE[licence] and libvpx's
+https://github.com/lukewilliamboswell/roc-ray/blob/main/vendor/libvpx/LICENSE[licence] ask to be included with a binary copy.
 raylib, SQLite, and msf_gif ask for nothing in a binary.
 
 == What the recipient sees
@@ -248,6 +239,6 @@ Linux::
 
 == Further reading
 
-* <<files-and-assets>> for directory handles and asset stores.
-* <<permissions>> for what the `--dev` declaration permits.
-* <<reference>> for the supported targets and bundles.
+* xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases] for directory handles and asset stores.
+* xref:permissions.adoc#permissions[Permissions: what your app can access] for what the `--dev` declaration permits.
+* xref:reference.adoc#reference[Reference] for the supported targets and bundles.

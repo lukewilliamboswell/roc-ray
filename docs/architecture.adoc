@@ -16,7 +16,7 @@ that should govern both the current implementation and future features.
 
 It is not an API reference, implementation tour, test inventory, or delivery
 plan. Those change as the project develops. Public module documentation
-describes the current API, <<contributing>> describes the
+describes the current API, xref:contributing.adoc#contributing[Contributing to RocRay] describes the
 current implementation workflow, and the
 https://github.com/lukewilliamboswell/roc-ray/issues[GitHub issues] describe
 candidate work and delivery order.
@@ -55,7 +55,7 @@ renders immediately to a frame.
 
 The vocabulary deliberately follows established meanings:
 
-[cols=",",options="header",]
+[cols="1,1",options="header"]
 |===
 |RocRay term |Meaning
 |`Model` |Application-owned state retained between host cycles
@@ -81,7 +81,7 @@ future concepts as well as the rationale for the current names.
 
 Several words have precise meanings throughout this document:
 
-[cols=",",options="header",]
+[cols="1,1",options="header"]
 |===
 |Word |Meaning here
 |bounded |The maximum host-retained items or bytes is known before admission; it need not be small or globally constant
@@ -176,7 +176,7 @@ representation and eventually releasing it. The two must not be conflated.
 
 Each layer has a distinct responsibility:
 
-[cols=",,",options="header",]
+[cols="1,1,1",options="header"]
 |===
 |Layer |Semantic authority |Runtime custody
 |Roc application |Domain model, policy, interpretation of input, what work to start |Ordinary Roc values reachable from the model and from a task closure
@@ -349,7 +349,7 @@ The application and host interact through four explicit protocols. They are
 separate because they have different direction, timing, cardinality, and
 failure semantics.
 
-[cols=",,",options="header",]
+[cols="1,1,1",options="header"]
 |===
 |Protocol |Direction |Timing and cardinality
 |Host authority: `App.Io` |Host to `init!` and `update!` |At initialization and once per host cycle; the same lifetime authority
@@ -361,7 +361,7 @@ failure semantics.
 Adding a fifth protocol is an architecture change. Adding a new value carried
 by one of these protocols is ordinarily an API change only.
 
-[[input-appinputmsg]]
+[#input-appinputmsg]
 === Input: `App.Input(msg)`
 
 `Input` is immutable data supplied to one call of `update!`. It contains three
@@ -394,7 +394,7 @@ sixteen per poll. So anything that happened between two polls would collapse
 into whatever came last. Recording at the callback is what makes the guarantee
 below hold independently of frame timing.
 
-[cols=",,,",options="header",]
+[cols="1,1,1,1",options="header"]
 |===
 |Field |Kind |Source |Capacity and coalescing
 |`keys` held bit, `mouse` held bits, `mouse` position and delta |State sample |raylib's level at the cycle boundary |Latest value
@@ -526,7 +526,7 @@ An operation whose outcome must change application policy therefore returns
 that outcome in the message; a task that returns nothing useful is a task whose
 completion the model cannot account for.
 
-[[rendering-drawframe]]
+[#rendering-drawframe]
 === Rendering: `Draw.Frame`
 
 `Frame` is a render-scoped capability rather than general application input.
@@ -555,7 +555,7 @@ to application code, a worker, presentation, or a device by inference.
 
 === Choosing where work goes
 
-[cols=",",options="header",]
+[cols="1,1",options="header"]
 |===
 |Need |Mechanism
 |Latest ambient state or bounded interval events |`App.Input` field

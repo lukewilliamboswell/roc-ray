@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#reference]
 = Reference
 
@@ -16,9 +7,9 @@ fixed limits, and the supported targets.
 
 == API reference
 
-The {api}[API reference] documents every module, type, and function the
+The https://lukewilliamboswell.github.io/roc-ray/api/[API reference] documents every module, type, and function the
 platform exposes, generated from the platform's own module documentation. Each
-effect's entry says which phases it is legal in (see <<phases>>). A release
+effect's entry says which phases it is legal in (see xref:app-model.adoc#phases[Details: which effects are legal where]). A release
 publishes the reference for its version; its index opens the latest.
 
 == Supported targets and bundles
@@ -33,7 +24,7 @@ Each release publishes two platform bundles that expose the same API:
 |===
 
 ARM Linux is not supported. The release notes name each bundle's URL and the
-Roc nightly the release was built and tested with. <<shipping>> explains building for
+Roc nightly the release was built and tested with. xref:shipping.adoc#shipping[Ship your game] explains building for
 each target.
 
 [#reference-switches]
@@ -59,7 +50,7 @@ recorded demo runs the app's ordinary code.
 |`--host-drops=SCRIPT` |Drop files on the window on the cycles named, such as `2:/tmp/a.png,2:/tmp/b.png`; each arrives in `input.dropped`
 |`+--host-close=CYCLE[,CYCLE...]+` |Request that the window close on each cycle named, such as `30` or `30,90`, as clicking its close button does
 |`--host-debug-allocator` |In a Debug build, use Zig's stack-tracing allocator to diagnose leaks
-|`--host-stats-record` |Record an Observatory capture; see <<observatory>>
+|`--host-stats-record` |Record an Observatory capture; see xref:observatory.adoc#observatory[Measuring performance with Observatory]
 |`--host-stats-output=PATH` |Choose the capture's path, and record
 |`--host-stats-detail=LEVEL` |`summary`, `standard` (the default), or `full`
 |`--host-stats-buffer-mib=N` |Recorder memory in MiB, 1 to 4096; default 32
@@ -138,8 +129,8 @@ frees its place for another.
 
 == Permissions and phases
 
-* <<permissions>> lists every `Permission`, what it permits, and every error a
+* xref:permissions.adoc#permissions[Permissions: what your app can access] lists every `Permission`, what it permits, and every error a
   refusal returns.
-* <<phases>> lists which kinds of effect are legal in which callbacks.
-* <<architecture>> defines the vocabulary precisely: host cycle, task,
+* xref:app-model.adoc#phases[Details: which effects are legal where] lists which kinds of effect are legal in which callbacks.
+* xref:architecture.adoc#architecture[Architecture] defines the vocabulary precisely: host cycle, task,
   message, phase, and waiting effect.

@@ -1,19 +1,10 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#host-services]
 = Printing, programs, environment, and clipboard
 
 This chapter covers the smaller services an app accesses through `App.Io`:
 printing to the terminal, reading environment variables, running other
-programs, and the system clipboard. It assumes <<app-model>> and
-<<permissions>>.
+programs, and the system clipboard. It assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!] and
+xref:permissions.adoc#permissions[Permissions: what your app can access].
 
 == Printing
 
@@ -108,9 +99,9 @@ _ = io.clipboard().set_text!("copied")
 Both are legal in `init!`, `update!`, and tasks; neither waits. Reading needs
 `ClipboardRead` and writing needs `ClipboardWrite`. Content that is not text,
 or is too large to copy, is refused rather than truncated.
-{src}/examples/input_inspector/main.roc[Input Inspector] uses both.
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] uses both.
 
 == Further reading
 
 * The `Stdout`, `Stderr`, `Cmd`, `App`, and `Window` pages of the
-  {api}[API reference].
+  https://lukewilliamboswell.github.io/roc-ray/api/[API reference].

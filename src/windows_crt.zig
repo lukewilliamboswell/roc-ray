@@ -18,7 +18,14 @@ comptime {
         _ = @import("msvc_runtime_stubs.zig");
         @export(&mainCRTStartup, .{ .name = "mainCRTStartup" });
         @export(&chkstk, .{ .name = "__chkstk" });
-        @export(&fltused, .{ .name = "_fltused" });
+        // LLVM can supply _fltused in the app object. COFF alternatename
+        // supplies our marker only when no input defines it, so both LLVM
+        // and native-backend apps link against the same host archive.
+        @export(&fltused, .{ .name = "roc_ray_fltused" });
+        asm (
+            \\.section .drectve,"yn"
+            \\.ascii " /alternatename:_fltused=roc_ray_fltused"
+        );
         @export(&tls_index, .{ .name = "_tls_index" });
         @export(&tls_start, .{ .name = "_tls_start" });
         @export(&tls_end, .{ .name = "_tls_end" });

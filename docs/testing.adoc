@@ -1,18 +1,9 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#testing]
 = Testing your app
 
 An app's logic can be tested without a window, and the whole app can be run
 unattended for a fixed number of cycles, with or without drawing. This chapter
-covers both. It assumes <<app-model>>.
+covers both. It assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!].
 
 == Test the pure functions
 
@@ -106,7 +97,7 @@ PowerShell, bash, or zsh.)
 Scripted keys and text work the same in headless, hidden, and windowed runs.
 A scripted press of the exit key ends the app, as a real one does, so
 `3:ESCAPE~` tests that Escape quits. An app can also drive its own input with
-`Keys.set_source!` (see <<capture>>).
+`Keys.set_source!` (see xref:capture.adoc#capture[Screenshots and recordings]).
 
 === Scripted close requests
 
@@ -114,7 +105,7 @@ A scripted press of the exit key ends the app, as a real one does, so
 that cycle, and `+--host-close=30,90+` on each cycle listed. It works in
 headless and hidden runs, so a test can check that an app using
 `with_close_request(Deliver)` saves and exits as it should (see
-<<app-model-closing>>):
+xref:app-model.adoc#app-model-closing[Closing the window]):
 
 [source,sh]
 ----
@@ -137,7 +128,7 @@ state.
 
 == Further reading
 
-* <<reference-switches>> lists every host switch and environment variable.
-* <<observatory>> records timing and allocation data for a run.
-* {src}/examples/breakout/main.roc[Breakout] separates its game logic from
+* xref:reference.adoc#reference-switches[Host switches] lists every host switch and environment variable.
+* xref:observatory.adoc#observatory[Measuring performance with Observatory] records timing and allocation data for a run.
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[Breakout] separates its game logic from
   its effects and tests them with `expect`.

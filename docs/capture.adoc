@@ -1,12 +1,3 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-ray
-:src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-ray/api/
-endif::[]
-
 [#capture]
 = Screenshots and recordings
 
@@ -18,9 +9,9 @@ nobody at the keyboard.
 Because the app records its own frames, a recording shows exactly what the
 app drew, with no screen-recording tool involved. With fixed timing, the same
 scripted run produces the same frames every time (see
-<<capture-repeatable>>), which is useful for demos and documentation, and for
-comparing one run with another. This chapter assumes <<app-model>> and
-<<tasks>>.
+xref:capture.adoc#capture-repeatable[Timing and repeatable recordings]), which is useful for demos and documentation, and for
+comparing one run with another. This chapter assumes xref:app-model.adoc#app-model[The app model: init!, update!, and render!] and
+xref:tasks.adoc#tasks[Tasks: operations that wait].
 
 == The output directory
 
@@ -60,9 +51,9 @@ the first is waiting returns `AlreadyPending`. A headless run has no
 framebuffer, so a screenshot there returns `Ok({})` without writing anything.
 
 `io.capture().screenshot_texture!(target, path)` exports an offscreen
-`Draw.RenderTexture` instead (see <<drawing>>), at the texture's own size.
+`Draw.RenderTexture` instead (see xref:drawing.adoc#drawing[Drawing]), at the texture's own size.
 This is useful for an image larger than the window. It keeps transparency, and it is
-legal in `init!` and tasks. {src}/examples/postcard_studio/main.roc[Postcard
+legal in `init!` and tasks. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/postcard_studio/main.roc[Postcard
 Studio] exports at twice the window size.
 
 == Recordings
@@ -125,7 +116,7 @@ repeatable: run the same app with the same random seed, the same scripted
 input, and no task results that depend on the outside world, and it records
 the same frames every time. Real input from a person, the wall clock, and
 network or file replies are not controlled by `FixedStep`, so a recording that
-depends on them can differ between runs. <<input-time>> explains
+depends on them can differ between runs. xref:input.adoc#input-time[Time] explains
 `elapsed_seconds`.
 
 == Hidden windows
@@ -134,7 +125,7 @@ depends on them can differ between runs. <<input-time>> explains
 renders on the GPU, so capture works exactly as with a visible window, and an
 app can render a chart or a clip to a file without a window appearing. A
 hidden window still needs a display server; on a machine without one, wrap the
-run in `xvfb-run`. {src}/examples/capture_plot/main.roc[Capture Plot] is a
+run in `xvfb-run`. https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_plot/main.roc[Capture Plot] is a
 hidden-window WebM batch render.
 
 == Scripted input
@@ -150,10 +141,10 @@ Keys.set_text!(Keys.typing("hello"))
 ----
 
 While a script drives a device, real input from that device is ignored.
-{src}/examples/capture_ui_demo/main.roc[Capture UI Demo] records a
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_ui_demo/main.roc[Capture UI Demo] records a
 reproducible interface walkthrough this way. The host's `+--host-keys+` and
 `+--host-text+` switches script input from the command line instead; see
-<<testing>>.
+xref:testing.adoc#testing[Testing your app].
 
 == Reading pixels
 
@@ -166,11 +157,11 @@ in `render!`.
 The host only keeps a copy of the screen once an app starts reading it, so the
 first `Screen` read of a run returns `Unavailable` and later reads succeed. A
 headless run has no pixels and always returns `Unavailable`.
-{src}/examples/input_inspector/main.roc[Input Inspector] uses one as an
+https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] uses one as an
 eyedropper.
 
 == Further reading
 
-* The `Capture`, `Keys`, and `Mouse` pages of the {api}[API reference].
-* {src}/examples/capture_screenshot/main.roc[Capture Screenshot] and
-  {src}/examples/breakout/main.roc[Breakout], which can record its own demo.
+* The `Capture`, `Keys`, and `Mouse` pages of the https://lukewilliamboswell.github.io/roc-ray/api/[API reference].
+* https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/capture_screenshot/main.roc[Capture Screenshot] and
+  https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/breakout/main.roc[Breakout], which can record its own demo.

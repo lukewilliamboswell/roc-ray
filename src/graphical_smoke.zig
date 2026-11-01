@@ -629,6 +629,39 @@ fn pixelReadbackRoundTrip() !void {
     try expectRegionUniform("target top-right corner", &corner_bytes, transparent);
 }
 
+fn chartPrimitivesRoundTrip() !void {
+    rl.BeginDrawing();
+    rl.ClearBackground(backend.colorToRl(black));
+    // The independent triangles deliberately have opposite winding.
+    const triangles = [_]Point{
+        .{ .x = 4, .y = 4 },  .{ .x = 20, .y = 4 },  .{ .x = 4, .y = 20 },
+        .{ .x = 24, .y = 4 }, .{ .x = 24, .y = 20 }, .{ .x = 40, .y = 4 },
+    };
+    backend.drawTriangles(&triangles, red);
+    const fan = [_]Point{ .{ .x = 44, .y = 4 }, .{ .x = 60, .y = 4 }, .{ .x = 60, .y = 20 }, .{ .x = 44, .y = 20 } };
+    backend.drawTriangleFan(&fan, green);
+    const strip = [_]Point{ .{ .x = 64, .y = 4 }, .{ .x = 64, .y = 20 }, .{ .x = 80, .y = 4 }, .{ .x = 80, .y = 20 } };
+    backend.drawTriangleStrip(&strip, blue);
+    const line = [_]Point{ .{ .x = 4, .y = 30 }, .{ .x = 30, .y = 30 }, .{ .x = 30, .y = 42 } };
+    backend.drawLineStrip(&line, 4, yellow);
+    backend.drawCircleSector(.{ .center = Point{ .x = 52, .y = 40 }, .radius = @as(f32, 12), .start_angle = @as(f32, 0), .end_angle = @as(f32, 90), .segments = @as(i32, 16), .color = red });
+    backend.drawEllipse(.{ .center = Point{ .x = 85, .y = 40 }, .radius_x = @as(f32, 12), .radius_y = @as(f32, 8), .color = green });
+    backend.drawRing(.{ .center = Point{ .x = 108, .y = 72 }, .inner_radius = @as(f32, 6), .outer_radius = @as(f32, 14), .start_angle = @as(f32, 0), .end_angle = @as(f32, 360), .segments = @as(i32, 32), .color = blue });
+    var shot = backend.captureFramebuffer() orelse return error.CaptureUnavailable;
+    defer shot.deinit();
+    rl.EndDrawing();
+    try expectPixel(shot.image, 7, 7, red);
+    try expectPixel(shot.image, 27, 7, red);
+    try expectPixel(shot.image, 48, 8, green);
+    try expectPixel(shot.image, 67, 8, blue);
+    try expectPixel(shot.image, 77, 17, blue);
+    try expectPixel(shot.image, 15, 30, yellow);
+    try expectPixel(shot.image, 56, 44, red);
+    try expectPixel(shot.image, 85, 40, green);
+    try expectPixel(shot.image, 118, 72, blue);
+    try expectPixel(shot.image, 108, 72, black);
+}
+
 /// Render representative primitives and assert exact framebuffer pixels.
 pub fn main() !void {
     rl.SetConfigFlags(rl.FLAG_WINDOW_HIDDEN | rl.FLAG_WINDOW_UNDECORATED);
@@ -903,4 +936,5 @@ pub fn main() !void {
     try downscaleRoundTrip();
     try renderTargetExportRoundTrip();
     try pixelReadbackRoundTrip();
+    try chartPrimitivesRoundTrip();
 }

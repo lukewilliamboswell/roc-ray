@@ -4331,6 +4331,332 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_3d7ecacf3635a94d
+pub const __AnonStruct_3d7ecacf3635a94d = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_3d7ecacf3635a94d) != 28) @compileError("__AnonStruct_3d7ecacf3635a94d size mismatch");
+        if (@alignOf(__AnonStruct_3d7ecacf3635a94d) != 4) @compileError("__AnonStruct_3d7ecacf3635a94d alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_3d7ecacf3635a94d) != 28) @compileError("__AnonStruct_3d7ecacf3635a94d size mismatch");
+        if (@alignOf(__AnonStruct_3d7ecacf3635a94d) != 4) @compileError("__AnonStruct_3d7ecacf3635a94d alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_8e15934abcb2568
+pub const __AnonStruct_8e15934abcb2568 = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_8e15934abcb2568) != 32) @compileError("__AnonStruct_8e15934abcb2568 size mismatch");
+        if (@alignOf(__AnonStruct_8e15934abcb2568) != 4) @compileError("__AnonStruct_8e15934abcb2568 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_8e15934abcb2568) != 32) @compileError("__AnonStruct_8e15934abcb2568 size mismatch");
+        if (@alignOf(__AnonStruct_8e15934abcb2568) != 4) @compileError("__AnonStruct_8e15934abcb2568 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_4fec05289ebc77b0
+pub const __AnonStruct_4fec05289ebc77b0 = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_4fec05289ebc77b0) != 20) @compileError("__AnonStruct_4fec05289ebc77b0 size mismatch");
+        if (@alignOf(__AnonStruct_4fec05289ebc77b0) != 4) @compileError("__AnonStruct_4fec05289ebc77b0 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_4fec05289ebc77b0) != 20) @compileError("__AnonStruct_4fec05289ebc77b0 size mismatch");
+        if (@alignOf(__AnonStruct_4fec05289ebc77b0) != 4) @compileError("__AnonStruct_4fec05289ebc77b0 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_ab45a30fbe17bff2
+pub const __AnonStruct_ab45a30fbe17bff2 = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_ab45a30fbe17bff2) != 24) @compileError("__AnonStruct_ab45a30fbe17bff2 size mismatch");
+        if (@alignOf(__AnonStruct_ab45a30fbe17bff2) != 4) @compileError("__AnonStruct_ab45a30fbe17bff2 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_ab45a30fbe17bff2) != 24) @compileError("__AnonStruct_ab45a30fbe17bff2 size mismatch");
+        if (@alignOf(__AnonStruct_ab45a30fbe17bff2) != 4) @compileError("__AnonStruct_ab45a30fbe17bff2 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_41ec3477d58f13a3
+pub const __AnonStruct_41ec3477d58f13a3 = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_41ec3477d58f13a3) != 32) @compileError("__AnonStruct_41ec3477d58f13a3 size mismatch");
+        if (@alignOf(__AnonStruct_41ec3477d58f13a3) != 4) @compileError("__AnonStruct_41ec3477d58f13a3 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_41ec3477d58f13a3) != 32) @compileError("__AnonStruct_41ec3477d58f13a3 size mismatch");
+        if (@alignOf(__AnonStruct_41ec3477d58f13a3) != 4) @compileError("__AnonStruct_41ec3477d58f13a3 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_1c99ffce89a5a687
+pub const __AnonStruct_1c99ffce89a5a687 = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_1c99ffce89a5a687) != 36) @compileError("__AnonStruct_1c99ffce89a5a687 size mismatch");
+        if (@alignOf(__AnonStruct_1c99ffce89a5a687) != 4) @compileError("__AnonStruct_1c99ffce89a5a687 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_1c99ffce89a5a687) != 36) @compileError("__AnonStruct_1c99ffce89a5a687 size mismatch");
+        if (@alignOf(__AnonStruct_1c99ffce89a5a687) != 4) @compileError("__AnonStruct_1c99ffce89a5a687 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_3b378fd867c0b9f1
 pub const __AnonStruct_3b378fd867c0b9f1 = if (@sizeOf(usize) == 4) extern struct {
     height: f32,
@@ -12388,6 +12714,120 @@ comptime {
     }
 }
 
+/// Arguments for Host.draw_circle_sector_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, radius : F32, segments : I32, start_angle : F32, thickness : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_circle_sector_linesArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_circle_sector_linesArgs) != 32) @compileError("HostDraw_circle_sector_linesArgs size mismatch");
+        if (@alignOf(HostDraw_circle_sector_linesArgs) != 4) @compileError("HostDraw_circle_sector_linesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_circle_sector_linesArgs) != 32) @compileError("HostDraw_circle_sector_linesArgs size mismatch");
+        if (@alignOf(HostDraw_circle_sector_linesArgs) != 4) @compileError("HostDraw_circle_sector_linesArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_circle_sector!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, radius : F32, segments : I32, start_angle : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_circle_sectorArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_circle_sectorArgs) != 28) @compileError("HostDraw_circle_sectorArgs size mismatch");
+        if (@alignOf(HostDraw_circle_sectorArgs) != 4) @compileError("HostDraw_circle_sectorArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_circle_sectorArgs) != 28) @compileError("HostDraw_circle_sectorArgs size mismatch");
+        if (@alignOf(HostDraw_circle_sectorArgs) != 4) @compileError("HostDraw_circle_sectorArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.draw_clear!
 /// Roc signature: Color.Rgba => {}
 /// Refcounted fields are owned by the hosted function.
@@ -12750,6 +13190,112 @@ comptime {
     }
 }
 
+/// Arguments for Host.draw_ellipse_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, radius_x : F32, radius_y : F32, thickness : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_ellipse_linesArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_ellipse_linesArgs) != 24) @compileError("HostDraw_ellipse_linesArgs size mismatch");
+        if (@alignOf(HostDraw_ellipse_linesArgs) != 4) @compileError("HostDraw_ellipse_linesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_ellipse_linesArgs) != 24) @compileError("HostDraw_ellipse_linesArgs size mismatch");
+        if (@alignOf(HostDraw_ellipse_linesArgs) != 4) @compileError("HostDraw_ellipse_linesArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_ellipse!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, radius_x : F32, radius_y : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_ellipseArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    radius_x: f32,
+    radius_y: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_ellipseArgs) != 20) @compileError("HostDraw_ellipseArgs size mismatch");
+        if (@alignOf(HostDraw_ellipseArgs) != 4) @compileError("HostDraw_ellipseArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_ellipseArgs) != 20) @compileError("HostDraw_ellipseArgs size mismatch");
+        if (@alignOf(HostDraw_ellipseArgs) != 4) @compileError("HostDraw_ellipseArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.draw_fps!
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, size : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -12853,6 +13399,56 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostDraw_lineArgs) != 24) @compileError("HostDraw_lineArgs size mismatch");
         if (@alignOf(HostDraw_lineArgs) != 4) @compileError("HostDraw_lineArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_line_strip!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2), thickness : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_line_stripArgs = if (@sizeOf(usize) == 4) extern struct {
+    points: RocListWith(MathVec2, false),
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    points: RocListWith(MathVec2, false),
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_line_stripArgs) != 32) @compileError("HostDraw_line_stripArgs size mismatch");
+        if (@alignOf(HostDraw_line_stripArgs) != 8) @compileError("HostDraw_line_stripArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_line_stripArgs) != 20) @compileError("HostDraw_line_stripArgs size mismatch");
+        if (@alignOf(HostDraw_line_stripArgs) != 4) @compileError("HostDraw_line_stripArgs alignment mismatch");
     }
 }
 
@@ -13168,6 +13764,124 @@ comptime {
     }
 }
 
+/// Arguments for Host.draw_ring_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, inner_radius : F32, outer_radius : F32, segments : I32, start_angle : F32, thickness : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_ring_linesArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    thickness: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_ring_linesArgs) != 36) @compileError("HostDraw_ring_linesArgs size mismatch");
+        if (@alignOf(HostDraw_ring_linesArgs) != 4) @compileError("HostDraw_ring_linesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_ring_linesArgs) != 36) @compileError("HostDraw_ring_linesArgs size mismatch");
+        if (@alignOf(HostDraw_ring_linesArgs) != 4) @compileError("HostDraw_ring_linesArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_ring!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, inner_radius : F32, outer_radius : F32, segments : I32, start_angle : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_ringArgs = if (@sizeOf(usize) == 4) extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    center: MathVec2,
+    end_angle: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    segments: i32,
+    start_angle: f32,
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.center.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.center.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_ringArgs) != 32) @compileError("HostDraw_ringArgs size mismatch");
+        if (@alignOf(HostDraw_ringArgs) != 4) @compileError("HostDraw_ringArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_ringArgs) != 32) @compileError("HostDraw_ringArgs size mismatch");
+        if (@alignOf(HostDraw_ringArgs) != 4) @compileError("HostDraw_ringArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.draw_rounded_rectangle_lines!
 /// Roc signature: { color : Color.Rgba, height : F32, radius : F32, segments : I32, thickness : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -13342,6 +14056,54 @@ comptime {
     }
 }
 
+/// Arguments for Host.draw_triangle_fan!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_triangle_fanArgs = if (@sizeOf(usize) == 4) extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_triangle_fanArgs) != 32) @compileError("HostDraw_triangle_fanArgs size mismatch");
+        if (@alignOf(HostDraw_triangle_fanArgs) != 8) @compileError("HostDraw_triangle_fanArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_triangle_fanArgs) != 16) @compileError("HostDraw_triangle_fanArgs size mismatch");
+        if (@alignOf(HostDraw_triangle_fanArgs) != 4) @compileError("HostDraw_triangle_fanArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Host.draw_triangle_lines!
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba, thickness : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -13461,6 +14223,102 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HostDraw_triangleArgs) != 28) @compileError("HostDraw_triangleArgs size mismatch");
         if (@alignOf(HostDraw_triangleArgs) != 4) @compileError("HostDraw_triangleArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_triangle_strip!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_triangle_stripArgs = if (@sizeOf(usize) == 4) extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_triangle_stripArgs) != 32) @compileError("HostDraw_triangle_stripArgs size mismatch");
+        if (@alignOf(HostDraw_triangle_stripArgs) != 8) @compileError("HostDraw_triangle_stripArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_triangle_stripArgs) != 16) @compileError("HostDraw_triangle_stripArgs size mismatch");
+        if (@alignOf(HostDraw_triangle_stripArgs) != 4) @compileError("HostDraw_triangle_stripArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Host.draw_triangles!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostDraw_trianglesArgs = if (@sizeOf(usize) == 4) extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+} else extern struct {
+    points: RocListWith(MathVec2, false),
+    color: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.points.decref(roc_host);
+        value.color.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.points.incref(amount);
+        value.color.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostDraw_trianglesArgs) != 32) @compileError("HostDraw_trianglesArgs size mismatch");
+        if (@alignOf(HostDraw_trianglesArgs) != 8) @compileError("HostDraw_trianglesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostDraw_trianglesArgs) != 16) @compileError("HostDraw_trianglesArgs size mismatch");
+        if (@alignOf(HostDraw_trianglesArgs) != 4) @compileError("HostDraw_trianglesArgs alignment mismatch");
     }
 }
 
@@ -14822,6 +15680,8 @@ pub const HostDraw_begin_shaderErr = ScopeLimitOrScopeUnavailable;
 pub const HostDraw_circle_gradientArg0 = __AnonStruct_f8a458371716c148;
 pub const HostDraw_circle_linesArg0 = __AnonStruct_8b18bd818a3a6ac2;
 pub const HostDraw_circleArg0 = __AnonStruct_e430ec55b5760490;
+pub const HostDraw_circle_sector_linesArg0 = __AnonStruct_8e15934abcb2568;
+pub const HostDraw_circle_sectorArg0 = __AnonStruct_3d7ecacf3635a94d;
 pub const HostDraw_draw_prepared_textArg0 = __AnonStruct_6bff15fb6a4cb85a;
 pub const HostDraw_draw_texture_instancesArg0 = __AnonStruct_a819339c8fa68dd6;
 pub const HostDraw_draw_texture_instancesArg0Instances = __AnonStruct_1b47e50f7d442c7;
@@ -14829,9 +15689,13 @@ pub const HostDraw_draw_texture_quadArg0 = __AnonStruct_81a2561bb748cfff;
 pub const HostDraw_draw_textureArg0 = __AnonStruct_f942b11a3b075f2d;
 pub const HostDraw_draw_textured_triangles_3dArg0 = __AnonStruct_3d4d22db215e6a00;
 pub const HostDraw_draw_textured_triangles_3dArg0Vertices = __AnonStruct_60e2d2c8b97ddaf1;
+pub const HostDraw_ellipse_linesArg0 = __AnonStruct_ab45a30fbe17bff2;
+pub const HostDraw_ellipseArg0 = __AnonStruct_4fec05289ebc77b0;
 pub const HostDraw_fpsArg0 = __AnonStruct_477f59604acc661e;
 pub const HostDraw_frame_size = __AnonStruct_473ae8de77ee164b;
 pub const HostDraw_lineArg0 = __AnonStruct_a3fdb7fbf4ae00b8;
+pub const HostDraw_line_stripArg0 = __AnonStruct_2dcd38bc772d0799;
+pub const HostDraw_line_stripArg0Points = MathVec2;
 pub const HostDraw_polygon_linesArg0 = __AnonStruct_2dcd38bc772d0799;
 pub const HostDraw_polygon_linesArg0Points = MathVec2;
 pub const HostDraw_polygonArg0 = __AnonStruct_16cb9af61afe2d08;
@@ -14840,11 +15704,19 @@ pub const HostDraw_rectangle_gradient_hArg0 = __AnonStruct_e8853ac20588d70f;
 pub const HostDraw_rectangle_gradient_vArg0 = __AnonStruct_fea6ab4381a204db;
 pub const HostDraw_rectangle_linesArg0 = __AnonStruct_dfc92600a2569f3d;
 pub const HostDraw_rectangleArg0 = __AnonStruct_3b378fd867c0b9f1;
+pub const HostDraw_ring_linesArg0 = __AnonStruct_1c99ffce89a5a687;
+pub const HostDraw_ringArg0 = __AnonStruct_41ec3477d58f13a3;
 pub const HostDraw_rounded_rectangle_linesArg0 = __AnonStruct_8edd1366fc9f1a8b;
 pub const HostDraw_rounded_rectangleArg0 = __AnonStruct_2b98c437f1796b13;
 pub const HostDraw_textArg0 = __AnonStruct_a794ed9ee3bc5d8d;
+pub const HostDraw_triangle_fanArg0 = __AnonStruct_16cb9af61afe2d08;
+pub const HostDraw_triangle_fanArg0Points = MathVec2;
 pub const HostDraw_triangle_linesArg0 = __AnonStruct_563f890a3b4ea7a0;
 pub const HostDraw_triangleArg0 = __AnonStruct_d48cb861dff2afaa;
+pub const HostDraw_triangle_stripArg0 = __AnonStruct_16cb9af61afe2d08;
+pub const HostDraw_triangle_stripArg0Points = MathVec2;
+pub const HostDraw_trianglesArg0 = __AnonStruct_16cb9af61afe2d08;
+pub const HostDraw_trianglesArg0Points = MathVec2;
 pub const HostFiles_designateOk = __AnonStruct_c497f4ed41e47ac1;
 pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_metadataErr = AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable;
@@ -16747,6 +17619,42 @@ pub const __AnonStruct_2dcd38bc772d0799Release = struct {
     }
 };
 
+pub const __AnonStruct_3d7ecacf3635a94dRelease = struct {
+    pub fn release(value: __AnonStruct_3d7ecacf3635a94d, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_8e15934abcb2568Release = struct {
+    pub fn release(value: __AnonStruct_8e15934abcb2568, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_4fec05289ebc77b0Release = struct {
+    pub fn release(value: __AnonStruct_4fec05289ebc77b0, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_ab45a30fbe17bff2Release = struct {
+    pub fn release(value: __AnonStruct_ab45a30fbe17bff2, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_41ec3477d58f13a3Release = struct {
+    pub fn release(value: __AnonStruct_41ec3477d58f13a3, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_1c99ffce89a5a687Release = struct {
+    pub fn release(value: __AnonStruct_1c99ffce89a5a687, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
 pub const __AnonStruct_3b378fd867c0b9f1Release = struct {
     pub fn release(value: __AnonStruct_3b378fd867c0b9f1, roc_host: *RocHost) void {
         value.decref(roc_host);
@@ -17845,6 +18753,14 @@ pub extern fn roc_draw_circle_lines_raw(arg0: HostDraw_circle_linesArgs) callcon
 /// Roc signature: { center : Math.Vec2, color : Color.Rgba, radius : F32 } => {}
 pub extern fn roc_draw_circle_raw(arg0: HostDraw_circleArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_circle_sector_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, radius : F32, segments : I32, start_angle : F32, thickness : F32 } => {}
+pub extern fn roc_draw_circle_sector_lines_raw(arg0: HostDraw_circle_sector_linesArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_circle_sector!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, radius : F32, segments : I32, start_angle : F32 } => {}
+pub extern fn roc_draw_circle_sector_raw(arg0: HostDraw_circle_sectorArgs) callconv(.c) void;
+
 /// Hosted symbol for Host.draw_clear!
 /// Roc signature: Color.Rgba => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
@@ -17887,6 +18803,14 @@ pub extern fn roc_draw_draw_texture_raw(arg0: HostDraw_draw_textureArgs) callcon
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_draw_textured_triangles_3d_raw(arg0: HostDraw_draw_textured_triangles_3dArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_ellipse_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, radius_x : F32, radius_y : F32, thickness : F32 } => {}
+pub extern fn roc_draw_ellipse_lines_raw(arg0: HostDraw_ellipse_linesArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_ellipse!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, radius_x : F32, radius_y : F32 } => {}
+pub extern fn roc_draw_ellipse_raw(arg0: HostDraw_ellipseArgs) callconv(.c) void;
+
 /// Hosted symbol for Host.draw_end_blend!
 /// Roc signature: {} => {}
 pub extern fn roc_draw_end_blend_raw() callconv(.c) void;
@@ -17923,6 +18847,13 @@ pub extern fn roc_draw_frame_size() callconv(.c) __AnonStruct_473ae8de77ee164b;
 /// Roc signature: { color : Color.Rgba, end : Math.Vec2, start : Math.Vec2, thickness : F32 } => {}
 pub extern fn roc_draw_line_raw(arg0: HostDraw_lineArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_line_strip!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2), thickness : F32 } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_line_strip_raw(arg0: HostDraw_line_stripArgs) callconv(.c) void;
+
 /// Hosted symbol for Host.draw_polygon_lines!
 /// Roc signature: { color : Color.Rgba, points : List(Math.Vec2), thickness : F32 } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
@@ -17953,6 +18884,14 @@ pub extern fn roc_draw_rectangle_lines_raw(arg0: HostDraw_rectangle_linesArgs) c
 /// Roc signature: { color : Color.Rgba, height : F32, width : F32, x : F32, y : F32 } => {}
 pub extern fn roc_draw_rectangle_raw(arg0: HostDraw_rectangleArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_ring_lines!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, inner_radius : F32, outer_radius : F32, segments : I32, start_angle : F32, thickness : F32 } => {}
+pub extern fn roc_draw_ring_lines_raw(arg0: HostDraw_ring_linesArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_ring!
+/// Roc signature: { center : Math.Vec2, color : Color.Rgba, end_angle : F32, inner_radius : F32, outer_radius : F32, segments : I32, start_angle : F32 } => {}
+pub extern fn roc_draw_ring_raw(arg0: HostDraw_ringArgs) callconv(.c) void;
+
 /// Hosted symbol for Host.draw_rounded_rectangle_lines!
 /// Roc signature: { color : Color.Rgba, height : F32, radius : F32, segments : I32, thickness : F32, width : F32, x : F32, y : F32 } => {}
 pub extern fn roc_draw_rounded_rectangle_lines_raw(arg0: HostDraw_rounded_rectangle_linesArgs) callconv(.c) void;
@@ -17968,6 +18907,13 @@ pub extern fn roc_draw_rounded_rectangle_raw(arg0: HostDraw_rounded_rectangleArg
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_text_raw(arg0: HostDraw_textArgs) callconv(.c) void;
 
+/// Hosted symbol for Host.draw_triangle_fan!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_triangle_fan_raw(arg0: HostDraw_triangle_fanArgs) callconv(.c) void;
+
 /// Hosted symbol for Host.draw_triangle_lines!
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba, thickness : F32 } => {}
 pub extern fn roc_draw_triangle_lines_raw(arg0: HostDraw_triangle_linesArgs) callconv(.c) void;
@@ -17975,6 +18921,20 @@ pub extern fn roc_draw_triangle_lines_raw(arg0: HostDraw_triangle_linesArgs) cal
 /// Hosted symbol for Host.draw_triangle!
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba } => {}
 pub extern fn roc_draw_triangle_raw(arg0: HostDraw_triangleArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_triangle_strip!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_triangle_strip_raw(arg0: HostDraw_triangle_stripArgs) callconv(.c) void;
+
+/// Hosted symbol for Host.draw_triangles!
+/// Roc signature: { color : Color.Rgba, points : List(Math.Vec2) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_triangles_raw(arg0: HostDraw_trianglesArgs) callconv(.c) void;
 
 /// Hosted symbol for Host.files_designate!
 /// Roc signature: Resource.Authority, [Arg(Str), Drop(Str)] => Try({ name : Str, parent : Str, path : Str }, [PermissionDenied])

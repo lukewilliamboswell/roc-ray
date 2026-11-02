@@ -12,10 +12,8 @@ repository root:
 scripts/run-example.py examples/roc-doom-e1m1/main.roc
 ```
 
-The checked-in application header points at the local platform because this
-example uses unreleased 3D APIs. The runner uses the development compiler pin
-from `platform/main.roc`, and the release workflow verifies the example against
-a release-shaped bundle.
+The checked-in application uses the local platform and the current Roc nightly.
+The release workflow also checks it against the packaged platform bundle.
 
 A title card opens the example; press Space, Enter or the left mouse button
 to begin, or wait eight seconds. Controls are `W`/`S` or Up/Down to move,
@@ -70,7 +68,7 @@ important even when the suspected problem is pure Roc code, because generated
 procedure names otherwise cannot be mapped reliably to their source module:
 
 ```sh
-ROC=~/roc_nightly-linux_x86_64-2026-09-10-a670e34/roc
+ROC=roc
 $ROC build examples/roc-doom-e1m1/main.roc --debug --output=/tmp/doom-profile
 /usr/bin/time -f 'elapsed=%e user=%U sys=%S' \
     /tmp/doom-profile --host-headless --host-headless-frames=500
@@ -109,7 +107,7 @@ absent and reports total and `update!` allocation per cycle when enabled:
 ```sh
 /tmp/doom-profile --host-alloc-stats --host-headless \
     --host-headless-frames=500
-ROC=~/roc_nightly-linux_x86_64-2026-09-10-a670e34/roc \
+ROC=roc \
     scripts/test_doom_performance.py --frames 500
 ```
 

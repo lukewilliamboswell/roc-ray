@@ -110,12 +110,10 @@ static archive, released as a linker input and named in the `targets:` block of
 `platform/main.roc`, exactly as `libraylib.a` is. `zig build libvpx-parity`
 checks the SIMD kernels; the producer workflow runs it on arm64 and x64.
 
-libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
-added to the glibc link stubs in `platform/targets/x64v1glibc/libc_stub.s`. SQLite's unix
-VFS and its serialized threading mode added ten more there and in
-`libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
-library: the stub files are hand-written assembly, and a missing symbol shows up
-as a link error naming it, not as a build failure in the library itself.
+The glibc link stubs must provide the symbols used by vendored libraries,
+including libvpx's `setjmp`/`longjmp` and SQLite's Unix VFS and threading calls.
+Review `platform/targets/x64v1glibc/libc_stub.s` and `libm_stub.s` when upgrading
+a library. A missing stub symbol appears as a final link error.
 
 Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
 Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
@@ -189,10 +187,10 @@ documentation; the release assets keep each release's own copy.
 
 === Release notes
 
-Write the notes for a release in `docs/releases/<version>.adoc` and add an
-include for it to `docs/releases.adoc`, newest first, so it appears in this
-manual. Link within the notes with `+xref:releases.adoc#id[text]+`. The
-release workflow converts the same file to Markdown for the GitHub release
+Write the notes for a release in `docs/releases/<version>.adoc`. Keep these
+publisher inputs out of the manual; published release pages own version-specific
+changes and migration instructions. Use local section IDs for links within the
+notes. The release workflow converts the same file to Markdown for the GitHub release
 page, then appends the nightly it was built and tested with, the `roc-stable` tag,
 the bundle URLs, and links to the
 examples archive and the docs. The conversion accepts the subset of AsciiDoc

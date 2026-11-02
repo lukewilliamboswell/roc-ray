@@ -1,18 +1,32 @@
 [#release-notes]
-= Release notes
+= Release downloads
 
-Each RocRay release has its notes here, newest first. Earlier releases are
-described on their
-https://github.com/lukewilliamboswell/roc-ray/releases[GitHub release pages].
+Use the https://github.com/lukewilliamboswell/roc-ray/releases/latest[latest release]
+for new applications. Each release owns its notes, examples, bundles and
+versioned documentation on https://github.com/lukewilliamboswell/roc-ray/releases[GitHub Releases].
 
-// One include per file in releases/, newest first. Each file is also the
-// source of its GitHub release page: the release workflow converts it to
-// Markdown with `scripts/release_helpers.py make-release-notes`.
+[#release-0-12-0]
+== 0.12.0
 
-include::releases/0.12.0.adoc[leveloffset=+1]
+https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.12.0[Notes and downloads]
 
-include::releases/0.11.1.adoc[leveloffset=+1]
+[#release-0-11-1]
+== 0.11.1
 
-include::releases/0.11.0.adoc[leveloffset=+1]
+https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.11.1[Notes and downloads]
 
-include::releases/0.10.0.adoc[leveloffset=+1]
+[#release-0-11-0]
+== 0.11.0
+
+https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.11.0[Notes and downloads]
+
+[#release-0-10-0]
+== 0.10.0
+
+https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0[Notes and downloads]
+
+[#upgrading-from-09]
+== Upgrade a 0.9 application
+
+Follow the https://github.com/lukewilliamboswell/roc-ray/releases/tag/0.10.0[0.10.0 migration instructions],
+then use this manual for the current application contract.

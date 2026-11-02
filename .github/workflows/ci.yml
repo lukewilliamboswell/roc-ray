@@ -346,7 +346,7 @@ jobs:
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
           zig: "false"
 
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@ae089dae16f63f11a754e49c48a9310445e084dd
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
         with:
           install-nix: "true"
           cache: "true"

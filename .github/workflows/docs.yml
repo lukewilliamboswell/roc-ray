@@ -35,7 +35,7 @@ jobs:
       # records before handing out the path. The docs environment fetches one
       # program and needs no Nix.
       - name: Set up Blueprint
-        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@ae089dae16f63f11a754e49c48a9310445e084dd
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
 
       - id: renderer
         name: Get the verified renderer
@@ -51,7 +51,7 @@ jobs:
       # an unsupported construct fails the build.
       - id: docs
         name: Build HTML, PDF and Markdown
-        uses: lukewilliamboswell/roc-automation/actions/build-docs@ae089dae16f63f11a754e49c48a9310445e084dd
+        uses: lukewilliamboswell/roc-automation/actions/build-docs@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
         with:
           renderer-binary: ${{ steps.renderer.outputs.path }}
           pdf-filename: roc-ray.pdf

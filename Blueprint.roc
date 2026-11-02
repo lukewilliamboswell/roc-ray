@@ -47,7 +47,7 @@ config = [
 	Environment(
 		"docs",
 		[
-			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.8.0/roc-docs-{system}"))]),
+			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/roc-docs-{system}"))]),
 			Expect(["sh", "realpath"]),
 		],
 	),

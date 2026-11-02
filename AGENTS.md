@@ -117,3 +117,6 @@
 - Add or change an instruction here only when it should govern unrelated future
   work across the repository. If an instruction is likely to expire when one
   feature or bug is finished, it does not belong here.
+
+- Follow the editorial guidance in `docs/contributing.adoc#contributing-manual`;
+  keep documentation focused on current reader tasks.

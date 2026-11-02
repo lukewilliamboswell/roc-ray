@@ -55,10 +55,8 @@ Elsewhere, or without Nix, install:
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the latest nightly has to
 come first on it. CI resolves the latest nightly once per run, so a pull
 request can turn red when a new nightly lands; update your nightly first when a
-failure has nothing to do with your change. A local debug build of the
-compiler is not a substitute: it
-trips SpecConstr invariants on this platform's code and fails in ways that look
-like platform bugs.
+failure has nothing to do with your change. Record the exact compiler identity
+when investigating a difference from CI.
 
 Build the native hosts:
 
@@ -397,7 +395,7 @@ Build and validate the reference locally:
 [source,bash]
 ----
 scripts/build_docs.py --check              # temp dir, touches nothing
-scripts/build_docs.py --version 0.10.0     # writes .docs-api/0.10.0
+scripts/build_docs.py --version VERSION    # writes .docs-api/VERSION
 ----
 
 `--check` fails on a module missing a page, a broken relative link, missing
@@ -410,22 +408,29 @@ and release, and places the result under `api/` beside the manual.
 === This manual
 
 This manual is AsciiDoc under `docs/`. `docs/index.adoc` is the book; each
-chapter is a file directly under `docs/` that it includes, and
-`docs/releases.adoc` includes the release notes in `docs/releases/`. It is
+chapter is a file directly under `docs/` that it includes. It is
 rendered by `roc-docs`, the documentation renderer roc-automation shares
 between Roc repositories, into a website with one page per chapter, a PDF,
 and a Markdown copy of every page. Blueprint fetches the renderer and checks
-it against the digest in `Blueprint.lock`; nothing else is needed:
+it against the digest in `Blueprint.lock`:
 
 [source,bash]
 ----
 blueprint run docs    # .docs-out/site/index.html and .docs-out/roc-ray.pdf
 ----
 
-The build fails on any renderer warning: a cross reference that does not
-resolve, an unprepared image, or a construct the renderer does not support.
+The build fails on any renderer warning, unresolved cross reference, missing
+image or unsupported construct.
 The `docs` workflow builds the manual the same way on every pull request,
 with roc-automation's `actions/build-docs`, and uploads the result.
+
+Every paragraph should help someone use, maintain or assess the current project.
+Delete superseded instructions and duplicate explanations. Keep implementation
+history in Git, unresolved work in issues, and release-specific changes on the
+published release; do not include release notes in the manual. Preserve current
+compatibility guidance, security boundaries, API contracts and required notices.
+
+Use the https://lukewilliamboswell.github.io/roc-automation/documentation.html#write-project-documentation[shared documentation guide] for structure and publishing.
 
 Write each chapter for one audience, and introduce a concept before relying on
 it. The getting-started chapters assume nothing beyond an installed compiler;

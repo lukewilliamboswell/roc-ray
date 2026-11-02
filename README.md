@@ -53,69 +53,14 @@ roc version
 roc examples/hello_world/main.roc
 ```
 
-## A whole app
-
-A red circle that follows the mouse. Replace `BUNDLE-URL` with the default
-bundle URL the release notes name.
-
-```roc
-app [Model, program] { rr: platform "BUNDLE-URL" }
-
-import rr.App
-import rr.Color
-import rr.Draw
-
-Model : { pointer : { x : F32, y : F32 } }
-
-Msg : []
-
-program = { init!, update!, render! }
-
-init! : App.Init(Model, [])
-init! = App.init(App.default.with_title("Hello"), |_io| Ok({ pointer: { x: 400, y: 300 } }))
-
-update! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])
-update! = |_model, input, _io| Ok({ pointer: input.devices.mouse.position() })
-
-render! : Model, Draw.Frame => Try({}, [Exit(I64)])
-render! = |model, frame| {
-    frame.clear!(Color.black)
-    frame.circle!({ center: model.pointer, radius: 40, style: Draw.filled(Color.red) })
-    Ok({})
-}
-```
-
-`init!` creates the starting state, `update!` uses each host cycle's input to
-compute the next state, and `render!` draws it. Anything that waits, such as
-reading a file or fetching a URL, runs as a task, and its result arrives in a
-later `update!`. Anything the app accesses beyond its own window, such as the
-network, a directory, or another program, is declared in its startup settings.
-
 ## Documentation
 
-The [RocRay manual](https://lukewilliamboswell.github.io/roc-ray/) is
-published as a website and a PDF. Its chapters are the AsciiDoc files in
-[`docs/`](docs/), which you can also read here:
-
-- [Getting started](docs/getting-started.adoc): install, run an example, and
-  write the smallest app
-- [Roc for RocRay](docs/roc-primer.adoc): the Roc a small app uses
-- [Your first game](docs/first-game.adoc): build a small game in six steps
-- [Example gallery](docs/examples.adoc): what each example shows, and a
-  learning path
-- Guides: [the app model](docs/app-model.adoc), [input](docs/input.adoc),
-  [drawing](docs/drawing.adoc), [tasks](docs/tasks.adoc),
-  [permissions](docs/permissions.adoc),
-  [files and assets](docs/files-and-assets.adoc), [audio](docs/audio.adoc),
-  [HTTP and UDP](docs/networking.adoc), [capture](docs/capture.adoc),
-  [testing](docs/testing.adoc), and [performance](docs/observatory.adoc)
-- [Glossary](docs/glossary.adoc)
-- [API reference](https://lukewilliamboswell.github.io/roc-ray/api/)
-- [Architecture](docs/architecture.adoc)
-- [Contributing](docs/contributing.adoc)
-- [Release notes](docs/releases/) and the
-  [releases page](https://github.com/lukewilliamboswell/roc-ray/releases)
-- [Third-party licences](THIRD-PARTY-LICENCES.md)
+Follow [the manual](https://lukewilliamboswell.github.io/roc-ray/) to write your
+first app and learn the app model, input, drawing, tasks and permissions. See the
+[API reference](https://lukewilliamboswell.github.io/roc-ray/api/) for exact
+interfaces, [Contributing](CONTRIBUTING.md) to change RocRay, and
+[GitHub Releases](https://github.com/lukewilliamboswell/roc-ray/releases) for
+version-specific changes and downloads.
 
 ## Licence
 

@@ -149,7 +149,7 @@ def profile_run(root: Path, binary: Path, frames: int) -> dict[str, int | None]:
         command_file.flush()
         result = subprocess.run(
             ["gdb", "-q", "-batch", "-x", command_file.name, "--args", str(binary)],
-            cwd=root,
+            cwd=binary.parent,
             capture_output=True,
             text=True,
         )

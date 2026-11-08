@@ -212,15 +212,18 @@ reports the recording `Finished` or `Failed`.
 
 An example declares, in its startup config, anything it accesses beyond its
 own resources, as xref:permissions.adoc#permissions[Permissions: what your app can access] describes. Nothing is passed on the command line.
+Run each example from its own directory; its `assets/` path and declared
+directory permission are relative to that directory. The development launcher
+and published examples runner use the same working directory.
 
 [cols="2,5,3",options="header"]
 |===
 |Example |Declares |Why
-|`sprite_and_sound` |`Directory("examples/sprite_and_sound/assets", ReadOnly)` |Loads its picture and sound from that directory
-|`post_process` |`Directory("examples/post_process/assets", ReadOnly)` |Loads its shader from that directory
-|`top_down` |`Directory("examples/top_down/assets", ReadOnly)` |Loads its map, textures, music, and sounds
-|`cave_climb` |`Directory("examples/cave_climb/assets", ReadOnly)` |Loads its map and textures
-|`roc-doom-e1m1` |`Directory("examples/roc-doom-e1m1/assets", ReadOnly)` |Loads its texture atlases, sounds, and music
+|`sprite_and_sound` |`Directory("assets", ReadOnly)` |Loads its picture and sound from that directory
+|`post_process` |`Directory("assets", ReadOnly)` |Loads its shader from that directory
+|`top_down` |`Directory("assets", ReadOnly)` |Loads its map, textures, music, and sounds
+|`cave_climb` |`Directory("assets", ReadOnly)` |Loads its map and textures
+|`roc-doom-e1m1` |`Directory("assets", ReadOnly)` |Loads its texture atlases, sounds, and music
 |`async_read` |`WorkingDirectory(ReadOnly)` |Reads files beneath the directory it runs from
 |`live_plot` |`WorkingDirectory(ReadOnly)` |Lists and reads the whole tree it runs from
 |`input_inspector` |`ClipboardRead`, `ClipboardWrite` |Copies and pastes text

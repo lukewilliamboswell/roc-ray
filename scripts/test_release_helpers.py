@@ -178,6 +178,46 @@ class PackageExamplesTests(unittest.TestCase):
             )
             self.assertIn(NEXT_URL, readme)
 
+    def test_archive_case_reads_assets_beside_its_app(self) -> None:
+        import test_examples_archive as runner
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            output = root / f"{ARCHIVE}.zip"
+            self.assertEqual(0, self.package(root, output).returncode)
+            suite = runner.extract(output, root / "extracted")
+            spec = json.loads((suite / "spec.json").read_text())
+            # Execute a real asset reader. Only compiler work is simulated;
+            # neither the case's working directory nor file access is mocked.
+            case = spec["apps"][0]["cases"][0]
+            case.update(stdin="input", stdout="89504e472062616c6c input\n")
+            spec["apps"] = spec["apps"][:1]
+            real_run = runner.run
+            compiler_directories = []
+
+            def compile_or_run(argv, cwd, env, stdin, timeout):
+                if argv[0] == "fixture-roc":
+                    compiler_directories.append(cwd)
+                    if argv[1] == "build":
+                        executable = Path(next(arg.removeprefix("--output=") for arg in argv if arg.startswith("--output=")))
+                        executable.write_text(
+                            "from pathlib import Path\n"
+                            "import sys\n"
+                            "print(Path('assets/ball.png').read_bytes().hex(), sys.stdin.read())\n"
+                        )
+                    return subprocess.CompletedProcess(argv, 0, b"", b"")
+                return real_run([sys.executable, *argv], cwd, env, stdin, timeout)
+
+            with unittest.mock.patch.object(runner, "run", side_effect=compile_or_run):
+                failures = runner.run_suite(
+                    "fixture-roc", suite, spec, NEXT_URL, "http://127.0.0.1/bundle.tar.zst",
+                    root / "bin", dict(os.environ),
+                )
+            self.assertEqual([], failures)
+            self.assertEqual([suite, suite], compiler_directories)
+            self.assertFalse((suite / "assets/ball.png").exists())
+
     def test_other_app_roots_are_rewritten_too(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

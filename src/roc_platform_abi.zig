@@ -14433,7 +14433,7 @@ pub const HostRandom_i32Args = extern struct {
 };
 
 /// Arguments for Host.shader_bind_uniforms!
-/// Roc signature: Resource.Handle([ShaderResource]), List({ kind : [Float, Bool, Int, Sampler2D, Vec2, Vec3, Vec4], name : Str }) => Try({}, [ResourceLimit, UniformNotFound(U8), UniformReflectionUnavailable, UniformTypeMismatch({ actual : U32, array_len : U32, index : U8 })])
+/// Roc signature: Resource.Handle([ShaderResource]), List({ kind : [Bool, Float, Int, Sampler2D, Vec2, Vec3, Vec4], name : Str }) => Try({}, [ResourceLimit, UniformNotFound(U8), UniformReflectionUnavailable, UniformTypeMismatch({ actual : U32, array_len : U32, index : U8 })])
 /// Refcounted fields are owned by the hosted function.
 pub const HostShader_bind_uniformsArgs = extern struct {
     arg0: *u64,
@@ -19034,7 +19034,7 @@ pub extern fn roc_random_entropy() callconv(.c) u64;
 pub extern fn roc_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
 
 /// Hosted symbol for Host.shader_bind_uniforms!
-/// Roc signature: Resource.Handle([ShaderResource]), List({ kind : [Float, Bool, Int, Sampler2D, Vec2, Vec3, Vec4], name : Str }) => Try({}, [ResourceLimit, UniformNotFound(U8), UniformReflectionUnavailable, UniformTypeMismatch({ actual : U32, array_len : U32, index : U8 })])
+/// Roc signature: Resource.Handle([ShaderResource]), List({ kind : [Bool, Float, Int, Sampler2D, Vec2, Vec3, Vec4], name : Str }) => Try({}, [ResourceLimit, UniformNotFound(U8), UniformReflectionUnavailable, UniformTypeMismatch({ actual : U32, array_len : U32, index : U8 })])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);

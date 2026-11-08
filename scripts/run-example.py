@@ -92,9 +92,8 @@ def main() -> int:
             command = [roc, str(staged), *local_bundles.PACKAGE_LIMIT_ARGS]
             if app_args:
                 command.extend(["--", *app_args])
-            # Run from the repository root: the examples load their assets from
-            # `examples/<name>/assets/...` relative to the working directory.
-            return subprocess.run(command, cwd=root).returncode
+            # Match the published examples runner: assets are relative to the app.
+            return subprocess.run(command, cwd=example.parent).returncode
     except local_bundles.LocalBundleError as err:
         print(f"error: {err}", file=sys.stderr)
         return 2

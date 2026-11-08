@@ -245,9 +245,8 @@ def run_headless_examples(
     """Run each already-built example executable in bounded headless mode.
 
     `built` pairs the checked-in entrypoint with the staged copy that was built.
-    The executables live in the scratch directory but are run from the
-    repository root, because the examples load their assets from
-    `examples/<name>/assets/...` relative to the working directory.
+    The executables live in the scratch directory but are run beside each
+    checked-in app, matching the published examples runner and asset roots.
     """
     failed: list[str] = []
 
@@ -269,7 +268,7 @@ def run_headless_examples(
             ],
             f"headless run {name}",
             verbose,
-            cwd=root,
+            cwd=example.parent,
         )
         if ok:
             print("ok")
@@ -467,7 +466,7 @@ def run_windowed_examples(
                 failed.append(f"windowed run {label} (missing executable)")
                 continue
 
-            problems = _check_windowed_case(root, executable, case, defaults, verbose)
+            problems = _check_windowed_case(example.parent, executable, case, defaults, verbose)
             if problems:
                 print(f"FAILED ({'; '.join(problems)})")
                 failed.append(f"windowed run {label}")
@@ -484,9 +483,9 @@ def run_graphical_observatory_probe(
     if not has_display() or not built:
         return []
 
-    staged = next(
-        (entry for example, entry in built if example_name(example) == "hello_world"),
-        built[0][1],
+    example, staged = next(
+        ((example, entry) for example, entry in built if example_name(example) == "hello_world"),
+        built[0],
     )
     executable = executable_for(staged)
     capture = staged.parent / "graphical-observatory.rrstats"
@@ -499,11 +498,8 @@ def run_graphical_observatory_probe(
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
         ],
-        # Match the ordinary windowed sweep: example asset paths are rooted at
-        # the checkout, not at the temporary directory containing the staged
-        # executable. A different cwd can turn an asset lookup failure into a
-        # false Observatory/runtime failure.
-        cwd=root,
+        # Match the ordinary windowed sweep and the published examples runner.
+        cwd=example.parent,
         stdout=None if verbose else subprocess.PIPE,
         stderr=None if verbose else subprocess.PIPE,
         text=True,

@@ -29,7 +29,7 @@ program = { init!, update!, render! }
 ## The directory the shader is loaded from, relative to the directory you run
 ## the example from. The config declares it and `init!` opens it, so both read
 ## this one constant.
-assets_dir = "examples/post_process/assets"
+assets_dir = "assets"
 
 init! : App.Init(Model, _)
 init! = App.init(

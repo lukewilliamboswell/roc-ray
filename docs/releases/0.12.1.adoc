@@ -1,0 +1,13 @@
+= RocRay 0.12.1
+
+0.12.1 restores compatibility with Roc `nightly-2026-11-07-ad3a5d2` and repairs
+asset loading in the published examples. The public application API is unchanged.
+
+The font codepoint iterator uses the compiler's current size-hint contract,
+following Oskar Hahn's fix in pull request #273.
+
+Each example now runs from its own directory. Asset-reading examples declare
+and open the `assets/` directory beside their app, matching the nightly
+compatibility runner. The development launchers, graphical tests and release
+archive tests use that same directory, and the archive regression exercises
+an actual asset read. Existing recorded outputs and all 27 examples are retained.

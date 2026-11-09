@@ -2,42 +2,42 @@
   "schema_version": 1,
   "kind": "roc-ray-link-inputs",
   "repository": "lukewilliamboswell/roc-ray",
-  "release": "link-inputs-sha256-9b4be6fc1357eaaf7a7db4ce518db76af2252c72cb7a575c518f109341912bc7",
+  "release": "link-inputs-sha256-d44161498f63824d271317d0f8b14fc46e0849abcb2a8e638194863dff83543d",
   "manifest": {
     "asset": "build-input-release.json",
-    "sha256": "9b4be6fc1357eaaf7a7db4ce518db76af2252c72cb7a575c518f109341912bc7"
+    "sha256": "d44161498f63824d271317d0f8b14fc46e0849abcb2a8e638194863dff83543d"
   },
   "source": {
-    "input_fingerprint": "2d200d156a6dbdf9fe133336c1a5905f830a244bfacc6b5f8d67ab338745a89a",
-    "ref": "refs/heads/zig-0.17",
+    "input_fingerprint": "249ba5b6b06680c61b1164a30f705f934bfbbf600b57cfa072a245af966ee65f",
+    "ref": "refs/heads/chore/adopt-reviewed-automation-e125",
     "repository": "lukewilliamboswell/roc-ray",
-    "sha": "4dc88854d25ff15695d8b3667b9bb5e831f22028",
+    "sha": "89a90b1815fd3b8dd7bedffc164464c65579791b",
     "workflow": "lukewilliamboswell/roc-ray/.github/workflows/link-inputs.yml"
   },
   "targets": {
     "arm64mac": {
       "asset": "link-inputs-arm64mac.tar",
-      "sha256": "b0e4728ecf763178337a544e22c8b5bc6575a660f7e2e6412560ca8671090cbd",
+      "sha256": "1861164c8dc0d3ac1671dee31d17f5598ddc316e135086183b1a451f9dadcaa1",
       "size": 7362560
     },
     "x64mac": {
       "asset": "link-inputs-x64mac.tar",
-      "sha256": "de8f835f6141070568bb2a5b0224c31e9894204ccfc15030bb930630bc9ec973",
+      "sha256": "de1432f05cb277d8fcc4e94a527857ad3ac6b2eb53586f2331eeab1b572cec7c",
       "size": 7168000
     },
     "x64v1glibc-wayland": {
       "asset": "link-inputs-x64v1glibc-wayland.tar",
-      "sha256": "9ad2d0861eebcb2e3f2fe80dbdbd6666e74184d25a4a9e2e44c7b05318041a22",
+      "sha256": "934b5ebf162a3fd35606f6508330671c8b8892dc0a9d7806e7f147e9e7ce7ae5",
       "size": 5672960
     },
     "x64v1glibc-x11": {
       "asset": "link-inputs-x64v1glibc-x11.tar",
-      "sha256": "73c568caaf71ab5ff211904c3e23ca81da939398f7bd17a69fe4e762bbee6d28",
+      "sha256": "a0439a3fbb0a7bd5ca502c22392e63bdf8bca050b4dc343b984469fab1b3b678",
       "size": 5242880
     },
     "x64win": {
       "asset": "link-inputs-x64win.tar",
-      "sha256": "5f47a0996e7734cd7a06e2072865cb428188e3b516616261409a03453ad7c7df",
+      "sha256": "7c4cc372ecb9417ff7d55372816824d8a18f8560a33ddce4bba6295bd438a8ce",
       "size": 9728000
     }
   }

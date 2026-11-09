@@ -23,9 +23,10 @@ runs:
     # The platform names no compiler: every job of a run installs the one
     # nightly that run resolved, so one run never mixes compilers.
     - name: Install Roc
-      uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+      uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
       with:
         version: nightly-new-compiler
+        download-method: asset-api
         nightly-tag: ${{ inputs.nightly-tag }}
 
     - name: Report the compiler

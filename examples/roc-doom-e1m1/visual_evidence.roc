@@ -64,7 +64,7 @@ program = { init!, update!, render! }
 
 ## The directory every asset is loaded from, declared read-only at startup.
 assets_dir : Str
-assets_dir = "examples/roc-doom-e1m1/assets"
+assets_dir = "assets"
 
 init! : App.Init(Model, _)
 init! = App.init_for_args(

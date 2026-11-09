@@ -7,7 +7,7 @@ upstream archive itself is deliberately not committed.
 Generated files are ready for RocRay: `generated/atlas.png` is one RGBA texture,
 `generated/atlas.json` gives pixel rectangles for each named image, and
 `generated/audio/` contains WAV sound effects. The application should load the
-directory rooted at `examples/roc-doom-e1m1/assets` and refer to these files relative to
+directory rooted at `assets` beside the app and refer to these files relative to
 that root.
 
 The atlas includes walls, doors, switch and exit decorations, floor and ceiling

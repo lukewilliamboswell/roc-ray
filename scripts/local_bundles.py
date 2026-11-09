@@ -460,8 +460,8 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
     local application modules may sit in nested directories.
 
     Assets are otherwise left where they are: they are opened at runtime through
-    an `Assets.Store`, and the built executable is run from the repository root
-    so `examples/<name>/assets/...` still resolves. The exception is a file
+    an `Assets.Store`, and the built executable is run from the original app
+    directory so its `assets/...` paths resolve. The exception is a file
     embedded at *compile* time -- `import "assets/fonts/X.ttf" as bytes` -- which
     the compiler resolves relative to the source file, and so has to exist beside
     the staged copy. Those are found by `embedded_paths` and copied too.

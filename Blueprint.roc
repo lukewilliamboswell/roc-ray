@@ -13,7 +13,7 @@
 # nightly named below; it runs the scripts under scripts/. Bare `roc` is the
 # latest nightly, which the machine provides: the platform, its examples and
 # its tests name no compiler.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.8.0/FbJymjYdCxx9vqMcau7r4tQfeAbnVGqqJoYrLGqPCqKu.tar.zst" }
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.12.0/GSb71LxYHqLohZz8jMfawWEwQcyev9ZdVC26sfsDwfq8.tar.zst" }
 
 import pf.Recipes
 
@@ -47,7 +47,7 @@ config = [
 	Environment(
 		"docs",
 		[
-			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/roc-docs-{system}"))]),
+			Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/roc-docs-{system}"))]),
 			Expect(["sh", "realpath"]),
 		],
 	),

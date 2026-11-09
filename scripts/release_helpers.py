@@ -553,15 +553,17 @@ release's platform bundle:
 
     {default_url}
 
-Run one from this folder with the latest Roc nightly:
+Run each example from its own directory with the latest Roc nightly:
 
-    roc examples/hello_world/main.roc
+    cd examples/hello_world
+    roc main.roc
 
-Some examples read files beside them; run every example from this folder so
-their paths resolve. `spec.json` records what each example prints when it
+Some examples read an `assets/` directory beside their app; running from that
+app directory keeps its declared filesystem permissions and paths aligned. `spec.json` records what each example prints when it
 runs headlessly, for example
 
-    roc build examples/pong/main.roc --output=pong
+    cd ../pong
+    roc build main.roc --output=pong
     ./pong --host-headless --host-headless-frames=60
 
 The manual is at https://lukewilliamboswell.github.io/roc-ray/.

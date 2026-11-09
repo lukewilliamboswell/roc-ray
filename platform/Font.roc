@@ -141,7 +141,7 @@ text_codepoints = |text| {
 	bytes = Str.to_utf8(text)
 	Iter.custom(
 		0.U64,
-		Unknown,
+		Err(Unknown),
 		|offset| {
 			match List.get(bytes, offset) {
 				Err(OutOfBounds) => Err(NoMore)

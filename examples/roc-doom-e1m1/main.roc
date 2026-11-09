@@ -73,7 +73,7 @@ program = { init!, update!, render! }
 ## from. The startup config declares this directory read-only, and `init!`
 ## opens its asset store from the same constant.
 assets_dir : Str
-assets_dir = "examples/roc-doom-e1m1/assets"
+assets_dir = "assets"
 
 init! : App.Init(Model, _)
 init! = App.init(

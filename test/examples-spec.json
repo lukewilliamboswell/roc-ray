@@ -4,7 +4,7 @@
     "scripts/release_helpers.py package-examples copies these apps into the archive's spec.json,",
     "adding the release and its bundle URL; scripts/test_examples_archive.py runs that exact",
     "archive before publication, and roc-automation's nightly compatibility workflow runs the",
-    "published one against each new Roc nightly. Each case runs from the archive root, compares",
+    "published one against each new Roc nightly. Each case runs beside its app, compares",
     "stdout, stderr and the exit code exactly, and must finish within ten seconds."
   ],
   "apps": [

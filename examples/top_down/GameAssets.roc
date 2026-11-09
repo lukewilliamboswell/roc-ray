@@ -29,7 +29,7 @@ GameAssets := {
 	## run the game from. `main.roc` declares this same directory, read-only,
 	## so the one constant keeps the declaration and the loader in step.
 	assets_dir : Str
-	assets_dir = "examples/top_down/assets"
+	assets_dir = "assets"
 
 	## Loads every texture, font, sound, and music stream before the first frame.
 	load! = |io| {

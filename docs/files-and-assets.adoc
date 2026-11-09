@@ -191,9 +191,9 @@ store = Assets.open!(exe_dir.subdir("assets")?, IgnoreManifest)?
 `roc main.roc` builds the executable in the compiler's cache, so nothing is
 beside it during development. xref:shipping.adoc#shipping[Ship your game] shows one `init!` that uses the
 source directory while you develop and the directory beside the executable
-once the game is packaged. The repository's examples run from the repository
-root, so they declare their own directory, such as
-`Directory("examples/top_down/assets", ReadOnly)`.
+once the game is packaged. The repository's examples run from their own app
+directory, so they declare the assets beside their source, such as
+`Directory("assets", ReadOnly)`.
 
 Load from a store with:
 

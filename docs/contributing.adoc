@@ -80,13 +80,14 @@ The `main` branch holds development source, including examples of APIs that
 have not been released yet. So each checked-in example names the platform in
 your checkout by path, `rr: platform "../../platform/main.roc"`. Neither the
 example nor the platform names a compiler. Build the host once,
-then run or check an example directly, from the repository root:
+then run or check an example directly, from its own directory:
 
 [source,bash]
 ----
 zig build
-roc examples/cave_climb/main.roc
-roc check examples/cave_climb/main.roc
+cd examples/cave_climb
+roc main.roc
+roc check main.roc
 ----
 
 Run `zig build` again after changing host code. CI checks every example exactly
@@ -361,7 +362,8 @@ When adding an example:
 * Add it to xref:examples.adoc#examples[Example gallery] (`docs/examples.adoc`) with its purpose and reusable
   patterns.
 * Add a case for it to `scripts/test_spec.json`.
-* Run it from the repository root so asset paths match how users invoke it.
+* Run it from its own directory and keep asset roots relative to that directory,
+  matching the published examples runner.
 * Put third-party licenses and attribution beside the relevant assets.
 * Prefer generated or existing assets unless new binary files materially improve
   the example.

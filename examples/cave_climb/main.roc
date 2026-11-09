@@ -128,9 +128,9 @@ ground_friction = 70.F32
 
 air_drag = 0.35.F32
 
-## Where the game's assets live, relative to the repository root it runs from.
+## Where the game's assets live, relative to the example directory it runs from.
 ## The config declares this directory, read-only, and nothing else on disk.
-asset_root = "examples/cave_climb/assets"
+asset_root = "assets"
 
 init! : App.Init(Model, _)
 init! = App.init(

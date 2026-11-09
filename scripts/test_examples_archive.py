@@ -5,7 +5,7 @@ The archive is what roc-automation's nightly compatibility workflow runs
 against each new nightly once it is published, so it is tested here the same
 way first: extracted unchanged into a fresh directory with an empty package
 cache, every app in its `spec.json` checked and built, and every case run from
-the archive root with stdout, stderr and the exit code compared exactly. The
+its own directory with stdout, stderr and the exit code compared exactly. The
 only difference is where the bundle comes from: the release URL in each header
 is replaced, for each command, by the same bundle served on loopback.
 
@@ -124,7 +124,7 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
             if not built:
                 continue
             started = time.monotonic()
-            ran = run([str(executable), *case["args"]], root, env, case["stdin"].encode("utf-8"), CASE_TIMEOUT)
+            ran = run([str(executable), *case["args"]], (root / path).parent, env, case["stdin"].encode("utf-8"), CASE_TIMEOUT)
             elapsed = int((time.monotonic() - started) * 1000)
             problems = compare(case, ran)
             print(f"  {case['name']}: {'ok' if not problems else 'FAILED'} ({elapsed} ms)")

@@ -5,8 +5,8 @@ complete E1M1 vertical slice built from the pinned Freedoom 0.13.0 Phase 1
 WAD. It is not affiliated with or endorsed by id Software or the Freedoom
 project; see [`THIRD-PARTY-LICENCES.md`](../../THIRD-PARTY-LICENCES.md).
 
-While developing RocRay, run it against the local platform source from the
-repository root:
+While developing RocRay, use the launcher from the repository root. It runs
+the app from its own directory, where its `assets/` directory lives:
 
 ```sh
 scripts/run-example.py examples/roc-doom-e1m1/main.roc

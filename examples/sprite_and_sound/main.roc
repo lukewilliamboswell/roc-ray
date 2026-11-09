@@ -4,7 +4,7 @@
 ## This example introduces three ideas, in the order `init!` uses them:
 ##
 ## 1. A permission. An app may only read the directories it declares in its
-##    startup config. This one declares `examples/sprite_and_sound/assets`,
+##    startup config. This one declares `assets`,
 ##    read-only, and nothing else.
 ## 2. An asset store. `Assets.open!` turns that directory into a store that
 ##    textures and sounds are loaded from by name.
@@ -33,7 +33,7 @@ Model : {
 
 ## The one directory this app reads. The config declares it and `init!` opens
 ## it, so both use this constant and cannot drift apart.
-assets_dir = "examples/sprite_and_sound/assets"
+assets_dir = "assets"
 
 ## The picture is 16 x 16 pixels; drawing each one 8 x 8 makes it 128 wide.
 scale = 8.F32

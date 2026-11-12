@@ -33,12 +33,16 @@ Game := [].{
 	## Creates a ready-to-launch game with a fresh wall and three lives.
 	new_world : () -> World
 	new_world = || {
-		bricks: Bricks.fresh,
-		paddle: Paddle.initial,
-		ball: Ball.on(Paddle.initial.rect()),
-		score: 0,
-		lives: initial_lives,
-		state: Ready,
+		paddle = Paddle.initial
+		ball = Ball.on(paddle.rect())
+		{
+			bricks: Bricks.fresh,
+			paddle,
+			ball,
+			score: 0,
+			lives: initial_lives,
+			state: Ready,
+		}
 	}
 
 	## Advances the current match state and reports its significant occurrences.

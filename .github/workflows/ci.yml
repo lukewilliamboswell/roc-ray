@@ -149,8 +149,14 @@ jobs:
       - name: Test example compile-time values on Windows
         if: runner.os == 'Windows'
         run: |
-          roc test examples/breakout/main.roc
-          roc test examples/live_plot/main.roc
+          ctfe_failed=0
+          for pass in 1 2 3; do
+            for app in examples/breakout/main.roc examples/live_plot/main.roc; do
+              echo "Uncached Windows test pass $pass: $app"
+              roc test --no-cache "$app" || ctfe_failed=1
+            done
+          done
+          test "$ctfe_failed" = 0
 
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives

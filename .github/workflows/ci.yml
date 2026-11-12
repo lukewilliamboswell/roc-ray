@@ -158,6 +158,15 @@ jobs:
           done
           test "$ctfe_failed" = 0
 
+      - name: Trace Windows compiler stack exceptions
+        if: always() && runner.os == 'Windows'
+        run: |
+          trace_failed=0
+          for pass in 1 2 3; do
+            python3 scripts/trace_windows_overflow.py roc test --no-cache examples/breakout/main.roc || trace_failed=1
+          done
+          test "$trace_failed" = 0
+
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives
       # against the lock, and nothing here can rebuild them.

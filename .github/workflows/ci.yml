@@ -2,6 +2,11 @@ name: Windows compiler mode comparison
 
 on:
   workflow_dispatch:
+    inputs:
+      build_fast_diagnostics:
+        type: boolean
+        default: false
+        description: Build the release compiler with developer diagnostics
 
 permissions:
   contents: read
@@ -9,6 +14,7 @@ permissions:
 
 jobs:
   compare:
+    if: inputs.build_fast_diagnostics != true
     runs-on: windows-2022
     timeout-minutes: 15
     defaults:
@@ -77,3 +83,69 @@ jobs:
         with:
           name: windows-compiler-mode-comparison
           path: ${{ runner.temp }}/compiler-comparison/
+
+  fast-diagnostics:
+    if: inputs.build_fast_diagnostics
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 6ea154972aca7c327c215aa833fcf6f0712e5ca5
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          nightly-tag: nightly-2026-11-11-7679cc5
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: roc-lang/roc
+          ref: 7679cc527cc260b65314b277b242cfb93cb98650
+          path: compiler-fast-debug
+          persist-credentials: false
+      - name: Build the release compiler with diagnostics
+        working-directory: compiler-fast-debug
+        run: zig build build-release -Ddev-diagnostics -Dcompiler-version=nightly-2026-11-11-7679cc5 -j2
+      - name: Reproduce with release diagnostics
+        run: |
+          compiler="$PWD/compiler-fast-debug/zig-out/bin/roc.exe"
+          "$compiler" version
+          log_dir="$RUNNER_TEMP/compiler-fast-diagnostics"
+          mkdir -p "$log_dir"
+          sha256sum "$compiler" > "$log_dir/compiler-hash.txt"
+          overall=0
+          for mode in untraced traced; do
+            unset ROC_TRACE_BOXY_WORK ROC_CTFE_DEMAND_TRACE
+            if [ "$mode" = traced ]; then
+              export ROC_TRACE_BOXY_WORK=1 ROC_CTFE_DEMAND_TRACE=1
+            fi
+            passed=0
+            result=0
+            for pass in {1..20}; do
+              trace_log="$log_dir/$mode-$pass.log"
+              echo "$mode: uncached Breakout pass $pass"
+              if "$compiler" test --no-cache examples/breakout/main.roc > "$trace_log" 2>&1; then
+                passed=$((passed + 1))
+                tail -3 "$trace_log"
+              else
+                result=$?
+                overall=1
+                tail -80 "$trace_log"
+                break
+              fi
+            done
+            echo "$mode: $passed passes; first failure exit=$result" >> "$log_dir/summary.txt"
+          done
+          cat "$log_dir/summary.txt"
+          exit "$overall"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: windows-compiler-fast-diagnostics
+          path: |
+            ${{ runner.temp }}/compiler-fast-diagnostics/
+            compiler-fast-debug/zig-out/bin/roc.exe

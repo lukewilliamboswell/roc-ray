@@ -70,7 +70,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: 0.17.1
 
       # Xvfb provides the display; the X11 dev packages are what raylib links
       # against, and mesa's software rasteriser is what gives xvfb a GL context.
@@ -142,6 +142,9 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+
+      - name: Test URL literals and pure parsing
+        run: roc test platform/Url.roc
 
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives

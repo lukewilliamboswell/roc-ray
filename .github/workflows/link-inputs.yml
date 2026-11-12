@@ -71,7 +71,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: 0.17.1
           use-cache: false
       - name: Test the producer and consumer contracts
         run: python3 -m unittest scripts/test_link_inputs.py
@@ -108,7 +108,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: 0.17.1
       - run: zig build libvpx-parity
 
   # Final-links every example against the exact candidate bytes and runs it
@@ -134,7 +134,7 @@ jobs:
           persist-credentials: false
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: 0.17.1
       - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
         with:
           version: nightly-new-compiler

@@ -39,7 +39,18 @@ config = [
 			Extend("scripts"),
 			# The exact Zig release that builds the host and its linker inputs;
 			# build.zig.zon names the same version.
-			Tools(["nix#zig_0_17", "nix#python3", "nix#zstd", "nix#curl", "nix#binutils"]),
+			Programs([
+				Fetch(
+					"zig",
+					|system|
+						match system {
+							"x86_64-linux" => Archive("https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz", TarXz, "zig-x86_64-linux-0.17.1/zig")
+							"aarch64-darwin" => Archive("https://ziglang.org/download/0.17.1/zig-aarch64-macos-0.17.1.tar.xz", TarXz, "zig-aarch64-macos-0.17.1/zig")
+							_ => Unavailable
+						},
+				),
+			]),
+			Tools(["nix#python3", "nix#zstd", "nix#curl", "nix#binutils"]),
 		],
 	),
 	# The shared documentation renderer from roc-automation. Blueprint.lock

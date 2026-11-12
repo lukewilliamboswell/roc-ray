@@ -32,7 +32,7 @@ Game := [].{
 
 	## Creates a ready-to-launch game with a fresh wall and three lives.
 	new_world : () -> World
-	new_world = || ready_world(Bricks.fresh, Paddle.initial)
+	new_world = || initial_world_for(Bricks.fresh, Paddle.initial)
 
 	## Advances the current match state and reports its significant occurrences.
 	update : World, Controls, F32 -> (World, List(Event))
@@ -46,8 +46,8 @@ Game := [].{
 }
 
 ## Places a fresh ball above the paddle and resets the match counters.
-ready_world : List(Bricks.Brick), Paddle -> Game.World
-ready_world = |bricks, paddle| {
+initial_world_for : List(Bricks.Brick), Paddle -> Game.World
+initial_world_for = |bricks, paddle| {
 	bricks,
 	paddle,
 	ball: Ball.on(paddle.rect()),

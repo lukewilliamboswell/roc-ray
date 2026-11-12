@@ -408,14 +408,21 @@ jobs:
           ROC_CTFE_DEMAND_TRACE: "1"
         run: |
           trace_result=0
-          ./compiler-debug/zig-out/bin/roc.exe test --no-cache examples/breakout/main.roc > "$RUNNER_TEMP/ctfe-roots.log" 2>&1 || trace_result=$?
-          tail -80 "$RUNNER_TEMP/ctfe-roots.log"
+          for pass in {1..20}; do
+            echo "Diagnostic compiler uncached pass $pass"
+            trace_log="$RUNNER_TEMP/ctfe-roots-$pass.log"
+            ./compiler-debug/zig-out/bin/roc.exe test --no-cache examples/breakout/main.roc > "$trace_log" 2>&1 || trace_result=$?
+            tail -80 "$trace_log"
+            if [ "$trace_result" != 0 ]; then break; fi
+          done
           exit "$trace_result"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: windows-compiler-root-diagnostics
-          path: ${{ runner.temp }}/ctfe-roots.log
+          path: |
+            ${{ runner.temp }}/ctfe-roots-*.log
+            compiler-debug/zig-out/bin/roc.exe
 
   required:
     name: CI required

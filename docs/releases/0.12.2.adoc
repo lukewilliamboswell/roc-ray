@@ -8,6 +8,11 @@ compile-time stack overflow that prevented Windows apps from building. The
 host ABI includes the nightly's updated boxed-callable layout, so task captures
 are read and released at the correct offsets.
 
+The packaged Breakout and live plot examples avoid further Windows compile-time
+initialization overflows. Breakout builds its wall through list operations and
+receives its initial paddle explicitly; live plot constructs its test cameras
+from screen dimensions. Gameplay, geometry, and all existing assertions are preserved.
+
 Linux hosts and linker inputs use PIC and the glibc PIE startup object. Release
 validation now checks that built Linux examples are position-independent
 executables without text relocations. Windows also tests URL parsing directly

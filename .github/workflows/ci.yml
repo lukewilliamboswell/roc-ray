@@ -146,11 +146,23 @@ jobs:
       - name: Test URL literals and pure parsing
         run: roc test platform/Url.roc
 
-      - name: Test example compile-time values on Windows
+      - name: Diagnose Windows compile-time evaluation
         if: runner.os == 'Windows'
         run: |
-          roc test examples/breakout/main.roc
-          roc test examples/live_plot/main.roc
+          mkdir -p "$RUNNER_TEMP/ctfe-probe-cache"
+          export ROC_CACHE_DIR="$RUNNER_TEMP/ctfe-probe-cache"
+          ctfe_failed=0
+          for mode in uncached cached repeated; do
+            for app in examples/breakout/main.roc examples/live_plot/main.roc; do
+              echo "Compile-time probe: $mode $app"
+              if [ "$mode" = uncached ]; then
+                roc test --no-cache "$app" || ctfe_failed=1
+              else
+                roc test "$app" || ctfe_failed=1
+              fi
+            done
+          done
+          test "$ctfe_failed" = 0
 
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives

@@ -11,7 +11,7 @@ Bricks := [].{
 
 	score = 10.U64
 	fresh : List(Brick)
-	fresh = [Red, Orange, Yellow, Green, Blue].join_map(build_row)
+	fresh = List.concat(build_row(Red), List.concat(build_row(Orange), List.concat(build_row(Yellow), List.concat(build_row(Green), build_row(Blue)))))
 
 	## Finds the first brick touched by the ball.
 	find_hit : List(Brick), Math.Circle -> Try(Brick, [NotFound])
@@ -82,7 +82,18 @@ brick_at = |kind, column| {
 
 ## Builds all ten bricks in one colored row.
 build_row : Row -> List(Bricks.Brick)
-build_row = |kind| [0.U64, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|column| brick_at(kind, column))
+build_row = |kind| [
+	brick_at(kind, 0),
+	brick_at(kind, 1),
+	brick_at(kind, 2),
+	brick_at(kind, 3),
+	brick_at(kind, 4),
+	brick_at(kind, 5),
+	brick_at(kind, 6),
+	brick_at(kind, 7),
+	brick_at(kind, 8),
+	brick_at(kind, 9),
+]
 
 ## Recursively finds the first touched brick from one private list index.
 find_hit_from : List(Bricks.Brick), Math.Circle, U64 -> Try(Bricks.Brick, [NotFound])

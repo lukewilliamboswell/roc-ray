@@ -143,6 +143,17 @@ jobs:
         with:
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
 
+      - name: Isolate compile-time list evaluation
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/list-values.roc" <<'EOF'
+          mapped = [1.U8, 2, 3].map(|byte| byte + 1)
+          repeated = List.repeat(1.U8, 50)
+          expect mapped == [2, 3, 4]
+          expect repeated.len() == 50
+          EOF
+          roc test "$RUNNER_TEMP/list-values.roc"
+
       - name: Test URL literals and pure parsing
         run: roc test platform/Url.roc
 

@@ -30,9 +30,16 @@ Game := [].{
 
 	Event := [GameStarted, WallHit, PaddleHit, BrickHit(Bricks.Brick), LifeLost(State), WallCleared]
 
-	## Creates a ready-to-launch game with a fresh wall and three lives.
-	new_world : () -> World
-	new_world = || initial_world_for(Bricks.fresh, Paddle.initial)
+	## Creates a ready-to-launch game around the paddle, with a fresh wall and three lives.
+	new_world : Paddle -> World
+	new_world = |paddle| {
+		bricks: Bricks.fresh,
+		paddle,
+		ball: Ball.on(paddle.rect()),
+		score: 0,
+		lives: initial_lives,
+		state: Ready,
+	}
 
 	## Advances the current match state and reports its significant occurrences.
 	update : World, Controls, F32 -> (World, List(Event))
@@ -43,17 +50,6 @@ Game := [].{
 			Won => update_finished(world, controls)
 			GameOver => update_finished(world, controls)
 		}
-}
-
-## Places a fresh ball above the paddle and resets the match counters.
-initial_world_for : List(Bricks.Brick), Paddle -> Game.World
-initial_world_for = |bricks, paddle| {
-	bricks,
-	paddle,
-	ball: Ball.on(paddle.rect()),
-	score: 0,
-	lives: initial_lives,
-	state: Ready,
 }
 
 ## Respawns the ball above the paddle that will launch it.
@@ -78,7 +74,7 @@ update_ready = |world, controls, dt| {
 
 ## Holds a finished match or replaces it with a fresh one on request.
 update_finished : Game.World, Game.Controls -> (Game.World, List(Game.Event))
-update_finished = |world, controls| if (controls.action_pressed) (Game.new_world(), [GameStarted]) else (world, [])
+update_finished = |world, controls| if (controls.action_pressed) (Game.new_world(Paddle.initial), [GameStarted]) else (world, [])
 
 ## Moves the ball and resolves life, wall, paddle, and brick interactions.
 update_playing : Game.World, Game.Controls, F32 -> (Game.World, List(Game.Event))

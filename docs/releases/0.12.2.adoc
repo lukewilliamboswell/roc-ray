@@ -1,7 +1,7 @@
 = RocRay 0.12.2
 
-0.12.2 restores compatibility with the current Roc nightly on Windows and
-updates the native toolchain to Zig 0.17.1. The public application API is unchanged.
+0.12.2 updates the native toolchain to Zig 0.17.1 and the host ABI for the
+current Roc nightly. The public application API is unchanged.
 
 URL normalization uses Roc's built-in ASCII lowercase operation, avoiding the
 compile-time stack overflow that prevented Windows apps from building. The

@@ -8,7 +8,7 @@ compile-time stack overflow that prevented Windows apps from building. The
 host ABI includes the nightly's updated boxed-callable layout, so task captures
 are read and released at the correct offsets.
 
-Breakout builds its wall through list operations and receives its initial paddle
+Breakout stores its fixed wall as authored data and receives its initial paddle
 explicitly; live plot constructs its test cameras from screen dimensions.
 Gameplay, geometry, and all existing assertions are preserved.
 

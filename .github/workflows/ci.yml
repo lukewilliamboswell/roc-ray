@@ -2,11 +2,6 @@ name: CI
 
 on:
   workflow_dispatch:
-    inputs:
-      compiler_diagnostics:
-        type: boolean
-        default: false
-        description: Build the failing compiler revision with developer diagnostics
   pull_request:
   # Squash merges land a commit no PR run validated, so check main itself.
   push:
@@ -378,51 +373,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: blueprint run glue
-
-  compiler-diagnostics:
-    name: Windows compiler root diagnostics
-    if: github.event_name == 'workflow_dispatch' && inputs.compiler_diagnostics
-    needs: resolve
-    runs-on: windows-2022
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: ./.github/actions/setup-toolchain
-        with:
-          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: roc-lang/roc
-          ref: 7679cc527cc260b65314b277b242cfb93cb98650
-          path: compiler-debug
-          persist-credentials: false
-      - name: Build the exact compiler with developer diagnostics
-        working-directory: compiler-debug
-        run: zig build roc -Dtarget=x86_64-windows-gnu -Doptimize=ReleaseSafe -Ddev-diagnostics -Dstrip -j2
-      - name: Trace compile-time root dependencies
-        env:
-          ROC_TRACE_BOXY_WORK: "1"
-          ROC_CTFE_DEMAND_TRACE: "1"
-        run: |
-          trace_result=0
-          for pass in {1..20}; do
-            echo "Diagnostic compiler uncached pass $pass"
-            trace_log="$RUNNER_TEMP/ctfe-roots-$pass.log"
-            ./compiler-debug/zig-out/bin/roc.exe test --no-cache examples/breakout/main.roc > "$trace_log" 2>&1 || trace_result=$?
-            tail -80 "$trace_log"
-            if [ "$trace_result" != 0 ]; then break; fi
-          done
-          exit "$trace_result"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: windows-compiler-root-diagnostics
-          path: |
-            ${{ runner.temp }}/ctfe-roots-*.log
-            compiler-debug/zig-out/bin/roc.exe
 
   required:
     name: CI required

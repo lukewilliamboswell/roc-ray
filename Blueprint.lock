@@ -16,6 +16,22 @@
 		(system "aarch64-darwin")
 		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-23-18478ff/roc_nightly-macos_apple_silicon-2026-10-23-18478ff.tar.gz"))
 		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-23-18478ff")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a")
+		(size 57411036)
+		(system "x86_64-linux")
+		(urls ("https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"))
+		(witness "")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d")
+		(size 54001240)
+		(system "aarch64-darwin")
+		(urls ("https://ziglang.org/download/0.17.1/zig-aarch64-macos-0.17.1.tar.xz"))
+		(witness "")) (
 		(name "roc-docs")
 		(obtained Both)
 		(served ("release-assets.githubusercontent.com"))

@@ -208,6 +208,29 @@ def executable_for(entry: Path) -> Path:
     return entry.with_name(f"{entry.stem}{suffix}")
 
 
+def check_linux_pie(built: list[tuple[Path, Path]]) -> list[str]:
+    """Require every Linux example to be a PIE without text relocations."""
+    if not IS_LINUX or not built:
+        return []
+    if shutil.which("readelf") is None:
+        return ["Linux PIE: readelf is required to inspect the built examples"]
+    failures = []
+    print("\nChecking Linux PIE executables...", end=" ", flush=True)
+    for example, staged in built:
+        result = subprocess.run(
+            ["readelf", "--file-header", "--dynamic", "-W", str(executable_for(staged))],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            failures.append(f"{example_name(example)}: readelf failed: {result.stderr.strip()}")
+        elif not re.search(r"Type:\s+DYN\b", result.stdout) or not re.search(r"\(FLAGS_1\).*\bPIE\b", result.stdout):
+            failures.append(f"{example_name(example)} is not a position-independent executable")
+        elif "TEXTREL" in result.stdout:
+            failures.append(f"{example_name(example)} requires text relocations")
+    print("ok" if not failures else "FAILED")
+    return [f"Linux PIE: {failure}" for failure in failures]
+
+
 def check_glibc_baseline(built: list[tuple[Path, Path]]) -> list[str]:
     """Fail if a built Linux example leaves a glibc 2.38-only symbol for the
     dynamic linker.
@@ -2084,6 +2107,7 @@ def _run_example_stages(
     elif args.skip_roc_build:
         print("\nSkipping headless runtime (--skip-roc-build)")
     else:
+        failed.extend(check_linux_pie(built))
         failed.extend(check_glibc_baseline(built))
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
 

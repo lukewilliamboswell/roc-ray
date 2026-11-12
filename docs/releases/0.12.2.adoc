@@ -1,0 +1,18 @@
+= RocRay 0.12.2
+
+0.12.2 updates the native toolchain to Zig 0.17.1 and the host ABI for the
+current Roc nightly. The public application API is unchanged.
+
+URL normalization uses Roc's built-in ASCII lowercase operation, avoiding the
+compile-time stack overflow that prevented Windows apps from building. The
+host ABI includes the nightly's updated boxed-callable layout, so task captures
+are read and released at the correct offsets.
+
+Breakout stores its fixed wall as authored data and receives its initial paddle
+explicitly; live plot constructs its test cameras from screen dimensions.
+Gameplay, geometry, and all existing assertions are preserved.
+
+Linux hosts and linker inputs use PIC and the glibc PIE startup object. Release
+validation now checks that built Linux examples are position-independent
+executables without text relocations. Windows also tests URL parsing directly
+and builds a small example through the default optimized LLVM path.

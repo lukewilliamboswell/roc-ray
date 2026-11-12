@@ -308,7 +308,7 @@ parse_absolute = |input| {
 				}
 		}?
 	scheme =
-		match ascii_lower(scheme_parts.before) {
+		match Str.with_ascii_lowercased(scheme_parts.before) {
 			"http" => Ok(Http)
 			"https" => Ok(Https)
 			other => Err(UnsupportedScheme(other))
@@ -384,7 +384,7 @@ validate_host = |raw_host| {
 
 validate_dns_name : Str -> Try(Str, [InvalidHost(Str)])
 validate_dns_name = |raw_host| {
-	host = ascii_lower(raw_host)
+	host = Str.with_ascii_lowercased(raw_host)
 	labels = Str.split_on(host, ".")
 	valid =
 		List.len(Str.to_utf8(host)) <= 253 and
@@ -632,7 +632,7 @@ is_forbidden = |byte, kind| {
 
 resolve_reference : Url, Str -> Try(Url, Url.ParseErr)
 resolve_reference = |base, reference| {
-	lower = ascii_lower(reference)
+	lower = Str.with_ascii_lowercased(reference)
 	if starts_with(lower, "http://") or starts_with(lower, "https://") {
 		parse_absolute(reference)
 	} else if Str.contains(reference, "://") or starts_with(reference, "//") {
@@ -862,19 +862,6 @@ parse_err_to_str = |err|
 		PortOutOfRange(port) => Str.concat("URL port is out of range: ", U64.to_str(port))
 		UnsupportedScheme(scheme) => Str.concat("Unsupported URL scheme: ", scheme)
 	}
-
-ascii_lower : Str -> Str
-ascii_lower = |input|
-	Str.from_utf8_lossy(
-		Str.to_utf8(input).map(
-			|byte|
-				if byte >= 65 and byte <= 90 {
-					byte + 32
-				} else {
-					byte
-				},
-		),
-	)
 
 ascii_upper_hex : U8 -> U8
 ascii_upper_hex = |byte|

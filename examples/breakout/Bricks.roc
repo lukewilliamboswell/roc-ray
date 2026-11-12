@@ -11,7 +11,58 @@ Bricks := [].{
 
 	score = 10.U64
 	fresh : List(Brick)
-	fresh = List.concat(build_row(Red), List.concat(build_row(Orange), List.concat(build_row(Yellow), List.concat(build_row(Green), build_row(Blue)))))
+	fresh = [
+		{ id: 0, rect: Math.rect(44, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 1, rect: Math.rect(116, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 2, rect: Math.rect(188, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 3, rect: Math.rect(260, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 4, rect: Math.rect(332, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 5, rect: Math.rect(404, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 6, rect: Math.rect(476, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 7, rect: Math.rect(548, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 8, rect: Math.rect(620, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 9, rect: Math.rect(692, 88, 64, 22), color: Color.rgba(255, 79, 125, 255) },
+		{ id: 10, rect: Math.rect(44, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 11, rect: Math.rect(116, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 12, rect: Math.rect(188, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 13, rect: Math.rect(260, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 14, rect: Math.rect(332, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 15, rect: Math.rect(404, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 16, rect: Math.rect(476, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 17, rect: Math.rect(548, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 18, rect: Math.rect(620, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 19, rect: Math.rect(692, 118, 64, 22), color: Color.rgba(255, 159, 69, 255) },
+		{ id: 20, rect: Math.rect(44, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 21, rect: Math.rect(116, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 22, rect: Math.rect(188, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 23, rect: Math.rect(260, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 24, rect: Math.rect(332, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 25, rect: Math.rect(404, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 26, rect: Math.rect(476, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 27, rect: Math.rect(548, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 28, rect: Math.rect(620, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 29, rect: Math.rect(692, 148, 64, 22), color: Color.rgba(255, 224, 102, 255) },
+		{ id: 30, rect: Math.rect(44, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 31, rect: Math.rect(116, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 32, rect: Math.rect(188, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 33, rect: Math.rect(260, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 34, rect: Math.rect(332, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 35, rect: Math.rect(404, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 36, rect: Math.rect(476, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 37, rect: Math.rect(548, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 38, rect: Math.rect(620, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 39, rect: Math.rect(692, 178, 64, 22), color: Color.rgba(76, 224, 179, 255) },
+		{ id: 40, rect: Math.rect(44, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 41, rect: Math.rect(116, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 42, rect: Math.rect(188, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 43, rect: Math.rect(260, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 44, rect: Math.rect(332, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 45, rect: Math.rect(404, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 46, rect: Math.rect(476, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 47, rect: Math.rect(548, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 48, rect: Math.rect(620, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+		{ id: 49, rect: Math.rect(692, 208, 64, 22), color: Color.rgba(90, 157, 255, 255) },
+	]
 
 	## Finds the first brick touched by the ball.
 	find_hit : List(Brick), Math.Circle -> Try(Brick, [NotFound])
@@ -27,73 +78,9 @@ Bricks := [].{
 	remove = |bricks, hit| List.keep_if(bricks, |brick| brick.id != hit.id)
 }
 
-Row := [Red, Orange, Yellow, Green, Blue]
-
-left = 44.F32
-
-top = 88.F32
-
-width = 64.F32
-
-height = 22.F32
-
-gap = 8.F32
-
-per_row = 10.U64
-
 band_top = 84.F32
 
 band_bottom = 236.F32
-
-## Converts a named brick row into its zero-based vertical index.
-row_index : Row -> U64
-row_index = |kind|
-	match kind {
-		Red => 0
-		Orange => 1
-		Yellow => 2
-		Green => 3
-		Blue => 4
-	}
-
-## Gives each brick row its arcade color.
-row_color : Row -> Color.Rgba
-row_color = |kind|
-	match kind {
-		Red => Color.from_hex_rgb(0xff4f7d)
-		Orange => Color.from_hex_rgb(0xff9f45)
-		Yellow => Color.from_hex_rgb(0xffe066)
-		Green => Color.from_hex_rgb(0x4ce0b3)
-		Blue => Color.from_hex_rgb(0x5a9dff)
-	}
-
-## Builds the brick at one row and column of the authored wall.
-brick_at : Row, U64 -> Bricks.Brick
-brick_at = |kind, column| {
-	id: row_index(kind) * per_row + column,
-	rect: Math.rect(
-		left + U64.to_f32(column) * (width + gap),
-		top + U64.to_f32(row_index(kind)) * (height + gap),
-		width,
-		height,
-	),
-	color: row_color(kind),
-}
-
-## Builds all ten bricks in one colored row.
-build_row : Row -> List(Bricks.Brick)
-build_row = |kind| [
-	brick_at(kind, 0),
-	brick_at(kind, 1),
-	brick_at(kind, 2),
-	brick_at(kind, 3),
-	brick_at(kind, 4),
-	brick_at(kind, 5),
-	brick_at(kind, 6),
-	brick_at(kind, 7),
-	brick_at(kind, 8),
-	brick_at(kind, 9),
-]
 
 ## Recursively finds the first touched brick from one private list index.
 find_hit_from : List(Bricks.Brick), Math.Circle, U64 -> Try(Bricks.Brick, [NotFound])

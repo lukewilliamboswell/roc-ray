@@ -72,7 +72,7 @@ init! = App.init_for_args(
 		if demo {
 			io.capture().start!(demo_recording)?
 		}
-		Ok({ assets: GameAssets.load!()?, world: Game.new_world(), demo, elapsed: 0 })
+		Ok({ assets: GameAssets.load!()?, world: Game.new_world(Paddle.initial), demo, elapsed: 0 })
 	},
 )
 
@@ -155,20 +155,20 @@ no_controls = { move: Still, action_pressed: Bool.False }
 expect read_controls(Devices.none.with_key_down(KeyLeft)).move == Left
 
 expect {
-	ready = Game.new_world()
+	ready = Game.new_world(Paddle.initial)
 	(world, events) = Game.update(ready, { ..no_controls, action_pressed: Bool.True }, 0)
 	world.state == Playing and List.len(events) == 1
 }
 
 expect {
-	playing = { ..Game.new_world(), state: Playing }
+	playing = { ..Game.new_world(Paddle.initial), state: Playing }
 	ball = { ..playing.ball, pos: { ..playing.ball.pos, x: Ball.radius }, velocity: { x: -100, y: -100 } }
 	(world, events) = Game.update({ ..playing, ball }, no_controls, 0.1)
 	world.ball.velocity.x > 0 and List.len(events) == 1
 }
 
 expect {
-	playing = { ..Game.new_world(), state: Playing, lives: 1 }
+	playing = { ..Game.new_world(Paddle.initial), state: Playing, lives: 1 }
 	ball = { ..playing.ball, pos: { ..playing.ball.pos, y: 610 } }
 	(world, events) = Game.update({ ..playing, ball }, no_controls, 0)
 	world.state == GameOver and world.lives == 0 and List.len(events) == 1

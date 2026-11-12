@@ -174,9 +174,21 @@ jobs:
           import Bricks
           expect Bricks.fresh.len() == 50
           EOF
+          python3 - <<'PYPROBE'
+          from pathlib import Path
+          import os
+          probe = Path(os.environ["RUNNER_TEMP"]) / "roc-pure-repro"
+          platform = Path(os.path.relpath(Path("platform/main.roc").resolve(), probe)).as_posix()
+          base = 'app [Model, program] { rr: platform "' + platform + '" }\n' + 'import rr.App\nimport rr.Draw\nimport rr.Camera\nimport rr.Math\nModel : {}\nMsg : []\nprogram = { init!, update!, render! }\ninit! : App.Init(Model, [])\ninit! = App.init(App.default, |_io| Ok({}))\nupdate! : Model, App.Input(Msg), App.Io => Try(Model, [Exit(I64)])\nupdate! = |model, _input, _io| Ok(model)\nrender! : Model, Draw.Frame => Try({}, [Exit(I64)])\nrender! = |_model, _frame| Ok({})\n'
+          (probe / "PlatformCameraProbe.roc").write_text(base + (probe / "CameraProbe.roc").read_text().replace("import Math\nimport Camera\n", ""))
+          (probe / "PlatformBricks.roc").write_text(Path("examples/breakout/Bricks.roc").read_text().replace("Bricks", "PlatformBricks"))
+          (probe / "PlatformBricksProbe.roc").write_text(base + "\nimport PlatformBricks\nexpect PlatformBricks.fresh.len() == 50\n")
+          PYPROBE
           ctfe_failed=0
           roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/CameraProbe.roc" || ctfe_failed=1
           roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/BricksProbe.roc" || ctfe_failed=1
+          roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/PlatformCameraProbe.roc" || ctfe_failed=1
+          roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/PlatformBricksProbe.roc" || ctfe_failed=1
           test "$ctfe_failed" = 0
 
       - name: Save standalone compiler reproductions

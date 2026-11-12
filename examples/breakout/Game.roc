@@ -33,7 +33,7 @@ Game := [].{
 	## Creates a ready-to-launch game around the paddle, with a fresh wall and three lives.
 	new_world : Paddle -> World
 	new_world = |paddle| {
-		bricks: Bricks.fresh(),
+		bricks: Bricks.fresh,
 		paddle,
 		ball: Ball.on(paddle.rect()),
 		score: 0,

@@ -10,9 +10,8 @@ Bricks := [].{
 	}
 
 	score = 10.U64
-	## Builds the authored wall in row order for a new game.
-	fresh : () -> List(Brick)
-	fresh = || [Red, Orange, Yellow, Green, Blue].join_map(build_row)
+	fresh : List(Brick)
+	fresh = [Red, Orange, Yellow, Green, Blue].join_map(build_row)
 
 	## Finds the first brick touched by the ball.
 	find_hit : List(Brick), Math.Circle -> Try(Brick, [NotFound])

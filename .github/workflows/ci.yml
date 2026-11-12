@@ -150,11 +150,12 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           ctfe_failed=0
+          for pass in {1..20}; do
+            echo "Uncached Windows Breakout pass $pass"
+            roc test --no-cache examples/breakout/main.roc || ctfe_failed=1
+          done
           for pass in 1 2 3; do
-            for app in examples/breakout/main.roc examples/live_plot/main.roc; do
-              echo "Uncached Windows test pass $pass: $app"
-              roc test --no-cache "$app" || ctfe_failed=1
-            done
+            roc test --no-cache examples/live_plot/main.roc || ctfe_failed=1
           done
           test "$ctfe_failed" = 0
 

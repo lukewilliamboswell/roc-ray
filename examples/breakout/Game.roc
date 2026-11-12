@@ -32,18 +32,7 @@ Game := [].{
 
 	## Creates a ready-to-launch game with a fresh wall and three lives.
 	new_world : () -> World
-	new_world = || {
-		paddle = Paddle.initial
-		ball = Ball.on(paddle.rect())
-		{
-			bricks: Bricks.fresh,
-			paddle,
-			ball,
-			score: 0,
-			lives: initial_lives,
-			state: Ready,
-		}
-	}
+	new_world = || ready_world(Bricks.fresh, Paddle.initial)
 
 	## Advances the current match state and reports its significant occurrences.
 	update : World, Controls, F32 -> (World, List(Event))
@@ -54,6 +43,17 @@ Game := [].{
 			Won => update_finished(world, controls)
 			GameOver => update_finished(world, controls)
 		}
+}
+
+## Places a fresh ball above the paddle and resets the match counters.
+ready_world : List(Bricks.Brick), Paddle -> Game.World
+ready_world = |bricks, paddle| {
+	bricks,
+	paddle,
+	ball: Ball.on(paddle.rect()),
+	score: 0,
+	lives: initial_lives,
+	state: Ready,
 }
 
 ## Respawns the ball above the paddle that will launch it.

@@ -149,17 +149,15 @@ jobs:
       - name: Diagnose Windows compile-time evaluation
         if: runner.os == 'Windows'
         run: |
-          mkdir -p "$RUNNER_TEMP/ctfe-probe-cache"
-          export ROC_CACHE_DIR="$RUNNER_TEMP/ctfe-probe-cache"
           ctfe_failed=0
-          for mode in uncached cached repeated; do
+          for mode in serial boxy interpreter; do
             for app in examples/breakout/main.roc examples/live_plot/main.roc; do
               echo "Compile-time probe: $mode $app"
-              if [ "$mode" = uncached ]; then
-                roc test --no-cache "$app" || ctfe_failed=1
-              else
-                roc test "$app" || ctfe_failed=1
-              fi
+              case "$mode" in
+                serial) roc test --no-cache -j1 "$app" || ctfe_failed=1 ;;
+                boxy) roc test --no-cache -j1 --specialize=no "$app" || ctfe_failed=1 ;;
+                interpreter) roc test --no-cache -j1 --opt=interpreter "$app" || ctfe_failed=1 ;;
+              esac
             done
           done
           test "$ctfe_failed" = 0

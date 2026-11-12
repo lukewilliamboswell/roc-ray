@@ -1355,8 +1355,12 @@ margin = 30.F32
 ## The part of the window the plot may draw in. `render!` scissors to this, so
 ## a dragged plot cannot scribble over the furniture.
 plot_area : Math.Vec2 -> Math.Rect
-plot_area = |screen|
-	Math.rect(hud_left, hud_top, F32.max(screen.x - hud_left - margin, 1), F32.max(screen.y - hud_top - hud_bottom, 1))
+plot_area = |screen| {
+	x: hud_left,
+	y: hud_top,
+	width: F32.max(screen.x - hud_left - margin, 1),
+	height: F32.max(screen.y - hud_top - hud_bottom, 1),
+}
 
 min_zoom = 0.04.F32
 

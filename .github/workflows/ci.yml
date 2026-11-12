@@ -146,6 +146,12 @@ jobs:
       - name: Test URL literals and pure parsing
         run: roc test platform/Url.roc
 
+      - name: Test example compile-time values on Windows
+        if: runner.os == 'Windows'
+        run: |
+          roc test examples/breakout/main.roc
+          roc test examples/live_plot/main.roc
+
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives
       # against the lock, and nothing here can rebuild them.

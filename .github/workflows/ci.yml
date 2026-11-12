@@ -146,21 +146,45 @@ jobs:
       - name: Test URL literals and pure parsing
         run: roc test platform/Url.roc
 
-      - name: Diagnose Windows compile-time evaluation
+      - name: Diagnose standalone Windows compile-time evaluation
         if: runner.os == 'Windows'
         run: |
+          mkdir -p "$RUNNER_TEMP/roc-pure-repro"
+          cp platform/Math.roc platform/Camera.roc platform/Color.roc "$RUNNER_TEMP/roc-pure-repro/"
+          sed 's/import rr\./import /g' examples/breakout/Bricks.roc > "$RUNNER_TEMP/roc-pure-repro/Bricks.roc"
+          cat > "$RUNNER_TEMP/roc-pure-repro/CameraProbe.roc" <<'EOF'
+          import Math
+          import Camera
+          
+          plot_area : Math.Vec2 -> Math.Rect
+          plot_area = |screen| Math.rect(360, 200, F32.max(screen.x - 390, 1), F32.max(screen.y - 284, 1))
+          
+          fit_zoom : Math.Vec2 -> F32
+          fit_zoom = |screen| Math.clamp(plot_area(screen).width / 12000, 0.04, 24)
+          
+          camera_at : Math.Rect, F32, F32 -> Camera.Camera2D
+          camera_at = |area, zoom, scroll| Camera.new({ target: { x: 6000, y: scroll }, offset: Math.center(area), rotation: 0, zoom })
+          
+          camera : Camera.Camera2D
+          camera = camera_at(plot_area({ x: 1240, y: 860 }), fit_zoom({ x: 1240, y: 860 }), 400)
+          
+          expect camera.target().y == 400
+          EOF
+          cat > "$RUNNER_TEMP/roc-pure-repro/BricksProbe.roc" <<'EOF'
+          import Bricks
+          expect Bricks.fresh.len() == 50
+          EOF
           ctfe_failed=0
-          for mode in serial boxy interpreter; do
-            for app in examples/breakout/main.roc examples/live_plot/main.roc; do
-              echo "Compile-time probe: $mode $app"
-              case "$mode" in
-                serial) roc test --no-cache -j1 "$app" || ctfe_failed=1 ;;
-                boxy) roc test --no-cache -j1 --specialize=no "$app" || ctfe_failed=1 ;;
-                interpreter) roc test --no-cache -j1 --opt=interpreter "$app" || ctfe_failed=1 ;;
-              esac
-            done
-          done
+          roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/CameraProbe.roc" || ctfe_failed=1
+          roc test --no-cache "$RUNNER_TEMP/roc-pure-repro/BricksProbe.roc" || ctfe_failed=1
           test "$ctfe_failed" = 0
+
+      - name: Save standalone compiler reproductions
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-compile-time-reproductions
+          path: ${{ runner.temp }}/roc-pure-repro/
 
       # Linker inputs come from the release locked by link-inputs.lock.json.
       # The cache only saves a download: every use rehashes the archives

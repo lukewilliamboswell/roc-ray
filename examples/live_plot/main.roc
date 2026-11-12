@@ -1355,12 +1355,8 @@ margin = 30.F32
 ## The part of the window the plot may draw in. `render!` scissors to this, so
 ## a dragged plot cannot scribble over the furniture.
 plot_area : Math.Vec2 -> Math.Rect
-plot_area = |screen| {
-	x: hud_left,
-	y: hud_top,
-	width: F32.max(screen.x - hud_left - margin, 1),
-	height: F32.max(screen.y - hud_top - hud_bottom, 1),
-}
+plot_area = |screen|
+	Math.rect(hud_left, hud_top, F32.max(screen.x - hud_left - margin, 1), F32.max(screen.y - hud_top - hud_bottom, 1))
 
 min_zoom = 0.04.F32
 
@@ -3297,35 +3293,38 @@ expect {
 }
 
 ## Zoom stays inside its limits however hard the wheel is spun.
-expect zoom_at(test_camera, { x: 700, y: 500 }, 400).zoom() <= max_zoom
-expect zoom_at(test_camera, { x: 700, y: 500 }, 0 - 400).zoom() >= min_zoom
-expect zoom_at(test_camera, { x: 700, y: 500 }, 0).zoom() == test_camera.zoom()
+expect zoom_at(test_camera(test_screen), { x: 700, y: 500 }, 400).zoom() <= max_zoom
+expect zoom_at(test_camera(test_screen), { x: 700, y: 500 }, 0 - 400).zoom() >= min_zoom
+expect zoom_at(test_camera(test_screen), { x: 700, y: 500 }, 0).zoom() == test_camera(test_screen).zoom()
 
 ## A wheel notch moves the page by the same number of pixels at any zoom, which
 ## is what makes it a scroll rather than a move through the world.
 expect {
-	close = test_camera.with_zoom(4)
-	far = test_camera.with_zoom(0.5)
+	close = test_camera(test_screen).with_zoom(4)
+	far = test_camera(test_screen).with_zoom(0.5)
 	near_delta = (close.target().y - scroll_by(close, 1).target().y) * 4
 	far_delta = (far.target().y - scroll_by(far, 1).target().y) * 0.5
 	F32.abs(near_delta - far_delta) < 0.001 and F32.abs(near_delta - scroll_pixels) < 0.001
 }
 
-expect scroll_by(test_camera, 0).target() == test_camera.target()
+expect scroll_by(test_camera(test_screen), 0).target() == test_camera(test_screen).target()
 
 ## Scrolling never moves the view sideways.
-expect scroll_by(test_camera, 3).target().x == test_camera.target().x
+expect scroll_by(test_camera(test_screen), 3).target().x == test_camera(test_screen).target().x
 
 ## Dragging right moves the world right, which means the target moves left, by
 ## the screen distance divided by the zoom.
 expect {
-	camera = test_camera.with_zoom(2)
+	camera = test_camera(test_screen).with_zoom(2)
 	moved = pan(camera, { x: 20, y: 0 })
 	F32.abs(moved.target().x - (camera.target().x - 10)) < 0.001
 }
 
-test_camera : Camera.Camera2D
-test_camera = camera_at(plot_area({ x: 1240, y: 860 }), fit_zoom({ x: 1240, y: 860 }), 400)
+test_screen : Math.Vec2
+test_screen = { x: 1240, y: 860 }
+
+test_camera : Math.Vec2 -> Camera.Camera2D
+test_camera = |screen| camera_at(plot_area(screen), fit_zoom(screen), 400)
 
 ## The entrance starts where it is and finishes where it is going, and never
 ## overshoots either.

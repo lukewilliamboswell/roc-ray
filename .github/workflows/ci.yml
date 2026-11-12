@@ -22,6 +22,12 @@ jobs:
         with:
           nightly-tag: nightly-2026-11-11-7679cc5
           zig: "false"
+      - name: Download the official safe compiler from the same revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download nightly-2026-11-11-7679cc5-safe --repo roc-lang/nightlies --pattern roc_nightly-windows_x86_64-2026-11-11-7679cc5-safe.zip --dir .official-safe
+          7z x -y .official-safe/roc_nightly-windows_x86_64-2026-11-11-7679cc5-safe.zip -o.official-safe
       - name: Download the exact diagnostic compiler
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,15 +35,21 @@ jobs:
       - name: Compare official and diagnostic compilers
         run: |
           diagnostic_roc="$PWD/.compiler-artifact/roc-ray/roc-ray/compiler-debug/zig-out/bin/roc.exe"
+          official_safe_roc="$PWD/.official-safe/roc_nightly-windows_x86_64-2026-11-11-7679cc5-safe/roc.exe"
           roc version
+          "$official_safe_roc" version
           "$diagnostic_roc" version
           log_dir="$RUNNER_TEMP/compiler-comparison"
           mkdir -p "$log_dir"
+          sha256sum "$(command -v roc)" "$official_safe_roc" "$diagnostic_roc" > "$log_dir/compiler-hashes.txt"
           overall=0
-          for mode in official diagnostic diagnostic-traced; do
+          for mode in official official-safe diagnostic diagnostic-traced; do
             unset ROC_TRACE_BOXY_WORK ROC_CTFE_DEMAND_TRACE
-            compiler="$(command -v roc)"
-            if [ "$mode" != official ]; then compiler="$diagnostic_roc"; fi
+            case "$mode" in
+              official) compiler="$(command -v roc)" ;;
+              official-safe) compiler="$official_safe_roc" ;;
+              *) compiler="$diagnostic_roc" ;;
+            esac
             if [ "$mode" = diagnostic-traced ]; then
               export ROC_TRACE_BOXY_WORK=1 ROC_CTFE_DEMAND_TRACE=1
             fi

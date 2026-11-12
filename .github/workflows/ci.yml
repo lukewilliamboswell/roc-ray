@@ -245,12 +245,18 @@ jobs:
         timeout-minutes: 10
         run: python3 scripts/check_tutorial.py
 
-      # The broad suite uses Roc's dev backend to fit hosted runners. This
-      # small app also covers the default LLVM link path used by run-example.py.
+      # Exercise the contributor helper and Roc's default dev run path.
       - name: Link and run a default-mode native example
         if: runner.os == 'macOS' || runner.os == 'Windows'
         timeout-minutes: 10
         run: scripts/run-example.py --skip-platform-build examples/hello_world -- --host-headless-frames=3
+
+      - name: Build and run an optimized Windows example
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        env:
+          ROC_BUILD_OPT: speed
+        run: scripts/all_tests.py --only hello_world --skip-platform-build --runtime-only --skip-bundle-test --skip-integration-probes --skip-windowed --platform-mode=bundle
 
       # The headless run above never calls raylib, so window, GL, texture,
       # font, audio and capture code would otherwise never execute on any

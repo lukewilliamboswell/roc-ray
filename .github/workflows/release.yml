@@ -28,14 +28,15 @@ jobs:
   resolve:
     name: Resolve the latest Roc nightly
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       nightly-tag: ${{ steps.nightly.outputs.tag }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: nightly
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/resolve-toolchain
 
   build:
     name: Build release bundles

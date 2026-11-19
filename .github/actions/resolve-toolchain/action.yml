@@ -1,0 +1,40 @@
+name: Resolve the workflow compiler
+description: Resolve one nightly and publish its verified Blueprint lock for every runner.
+outputs:
+  tag:
+    description: The nightly tag every job must use
+    value: ${{ steps.nightly.outputs.tag }}
+runs:
+  using: composite
+  steps:
+    - id: nightly
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up cached Blueprint
+      uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@6c796f299012707d2e9bad23fd6449ed93f1f475
+      with:
+        cache-binary: "true"
+
+    - name: Lock the workflow compiler for all runners
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ROC_NIGHTLY: ${{ steps.nightly.outputs.tag }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/../../../scripts/setup_roc_blueprint.py"
+        --nightly "$ROC_NIGHTLY"
+        --directory "$RUNNER_TEMP/roc-toolchain"
+        --prepare
+
+    - name: Share the compiler manifest and lock
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: roc-toolchain-${{ steps.nightly.outputs.tag }}
+        path: |
+          ${{ runner.temp }}/roc-toolchain/Blueprint.roc
+          ${{ runner.temp }}/roc-toolchain/Blueprint.lock
+        if-no-files-found: error
+        retention-days: 7

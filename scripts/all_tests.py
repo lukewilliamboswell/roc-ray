@@ -2059,7 +2059,7 @@ def _run_example_stages(
                 name = example_name(example)
                 print(f"  Testing {name}...", end=" ", flush=True)
                 if run_cmd(
-                    ["roc", "test", staged[example].name, *LIMITS],
+                    ["roc", "test", "--no-cache", staged[example].name, *LIMITS],
                     f"test {name}",
                     args.verbose,
                     cwd=staged[example].parent,

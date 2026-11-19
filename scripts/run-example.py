@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+from roc_options import compiler_args
 
 
 def main() -> int:
@@ -89,7 +90,7 @@ def main() -> int:
                 example, packages, packages.scratch_dir / example.parent.name
             )
 
-            command = [roc, str(staged), "--no-cache", *local_bundles.PACKAGE_LIMIT_ARGS]
+            command = [roc, str(staged), *compiler_args(roc, "build", example), *local_bundles.PACKAGE_LIMIT_ARGS]
             if app_args:
                 command.extend(["--", *app_args])
             # Match the published examples runner: assets are relative to the app.

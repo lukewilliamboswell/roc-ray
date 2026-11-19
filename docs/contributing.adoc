@@ -191,7 +191,19 @@ scripts/all_tests.py --skip-roc-build
 scripts/all_tests.py --only pong,snake
 ----
 
-It checks formatting and types, runs Roc tests, builds the apps and exercises
+Routine builds use Roc's `dev` backend and compilation cache. The exceptions
+in `scripts/roc_options.py` apply only to the named commands and compiler:
+November 18's cached `Devices` tests stall, cached Doom tests crash, and cached
+`top_down` checks crash. Its unspecialized native build also crashes with
+fresh compilation, so this one example enables development specialization
+while retaining the cache. The released examples specification carries that
+build option for nightly compatibility testing. Other compilers use the cache
+normally. Privacy fixtures compile from source so cached results cannot stand
+in for checking the current boundary; Windows CTFE regression checks force
+each evaluation to run. The explicit optimized Windows smoke test covers
+LLVM's separate ABI and linker path.
+
+The driver checks formatting and types, runs Roc tests, builds the apps and exercises
 both their headless paths and, in the windowed sweep, the real raylib backend:
 every example is run against a real (hidden) window for a fixed number of
 frames, with the cases in `scripts/test_spec.json` scripting keys and typed text

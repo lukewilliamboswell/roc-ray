@@ -193,12 +193,17 @@ class PackageExamplesTests(unittest.TestCase):
             case = spec["apps"][0]["cases"][0]
             case.update(stdin="input", stdout="89504e472062616c6c input\n")
             spec["apps"] = spec["apps"][:1]
+            spec["apps"][0]["build_args"] = ["--specialize=yes"]
             real_run = runner.run
             compiler_directories = []
 
             def compile_or_run(argv, cwd, env, stdin, timeout):
                 if argv[0] == "fixture-roc":
                     compiler_directories.append(cwd)
+                    if argv[1] == "build":
+                        self.assertIn("--specialize=yes", argv)
+                    else:
+                        self.assertNotIn("--specialize=yes", argv)
                     if argv[1] == "build":
                         executable = Path(next(arg.removeprefix("--output=") for arg in argv if arg.startswith("--output=")))
                         executable.write_text(

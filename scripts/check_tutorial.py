@@ -62,11 +62,11 @@ def stage(app: Path, packages: local_bundles.ServedPackages) -> Path:
 
 
 def check(app: Path, packages: local_bundles.ServedPackages, roc: str) -> bool:
-    if not (run([roc, "fmt", "--check", str(app)]) and run([roc, "check", str(app)]) and run([roc, "test", "--no-cache", str(app)])):
+    if not (run([roc, "fmt", "--check", str(app)]) and run([roc, "check", str(app)]) and run([roc, "test", str(app)])):
         return False
     staged = stage(app, packages)
     executable = staged.with_suffix(".exe" if local_bundles.IS_WINDOWS else "")
-    return run([roc, "build", "--no-cache", str(staged), f"--output={executable}", *local_bundles.PACKAGE_LIMIT_ARGS]) and run(
+    return run([roc, "build", str(staged), f"--output={executable}", *local_bundles.PACKAGE_LIMIT_ARGS]) and run(
         [str(executable), "--host-headless", f"--host-headless-frames={FRAMES}"]
     )
 

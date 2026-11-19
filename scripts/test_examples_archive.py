@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_bundle_artifact import check_bundle_url, serve_dir  # noqa: E402
+from roc_options import compiler_args
 
 IS_WINDOWS = platform.system() == "Windows"
 COMPILE_TIMEOUT = 300
@@ -105,8 +106,8 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
         print(f"[{position}/{len(apps)}] {path}")
         built = True
         for argv in (
-            [roc, "check", path, "--no-cache", *replace],
-            [roc, "build", path, "--no-cache", "--opt=dev", f"--output={executable}", *replace],
+            [roc, "check", path, *compiler_args(roc, "check", Path(path)), *replace],
+            [roc, "build", path, *compiler_args(roc, "build", Path(path)), "--opt=dev", *app.get("build_args", []), f"--output={executable}", *replace],
         ):
             ran = run(argv, root, env, b"", COMPILE_TIMEOUT)
             if ran is None or ran.returncode != 0:

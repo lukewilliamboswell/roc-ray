@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+from roc_options import compiler_args
 
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -91,9 +92,9 @@ def find_roc(root: Path) -> str | None:
 
 def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
-    build_opt = os.environ.get("ROC_BUILD_OPT", "speed")
+    build_opt = os.environ.get("ROC_BUILD_OPT", "dev")
     result = subprocess.run(
-        [roc, "build", f"--opt={build_opt}", "--no-cache", "main.roc", *local_bundles.PACKAGE_LIMIT_ARGS],
+        [roc, "build", f"--opt={build_opt}", *compiler_args(roc, "build", example), "main.roc", *local_bundles.PACKAGE_LIMIT_ARGS],
         cwd=example.parent,
     )
     return result.returncode == 0

@@ -149,6 +149,8 @@ jobs:
 
       - name: Test example compile-time values on Windows
         if: runner.os == 'Windows'
+        # Force each CTFE evaluation to run: a cached success would hide a
+        # recurrence of the Windows compile-time evaluation failures.
         run: |
           ctfe_failed=0
           for pass in 1 2 3; do
@@ -212,9 +214,14 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          for app in examples/*/main.roc; do
-            roc check "$app" || { echo "::error file=$app::roc check failed as written"; exit 1; }
-          done
+          python3 - <<'PY_CHECK'
+          from pathlib import Path
+          import subprocess
+          from scripts.roc_options import compiler_args
+
+          for app in sorted(Path("examples").glob("*/main.roc")):
+              subprocess.run(["roc", "check", *compiler_args("roc", "check", app), str(app)], check=True)
+          PY_CHECK
 
       # all_tests.py bundles the complete platform and serves
       # it on a loopback port, and builds copies of the examples that point at
@@ -252,6 +259,8 @@ jobs:
         timeout-minutes: 10
         run: scripts/run-example.py --skip-platform-build examples/hello_world -- --host-headless-frames=3
 
+      # This exercises LLVM's optimized Windows ABI/linker path, independently
+      # of the dev backend used by the routine example suite.
       - name: Build and run an optimized Windows example
         if: runner.os == 'Windows'
         timeout-minutes: 10

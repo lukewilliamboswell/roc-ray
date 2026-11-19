@@ -172,6 +172,10 @@ pub fn build(b: *std.Build) void {
     release_helper_tests.setCwd(b.path("."));
     test_step.dependOn(&release_helper_tests.step);
 
+    const compiler_option_tests = b.addSystemCommand(&.{ "python3", "scripts/test_roc_options.py" });
+    compiler_option_tests.setCwd(b.path("."));
+    test_step.dependOn(&compiler_option_tests.step);
+
     const dependency_input_tests = b.addSystemCommand(&.{
         "python3",
         "-m",

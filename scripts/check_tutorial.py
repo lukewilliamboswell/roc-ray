@@ -6,9 +6,10 @@ that stops compiling fails here rather than in a reader's terminal, and one
 `roc fmt` would change fails too, since readers copy what the manual shows.
 
 Each file names the working-tree platform by a relative path, which is enough
-for `roc check` and `roc test`. Building needs the platform's native linker
-inputs, so the build uses a copy of the file pointed at the locally served
-platform, as scripts/all_tests.py does for the examples. The checked-in files
+for `roc check`. Tests and builds use a copy pointed at the locally served
+platform, as scripts/all_tests.py does for the examples. This exercises the
+same dependency graph as a published application and supplies native linker
+inputs for the build. The checked-in files
 are never rewritten, and they carry no compiler pin, so the nightly updater
 has nothing to keep in step.
 
@@ -30,14 +31,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+from roc_options import compiler_args
 
 ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = ROOT / "docs" / "tutorial"
 FRAMES = 60
 
 
-def run(command: list[str]) -> bool:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+def run(command: list[str], cwd: Path = ROOT) -> bool:
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         print("FAILED")
         print(f"    $ {' '.join(command)}")
@@ -62,9 +64,13 @@ def stage(app: Path, packages: local_bundles.ServedPackages) -> Path:
 
 
 def check(app: Path, packages: local_bundles.ServedPackages, roc: str) -> bool:
-    if not (run([roc, "fmt", "--check", str(app)]) and run([roc, "check", str(app)]) and run([roc, "test", str(app)])):
+    if not (run([roc, "fmt", "--check", str(app)]) and run([roc, "check", str(app)])):
         return False
     staged = stage(app, packages)
+    # The direct check above validates the manual exactly as written. Run its
+    # tests against the same bundle as the build, matching the example driver.
+    if not run([roc, "test", *compiler_args(roc, "test", app), staged.name, *local_bundles.PACKAGE_LIMIT_ARGS], cwd=staged.parent):
+        return False
     executable = staged.with_suffix(".exe" if local_bundles.IS_WINDOWS else "")
     return run([roc, "build", str(staged), f"--output={executable}", *local_bundles.PACKAGE_LIMIT_ARGS]) and run(
         [str(executable), "--host-headless", f"--host-headless-frames={FRAMES}"]

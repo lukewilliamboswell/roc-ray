@@ -198,7 +198,10 @@ November 18's cached `Devices` tests stall, cached Doom tests crash, and cached
 fresh compilation, so this one example enables development specialization
 while retaining the cache. The released examples specification carries that
 build option for nightly compatibility testing. Other compilers use the cache
-normally. Privacy fixtures compile from source so cached results cannot stand
+normally. On this compiler, cached Pong, Snake, and SQLite Scores tests also
+fail with `OutOfMemory` on Intel macOS, as do the eight tutorial tests on
+Windows; those exact test commands compile from source on those hosts.
+Privacy fixtures compile from source so cached results cannot stand
 in for checking the current boundary; Windows CTFE regression checks force
 each evaluation to run. The shared nightly compatibility runner also disables
 the checked-source cache to test published sources directly against each new

@@ -7,76 +7,155 @@
 ## next = model.position.add(model.velocity.scale(input.time.elapsed_seconds))
 ## ```
 ##
+MathVec2 := {
+	x : F32,
+	y : F32,
+}.{
+
+	## Construct a circle.
+	circle : MathVec2, F32 -> Math.Circle
+	circle = Math.circle
+
+	## Add two vectors component-wise.
+	add : MathVec2, MathVec2 -> MathVec2
+	add = Math.add
+
+	## Subtract two vectors component-wise.
+	sub : MathVec2, MathVec2 -> MathVec2
+	sub = Math.sub
+
+	## Multiply both vector components by a scalar.
+	scale : MathVec2, F32 -> MathVec2
+	scale = Math.scale
+
+	## Compute the vector dot product.
+	dot : MathVec2, MathVec2 -> F32
+	dot = Math.dot
+
+	## Squared vector length, avoiding a square root.
+	length_squared : MathVec2 -> F32
+	length_squared = Math.length_squared
+
+	## Euclidean vector length.
+	length : MathVec2 -> F32
+	length = Math.length
+
+	## Squared distance between two points.
+	distance_squared : MathVec2, MathVec2 -> F32
+	distance_squared = Math.distance_squared
+
+	## Euclidean distance between two points.
+	distance : MathVec2, MathVec2 -> F32
+	distance = Math.distance
+
+	## Return a unit vector, or zero when the input has zero length.
+	normalize : MathVec2 -> MathVec2
+	normalize = Math.normalize
+
+	## Linearly interpolate between two vectors.
+	lerp_vec2 : MathVec2, MathVec2, F32 -> MathVec2
+	lerp_vec2 = Math.lerp_vec2
+
+	## Encode this vector as one semantic leaf for formats that support 2D
+	## vectors. Shader uniform records use this for one GLSL `vec2`.
+	encoder_for : encoding -> (MathVec2, state -> Try(state, err))
+		where [
+			encoding.encode_vec2 : MathVec2, state -> Try(state, err),
+		]
+	encoder_for = |_encoding| {
+		Encoding : encoding
+
+		|value, state| Encoding.encode_vec2(value, state)
+	}
+
+	## Compare two of these values.
+	is_eq : MathVec2, MathVec2 -> Bool
+	is_eq = |a, b| a.x == b.x and a.y == b.y
+}
+
+MathRect := {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+}.{
+
+	## Left edge of a rectangle.
+	left : MathRect -> F32
+	left = Math.left
+
+	## Right edge of a rectangle.
+	right : MathRect -> F32
+	right = Math.right
+
+	## Top edge of a rectangle.
+	top : MathRect -> F32
+	top = Math.top
+
+	## Bottom edge of a rectangle.
+	bottom : MathRect -> F32
+	bottom = Math.bottom
+
+	## Center point of a rectangle.
+	center : MathRect -> Math.Vec2
+	center = Math.center
+
+	## Closest point in or on a rectangle.
+	closest_point : MathRect, Math.Vec2 -> Math.Vec2
+	closest_point = Math.closest_point
+
+	## Whether a rectangle contains a point, including its edges.
+	contains : MathRect, Math.Vec2 -> Bool
+	contains = Math.contains
+
+	## Whether two rectangles overlap or touch.
+	overlaps : MathRect, MathRect -> Bool
+	overlaps = Math.overlaps
+
+	## Compare two of these values.
+	is_eq : MathRect, MathRect -> Bool
+	is_eq = |a, b| a.x == b.x and a.y == b.y and a.width == b.width and a.height == b.height
+}
+
+MathCircle := {
+	center : Math.Vec2,
+	radius : F32,
+}.{
+
+	## Whether a circle contains a point, including its edge.
+	circle_contains : MathCircle, Math.Vec2 -> Bool
+	circle_contains = Math.circle_contains
+
+	## Whether two circles overlap or touch.
+	circle_overlaps : MathCircle, MathCircle -> Bool
+	circle_overlaps = Math.circle_overlaps
+
+	## Whether a circle and rectangle overlap or touch.
+	circle_rect : MathCircle, Math.Rect -> Bool
+	circle_rect = Math.circle_rect
+
+	## Receiver-friendly aliases for circle queries. The longer names avoid
+	## ambiguity with the corresponding rectangle methods.
+	contains_point : MathCircle, Math.Vec2 -> Bool
+	contains_point = Math.contains_point
+
+	overlaps_circle : MathCircle, MathCircle -> Bool
+	overlaps_circle = Math.overlaps_circle
+
+	overlaps_rect : MathCircle, Math.Rect -> Bool
+	overlaps_rect = Math.overlaps_rect
+
+	## Compare two of these values.
+	is_eq : MathCircle, MathCircle -> Bool
+	is_eq = |a, b| a.center == b.center and a.radius == b.radius
+}
+
 Math := [].{
 
 	# TODO(follow up): Restore derived equality once Roc compiles comparisons
 	# through platform aliases without looping (nightly-2026-09-18-1d982dc).
 	## Two-dimensional floating-point vector, also named `Draw.Vector2`.
-	Vec2 := {
-		x : F32,
-		y : F32,
-	}.{
-
-		## Construct a circle.
-		circle : Vec2, F32 -> Circle
-		circle = Math.circle
-
-		## Add two vectors component-wise.
-		add : Vec2, Vec2 -> Vec2
-		add = Math.add
-
-		## Subtract two vectors component-wise.
-		sub : Vec2, Vec2 -> Vec2
-		sub = Math.sub
-
-		## Multiply both vector components by a scalar.
-		scale : Vec2, F32 -> Vec2
-		scale = Math.scale
-
-		## Compute the vector dot product.
-		dot : Vec2, Vec2 -> F32
-		dot = Math.dot
-
-		## Squared vector length, avoiding a square root.
-		length_squared : Vec2 -> F32
-		length_squared = Math.length_squared
-
-		## Euclidean vector length.
-		length : Vec2 -> F32
-		length = Math.length
-
-		## Squared distance between two points.
-		distance_squared : Vec2, Vec2 -> F32
-		distance_squared = Math.distance_squared
-
-		## Euclidean distance between two points.
-		distance : Vec2, Vec2 -> F32
-		distance = Math.distance
-
-		## Return a unit vector, or zero when the input has zero length.
-		normalize : Vec2 -> Vec2
-		normalize = Math.normalize
-
-		## Linearly interpolate between two vectors.
-		lerp_vec2 : Vec2, Vec2, F32 -> Vec2
-		lerp_vec2 = Math.lerp_vec2
-
-		## Encode this vector as one semantic leaf for formats that support 2D
-		## vectors. Shader uniform records use this for one GLSL `vec2`.
-		encoder_for : encoding -> (Vec2, state -> Try(state, err))
-			where [
-				encoding.encode_vec2 : Vec2, state -> Try(state, err),
-			]
-		encoder_for = |_encoding| {
-			Encoding : encoding
-
-			|value, state| Encoding.encode_vec2(value, state)
-		}
-
-		## Compare two of these values.
-		is_eq : Vec2, Vec2 -> Bool
-		is_eq = |a, b| a.x == b.x and a.y == b.y
-	}
+	Vec2 : MathVec2
 
 	## Three-dimensional floating-point vector.
 	Vec3 := {
@@ -120,83 +199,10 @@ Math := [].{
 	vec4 = |x, y, z, w| { x, y, z, w }
 
 	## Axis-aligned rectangle represented by top-left position and size.
-	Rect := {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-	}.{
-
-		## Left edge of a rectangle.
-		left : Rect -> F32
-		left = Math.left
-
-		## Right edge of a rectangle.
-		right : Rect -> F32
-		right = Math.right
-
-		## Top edge of a rectangle.
-		top : Rect -> F32
-		top = Math.top
-
-		## Bottom edge of a rectangle.
-		bottom : Rect -> F32
-		bottom = Math.bottom
-
-		## Center point of a rectangle.
-		center : Rect -> Vec2
-		center = Math.center
-
-		## Closest point in or on a rectangle.
-		closest_point : Rect, Vec2 -> Vec2
-		closest_point = Math.closest_point
-
-		## Whether a rectangle contains a point, including its edges.
-		contains : Rect, Vec2 -> Bool
-		contains = Math.contains
-
-		## Whether two rectangles overlap or touch.
-		overlaps : Rect, Rect -> Bool
-		overlaps = Math.overlaps
-
-		## Compare two of these values.
-		is_eq : Rect, Rect -> Bool
-		is_eq = |a, b| a.x == b.x and a.y == b.y and a.width == b.width and a.height == b.height
-	}
+	Rect : MathRect
 
 	## Circle represented by center and radius.
-	Circle := {
-		center : Vec2,
-		radius : F32,
-	}.{
-
-		## Whether a circle contains a point, including its edge.
-		circle_contains : Circle, Vec2 -> Bool
-		circle_contains = Math.circle_contains
-
-		## Whether two circles overlap or touch.
-		circle_overlaps : Circle, Circle -> Bool
-		circle_overlaps = Math.circle_overlaps
-
-		## Whether a circle and rectangle overlap or touch.
-		circle_rect : Circle, Rect -> Bool
-		circle_rect = Math.circle_rect
-
-		## Receiver-friendly aliases for circle queries. The longer names avoid
-		## ambiguity with the corresponding rectangle methods.
-		contains_point : Circle, Vec2 -> Bool
-		contains_point = Math.contains_point
-
-		overlaps_circle : Circle, Circle -> Bool
-		overlaps_circle = Math.overlaps_circle
-
-		overlaps_rect : Circle, Rect -> Bool
-		overlaps_rect = Math.overlaps_rect
-
-		## Compare two of these values.
-		is_eq : Circle, Circle -> Bool
-		is_eq = |a, b| a.center == b.center and a.radius == b.radius
-	}
+	Circle : MathCircle
 
 	## Construct a two-dimensional vector.
 	vec2 : F32, F32 -> Vec2
@@ -212,7 +218,7 @@ Math := [].{
 
 	## Construct a circle.
 	circle : Vec2, F32 -> Circle
-	circle = |center, radius| { center, radius }
+	circle = |circle_center, radius| { center: circle_center, radius }
 
 	## Clamp a value to inclusive lower and upper bounds.
 	clamp : F32, F32, F32 -> F32

@@ -6,196 +6,208 @@
 ## Values use compact, grade-specific PGA coefficients.
 import Math
 
+PhysicsPoint := {
+	e032 : F32,
+	e013 : F32,
+	e021 : F32,
+	e123 : F32,
+}.{
+
+	## Return normalized x, y, and z coordinates for a point.
+	coords : PhysicsPoint -> Physics.Coords
+	coords = Physics.coords
+
+	## Return the x/y components of a point for 2D drawing boundaries.
+	xy : PhysicsPoint -> Math.Vec2
+	xy = Physics.xy
+
+	## Return a read-only point coefficient record.
+	point_coeffs : PhysicsPoint -> Physics.PointCoeffs
+	point_coeffs = Physics.point_coeffs
+
+	## Translate a point by a free vector.
+	add : PhysicsPoint, Physics.Vector -> PhysicsPoint
+	add = Physics.add
+
+	## Return the free vector from the second point to the first point.
+	sub : PhysicsPoint, PhysicsPoint -> Physics.Vector
+	sub = Physics.sub
+
+	## Compute the Euclidean distance between two finite points.
+	distance : PhysicsPoint, PhysicsPoint -> F32
+	distance = Physics.distance
+
+	## Construct a plane through a point with the given normal direction.
+	plane_from_point_normal : PhysicsPoint, Physics.Vector -> Physics.Plane
+	plane_from_point_normal = Physics.plane_from_point_normal
+
+	## Construct a PGA line passing through two finite points.
+	line_from_points : PhysicsPoint, PhysicsPoint -> Physics.Line
+	line_from_points = Physics.line_from_points
+
+	## Construct a simple particle body.
+	body : PhysicsPoint, Physics.Vector -> Physics.Body
+	body = Physics.body
+}
+
+PhysicsVector := {
+	e032 : F32,
+	e013 : F32,
+	e021 : F32,
+}.{
+
+	## Return x, y, and z components for a free vector.
+	components : PhysicsVector -> Physics.Coords
+	components = Physics.components
+
+	## Return the x/y components of a vector for 2D drawing boundaries.
+	vector_xy_components : PhysicsVector -> Math.Vec2
+	vector_xy_components = Physics.vector_xy_components
+
+	## Return a read-only vector coefficient record.
+	vector_coeffs : PhysicsVector -> Physics.VectorCoeffs
+	vector_coeffs = Physics.vector_coeffs
+
+	## Add two free vectors.
+	add_vec : PhysicsVector, PhysicsVector -> PhysicsVector
+	add_vec = Physics.add_vec
+
+	## Subtract the second free vector from the first.
+	sub_vec : PhysicsVector, PhysicsVector -> PhysicsVector
+	sub_vec = Physics.sub_vec
+
+	## Scale a free vector by a scalar amount.
+	scale : PhysicsVector, F32 -> PhysicsVector
+	scale = Physics.scale
+
+	## Compute the Euclidean dot product of two free vectors.
+	dot : PhysicsVector, PhysicsVector -> F32
+	dot = Physics.dot
+
+	## Compute the Euclidean cross product of two free vectors.
+	cross : PhysicsVector, PhysicsVector -> PhysicsVector
+	cross = Physics.cross
+
+	## Compute the squared Euclidean length of a free vector.
+	length_squared : PhysicsVector -> F32
+	length_squared = Physics.length_squared
+
+	## Compute the Euclidean length of a free vector.
+	length : PhysicsVector -> F32
+	length = Physics.length
+
+	## Return a unit-length vector, or zero for a zero-length input.
+	normalize : PhysicsVector -> PhysicsVector
+	normalize = Physics.normalize
+
+	## Reflect a vector around a surface normal.
+	reflect : PhysicsVector, PhysicsVector -> PhysicsVector
+	reflect = Physics.reflect
+
+	## Construct a normalized plane from a normal and signed distance to origin.
+	plane : PhysicsVector, F32 -> Physics.Plane
+	plane = Physics.plane
+
+	## Construct a translation motor from a free offset vector.
+	translation : PhysicsVector -> Physics.Motor
+	translation = Physics.translation
+
+	## Clamp only the y component of a free vector.
+	clamp_y : PhysicsVector, F32, F32 -> PhysicsVector
+	clamp_y = Physics.clamp_y
+}
+
+PhysicsPlane := {
+	e0 : F32,
+	e1 : F32,
+	e2 : F32,
+	e3 : F32,
+}.{
+
+	## Return a read-only plane coefficient record.
+	plane_coeffs : PhysicsPlane -> Physics.PlaneCoeffs
+	plane_coeffs = Physics.plane_coeffs
+
+	## Compute the signed Euclidean distance from a normalized plane to a point.
+	signed_distance : PhysicsPlane, Physics.Point -> F32
+	signed_distance = Physics.signed_distance
+
+	## Project a point onto a normalized plane.
+	project_point_plane : PhysicsPlane, Physics.Point -> Physics.Point
+	project_point_plane = Physics.project_point_plane
+}
+
+PhysicsLine := {
+	e01 : F32,
+	e02 : F32,
+	e03 : F32,
+	e23 : F32,
+	e31 : F32,
+	e12 : F32,
+}.{
+
+	## Return a read-only line coefficient record.
+	line_coeffs : PhysicsLine -> Physics.LineCoeffs
+	line_coeffs = Physics.line_coeffs
+}
+
+PhysicsMotor := {
+	s : F32,
+	e23 : F32,
+	e31 : F32,
+	e12 : F32,
+	e01 : F32,
+	e02 : F32,
+	e03 : F32,
+	e0123 : F32,
+}.{
+
+	## Return a read-only motor coefficient record.
+	motor_coeffs : PhysicsMotor -> Physics.MotorCoeffs
+	motor_coeffs = Physics.motor_coeffs
+
+	## Extract the translation offset represented by a translation motor.
+	translation_vector : PhysicsMotor -> Physics.Vector
+	translation_vector = Physics.translation_vector
+
+	## Apply a translation motor to a finite point.
+	apply_motor_point : PhysicsMotor, Physics.Point -> Physics.Point
+	apply_motor_point = Physics.apply_motor_point
+}
+
+PhysicsBody := {
+	position : Physics.Point,
+	velocity : Physics.Vector,
+}.{
+
+	## Integrate acceleration into a body's velocity over a time step.
+	apply_acceleration : PhysicsBody, Physics.Vector, F32 -> PhysicsBody
+	apply_acceleration = Physics.apply_acceleration
+
+	## Integrate velocity into a body's position over a time step.
+	integrate_body : PhysicsBody, F32 -> PhysicsBody
+	integrate_body = Physics.integrate_body
+}
+
 Physics := [].{
 
 	## A finite 3D PGA point stored as compact grade-3 homogeneous coefficients.
-	Point := {
-		e032 : F32,
-		e013 : F32,
-		e021 : F32,
-		e123 : F32,
-	}.{
-
-		## Return normalized x, y, and z coordinates for a point.
-		coords : Point -> Coords
-		coords = Physics.coords
-
-		## Return the x/y components of a point for 2D drawing boundaries.
-		xy : Point -> Math.Vec2
-		xy = Physics.xy
-
-		## Return a read-only point coefficient record.
-		point_coeffs : Point -> PointCoeffs
-		point_coeffs = Physics.point_coeffs
-
-		## Translate a point by a free vector.
-		add : Point, Vector -> Point
-		add = Physics.add
-
-		## Return the free vector from the second point to the first point.
-		sub : Point, Point -> Vector
-		sub = Physics.sub
-
-		## Compute the Euclidean distance between two finite points.
-		distance : Point, Point -> F32
-		distance = Physics.distance
-
-		## Construct a plane through a point with the given normal direction.
-		plane_from_point_normal : Point, Vector -> Plane
-		plane_from_point_normal = Physics.plane_from_point_normal
-
-		## Construct a PGA line passing through two finite points.
-		line_from_points : Point, Point -> Line
-		line_from_points = Physics.line_from_points
-
-		## Construct a simple particle body.
-		body : Point, Vector -> Body
-		body = Physics.body
-	}
+	Point : PhysicsPoint
 
 	## A free 3D direction or translation stored as the ideal part of a point.
-	Vector := {
-		e032 : F32,
-		e013 : F32,
-		e021 : F32,
-	}.{
-
-		## Return x, y, and z components for a free vector.
-		components : Vector -> Coords
-		components = Physics.components
-
-		## Return the x/y components of a vector for 2D drawing boundaries.
-		vector_xy_components : Vector -> Math.Vec2
-		vector_xy_components = Physics.vector_xy_components
-
-		## Return a read-only vector coefficient record.
-		vector_coeffs : Vector -> VectorCoeffs
-		vector_coeffs = Physics.vector_coeffs
-
-		## Add two free vectors.
-		add_vec : Vector, Vector -> Vector
-		add_vec = Physics.add_vec
-
-		## Subtract the second free vector from the first.
-		sub_vec : Vector, Vector -> Vector
-		sub_vec = Physics.sub_vec
-
-		## Scale a free vector by a scalar amount.
-		scale : Vector, F32 -> Vector
-		scale = Physics.scale
-
-		## Compute the Euclidean dot product of two free vectors.
-		dot : Vector, Vector -> F32
-		dot = Physics.dot
-
-		## Compute the Euclidean cross product of two free vectors.
-		cross : Vector, Vector -> Vector
-		cross = Physics.cross
-
-		## Compute the squared Euclidean length of a free vector.
-		length_squared : Vector -> F32
-		length_squared = Physics.length_squared
-
-		## Compute the Euclidean length of a free vector.
-		length : Vector -> F32
-		length = Physics.length
-
-		## Return a unit-length vector, or zero for a zero-length input.
-		normalize : Vector -> Vector
-		normalize = Physics.normalize
-
-		## Reflect a vector around a surface normal.
-		reflect : Vector, Vector -> Vector
-		reflect = Physics.reflect
-
-		## Construct a normalized plane from a normal and signed distance to origin.
-		plane : Vector, F32 -> Plane
-		plane = Physics.plane
-
-		## Construct a translation motor from a free offset vector.
-		translation : Vector -> Motor
-		translation = Physics.translation
-
-		## Clamp only the y component of a free vector.
-		clamp_y : Vector, F32, F32 -> Vector
-		clamp_y = Physics.clamp_y
-	}
+	Vector : PhysicsVector
 
 	## A 3D PGA plane stored as grade-1 coefficients.
-	Plane := {
-		e0 : F32,
-		e1 : F32,
-		e2 : F32,
-		e3 : F32,
-	}.{
-
-		## Return a read-only plane coefficient record.
-		plane_coeffs : Plane -> PlaneCoeffs
-		plane_coeffs = Physics.plane_coeffs
-
-		## Compute the signed Euclidean distance from a normalized plane to a point.
-		signed_distance : Plane, Point -> F32
-		signed_distance = Physics.signed_distance
-
-		## Project a point onto a normalized plane.
-		project_point_plane : Plane, Point -> Point
-		project_point_plane = Physics.project_point_plane
-	}
+	Plane : PhysicsPlane
 
 	## A 3D PGA line stored as six grade-2 Plucker-style coefficients.
-	Line := {
-		e01 : F32,
-		e02 : F32,
-		e03 : F32,
-		e23 : F32,
-		e31 : F32,
-		e12 : F32,
-	}.{
-
-		## Return a read-only line coefficient record.
-		line_coeffs : Line -> LineCoeffs
-		line_coeffs = Physics.line_coeffs
-	}
+	Line : PhysicsLine
 
 	## A 3D PGA motor stored as compact even-subalgebra coefficients.
-	Motor := {
-		s : F32,
-		e23 : F32,
-		e31 : F32,
-		e12 : F32,
-		e01 : F32,
-		e02 : F32,
-		e03 : F32,
-		e0123 : F32,
-	}.{
-
-		## Return a read-only motor coefficient record.
-		motor_coeffs : Motor -> MotorCoeffs
-		motor_coeffs = Physics.motor_coeffs
-
-		## Extract the translation offset represented by a translation motor.
-		translation_vector : Motor -> Vector
-		translation_vector = Physics.translation_vector
-
-		## Apply a translation motor to a finite point.
-		apply_motor_point : Motor, Point -> Point
-		apply_motor_point = Physics.apply_motor_point
-	}
+	Motor : PhysicsMotor
 
 	## A simple particle body with a PGA point position and vector velocity.
-	Body := {
-		position : Point,
-		velocity : Vector,
-	}.{
-
-		## Integrate acceleration into a body's velocity over a time step.
-		apply_acceleration : Body, Vector, F32 -> Body
-		apply_acceleration = Physics.apply_acceleration
-
-		## Integrate velocity into a body's position over a time step.
-		integrate_body : Body, F32 -> Body
-		integrate_body = Physics.integrate_body
-	}
+	Body : PhysicsBody
 
 	## Plain coordinate view returned by accessors.
 	Coords : {

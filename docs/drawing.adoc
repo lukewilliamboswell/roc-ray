@@ -21,7 +21,7 @@ Every drawing effect takes the frame and is legal only in `render!`:
 render! = |model, frame| {
     frame.clear!(Color.from_hex_rgb(0x0d1425))
     frame.rectangle!({ x: 40, y: 40, width: 200, height: 90, style: Draw.filled(Color.white) })
-    frame.circle!({ center: model.pointer, radius: 18, style: Draw.outlined(Color.red, 3) })
+    frame.circle!({ center: Math.vec2(model.pointer.x, model.pointer.y), radius: 18, style: Draw.outlined(Color.red, 3) })
     Ok({})
 }
 ----

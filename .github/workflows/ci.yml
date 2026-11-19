@@ -17,14 +17,15 @@ jobs:
   resolve:
     name: Resolve the latest Roc nightly
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       nightly-tag: ${{ steps.nightly.outputs.tag }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: nightly
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/resolve-toolchain
 
   # Pixel-level rendering and capture checks. They need a real GL context, so
   # each runner has to be given one -- without this the target never runs
@@ -148,6 +149,8 @@ jobs:
 
       - name: Test example compile-time values on Windows
         if: runner.os == 'Windows'
+        # Force each CTFE evaluation to run: a cached success would hide a
+        # recurrence of the Windows compile-time evaluation failures.
         run: |
           ctfe_failed=0
           for pass in 1 2 3; do
@@ -211,9 +214,14 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          for app in examples/*/main.roc; do
-            roc check "$app" || { echo "::error file=$app::roc check failed as written"; exit 1; }
-          done
+          python3 - <<'PY_CHECK'
+          from pathlib import Path
+          import subprocess
+          from scripts.roc_options import compiler_args
+
+          for app in sorted(Path("examples").glob("*/main.roc")):
+              subprocess.run(["roc", "check", *compiler_args("roc", "check", app), str(app)], check=True)
+          PY_CHECK
 
       # all_tests.py bundles the complete platform and serves
       # it on a loopback port, and builds copies of the examples that point at
@@ -251,6 +259,8 @@ jobs:
         timeout-minutes: 10
         run: scripts/run-example.py --skip-platform-build examples/hello_world -- --host-headless-frames=3
 
+      # This exercises LLVM's optimized Windows ABI/linker path, independently
+      # of the dev backend used by the routine example suite.
       - name: Build and run an optimized Windows example
         if: runner.os == 'Windows'
         timeout-minutes: 10
@@ -367,7 +377,7 @@ jobs:
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
           zig: "false"
 
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@e12512e2605608588782edb044dd766137e34869
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@6c796f299012707d2e9bad23fd6449ed93f1f475
         with:
           install-nix: "true"
           cache: "true"

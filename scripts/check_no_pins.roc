@@ -1,6 +1,6 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
 }
 
 import cli.Cmd
@@ -113,7 +113,7 @@ fail! = |message| {
 ## The standard output of a program that must exit 0.
 capture! : Str, List(Str) => Try(Str, [ScriptFailed])
 capture! = |program, args|
-	match Cmd.run!(Cmd.new_str(program).args_str(args)) {
+	match Cmd.run!(OsStr.from_str(program), args.map(OsStr.from_str)) {
 		Ok(output) =>
 			match output.status {
 				Exited(0) => Ok(Str.from_utf8_lossy(output.stdout_bytes))

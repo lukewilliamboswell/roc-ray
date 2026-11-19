@@ -15,12 +15,13 @@ executable you keep, use `roc build`:
 [source,sh]
 ----
 mkdir -p dist
-roc build --opt=speed main.roc --output=dist/rocket
+roc build main.roc --output=dist/rocket
 ----
 
-`--opt=speed` asks for an optimised build, which is also ``roc build``'s
-default. `--output` names the executable; its directory must already exist,
-or the build fails at the link step.
+`roc build` uses the `dev` backend by default. Choose `--opt=speed` when
+measurements show that your app needs the runtime performance, and retest the
+optimised executable: it uses a different code-generation path. `--output`
+names the executable; its directory must already exist, or linking fails.
 
 The executable is self-contained. Your app, the RocRay host, raylib, SQLite,
 and the video and GIF encoders are all linked into it, so there is no runtime
@@ -137,7 +138,7 @@ To package it, build the executable and copy the assets beside it:
 [source,sh]
 ----
 mkdir -p dist/rocket
-roc build --opt=speed main.roc --output=dist/rocket/rocket
+roc build main.roc --output=dist/rocket/rocket
 cp -r assets dist/rocket/
 ----
 
@@ -183,7 +184,7 @@ For example, on Linux:
 
 [source,sh]
 ----
-roc build --opt=speed --target=arm64mac main.roc --output=dist/rocket-macos-arm64/rocket
+roc build --target=arm64mac main.roc --output=dist/rocket-macos-arm64/rocket
 ----
 
 Linux and macOS executables can be built from Linux; the platform bundle

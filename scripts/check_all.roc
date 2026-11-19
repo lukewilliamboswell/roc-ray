@@ -1,6 +1,6 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
 }
 
 import cli.Cmd
@@ -91,9 +91,21 @@ fail! = |message| {
 succeed! : Str, List(Str) => Try({}, [ScriptFailed])
 succeed! = |program, args| {
 	_ = Stdout.line!("+ ${program} ${Str.join_with(args, " ")}")
-	match Cmd.new_str(program).args_str(args).exec_exit_code!() {
+	match exit_code!(program, args) {
 		Ok(0) => Ok({})
 		Ok(code) => fail!("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
+		Err(_) => fail!("could not run ${program}")
+	}
+}
+
+# Keep child output on the terminal and preserve its exit status for git diff.
+exit_code! : Str, List(Str) => Try(I32, [ScriptFailed])
+exit_code! = |program, args| {
+	match Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).stdout(Inherit).stderr(Inherit).run!() {
+		Ok(output) => match output.status {
+			Exited(code) => Ok(code)
+			Signaled(signal) => fail!("${program} terminated by signal ${signal.to_str()}")
+		}
 		Err(_) => fail!("could not run ${program}")
 	}
 }

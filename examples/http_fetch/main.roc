@@ -232,7 +232,7 @@ render! = |model, frame| {
 draw_indicator! : Draw.Frame, { x : F32, y : F32 }, State, F32 => {}
 draw_indicator! = |frame, center, state, elapsed| {
 	color = state_color(state)
-	frame.circle!({ center: center, radius: 20, style: Draw.outlined(Color.with_alpha(color, 55), 1.5) })
+	frame.circle!({ center: Draw.Vector2.{ x: center.x, y: center.y }, radius: 20, style: Draw.outlined(Color.with_alpha(color, 55), 1.5) })
 	match state {
 		Waiting =>
 			List.for_each!(
@@ -247,7 +247,7 @@ draw_indicator! = |frame, center, state, elapsed| {
 				},
 			)
 
-		_ => frame.circle!({ center: center, radius: 6, style: Draw.filled(color) })
+		_ => frame.circle!({ center: Draw.Vector2.{ x: center.x, y: center.y }, radius: 6, style: Draw.filled(color) })
 	}
 }
 

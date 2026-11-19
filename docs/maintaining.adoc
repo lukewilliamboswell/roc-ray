@@ -136,6 +136,10 @@ Build the Linux x64 native Wayland bundle:
 scripts/bundle.sh --platform wayland
 ----
 
+The output filenames are `default-<hash>.tar.zst` and
+`wayland-<hash>.tar.zst`. The prefix identifies the variant in the GitHub
+release assets; the hash still verifies the bundle's content.
+
 Both bundles take the host archives that `zig build` writes under
 `platform/targets/`, and install their other linker inputs from the locked
 release into a fresh staging directory. The default package takes the

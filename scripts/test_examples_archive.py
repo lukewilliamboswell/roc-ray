@@ -10,7 +10,7 @@ only difference is where the bundle comes from: the release URL in each header
 is replaced, for each command, by the same bundle served on loopback.
 
     scripts/test_examples_archive.py --archive roc-ray-examples-0.11.0.zip \\
-        --bundle dist/<hash>.tar.zst
+        --bundle dist/default-<hash>.tar.zst
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_bundle_artifact import check_bundle_url, serve_dir  # noqa: E402
+from roc_options import compiler_args
 
 IS_WINDOWS = platform.system() == "Windows"
 COMPILE_TIMEOUT = 300
@@ -104,9 +105,10 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
         executable = bin_dir / (name + (".exe" if IS_WINDOWS else ""))
         print(f"[{position}/{len(apps)}] {path}")
         built = True
+        build_args = list(dict.fromkeys([*compiler_args(roc, "build", Path(path)), *app.get("build_args", [])]))
         for argv in (
-            [roc, "check", path, "--no-cache", *replace],
-            [roc, "build", path, "--no-cache", "--opt=dev", f"--output={executable}", *replace],
+            [roc, "check", path, *compiler_args(roc, "check", Path(path)), *replace],
+            [roc, "build", path, *build_args, "--opt=dev", f"--output={executable}", *replace],
         ):
             ran = run(argv, root, env, b"", COMPILE_TIMEOUT)
             if ran is None or ran.returncode != 0:

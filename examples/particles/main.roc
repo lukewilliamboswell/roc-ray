@@ -196,7 +196,7 @@ update! = |model, input, _io| {
 	# A long first cycle or a resize stall must not teleport the fountain.
 	dt = Math.clamp(input.time.elapsed_seconds, 0, 0.05)
 	spread = if (model.demo or devices.key_down(KeySpace)) 1.9 else 0.7
-	pointer = devices.mouse.position()
+	pointer = Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y }
 	emitter =
 		if model.demo {
 			demo_emitter(input.time.cycle_count)

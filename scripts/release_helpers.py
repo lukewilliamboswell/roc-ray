@@ -566,6 +566,12 @@ runs headlessly, for example
     roc build main.roc --output=pong
     ./pong --host-headless --host-headless-frames=60
 
+For `top_down` with Roc nightly `nightly-2026-11-18-a520eed`, use
+`roc build main.roc --specialize=yes`: its unspecialized native lowering can
+crash even with a fresh compilation. This keeps the development backend and
+compilation cache. `spec.json` carries the same option for the compatibility
+runner.
+
 The manual is at https://lukewilliamboswell.github.io/roc-ray/.
 """
 
@@ -646,6 +652,18 @@ def bump_check_mode(_previous_url: str) -> str:
 
 
 def default_url_from_release(release: dict[str, Any]) -> str:
+    assets = release.get("assets", [])
+    defaults = [
+        str(asset.get("browser_download_url", ""))
+        for asset in assets
+        if str(asset.get("name", "")).startswith("default-")
+        and str(asset.get("name", "")).endswith(BUNDLE_SUFFIX)
+    ]
+    if len(defaults) == 1:
+        return require_url(defaults[0])
+    if len(defaults) > 1:
+        raise RuntimeError("latest release has multiple default bundle assets")
+
     body = str(release.get("body", ""))
     default_section = re.search(
         r"### Default bundle(?P<section>.*?)(?:\n### |\Z)",
@@ -657,7 +675,6 @@ def default_url_from_release(release: dict[str, Any]) -> str:
         if match:
             return require_url(match.group("url"))
 
-    assets = release.get("assets", [])
     matches = [
         str(asset.get("browser_download_url", ""))
         for asset in assets

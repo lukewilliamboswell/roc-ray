@@ -272,8 +272,9 @@ while IFS= read -r line; do
     if [[ "$line" == Created:* ]]; then
         created="${line#Created:}"
         created_name="$(basename "${created#"${created%%[![:space:]]*}"}")"
-        mv -f "$staged_output/$created_name" "$output_dir/$created_name"
-        echo "Created: $output_dir/$created_name"
+        variant_name="$package-$created_name"
+        mv -f "$staged_output/$created_name" "$output_dir/$variant_name"
+        echo "Created: $output_dir/$variant_name"
     else
         printf '%s\n' "$line"
     fi

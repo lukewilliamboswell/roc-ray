@@ -422,6 +422,9 @@
           "stderr": "",
           "exit_code": 0
         }
+      ],
+      "build_args": [
+        "--specialize=yes"
       ]
     },
     {

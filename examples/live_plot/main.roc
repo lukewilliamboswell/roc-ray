@@ -1093,7 +1093,7 @@ scan_once = |model, scan| {
 		instances: List.concat(model.instances, dots),
 		runs: grow_run(model.runs, List.len(dots)),
 		peak: retain_peak(model.peak, scan, result.best, lane_path(model, scan.lane)),
-		lanes: add_lines(add_columns(model.lanes, scan.lane, cols), scan.lane, List.len(dots)),
+		lanes: add_lane_lines(add_columns(model.lanes, scan.lane, cols), scan.lane, List.len(dots)),
 		rates: model.rates.add_lines(List.len(dots)),
 		lines_parsed: model.lines_parsed + List.len(dots),
 	}
@@ -1162,8 +1162,8 @@ set_progress = |lanes, index, progress| update_lane(lanes, index, |lane| { ..lan
 set_scale : List(Lane), U64, F32 -> List(Lane)
 set_scale = |lanes, index, scale| update_lane(lanes, index, |lane| { ..lane, x_scale: scale })
 
-add_lines : List(Lane), U64, U64 -> List(Lane)
-add_lines = |lanes, index, lines| update_lane(lanes, index, |lane| { ..lane, lines: lane.lines + lines })
+add_lane_lines : List(Lane), U64, U64 -> List(Lane)
+add_lane_lines = |lanes, index, lines| update_lane(lanes, index, |lane| { ..lane, lines: lane.lines + lines })
 
 lane_path : Model, U64 -> Str
 lane_path = |model, index|
@@ -1856,12 +1856,12 @@ look = |model, input| {
 	# point in the middle of the plot rather than sliding it.
 	base = model.camera.with_offset(Math.center(area))
 	zoomed = if zooming {
-		zoom_at(base, devices.mouse.position(), wheel)
+		zoom_at(base, Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y }, wheel)
 	} else {
 		scroll_by(base, wheel)
 	}
 	panned = if dragging {
-		pan(zoomed, devices.mouse.delta())
+		pan(zoomed, Math.Vec2.{ x: devices.mouse.delta_x, y: devices.mouse.delta_y })
 	} else {
 		zoomed
 	}
@@ -2990,27 +2990,27 @@ resume = |scan, result| {
 }
 
 ## "ab\ncde\nf" -- two closed lines of two and three columns, then a partial.
-sample : List(U8)
-sample = [97, 98, 10, 99, 100, 101, 10, 102]
+sample_bytes : List(U8)
+sample_bytes = [97, 98, 10, 99, 100, 101, 10, 102]
 
 generous : Budget
 generous = { max_lines: 64, max_bytes: 4096 }
 
 ## A closed line becomes one point, and the point's x is the line's index.
 expect {
-	result = scan_chunk(scan_of(sample), generous)
+	result = scan_chunk(scan_of(sample_bytes), generous)
 	result.lines == 2 and List.len(result.dots) == 2
 }
 
 expect {
-	dots = scan_chunk(scan_of(sample), generous).dots
+	dots = scan_chunk(scan_of(sample_bytes), generous).dots
 	List.map(dots, |dot| dot.dest.x) == [0, line_scale]
 }
 
 ## A shorter line plots higher up its lane than a longer one, and both sit
 ## above the lane's baseline.
 expect {
-	dots = scan_chunk(scan_of(sample), generous).dots
+	dots = scan_chunk(scan_of(sample_bytes), generous).dots
 	match { first: List.get(dots, 0), second: List.get(dots, 1) } {
 		{ first: Ok(first), second: Ok(second) } =>
 			first.dest.y > second.dest.y and second.dest.y > 0 and first.dest.y < lane_baseline(0)
@@ -3022,14 +3022,14 @@ expect {
 ## The whole window is consumed when the budget does not bind, and the trailing
 ## partial line is left in `col` for the caller to finish.
 expect {
-	result = scan_chunk(scan_of(sample), generous)
-	result.consumed == List.len(sample) and result.col == 1 and !(result.full)
+	result = scan_chunk(scan_of(sample_bytes), generous)
+	result.consumed == List.len(sample_bytes) and result.col == 1 and !(result.full)
 }
 
 ## The line budget stops the scan at the line it names, and `consumed` stops
 ## with it rather than running to the end of the window.
 expect {
-	result = scan_chunk(scan_of(sample), { max_lines: 1, max_bytes: 4096 })
+	result = scan_chunk(scan_of(sample_bytes), { max_lines: 1, max_bytes: 4096 })
 	result.lines == 1 and result.consumed == 3 and result.full
 }
 
@@ -3037,28 +3037,28 @@ expect {
 ## for line index 1 -- the line index is carried across cycles, so where a point
 ## goes does not depend on which cycle happened to parse it.
 expect {
-	first = scan_chunk(scan_of(sample), { max_lines: 1, max_bytes: 4096 })
-	second = scan_chunk(resume(scan_of(sample), first), { max_lines: 1, max_bytes: 4096 })
+	first = scan_chunk(scan_of(sample_bytes), { max_lines: 1, max_bytes: 4096 })
+	second = scan_chunk(resume(scan_of(sample_bytes), first), { max_lines: 1, max_bytes: 4096 })
 	second.lines == 1 and List.map(second.dots, |dot| dot.dest.x) == [line_scale]
 }
 
 ## A byte budget that cuts a line in half carries the columns already seen into
 ## the next cycle, so the line's length is the length of the whole line.
 expect {
-	first = scan_chunk(scan_of(sample), { max_lines: 64, max_bytes: 1 })
-	second = scan_chunk(resume(scan_of(sample), first), generous)
+	first = scan_chunk(scan_of(sample_bytes), { max_lines: 64, max_bytes: 1 })
+	second = scan_chunk(resume(scan_of(sample_bytes), first), generous)
 	first.lines == 0 and first.col == 1 and second.lines == 2
 }
 
 ## Scanning a file one byte at a time produces exactly the points that scanning
 ## it in one go does. This is the property the whole design rests on.
-expect columns_of(sample, { max_lines: 64, max_bytes: 1 }) == columns_of(sample, generous)
-expect columns_of(sample, { max_lines: 1, max_bytes: 4096 }) == [2, 3]
+expect columns_of(sample_bytes, { max_lines: 64, max_bytes: 1 }) == columns_of(sample_bytes, generous)
+expect columns_of(sample_bytes, { max_lines: 1, max_bytes: 4096 }) == [2, 3]
 
 ## The columns a scan reports and the columns its points encode are the same
 ## numbers, which is what lets the histogram be built from one and the plot from
 ## the other.
-expect scan_chunk(scan_of(sample), generous).cols == columns_of(sample, generous)
+expect scan_chunk(scan_of(sample_bytes), generous).cols == columns_of(sample_bytes, generous)
 
 columns_of : List(U8), Budget -> List(U64)
 columns_of = |bytes, budget| gather(scan_of(bytes), budget, [])
@@ -3093,13 +3093,13 @@ expect {
 
 ## The longest line in the chunk is reported by offset, so the caller can decide
 ## whether copying it out is worth it. "cde" starts at byte 3.
-expect scan_chunk(scan_of(sample), generous).best == { start: 3, columns: 3 }
+expect scan_chunk(scan_of(sample_bytes), generous).best == { start: 3, columns: 3 }
 
 ## Retaining that line copies it out rather than keeping a view of the file, and
 ## a shorter line does not displace it.
 expect {
-	kept = retain_peak({ path: "", columns: 0, text: "" }, scan_of(sample), { start: 3, columns: 3 }, "a.txt")
-	held = retain_peak(kept, scan_of(sample), { start: 0, columns: 2 }, "b.txt")
+	kept = retain_peak({ path: "", columns: 0, text: "" }, scan_of(sample_bytes), { start: 3, columns: 3 }, "a.txt")
+	held = retain_peak(kept, scan_of(sample_bytes), { start: 0, columns: 2 }, "b.txt")
 	kept.text == "cde" and kept.path == "a.txt" and held.columns == 3 and held.path == "a.txt"
 }
 

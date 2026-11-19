@@ -96,6 +96,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+from roc_options import compiler_args
 import test_http_client  # noqa: E402  (needs the sys.path entry above)
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -108,10 +109,9 @@ _rewrite_platform_ref = local_bundles.rewrite_platform_ref
 # See `local_bundles.PACKAGE_LIMIT_ARGS`: a locally built platform bundle is
 # bigger than roc's default transitive-dependency budget.
 LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
-# Keep the ordinary developer/release path on Roc's default optimized backend.
-# CI may select the native dev backend when a pinned nightly's LLVM pipeline
-# exceeds hosted-runner memory or time limits.
-ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'speed')}"]
+# Routine validation uses the native dev backend. The optimized Windows smoke
+# check explicitly selects speed to cover the separate LLVM code-generation path.
+ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'dev')}"]
 
 # Examples to skip in the bundled-platform build test, mapping example name ->
 # reason. Use this when a specific example can't build against the bundled
@@ -1759,7 +1759,8 @@ def run_platform_value_tests(root: Path, verbose: bool) -> list[str]:
     print("\nRunning platform value tests...")
     for module in ("App", "Devices", "AppTransport", "Capture", "Font", "Physics", "Time"):
         print(f"  Testing {module}...", end=" ", flush=True)
-        if run_cmd(["roc", "test", str(root / "platform" / f"{module}.roc"),
+        source = root / "platform" / f"{module}.roc"
+        if run_cmd(["roc", "test", *compiler_args("roc", "test", source), str(source),
                     f"--main={root / 'platform' / 'main.roc'}"],
                    f"platform values {module}", verbose, cwd=root):
             print("ok")
@@ -2039,7 +2040,7 @@ def _run_example_stages(
             name = example_name(example)
             print(f"  Checking {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "check", staged[example].name, *LIMITS],
+                ["roc", "check", *compiler_args("roc", "check", example), staged[example].name, *LIMITS],
                 f"check {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -2057,7 +2058,7 @@ def _run_example_stages(
                 name = example_name(example)
                 print(f"  Testing {name}...", end=" ", flush=True)
                 if run_cmd(
-                    ["roc", "test", staged[example].name, *LIMITS],
+                    ["roc", "test", *compiler_args("roc", "test", example), staged[example].name, *LIMITS],
                     f"test {name}",
                     args.verbose,
                     cwd=staged[example].parent,
@@ -2081,7 +2082,7 @@ def _run_example_stages(
 
             print(f"  Building {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "build", *ROC_BUILD_ARGS, staged[example].name, *LIMITS],
+                ["roc", "build", *ROC_BUILD_ARGS, *compiler_args("roc", "build", example), staged[example].name, *LIMITS],
                 f"build {name}",
                 args.verbose,
                 cwd=staged[example].parent,

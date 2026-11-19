@@ -156,7 +156,7 @@ update! = |model, input, io| {
 		else resolved.theme
 
 	save = devices.key_pressed(KeyS)
-	sun = if (resolved.demo) demo_sun(cycle) else devices.mouse.position()
+	sun = if (resolved.demo) demo_sun(cycle) else Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y }
 	next = {
 		..resolved,
 		theme,

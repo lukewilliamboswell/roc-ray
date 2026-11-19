@@ -7,28 +7,30 @@
 ## directions, `P_XYMovement` caps momentum and applies 0xe800 friction, and
 ## `P_CalcHeight` derives view bob from squared horizontal momentum. The Roc
 ## implementation is independently written and uses world-space F32 values.
+SimAngle :: { turns : F32 }.{
+	from_turns : F32 -> SimAngle
+	from_turns = |raw_turns| SimAngle.({ turns: wrap_turn(raw_turns) })
+
+	turns : SimAngle -> F32
+	turns = |SimAngle.(value)| value.turns
+
+	## Opaque angles compare by their normalized turn.
+	is_eq : SimAngle, SimAngle -> Bool
+	is_eq = |SimAngle.(a), SimAngle.(b)| a.turns == b.turns
+
+	add : SimAngle, F32 -> SimAngle
+	add = |SimAngle.(value), delta| SimAngle.from_turns(value.turns + delta)
+
+	forward : SimAngle -> RocDoomSim.Vec2
+	forward = |SimAngle.(value)| {
+		radians = value.turns * RocDoomSim.tau
+		{ x: F32.cos(radians), y: F32.sin(radians) }
+	}
+}
+
 RocDoomSim := [].{
 	Vec2 : { x : F32, y : F32 }
-	Angle :: { turns : F32 }.{
-		from_turns : F32 -> Angle
-		from_turns = |turns| Angle.({ turns: wrap_turn(turns) })
-
-		turns : Angle -> F32
-		turns = |Angle.(value)| value.turns
-
-		## Opaque angles compare by their normalized turn.
-		is_eq : Angle, Angle -> Bool
-		is_eq = |Angle.(a), Angle.(b)| a.turns == b.turns
-
-		add : Angle, F32 -> Angle
-		add = |Angle.(value), delta| Angle.from_turns(value.turns + delta)
-
-		forward : Angle -> Vec2
-		forward = |Angle.(value)| {
-			radians = value.turns * tau
-			{ x: F32.cos(radians), y: F32.sin(radians) }
-		}
-	}
+	Angle : SimAngle
 
 	Command : {
 		## Doom tic-command magnitudes; normal run values are forward 50, side 40.

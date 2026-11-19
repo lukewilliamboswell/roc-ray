@@ -10,20 +10,59 @@
 ##
 ## Resolve a `View` from the current `input.devices` during `update!`. Retaining
 ## a view also retains that snapshot's sampled lists.
+GamepadSnapshot := {
+	connected : List(U8),
+	buttons : List(U8),
+	axes : List(F32),
+}.{
+
+	## Resolve a slot into a snapshot-scoped connected view. Callers handle
+	## disconnect once, after which button and axis queries stay allocation-free.
+	lookup : GamepadSnapshot, Gamepad.Id -> [Connected(Gamepad.View), Disconnected]
+	lookup = Gamepad.lookup
+}
+
+GamepadView :: { snapshot : Gamepad.Snapshot, gamepad : Gamepad.Id }.{
+
+	## Slot occupied by this connected pad.
+	id : GamepadView -> Gamepad.Id
+	id = |pad| pad.gamepad
+
+	## Whether a button is currently held.
+	button_down : GamepadView, Gamepad.Button -> Bool
+	button_down = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 1)
+
+	## Whether a button is currently up.
+	button_up : GamepadView, Gamepad.Button -> Bool
+	button_up = |pad, button| !(pad.button_down(button))
+
+	## Whether a button went from up to down between the previous sample and
+	## this one. Sampled, so a press and release inside one cycle is lost.
+	button_pressed : GamepadView, Gamepad.Button -> Bool
+	button_pressed = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 2)
+
+	## Whether a button went from down to up between the previous sample and
+	## this one, with the same caveat as `button_pressed`.
+	button_released : GamepadView, Gamepad.Button -> Bool
+	button_released = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 4)
+
+	## Read an axis from this input's latest sample. Stick axes are normally in [-1, 1].
+	axis : GamepadView, Gamepad.Axis -> F32
+	axis = |pad, axis_name| axis_value(pad.snapshot, pad.gamepad, axis_name)
+
+	## Left stick as a two-dimensional vector.
+	left_stick : GamepadView -> { x : F32, y : F32 }
+	left_stick = |pad| { x: pad.axis(LeftX), y: pad.axis(LeftY) }
+
+	## Right stick as a two-dimensional vector.
+	right_stick : GamepadView -> { x : F32, y : F32 }
+	right_stick = |pad| { x: pad.axis(RightX), y: pad.axis(RightY) }
+}
+
 Gamepad := [].{
 
 	## Fixed-size gamepad state sampled once per host-cycle input.
-	Snapshot := {
-		connected : List(U8),
-		buttons : List(U8),
-		axes : List(F32),
-	}.{
-
-		## Resolve a slot into a snapshot-scoped connected view. Callers handle
-		## disconnect once, after which button and axis queries stay allocation-free.
-		lookup : Snapshot, Id -> [Connected(View), Disconnected]
-		lookup = Gamepad.lookup
-	}
+	Snapshot : GamepadSnapshot
 
 	## One of the four gamepad slots sampled by the platform.
 	Id := [One, Two, Three, Four].{
@@ -73,42 +112,7 @@ Gamepad := [].{
 	## references to the existing flat lists; lookup does not allocate or resample.
 	## It is valid as a view of this snapshot only. Resolve the pad again from the
 	## next cycle's `Devices.Snapshot` instead of retaining it in the model.
-	View :: { snapshot : Snapshot, gamepad : Id }.{
-
-		## Slot occupied by this connected pad.
-		id : View -> Id
-		id = |pad| pad.gamepad
-
-		## Whether a button is currently held.
-		button_down : View, Button -> Bool
-		button_down = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 1)
-
-		## Whether a button is currently up.
-		button_up : View, Button -> Bool
-		button_up = |pad, button| !(pad.button_down(button))
-
-		## Whether a button went from up to down between the previous sample and
-		## this one. Sampled, so a press and release inside one cycle is lost.
-		button_pressed : View, Button -> Bool
-		button_pressed = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 2)
-
-		## Whether a button went from down to up between the previous sample and
-		## this one, with the same caveat as `button_pressed`.
-		button_released : View, Button -> Bool
-		button_released = |pad, button| button_state(pad.snapshot, pad.gamepad, button, 4)
-
-		## Read an axis from this input's latest sample. Stick axes are normally in [-1, 1].
-		axis : View, Axis -> F32
-		axis = |pad, axis_name| axis_value(pad.snapshot, pad.gamepad, axis_name)
-
-		## Left stick as a two-dimensional vector.
-		left_stick : View -> { x : F32, y : F32 }
-		left_stick = |pad| { x: pad.axis(LeftX), y: pad.axis(LeftY) }
-
-		## Right stick as a two-dimensional vector.
-		right_stick : View -> { x : F32, y : F32 }
-		right_stick = |pad| { x: pad.axis(RightX), y: pad.axis(RightY) }
-	}
+	View : GamepadView
 
 	## Resolve a slot into a snapshot-scoped connected view. Callers handle
 	## disconnect once, after which button and axis queries stay allocation-free.

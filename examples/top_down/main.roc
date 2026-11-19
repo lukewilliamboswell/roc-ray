@@ -2,6 +2,10 @@
 ##
 ## Use WASD or Arrow keys to move, Space to dash or restart, and Escape to quit.
 ## Pass `--record-demo` to write `examples/gallery/top_down.gif`.
+## With Roc nightly `nightly-2026-11-18-a520eed`, build with
+## `roc build main.roc --specialize=yes` to avoid its unspecialized native
+## lowering crash. The development backend and compilation cache stay enabled.
+##
 ## File structure:
 ##
 ## - State (`Game.roc`): player, remaining sparks, score, lives, gate, and feedback

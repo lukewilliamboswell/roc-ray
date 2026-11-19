@@ -53,7 +53,10 @@ Elsewhere, or without Nix, install:
 * SQLite's `sqlite3` command-line tool for inspecting Observatory captures
 
 `scripts/all_tests.py` resolves `roc` from `PATH`, so the latest nightly has to
-come first on it. CI resolves the latest nightly once per run, so a pull
+come first on it. CI resolves the latest nightly and its Blueprint lock once
+per run, then shares that lock with every runner. Blueprint verifies compiler
+downloads against it; CI caches the Blueprint binary and verified compiler
+archives. A pull
 request can turn red when a new nightly lands; update your nightly first when a
 failure has nothing to do with your change. Record the exact compiler identity
 when investigating a difference from CI.
@@ -188,7 +191,24 @@ scripts/all_tests.py --skip-roc-build
 scripts/all_tests.py --only pong,snake
 ----
 
-It checks formatting and types, runs Roc tests, builds the apps and exercises
+Routine builds use Roc's `dev` backend and compilation cache. The exceptions
+in `scripts/roc_options.py` apply only to the named commands and compiler:
+November 18's cached `Devices` tests stall, cached Doom tests crash, and cached
+`top_down` checks crash. Its unspecialized native builds and tests also crash with
+fresh compilation, so this one example enables development specialization
+while retaining the cache. The released examples specification carries that
+build option for nightly compatibility testing. Other compilers use the cache
+normally. On this compiler, cached Pong, Snake, and SQLite Scores tests also
+fail with `OutOfMemory` on Intel macOS, as do the eight tutorial tests on
+Windows; those exact test commands compile from source on those hosts.
+Privacy fixtures compile from source so cached results cannot stand
+in for checking the current boundary; Windows CTFE regression checks force
+each evaluation to run. The shared nightly compatibility runner also disables
+the checked-source cache to test published sources directly against each new
+compiler. The explicit optimized Windows smoke test covers
+LLVM's separate ABI and linker path.
+
+The driver checks formatting and types, runs Roc tests, builds the apps and exercises
 both their headless paths and, in the windowed sweep, the real raylib backend:
 every example is run against a real (hidden) window for a fixed number of
 frames, with the cases in `scripts/test_spec.json` scripting keys and typed text

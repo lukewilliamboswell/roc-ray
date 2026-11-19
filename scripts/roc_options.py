@@ -24,13 +24,13 @@ def compiler_args(roc: str, command: str, source: Path) -> list[str]:
     """Scope compiler-defect workarounds to the affected command and nightly."""
     source = Path(source)
     name = source.parent.name if source.name == "main.roc" else source.stem
-    if (command, name) not in CACHE_EXCEPTIONS and (command, name) != ("build", "top_down"):
+    if (command, name) not in CACHE_EXCEPTIONS and not (command in ("build", "test") and name == "top_down"):
         return []
     if compiler_version(roc) != f"Roc compiler version {AFFECTED_NIGHTLY}":
         return []
-    # The unspecialized dev lowering crashes intermittently on macOS/Windows,
+    # The unspecialized dev lowering crashes intermittently on Linux/macOS/Windows,
     # including fresh builds. Specialization avoids that path and retains the
     # dev backend and its cache; repeated Intel builds reproduce the difference.
-    if (command, name) == ("build", "top_down"):
+    if command in ("build", "test") and name == "top_down":
         return ["--specialize=yes"]
     return ["--no-cache"]

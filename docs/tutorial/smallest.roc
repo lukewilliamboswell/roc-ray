@@ -4,6 +4,7 @@ app [Model, program] { rr: platform "../../platform/main.roc" }
 import rr.App
 import rr.Color
 import rr.Draw
+import rr.Math
 
 Model : { pointer : { x : F32, y : F32 } }
 
@@ -20,7 +21,7 @@ update! = |_model, input, _io| Ok({ pointer: input.devices.mouse.position() })
 render! : Model, Draw.Frame => Try({}, [Exit(I64)])
 render! = |model, frame| {
 	frame.clear!(Color.black)
-	frame.circle!({ center: model.pointer, radius: 40, style: Draw.filled(Color.red) })
+	frame.circle!({ center: Math.vec2(model.pointer.x, model.pointer.y), radius: 40, style: Draw.filled(Color.red) })
 	Ok({})
 }
 # end::body[]

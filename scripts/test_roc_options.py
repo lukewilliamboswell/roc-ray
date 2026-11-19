@@ -12,7 +12,6 @@ class CompilerOptionsTests(unittest.TestCase):
         with patch.object(roc_options, "compiler_version", side_effect=AssertionError("unneeded version query")):
             for command in ["check", "test", "build"]:
                 self.assertEqual([], roc_options.compiler_args("roc", command, Path("examples/pong/main.roc")))
-            self.assertEqual([], roc_options.compiler_args("roc", "test", Path("examples/top_down/main.roc")))
             self.assertEqual([], roc_options.compiler_args("roc", "build", Path("examples/roc-doom-e1m1/main.roc")))
 
     def test_reproduced_failures_use_source_compilation(self):
@@ -28,7 +27,8 @@ class CompilerOptionsTests(unittest.TestCase):
 
     def test_native_lowering_workaround_retains_cache(self):
         with patch.object(roc_options, "compiler_version", return_value="Roc compiler version nightly-2026-11-18-a520eed"):
-            self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", "build", Path("examples/top_down/main.roc")))
+            for command in ["build", "test"]:
+                self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", command, Path("examples/top_down/main.roc")))
 
     def test_workaround_does_not_follow_other_compilers(self):
         with patch.object(roc_options, "compiler_version", return_value="Roc compiler version nightly-2026-11-19-abcdef0"):

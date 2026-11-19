@@ -28,6 +28,7 @@ app [Model, program] { rr: platform "BUNDLE-URL" }
 import rr.App
 import rr.Color
 import rr.Draw
+import rr.Math
 import rr.Text
 
 Model : {
@@ -62,7 +63,7 @@ render! = |model, frame| {
     frame.clear!(Color.black)
     model.title.draw!(frame, { pos: { x: 400, y: 40 }, color: Color.white, align: (Top, Center) })
     frame.text_at!({ pos: { x: 20, y: 560 }, text: "Clicks: ${model.clicks.to_str()}", size: 20, color: Color.white })
-    frame.circle!({ center: model.pointer, radius: 18, style: Draw.filled(Color.red) })
+    frame.circle!({ center: Math.vec2(model.pointer.x, model.pointer.y), radius: 18, style: Draw.filled(Color.red) })
     Ok({})
 }
 ----
@@ -256,7 +257,7 @@ render! = |model, frame| {
     frame.clear!(Color.black)
     model.title.draw!(frame, { pos: { x: 400, y: 40 }, color: Color.white, align: (Top, Center) })
     frame.text_at!({ pos: { x: 20, y: 560 }, text: "Clicks: ${model.clicks.to_str()}", size: 20, color: Color.white })
-    frame.circle!({ center: model.pointer, radius: 18, style: Draw.filled(Color.red) })
+    frame.circle!({ center: Math.vec2(model.pointer.x, model.pointer.y), radius: 18, style: Draw.filled(Color.red) })
     Ok({})
 }
 ----

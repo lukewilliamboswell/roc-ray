@@ -35,7 +35,7 @@ jobs:
       # records before handing out the path. The docs environment fetches one
       # program and needs no Nix.
       - name: Set up Blueprint
-        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@e12512e2605608588782edb044dd766137e34869
+        uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@6c796f299012707d2e9bad23fd6449ed93f1f475
 
       - id: renderer
         name: Get the verified renderer

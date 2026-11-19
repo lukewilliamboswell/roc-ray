@@ -566,6 +566,12 @@ runs headlessly, for example
     roc build main.roc --output=pong
     ./pong --host-headless --host-headless-frames=60
 
+For `top_down` with Roc nightly `nightly-2026-11-18-a520eed`, use
+`roc build main.roc --specialize=yes`: its unspecialized native lowering can
+crash even with a fresh compilation. This keeps the development backend and
+compilation cache. `spec.json` carries the same option for the compatibility
+runner.
+
 The manual is at https://lukewilliamboswell.github.io/roc-ray/.
 """
 

@@ -1,0 +1,21 @@
+= RocRay 0.12.3
+
+0.12.3 supports Roc nightly `nightly-2026-11-18-a520eed`. Public API names
+and receiver methods are preserved; platform adapters and examples use the
+compiler's explicit conversions between nominal values and structural data.
+The generated host ABI matches this compiler.
+
+Release bundles identify their variants in their filenames:
+`default-<hash>.tar.zst` and `wayland-<hash>.tar.zst`. Package registries can
+select a variant directly from the release assets without parsing release
+notes.
+
+Repository scripts use the same November 18 nightly with basic-cli 0.28.1.
+CI provisions its separately resolved nightly through Blueprint 0.13.0,
+shares one verified compiler lock across runners, and caches the Blueprint
+binary and verified compiler archives.
+
+Routine validation uses cached development builds. The affected November 18
+compiler commands have documented exceptions; Spark Run uses development
+specialization to avoid an intermittent native lowering crash. The optimized
+Windows smoke test covers LLVM's separate ABI and linker path.

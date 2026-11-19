@@ -200,7 +200,9 @@ while retaining the cache. The released examples specification carries that
 build option for nightly compatibility testing. Other compilers use the cache
 normally. Privacy fixtures compile from source so cached results cannot stand
 in for checking the current boundary; Windows CTFE regression checks force
-each evaluation to run. The explicit optimized Windows smoke test covers
+each evaluation to run. The shared nightly compatibility runner also disables
+the checked-source cache to test published sources directly against each new
+compiler. The explicit optimized Windows smoke test covers
 LLVM's separate ABI and linker path.
 
 The driver checks formatting and types, runs Roc tests, builds the apps and exercises

@@ -105,9 +105,10 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
         executable = bin_dir / (name + (".exe" if IS_WINDOWS else ""))
         print(f"[{position}/{len(apps)}] {path}")
         built = True
+        build_args = list(dict.fromkeys([*compiler_args(roc, "build", Path(path)), *app.get("build_args", [])]))
         for argv in (
             [roc, "check", path, *compiler_args(roc, "check", Path(path)), *replace],
-            [roc, "build", path, *compiler_args(roc, "build", Path(path)), "--opt=dev", *app.get("build_args", []), f"--output={executable}", *replace],
+            [roc, "build", path, *build_args, "--opt=dev", f"--output={executable}", *replace],
         ):
             ran = run(argv, root, env, b"", COMPILE_TIMEOUT)
             if ran is None or ran.returncode != 0:

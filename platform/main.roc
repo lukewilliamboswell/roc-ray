@@ -340,7 +340,7 @@ input_from_raw = |raw| {
 		buttons: raw.gamepads.buttons,
 		axes: raw.gamepads.axes,
 	},
-	mouse: raw.mouse,
+	mouse: Mouse.Snapshot.{ buttons: raw.mouse.buttons, left: raw.mouse.left, middle: raw.mouse.middle, right: raw.mouse.right, wheel: raw.mouse.wheel, wheel_x: raw.mouse.wheel_x, wheel_y: raw.mouse.wheel_y, delta_x: raw.mouse.delta_x, delta_y: raw.mouse.delta_y, x: raw.mouse.x, y: raw.mouse.y },
 }
 
 ## Rebuild a public `App.Input` after unwrapping this cycle's task messages.

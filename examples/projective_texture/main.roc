@@ -35,7 +35,7 @@ Model : {
 ## Apply pointer input and return the cursor that `update!` should set.
 drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
 drag_corner = |model, devices| {
-	mouse = devices.mouse.position()
+	mouse = Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y }
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = devices.mouse.button_down(Left) and (model.dragging or (devices.mouse.button_pressed(Left) and handle_near))
 	cursor = if (handle_near or dragging) ResizeAll else Arrow

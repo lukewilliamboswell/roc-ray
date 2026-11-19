@@ -105,28 +105,28 @@ TextureDrawBuilder(field) := {
 	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if (options.source_set) options.source else Math.rect(0, 0, texture.width, texture.height)
+		source_value = if (options.source_set) options.source else Math.rect(0, 0, texture.width, texture.height)
 
-		dest = if options.dest_set {
+		dest_value = if options.dest_set {
 			options.dest
 		} else {
 			{
 				x: options.pos.x,
 				y: options.pos.y,
-				width: source.width * options.scale.x,
-				height: source.height * options.scale.y,
+				width: source_value.width * options.scale.x,
+				height: source_value.height * options.scale.y,
 			}
 		}
 
-		origin = if options.origin_set {
+		origin_value = if options.origin_set {
 			options.origin
 		} else if options.origin_center {
-			{ x: dest.width * 0.5, y: dest.height * 0.5 }
+			{ x: dest_value.width * 0.5, y: dest_value.height * 0.5 }
 		} else {
 			Math.zero
 		}
 
-		{ texture, source, dest, origin, rotation: options.rotation, tint: options.tint }
+		{ texture, source: source_value, dest: dest_value, origin: origin_value, rotation: options.rotation, tint: options.tint }
 	}
 
 	pos : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
@@ -197,6 +197,241 @@ crosses_have_one_sign = |a, b, c, d| {
 	all_positive or all_negative
 }
 
+DrawFrame :: Host.DrawFrame.{
+
+	## Draw independent triangles. Every consecutive triple is one triangle.
+	## An empty list is a no-op; a non-empty count not divisible by three is a
+	## programmer error. Legal in `render!` only.
+	triangles! : DrawFrame, Draw.TrianglePoints => {}
+	triangles! = Draw.triangles!
+
+	## Draw a triangle fan: the first point is the centre and later points form
+	## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_fan! : DrawFrame, Draw.TrianglePoints => {}
+	triangle_fan! = Draw.triangle_fan!
+
+	## Draw a triangle strip. Each point after the first two adds one triangle.
+	## Fewer than three points are a no-op. Legal in `render!` only.
+	triangle_strip! : DrawFrame, Draw.TrianglePoints => {}
+	triangle_strip! = Draw.triangle_strip!
+
+	## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
+	## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
+	line_strip! : DrawFrame, Draw.LineStrip => {}
+	line_strip! = Draw.line_strip!
+
+	## Draw a filled and/or outlined circular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	circle_sector! : DrawFrame, Draw.CircleSector => {}
+	circle_sector! = Draw.circle_sector!
+
+	## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
+	ellipse! : DrawFrame, Draw.Ellipse => {}
+	ellipse! = Draw.ellipse!
+
+	## Draw a filled and/or outlined annular sector. Angles are degrees and
+	## `segments` must be at least three. Legal in `render!` only.
+	ring! : DrawFrame, Draw.Ring => {}
+	ring! = Draw.ring!
+
+	## Clear the active drawing target to a solid color.
+	##
+	## Legal in `render!` only.
+	clear! : DrawFrame, Color.Rgba => {}
+	clear! = Draw.clear!
+
+	## Draw a vertical rectangle gradient.
+	##
+	## Legal in `render!` only.
+	rectangle_gradient_v! : DrawFrame, Draw.RectangleGradientV => {}
+	rectangle_gradient_v! = Draw.rectangle_gradient_v!
+
+	## Draw a horizontal rectangle gradient.
+	##
+	## Legal in `render!` only.
+	rectangle_gradient_h! : DrawFrame, Draw.RectangleGradientH => {}
+	rectangle_gradient_h! = Draw.rectangle_gradient_h!
+
+	## Draw a radial circle gradient.
+	##
+	## Legal in `render!` only.
+	circle_gradient! : DrawFrame, Draw.CircleGradient => {}
+	circle_gradient! = Draw.circle_gradient!
+
+	## Draw raylib's current frames-per-second counter.
+	##
+	## Legal in `render!` only.
+	fps! : DrawFrame, Draw.Fps => {}
+	fps! = Draw.fps!
+
+	## Draw a filled and/or outlined axis-aligned rectangle.
+	##
+	## Legal in `render!` only.
+	rectangle! : DrawFrame, Draw.Rectangle => {}
+	rectangle! = Draw.rectangle!
+
+	## Draw a filled and/or outlined rounded rectangle.
+	##
+	## Legal in `render!` only.
+	rounded_rectangle! : DrawFrame, Draw.RoundedRectangle => {}
+	rounded_rectangle! = Draw.rounded_rectangle!
+
+	## Draw a filled and/or outlined circle.
+	##
+	## Legal in `render!` only.
+	circle! : DrawFrame, Draw.Circle => {}
+	circle! = Draw.circle!
+
+	## Draw a stroked line segment. `NoStroke` performs no drawing.
+	##
+	## Legal in `render!` only.
+	line! : DrawFrame, Draw.Line => {}
+	line! = Draw.line!
+
+	## Draw a filled and/or outlined triangle.
+	##
+	## Legal in `render!` only.
+	triangle! : DrawFrame, Draw.Triangle => {}
+	triangle! = Draw.triangle!
+
+	## Draw a convex filled polygon and/or an ordered polygon outline. The host
+	## triangulates the fill without allocating; fewer than three points do not
+	## fill.
+	##
+	## Legal in `render!` only.
+	convex_polygon! : DrawFrame, Draw.ConvexPolygon => {}
+	convex_polygon! = Draw.convex_polygon!
+
+	## Draw a texture with explicit source, destination, origin, rotation, and
+	## tint.
+	##
+	## Legal in `render!` only.
+	texture! : DrawFrame, Draw.TextureDraw => {}
+	texture! = Draw.texture!
+
+	## Draw one borrowed indexed batch of perspective-correct textured triangles.
+	## The vertex and index list lengths explicitly bound all work in this call;
+	## the host consumes both synchronously and retains no geometry. The index
+	## count must be a multiple of three and every index must name a vertex.
+	## Violating either condition is a programmer error.
+	##
+	## Legal in `render!` only. Normally called inside `with_camera_3d!`.
+	textured_triangles_3d! : DrawFrame, Draw.TexturedTriangles3D => {}
+	textured_triangles_3d! = Draw.textured_triangles_3d!
+
+	## Draw many instances of one texture, in list order, with a single hosted
+	## call.
+	##
+	## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
+	## is what caps how many sprites a frame can afford. This crosses once for the
+	## whole batch and lets the host loop over it, so the cost per instance is the
+	## `DrawTexturePro` call alone. Build the list from application state and pass
+	## it straight through; an empty list does not cross at all.
+	##
+	## Legal in `render!` only.
+	texture_instances! : DrawFrame, Draw.Texture, List(Draw.TextureInstance) => {}
+	texture_instances! = Draw.texture_instances!
+
+	## Project a texture onto a validated planar quad with exact homogeneous UV
+	## interpolation. This remains one hosted call and preserves active shaders.
+	##
+	## Legal in `render!` only.
+	projective_texture! : DrawFrame, Draw.ProjectiveTexture => {}
+	projective_texture! = Draw.projective_texture!
+
+	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
+	## Callback errors are returned only after the native target has been
+	## restored.
+	##
+	## Legal in `render!` only.
+	with_render_texture! : DrawFrame, Draw.RenderTexture, (DrawFrame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_render_texture! = Draw.with_render_texture!
+
+	## Scope shader application and upload its complete uniform record before the
+	## callback draws. Callback errors are returned only after the previous
+	## shader and all of its uniform values have been restored.
+	##
+	## Legal in `render!` only.
+	with_shader! : DrawFrame, Shader(uniforms), (DrawFrame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_shader! = Draw.with_shader!
+
+	## Scope one of raylib's built-in blend equations. Custom blend factors are
+	## deliberately excluded until they can be represented without global state.
+	##
+	## Legal in `render!` only.
+	with_blend_mode! : DrawFrame, Draw.BlendMode, (DrawFrame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_blend_mode! = Draw.with_blend_mode!
+
+	## Draw the callback in world space using this camera.
+	##
+	## Legal in `render!` only.
+	with_camera! : DrawFrame, Draw.Camera2D, (DrawFrame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_camera! = Draw.with_camera!
+
+	## Draw the callback in 3D world space using a perspective camera. Depth
+	## testing and depth writes are active until the callback returns.
+	##
+	## Legal in `render!` only.
+	with_camera_3d! : DrawFrame, Draw.Camera3D, (DrawFrame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_camera_3d! = Draw.with_camera_3d!
+
+	## Restrict callback drawing to screen-space `bounds`, and close the scissor
+	## however the callback ends, error included.
+	##
+	## `bounds` is in the same logical coordinates as every other drawing call,
+	## so it is a rectangle on the surface rather than in framebuffer pixels.
+	##
+	## Legal in `render!` only.
+	with_scissor! : DrawFrame, Math.Rect, (DrawFrame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
+	with_scissor! = Draw.with_scissor!
+
+	## Draw text using an explicit font, spacing, color, and resolved top-left
+	## origin. This performs no measurement or alignment pass.
+	##
+	## Legal in `render!` only.
+	text! : DrawFrame, Draw.Text => {}
+	text! = Draw.text!
+
+	## Draw top-left aligned text with the built-in font and default spacing.
+	##
+	## Legal in `render!` only.
+	debug_text! : DrawFrame, Draw.DebugText => {}
+	debug_text! = Draw.debug_text!
+
+	## Draw simple top-left aligned text with the built-in font.
+	##
+	## Legal in `render!` only.
+	text_at! : DrawFrame, Draw.SimpleText => {}
+	text_at! = Draw.text_at!
+
+	from_host : Host.DrawFrame -> DrawFrame
+	from_host = |frame| DrawFrame.(frame)
+
+	## How big the surface being drawn to right now is.
+	##
+	## Normally this is the window's logical drawing size -- the same value
+	## `Window.Snapshot.size` reports, in the same coordinate space as mouse
+	## input and every drawing call. Inside `with_render_texture!` it is the
+	## render target's size instead, because that is what the callback's
+	## coordinates are relative to.
+	##
+	## This is the size of the drawing surface, so it is `F32` where
+	## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
+	## centre points directly, and a render target's dimensions are already `F32`
+	## on `Texture`. `Window.Snapshot.size` stays `I32` because it is also the
+	## thing `Window.suggest_size!` asks for.
+	##
+	## Reach for this when laying something out against the surface -- a HUD in a
+	## corner, a title centred across the top. Layout decisions that `update!`
+	## also has to make, such as which arrangement to use or what the pointer is
+	## over, belong on `input.window` where the rest of application logic can see
+	## them.
+	##
+	## Legal in `render!` only.
+	size! : DrawFrame => Draw.FrameSize
+	size! = |_frame| Host.draw_frame_size!()
+}
+
 Draw := [].{
 
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
@@ -210,240 +445,7 @@ Draw := [].{
 	## happen in `init!` or `update!`. Roc does not enforce affine use or encode a
 	## frame epoch, so do not retain a `Frame` in the model: pass the
 	## callback's own frame down through helpers.
-	Frame :: Host.DrawFrame.{
-
-		## Draw independent triangles. Every consecutive triple is one triangle.
-		## An empty list is a no-op; a non-empty count not divisible by three is a
-		## programmer error. Legal in `render!` only.
-		triangles! : Frame, TrianglePoints => {}
-		triangles! = Draw.triangles!
-
-		## Draw a triangle fan: the first point is the centre and later points form
-		## its perimeter. Fewer than three points are a no-op. Legal in `render!` only.
-		triangle_fan! : Frame, TrianglePoints => {}
-		triangle_fan! = Draw.triangle_fan!
-
-		## Draw a triangle strip. Each point after the first two adds one triangle.
-		## Fewer than three points are a no-op. Legal in `render!` only.
-		triangle_strip! : Frame, TrianglePoints => {}
-		triangle_strip! = Draw.triangle_strip!
-
-		## Draw an open polyline. `NoStroke` and fewer than two points are no-ops.
-		## Curve flattening and dash splitting remain pure Roc policy. Legal in `render!` only.
-		line_strip! : Frame, LineStrip => {}
-		line_strip! = Draw.line_strip!
-
-		## Draw a filled and/or outlined circular sector. Angles are degrees and
-		## `segments` must be at least three. Legal in `render!` only.
-		circle_sector! : Frame, CircleSector => {}
-		circle_sector! = Draw.circle_sector!
-
-		## Draw a filled and/or outlined axis-aligned ellipse. Legal in `render!` only.
-		ellipse! : Frame, Ellipse => {}
-		ellipse! = Draw.ellipse!
-
-		## Draw a filled and/or outlined annular sector. Angles are degrees and
-		## `segments` must be at least three. Legal in `render!` only.
-		ring! : Frame, Ring => {}
-		ring! = Draw.ring!
-
-		## Clear the active drawing target to a solid color.
-		##
-		## Legal in `render!` only.
-		clear! : Frame, Color.Rgba => {}
-		clear! = Draw.clear!
-
-		## Draw a vertical rectangle gradient.
-		##
-		## Legal in `render!` only.
-		rectangle_gradient_v! : Frame, RectangleGradientV => {}
-		rectangle_gradient_v! = Draw.rectangle_gradient_v!
-
-		## Draw a horizontal rectangle gradient.
-		##
-		## Legal in `render!` only.
-		rectangle_gradient_h! : Frame, RectangleGradientH => {}
-		rectangle_gradient_h! = Draw.rectangle_gradient_h!
-
-		## Draw a radial circle gradient.
-		##
-		## Legal in `render!` only.
-		circle_gradient! : Frame, CircleGradient => {}
-		circle_gradient! = Draw.circle_gradient!
-
-		## Draw raylib's current frames-per-second counter.
-		##
-		## Legal in `render!` only.
-		fps! : Frame, Fps => {}
-		fps! = Draw.fps!
-
-		## Draw a filled and/or outlined axis-aligned rectangle.
-		##
-		## Legal in `render!` only.
-		rectangle! : Frame, Rectangle => {}
-		rectangle! = Draw.rectangle!
-
-		## Draw a filled and/or outlined rounded rectangle.
-		##
-		## Legal in `render!` only.
-		rounded_rectangle! : Frame, RoundedRectangle => {}
-		rounded_rectangle! = Draw.rounded_rectangle!
-
-		## Draw a filled and/or outlined circle.
-		##
-		## Legal in `render!` only.
-		circle! : Frame, Circle => {}
-		circle! = Draw.circle!
-
-		## Draw a stroked line segment. `NoStroke` performs no drawing.
-		##
-		## Legal in `render!` only.
-		line! : Frame, Line => {}
-		line! = Draw.line!
-
-		## Draw a filled and/or outlined triangle.
-		##
-		## Legal in `render!` only.
-		triangle! : Frame, Triangle => {}
-		triangle! = Draw.triangle!
-
-		## Draw a convex filled polygon and/or an ordered polygon outline. The host
-		## triangulates the fill without allocating; fewer than three points do not
-		## fill.
-		##
-		## Legal in `render!` only.
-		convex_polygon! : Frame, ConvexPolygon => {}
-		convex_polygon! = Draw.convex_polygon!
-
-		## Draw a texture with explicit source, destination, origin, rotation, and
-		## tint.
-		##
-		## Legal in `render!` only.
-		texture! : Frame, TextureDraw => {}
-		texture! = Draw.texture!
-
-		## Draw one borrowed indexed batch of perspective-correct textured triangles.
-		## The vertex and index list lengths explicitly bound all work in this call;
-		## the host consumes both synchronously and retains no geometry. The index
-		## count must be a multiple of three and every index must name a vertex.
-		## Violating either condition is a programmer error.
-		##
-		## Legal in `render!` only. Normally called inside `with_camera_3d!`.
-		textured_triangles_3d! : Frame, TexturedTriangles3D => {}
-		textured_triangles_3d! = Draw.textured_triangles_3d!
-
-		## Draw many instances of one texture, in list order, with a single hosted
-		## call.
-		##
-		## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
-		## is what caps how many sprites a frame can afford. This crosses once for the
-		## whole batch and lets the host loop over it, so the cost per instance is the
-		## `DrawTexturePro` call alone. Build the list from application state and pass
-		## it straight through; an empty list does not cross at all.
-		##
-		## Legal in `render!` only.
-		texture_instances! : Frame, Texture, List(TextureInstance) => {}
-		texture_instances! = Draw.texture_instances!
-
-		## Project a texture onto a validated planar quad with exact homogeneous UV
-		## interpolation. This remains one hosted call and preserves active shaders.
-		##
-		## Legal in `render!` only.
-		projective_texture! : Frame, ProjectiveTexture => {}
-		projective_texture! = Draw.projective_texture!
-
-		## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
-		## Callback errors are returned only after the native target has been
-		## restored.
-		##
-		## Legal in `render!` only.
-		with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
-		with_render_texture! = Draw.with_render_texture!
-
-		## Scope shader application and upload its complete uniform record before the
-		## callback draws. Callback errors are returned only after the previous
-		## shader and all of its uniform values have been restored.
-		##
-		## Legal in `render!` only.
-		with_shader! : Frame, Shader(uniforms), (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
-		with_shader! = Draw.with_shader!
-
-		## Scope one of raylib's built-in blend equations. Custom blend factors are
-		## deliberately excluded until they can be represented without global state.
-		##
-		## Legal in `render!` only.
-		with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
-		with_blend_mode! = Draw.with_blend_mode!
-
-		## Draw the callback in world space using this camera.
-		##
-		## Legal in `render!` only.
-		with_camera! : Frame, Camera2D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
-		with_camera! = Draw.with_camera!
-
-		## Draw the callback in 3D world space using a perspective camera. Depth
-		## testing and depth writes are active until the callback returns.
-		##
-		## Legal in `render!` only.
-		with_camera_3d! : Frame, Camera3D, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
-		with_camera_3d! = Draw.with_camera_3d!
-
-		## Restrict callback drawing to screen-space `bounds`, and close the scissor
-		## however the callback ends, error included.
-		##
-		## `bounds` is in the same logical coordinates as every other drawing call,
-		## so it is a rectangle on the surface rather than in framebuffer pixels.
-		##
-		## Legal in `render!` only.
-		with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
-		with_scissor! = Draw.with_scissor!
-
-		## Draw text using an explicit font, spacing, color, and resolved top-left
-		## origin. This performs no measurement or alignment pass.
-		##
-		## Legal in `render!` only.
-		text! : Frame, Text => {}
-		text! = Draw.text!
-
-		## Draw top-left aligned text with the built-in font and default spacing.
-		##
-		## Legal in `render!` only.
-		debug_text! : Frame, DebugText => {}
-		debug_text! = Draw.debug_text!
-
-		## Draw simple top-left aligned text with the built-in font.
-		##
-		## Legal in `render!` only.
-		text_at! : Frame, SimpleText => {}
-		text_at! = Draw.text_at!
-
-		from_host : Host.DrawFrame -> Frame
-		from_host = |frame| Frame.(frame)
-
-		## How big the surface being drawn to right now is.
-		##
-		## Normally this is the window's logical drawing size -- the same value
-		## `Window.Snapshot.size` reports, in the same coordinate space as mouse
-		## input and every drawing call. Inside `with_render_texture!` it is the
-		## render target's size instead, because that is what the callback's
-		## coordinates are relative to.
-		##
-		## This is the size of the drawing surface, so it is `F32` where
-		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
-		## centre points directly, and a render target's dimensions are already `F32`
-		## on `Texture`. `Window.Snapshot.size` stays `I32` because it is also the
-		## thing `Window.suggest_size!` asks for.
-		##
-		## Reach for this when laying something out against the surface -- a HUD in a
-		## corner, a title centred across the top. Layout decisions that `update!`
-		## also has to make, such as which arrangement to use or what the pointer is
-		## over, belong on `input.window` where the rest of application logic can see
-		## them.
-		##
-		## Legal in `render!` only.
-		size! : Frame => FrameSize
-		size! = |_frame| Host.draw_frame_size!()
-	}
+	Frame : DrawFrame
 
 	## Dimensions of the surface `render!` is currently drawing to.
 	FrameSize : {

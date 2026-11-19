@@ -142,7 +142,7 @@ App := [].{
 			dropped : List(Dropped),
 			dropped_overflow : Bool,
 		}
-		fields = |input| input
+		fields = |input| { devices: input.devices, window: input.window, time: input.time, messages: input.messages, capture: input.capture, dropped: input.dropped, dropped_overflow: input.dropped_overflow }
 
 		## Build an input by stating every sampled field at once.
 		##
@@ -498,7 +498,10 @@ App := [].{
 
 		## Inspect whether the app records itself from startup.
 		recording : Config -> [NoRecording, Record(Capture.Recording)]
-		recording = |cfg| cfg.recording
+		recording = |cfg| match cfg.recording {
+			NoRecording => NoRecording
+			Record(value) => Record(value)
+		}
 
 		## Inspect the configured startup default-font intent. An empty path means
 		## the backend's built-in font.

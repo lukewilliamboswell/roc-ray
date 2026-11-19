@@ -233,7 +233,7 @@ update_editor = |model, input| {
 			],
 		}
 	} else if input.mouse.button_down(Left) {
-		match cell_at(input.mouse.position()) {
+		match cell_at(Math.Vec2.{ x: input.mouse.x, y: input.mouse.y }) {
 			Err(_) => { model: { ..base, last_cell: Idle }, edits: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
@@ -339,7 +339,7 @@ update! = |model, input, _io| {
 		perform_edit!(next.model.texture, edit)
 	}
 
-	mouse = devices.mouse.position()
+	mouse = Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y }
 	Mouse.set_cursor!(
 		match cell_at(mouse) {
 			Ok(_) => Crosshair

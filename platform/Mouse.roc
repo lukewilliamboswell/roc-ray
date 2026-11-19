@@ -6,53 +6,55 @@
 ##
 import Host
 
+MouseSnapshot := {
+	buttons : List(U8),
+	left : Bool,
+	middle : Bool,
+	right : Bool,
+	wheel : F32,
+	wheel_x : F32,
+	wheel_y : F32,
+	delta_x : F32,
+	delta_y : F32,
+	x : F32,
+	y : F32,
+}.{
+	button_down : MouseSnapshot, Mouse.Button -> Bool
+	button_down = |mouse, button| Mouse.button_down(mouse, button)
+
+	## Whether a button is currently up.
+	button_up : MouseSnapshot, Mouse.Button -> Bool
+	button_up = |mouse, button| Mouse.button_up(mouse, button)
+
+	## Whether a button was pressed at least once since the previous input.
+	## A click that began and ended between two cycles still counts.
+	button_pressed : MouseSnapshot, Mouse.Button -> Bool
+	button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
+
+	## Whether a button was released at least once since the previous input.
+	button_released : MouseSnapshot, Mouse.Button -> Bool
+	button_released = |mouse, button| Mouse.button_released(mouse, button)
+
+	## Current cursor position in logical drawing coordinates.
+	position : MouseSnapshot -> { x : F32, y : F32 }
+	position = |mouse| Mouse.position(mouse)
+
+	## Cursor movement since the previous frame.
+	delta : MouseSnapshot -> { x : F32, y : F32 }
+	delta = |mouse| Mouse.delta(mouse)
+
+	## Horizontal and vertical wheel movement since the previous input,
+	## every notch in the interval summed.
+	wheel_delta : MouseSnapshot -> { x : F32, y : F32 }
+	wheel_delta = |mouse| Mouse.wheel_delta(mouse)
+}
+
 Mouse := [].{
 
 	## Mouse input for one cycle. Position, movement and the held bits are
 	## samples at the cycle boundary; the pressed and released bits and the
 	## wheel are events recorded since the previous input.
-	Snapshot := {
-		buttons : List(U8),
-		left : Bool,
-		middle : Bool,
-		right : Bool,
-		wheel : F32,
-		wheel_x : F32,
-		wheel_y : F32,
-		delta_x : F32,
-		delta_y : F32,
-		x : F32,
-		y : F32,
-	}.{
-		button_down : Snapshot, Button -> Bool
-		button_down = |mouse, button| Mouse.button_down(mouse, button)
-
-		## Whether a button is currently up.
-		button_up : Snapshot, Button -> Bool
-		button_up = |mouse, button| Mouse.button_up(mouse, button)
-
-		## Whether a button was pressed at least once since the previous input.
-		## A click that began and ended between two cycles still counts.
-		button_pressed : Snapshot, Button -> Bool
-		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
-
-		## Whether a button was released at least once since the previous input.
-		button_released : Snapshot, Button -> Bool
-		button_released = |mouse, button| Mouse.button_released(mouse, button)
-
-		## Current cursor position in logical drawing coordinates.
-		position : Snapshot -> { x : F32, y : F32 }
-		position = |mouse| Mouse.position(mouse)
-
-		## Cursor movement since the previous frame.
-		delta : Snapshot -> { x : F32, y : F32 }
-		delta = |mouse| Mouse.delta(mouse)
-
-		## Horizontal and vertical wheel movement since the previous input,
-		## every notch in the interval summed.
-		wheel_delta : Snapshot -> { x : F32, y : F32 }
-		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
-	}
+	Snapshot : MouseSnapshot
 
 	## Native operating-system cursor shapes.
 	Cursor := [
@@ -210,22 +212,6 @@ Mouse := [].{
 	set_cursor_mode! : CursorMode => {}
 	set_cursor_mode! = |mode| Host.mouse_set_cursor_mode!(cursor_mode_code(mode))
 }
-
-cursor_code : Mouse.Cursor -> U8
-cursor_code = |cursor|
-	match cursor {
-		Default => 0
-		Arrow => 1
-		IBeam => 2
-		Crosshair => 3
-		PointingHand => 4
-		ResizeEastWest => 5
-		ResizeNorthSouth => 6
-		ResizeNorthwestSoutheast => 7
-		ResizeNortheastSouthwest => 8
-		ResizeAll => 9
-		NotAllowed => 10
-	}
 
 button_code : Mouse.Button -> U64
 button_code = |button|

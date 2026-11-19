@@ -1759,7 +1759,9 @@ def run_platform_value_tests(root: Path, verbose: bool) -> list[str]:
     print("\nRunning platform value tests...")
     for module in ("App", "Devices", "AppTransport", "Capture", "Font", "Physics", "Time"):
         print(f"  Testing {module}...", end=" ", flush=True)
-        if run_cmd(["roc", "test", str(root / "platform" / f"{module}.roc"),
+        # Compile the nominal receiver methods from source. Reusing imported
+        # test artifacts can stall in this compiler even with a fresh cache.
+        if run_cmd(["roc", "test", "--no-cache", str(root / "platform" / f"{module}.roc"),
                     f"--main={root / 'platform' / 'main.roc'}"],
                    f"platform values {module}", verbose, cwd=root):
             print("ok")

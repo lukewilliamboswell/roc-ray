@@ -159,17 +159,17 @@ Devices := [].{
 
 		## Place the pointer, as `Devices.none.with_mouse_position({ x: 40, y: 12 })`.
 		with_mouse_position : Snapshot, { x : F32, y : F32 } -> Snapshot
-		with_mouse_position = |input, pos| {
+		with_mouse_position = |input, pos| Snapshot.{
 			..snapshot_fields(input),
-			mouse: { ..mouse_fields(input.mouse), x: pos.x, y: pos.y },
+			mouse: Mouse.Snapshot.{ ..mouse_fields(input.mouse), x: pos.x, y: pos.y },
 		}
 
 		## Say how far the pointer moved this cycle, which is what
 		## `input.mouse.delta()` reports.
 		with_mouse_delta : Snapshot, { x : F32, y : F32 } -> Snapshot
-		with_mouse_delta = |input, delta| {
+		with_mouse_delta = |input, delta| Snapshot.{
 			..snapshot_fields(input),
-			mouse: { ..mouse_fields(input.mouse), delta_x: delta.x, delta_y: delta.y },
+			mouse: Mouse.Snapshot.{ ..mouse_fields(input.mouse), delta_x: delta.x, delta_y: delta.y },
 		}
 
 		## Say how far the wheel moved this cycle, which is what
@@ -178,9 +178,9 @@ Devices := [].{
 		## `wheel` is set to the vertical movement, matching how the host samples
 		## a one-dimensional wheel alongside the two-axis one.
 		with_mouse_wheel : Snapshot, { x : F32, y : F32 } -> Snapshot
-		with_mouse_wheel = |input, wheel| {
+		with_mouse_wheel = |input, wheel| Snapshot.{
 			..snapshot_fields(input),
-			mouse: { ..mouse_fields(input.mouse), wheel: wheel.y, wheel_x: wheel.x, wheel_y: wheel.y },
+			mouse: Mouse.Snapshot.{ ..mouse_fields(input.mouse), wheel: wheel.y, wheel_x: wheel.x, wheel_y: wheel.y },
 		}
 
 		## Say that one mouse button is held. The `with_mouse_button_*` family
@@ -207,7 +207,7 @@ Devices := [].{
 		## event record are not derived from it: a test that wants them to
 		## agree states them too, as the host would have.
 		with_text_input : Snapshot, List(U32) -> Snapshot
-		with_text_input = |input, codepoints| {
+		with_text_input = |input, codepoints| Snapshot.{
 			..snapshot_fields(input),
 			text_input: List.take_first(codepoints, text_input_capacity),
 			text_input_overflow: List.len(codepoints) > text_input_capacity,
@@ -216,7 +216,7 @@ Devices := [].{
 		## Say whether typed text was cut at the interval's capacity, which is
 		## what `text_input_overflow` reports.
 		with_text_input_overflow : Snapshot, Bool -> Snapshot
-		with_text_input_overflow = |input, overflow| {
+		with_text_input_overflow = |input, overflow| Snapshot.{
 			..snapshot_fields(input),
 			text_input_overflow: overflow,
 		}
@@ -229,7 +229,7 @@ Devices := [].{
 		## methods this works on `Devices.empty` too, since a list has no
 		## fixed length to fit.
 		with_events : Snapshot, List(Event) -> Snapshot
-		with_events = |input, events| {
+		with_events = |input, events| Snapshot.{
 			..snapshot_fields(input),
 			events: events,
 		}
@@ -237,7 +237,7 @@ Devices := [].{
 		## Say whether the event record was cut at its capacity, which is what
 		## `events_overflow` reports.
 		with_events_overflow : Snapshot, Bool -> Snapshot
-		with_events_overflow = |input, overflow| {
+		with_events_overflow = |input, overflow| Snapshot.{
 			..snapshot_fields(input),
 			events_overflow: overflow,
 		}
@@ -403,7 +403,7 @@ snapshot_fields : Devices.Snapshot -> {
 	gamepads : Gamepad.Snapshot,
 	mouse : Mouse.Snapshot,
 }
-snapshot_fields = |input| input
+snapshot_fields = |input| { keys: input.keys, text_input: input.text_input, text_input_overflow: input.text_input_overflow, events: input.events, events_overflow: input.events_overflow, gamepads: input.gamepads, mouse: input.mouse }
 
 ## The same, for the sampled mouse state nested inside it.
 mouse_fields : Mouse.Snapshot -> {
@@ -419,7 +419,7 @@ mouse_fields : Mouse.Snapshot -> {
 	x : F32,
 	y : F32,
 }
-mouse_fields = |mouse| mouse
+mouse_fields = |mouse| { buttons: mouse.buttons, left: mouse.left, middle: mouse.middle, right: mouse.right, wheel: mouse.wheel, wheel_x: mouse.wheel_x, wheel_y: mouse.wheel_y, delta_x: mouse.delta_x, delta_y: mouse.delta_y, x: mouse.x, y: mouse.y }
 
 ## Write one packed state byte, leaving a list that is too short alone.
 ##
@@ -436,7 +436,7 @@ set_byte = |bytes, index, value|
 
 ## Replace one key's packed state byte.
 with_key_state : Devices.Snapshot, Keys.Key, U8 -> Devices.Snapshot
-with_key_state = |input, key, state| {
+with_key_state = |input, key, state| Devices.Snapshot.{
 	..snapshot_fields(input),
 	keys: set_byte(input.keys, Keys.key_code(key), state),
 }
@@ -450,9 +450,9 @@ with_key_state = |input, key, state| {
 with_mouse_button_state : Devices.Snapshot, Mouse.Button, U8 -> Devices.Snapshot
 with_mouse_button_state = |input, button, state| {
 	buttons = set_byte(input.mouse.buttons, mouse_button_code(button), state)
-	{
+	Devices.Snapshot.{
 		..snapshot_fields(input),
-		mouse: {
+		mouse: Mouse.Snapshot.{
 			..mouse_fields(input.mouse),
 			buttons: buttons,
 			left: button_held(buttons, 0),

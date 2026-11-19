@@ -226,8 +226,8 @@ draw_indicator! = |frame, center, phase, accent, elapsed|
 			)
 
 		Settled(color) => {
-			frame.circle!({ center: center, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
-			frame.circle!({ center: center, radius: 5, style: Draw.filled(color) })
+			frame.circle!({ center: Draw.Vector2.{ x: center.x, y: center.y }, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
+			frame.circle!({ center: Draw.Vector2.{ x: center.x, y: center.y }, radius: 5, style: Draw.filled(color) })
 		}
 	}
 

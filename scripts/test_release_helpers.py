@@ -334,6 +334,26 @@ class PackageExamplesTests(unittest.TestCase):
 
 
 class ResolveDefaultBundleUrlTests(unittest.TestCase):
+    def test_prefixed_assets_identify_default_without_release_notes(self) -> None:
+        url = "https://example.com/default-abc.tar.zst"
+        release = {"assets": [
+            {"name": "wayland-def.tar.zst", "browser_download_url": "https://example.com/wayland-def.tar.zst"},
+            {"name": "default-abc.tar.zst", "browser_download_url": url},
+        ]}
+        self.assertEqual(url, helpers.default_url_from_release(release))
+
+    def test_legacy_release_notes_still_identify_default(self) -> None:
+        release = {"body": f'### Default bundle\napp [main!] {{ pf: platform "{BUNDLE_URL}" }}\n### Wayland bundle\n'}
+        self.assertEqual(BUNDLE_URL, helpers.default_url_from_release(release))
+
+    def test_multiple_default_assets_are_ambiguous(self) -> None:
+        release = {"assets": [
+            {"name": "default-abc.tar.zst", "browser_download_url": "https://example.com/default-abc.tar.zst"},
+            {"name": "default-def.tar.zst", "browser_download_url": "https://example.com/default-def.tar.zst"},
+        ]}
+        with self.assertRaisesRegex(RuntimeError, "multiple default"):
+            helpers.default_url_from_release(release)
+
     def test_explicit_url_wins(self) -> None:
         self.assertEqual(
             NEXT_URL, helpers.resolve_default_bundle_url(NEXT_URL, "", "", "")

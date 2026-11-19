@@ -1,21 +1,21 @@
 (
 	(fetched ((
 		(name "roc-stable")
-		(obtained Both)
-		(served ("release-assets.githubusercontent.com"))
-		(sha256 "c283ae01e758b9d64002d72b8e4ad776466e7e6e5f495fd466e274afbd25ce7f")
-		(size 73616283)
-		(system "x86_64-linux")
-		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-23-18478ff/roc_nightly-linux_x86_64-2026-10-23-18478ff.tar.gz"))
-		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-23-18478ff")) (
-		(name "roc-stable")
 		(obtained Published)
 		(served ())
-		(sha256 "668b2731c62ac9054ecf5cd4d483638c237626517df6c076204870065a103b38")
-		(size 70519866)
+		(sha256 "d9395495f9dd07c39629c33f156f7fee68e8d22f8a764522e5cdd1cc30879b51")
+		(size 95010092)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-18-a520eed/roc_nightly-linux_x86_64-2026-11-18-a520eed.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-18-a520eed")) (
+		(name "roc-stable")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "3b9ba3cc7357e47916f03689979be6c35c1986a1fd5a54bf0d06ea609fe0648d")
+		(size 91000550)
 		(system "aarch64-darwin")
-		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-23-18478ff/roc_nightly-macos_apple_silicon-2026-10-23-18478ff.tar.gz"))
-		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-23-18478ff")) (
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-18-a520eed/roc_nightly-macos_apple_silicon-2026-11-18-a520eed.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-18-a520eed")) (
 		(name "zig")
 		(obtained Computed)
 		(served ("ziglang.org"))

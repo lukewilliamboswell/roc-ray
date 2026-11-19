@@ -89,7 +89,7 @@ update! = |model, input, _io| {
 	# rather than another task. A full send buffer means this frame's position
 	# never left, which for a position update is the right outcome: the next
 	# frame carries a newer one anyway.
-	pointer = input.devices.mouse.position()
+	pointer = Draw.Vector2.{ x: input.devices.mouse.x, y: input.devices.mouse.y }
 	dropped = match Udp.Socket.send!(model.socket, model.peer, encode(pointer)) {
 		Ok({}) => model.dropped
 		Err(_) => model.dropped + 1

@@ -91,7 +91,7 @@ update! = |model, input, _io| {
 	rotation_dir = axis(devices.key_down(KeyQ), devices.key_down(KeyE))
 	rotation = if (devices.key_pressed(KeyR)) 0 else model.rotation + rotation_dir * 90 * dt
 
-	Ok({ ..model, player, zoom, rotation, mouse: devices.mouse.position() })
+	Ok({ ..model, player, zoom, rotation, mouse: Math.Vec2.{ x: devices.mouse.x, y: devices.mouse.y } })
 }
 
 ## Builds the camera and coordinate conversions from the latest Model. This

@@ -10,7 +10,7 @@ only difference is where the bundle comes from: the release URL in each header
 is replaced, for each command, by the same bundle served on loopback.
 
     scripts/test_examples_archive.py --archive roc-ray-examples-0.11.0.zip \\
-        --bundle dist/<hash>.tar.zst
+        --bundle dist/default-<hash>.tar.zst
 """
 
 from __future__ import annotations

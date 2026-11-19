@@ -9,6 +9,7 @@ import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
+import rr.Math
 import rr.Shader
 import rr.Stdout
 import rr.Text
@@ -30,7 +31,7 @@ import "sprite_cutout.fs" as sprite_fragment_shader : Str
 debug_geometry = Bool.False
 
 RenderGeometry : {
-	vertices : List({ position : { x : F32, y : F32, z : F32 }, uv : { x : F32, y : F32 }, tint : Color.Rgba }),
+	vertices : List(Draw.TexturedVertex3D),
 	indices : List(U32),
 }
 
@@ -339,14 +340,16 @@ place_above_floor = |geometry, level, pos, above| {
 		Err(OutsideMap) => 0
 	}
 	offset = I64.to_f32(floor + above) * E1M1Renderer.doom_scale
-	{ ..geometry, vertices: List.map(geometry.vertices, |vertex| { ..vertex, position: { ..vertex.position, y: vertex.position.y + offset } }) }
+	{ ..geometry, vertices: List.map(geometry.vertices, |vertex| { ..vertex, position: Math.vec3(vertex.position.x, vertex.position.y + offset, vertex.position.z) }) }
 }
 
+render_sprite_geometry : RocDoomSprites.Geometry -> RenderGeometry
 render_sprite_geometry = |batch| {
 	vertices = List.map(
 		batch.vertices,
 		|vertex| {
-			..vertex,
+			position: Math.vec3(vertex.position.x, vertex.position.y, vertex.position.z),
+			uv: Math.vec2(vertex.uv.x, vertex.uv.y),
 			tint: Color.rgba(vertex.tint.r, vertex.tint.g, vertex.tint.b, vertex.tint.a),
 		},
 	)
@@ -555,7 +558,8 @@ render_geometry = |batch| {
 	vertices = List.map(
 		batch.vertices,
 		|vertex| {
-			..vertex,
+			position: Math.vec3(vertex.position.x, vertex.position.y, vertex.position.z),
+			uv: Math.vec2(vertex.uv.x, vertex.uv.y),
 			tint: Color.rgba(vertex.tint.r, vertex.tint.g, vertex.tint.b, vertex.tint.a),
 		},
 	)

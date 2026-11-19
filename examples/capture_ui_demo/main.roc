@@ -306,7 +306,7 @@ render! = |model, frame| {
 
 	match List.get(model.field_labels, model.typed) {
 		Ok(label) => {
-			label.draw!(frame, { pos: field_text_origin, color: theme.ink })
+			label.draw!(frame, { pos: Draw.Vector2.{ x: field_text_origin.x, y: field_text_origin.y }, color: theme.ink })
 			if model.focused and caret_visible(model.frame) {
 				draw_caret!(frame, field_text_origin.x + label.bounds().width + 3)
 			}

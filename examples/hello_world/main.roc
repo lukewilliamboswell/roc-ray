@@ -99,8 +99,8 @@ render! = |model, frame| {
 	model.help.draw!(frame, { pos: { x: center_x, y: panel.y + 160 }, color: Color.from_hex_rgb(0xa8b4cc), align: (Top, Center) })
 
 	# The pointer gets a halo that pulses with the same clock as the backdrop.
-	frame.circle!({ center: model.pointer, radius: 26 + 8 * pulse, style: Draw.filled(Color.with_alpha(accent, 40)) })
-	frame.circle!({ center: model.pointer, radius: 18, style: Draw.filled_and_outlined(accent, Color.white, 3) })
+	frame.circle!({ center: Draw.Vector2.{ x: model.pointer.x, y: model.pointer.y }, radius: 26 + 8 * pulse, style: Draw.filled(Color.with_alpha(accent, 40)) })
+	frame.circle!({ center: Draw.Vector2.{ x: model.pointer.x, y: model.pointer.y }, radius: 18, style: Draw.filled_and_outlined(accent, Color.white, 3) })
 
 	Ok({})
 }

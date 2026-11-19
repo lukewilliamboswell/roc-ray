@@ -1,6 +1,6 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
 }
 
 import cli.Cmd
@@ -37,7 +37,7 @@ main! = |args| {
 		Err(_) => return Err(Exit(1))
 	}
 	result = run!(options, work)
-	_ = Cmd.new_str("rm").args_str(["-rf", work]).exec_exit_code!()
+	_ = exit_code!("rm", ["-rf", work])
 	match result {
 		Ok({}) => Ok({})
 		Err(_) => Err(Exit(1))
@@ -50,6 +50,7 @@ parse : List(Str), Options -> Try(Options, [BadArguments])
 parse = |args, options|
 	match args {
 		[] => Ok(options)
+		["--", .. as rest] => parse(rest, options)
 		["--update", .. as rest] => parse(rest, { ..options, update: Bool.True })
 		["--roc-repo", repo, .. as rest] => parse(rest, { ..options, roc_repo: repo })
 		_ => Err(BadArguments)
@@ -94,10 +95,10 @@ run! = |options, work| {
 		succeed!("cp", [generated, committed])?
 		say!("Updated ${committed}")
 	} else {
-		match Cmd.new_str("git").args_str(["diff", "--no-index", "--stat", "--exit-code", committed, generated]).exec_exit_code!() {
+		match exit_code!("git", ["diff", "--no-index", "--stat", "--exit-code", committed, generated]) {
 			Ok(0) => say!("PASS ${committed} matches what ${version} generates")
 			Ok(_) => {
-				_ = Cmd.new_str("git").args_str(["--no-pager", "diff", "--no-index", committed, generated]).exec_exit_code!()
+				_ = exit_code!("git", ["--no-pager", "diff", "--no-index", committed, generated])
 				fail!("${committed} differs from what ${version} generates. If this change did not touch platform/, the compiler changed the ABI: review the diff, run scripts/check_glue.roc -- --update, and release.")
 			}
 			Err(_) => fail!("could not run git diff")
@@ -141,7 +142,7 @@ fail! = |message| {
 ## Run a program with inherited output; a non-zero exit is an error.
 succeed! : Str, List(Str) => Try({}, [ScriptFailed])
 succeed! = |program, args|
-	match Cmd.new_str(program).args_str(args).exec_exit_code!() {
+	match exit_code!(program, args) {
 		Ok(0) => Ok({})
 		Ok(code) => fail!("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
 		Err(_) => fail!("could not run ${program}")
@@ -150,7 +151,7 @@ succeed! = |program, args|
 ## The standard output of a program that must exit 0.
 capture! : Str, List(Str) => Try(Str, [ScriptFailed])
 capture! = |program, args|
-	match Cmd.run!(Cmd.new_str(program).args_str(args)) {
+	match Cmd.run!(OsStr.from_str(program), args.map(OsStr.from_str)) {
 		Ok(output) =>
 			match output.status {
 				Exited(0) => Ok(Str.from_utf8_lossy(output.stdout_bytes))
@@ -158,3 +159,15 @@ capture! = |program, args|
 			}
 		Err(_) => fail!("could not run ${program}")
 	}
+
+# Keep child output on the terminal and preserve its exit status for git diff.
+exit_code! : Str, List(Str) => Try(I32, [ScriptFailed])
+exit_code! = |program, args| {
+	match Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).stdout(Inherit).stderr(Inherit).run!() {
+		Ok(output) => match output.status {
+			Exited(code) => Ok(code)
+			Signaled(signal) => fail!("${program} terminated by signal ${signal.to_str()}")
+		}
+		Err(_) => fail!("could not run ${program}")
+	}
+}

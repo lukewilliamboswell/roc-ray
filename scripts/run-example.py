@@ -89,7 +89,7 @@ def main() -> int:
                 example, packages, packages.scratch_dir / example.parent.name
             )
 
-            command = [roc, str(staged), *local_bundles.PACKAGE_LIMIT_ARGS]
+            command = [roc, str(staged), "--no-cache", *local_bundles.PACKAGE_LIMIT_ARGS]
             if app_args:
                 command.extend(["--", *app_args])
             # Match the published examples runner: assets are relative to the app.

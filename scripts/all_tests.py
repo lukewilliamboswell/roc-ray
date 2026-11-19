@@ -111,7 +111,9 @@ LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
 # Keep the ordinary developer/release path on Roc's default optimized backend.
 # CI may select the native dev backend when a pinned nightly's LLVM pipeline
 # exceeds hosted-runner memory or time limits.
-ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'speed')}"]
+# Cached checked imports can crash this nightly during native lowering.
+# Compile the source afresh; downloaded compiler and package bytes stay cached.
+ROC_BUILD_ARGS = [f"--opt={os.environ.get('ROC_BUILD_OPT', 'speed')}", "--no-cache"]
 
 # Examples to skip in the bundled-platform build test, mapping example name ->
 # reason. Use this when a specific example can't build against the bundled

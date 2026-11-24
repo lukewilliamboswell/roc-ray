@@ -36,6 +36,10 @@ def compiler_args(roc: str, command: str, source: Path) -> list[str]:
     if not cached_test_oom and (command, name) not in CACHE_EXCEPTIONS and not (command in ("build", "test") and name == "top_down"):
         return []
     version = compiler_version(roc)
+    # On the November 24 nightly, the cached Ubuntu 22 test segfaults in Boxy
+    # lowering. Keep the same tests and use specialization for this case.
+    if command == "test" and name == "top_down" and version == "Roc compiler version nightly-2026-11-24-ff5e544":
+        return ["--specialize=yes"]
     # The November 23 nightly still hits both top_down failures.
     if name == "top_down" and version == "Roc compiler version nightly-2026-11-23-b5c77fc":
         return ["--no-cache"] if command == "check" else ["--specialize=yes"]

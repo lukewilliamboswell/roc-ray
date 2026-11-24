@@ -24,7 +24,7 @@ config = [
 	Environment(
 		"scripts",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-23-b5c77fc"))]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-24-ff5e544"))]),
 			# Every bundle the scripts depend on, including dependencies of
 			# dependencies: `roc-stable deps scripts/check_glue.roc` lists them.
 			RocPackages([

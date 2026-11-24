@@ -36,9 +36,9 @@ def compiler_args(roc: str, command: str, source: Path) -> list[str]:
     if not cached_test_oom and (command, name) not in CACHE_EXCEPTIONS and not (command in ("build", "test") and name == "top_down"):
         return []
     version = compiler_version(roc)
-    # The warm-cache top_down check also crashes on the November 23 nightly.
-    if (command, name) == ("check", "top_down") and version == "Roc compiler version nightly-2026-11-23-b5c77fc":
-        return ["--no-cache"]
+    # The November 23 nightly still hits both top_down failures.
+    if name == "top_down" and version == "Roc compiler version nightly-2026-11-23-b5c77fc":
+        return ["--no-cache"] if command == "check" else ["--specialize=yes"]
     if version != f"Roc compiler version {AFFECTED_NIGHTLY}":
         return []
     # The unspecialized dev lowering crashes intermittently on Linux/macOS/Windows,

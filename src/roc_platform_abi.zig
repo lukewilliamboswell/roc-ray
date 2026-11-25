@@ -8890,7 +8890,7 @@ pub const HostFiles_read_bytesResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostFiles_read_bytesResultPayload = extern union {
-    err: BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
+    err: BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable,
     ok: RocListWith(u8, false),
 };
 
@@ -8898,8 +8898,8 @@ pub const HostFiles_read_bytesResultPayload = extern union {
 pub const HostFiles_read_bytesResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostFiles_read_bytesResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
-        const ptr: *const BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+        const ptr: *const BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8918,7 +8918,7 @@ pub const HostFiles_read_bytesResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostFiles_read_bytesResultPayload,
     tag: HostFiles_read_bytesResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
+    pub fn payload_err(self: *const @This()) BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -8948,15 +8948,16 @@ comptime {
     }
 }
 
-/// Tag union: BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
-pub const BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
+/// Tag union: BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable
+pub const BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable = enum(u8) {
     busy = 0,
-    not_found = 1,
-    path_invalid = 2,
-    permission_denied = 3,
-    read_failed = 4,
-    too_large = 5,
-    unavailable = 6,
+    limit_exceeds_max = 1,
+    not_found = 2,
+    path_invalid = 3,
+    permission_denied = 4,
+    read_failed = 5,
+    too_large = 6,
+    unavailable = 7,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -8972,12 +8973,12 @@ pub const BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrU
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
-        if (@alignOf(BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
+        if (@sizeOf(BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable) != 1) @compileError("BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable alignment mismatch");
     }
 }
 
@@ -14434,12 +14435,13 @@ pub const HostFiles_open_rootArgs = extern struct {
 };
 
 /// Arguments for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str, U64 => Try(List(U8), [Busy, LimitExceedsMax, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostFiles_read_bytesArgs = extern struct {
     arg0: u64,
     arg1: RocStr,
     arg2: RocStr,
+    arg3: u64,
 };
 
 /// Arguments for Host.files_read_text!
@@ -15798,7 +15800,7 @@ pub const HostFiles_listErr = BusyOrNotADirectoryOrNotFoundOrPathInvalidOrPermis
 pub const HostFiles_metadataErr = AccessRefusedOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrUnavailable;
 pub const HostFiles_metadataOk = __AnonStruct_a1f5c33e74b3920b;
 pub const HostFiles_open_rootErr = AccessRefusedOrNotADirectoryOrNotFoundOrOpenFailedOrPathInvalidOrPermissionDeniedOrUnavailable;
-pub const HostFiles_read_bytesErr = BusyOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
+pub const HostFiles_read_bytesErr = BusyOrLimitExceedsMaxOrNotFoundOrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_read_textErr = BusyOrNotFoundOrNotUtf8OrPathInvalidOrPermissionDeniedOrReadFailedOrTooLargeOrUnavailable;
 pub const HostFiles_write_bytesErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
 pub const HostFiles_write_textResult = HostFiles_write_bytesResult;
@@ -19002,13 +19004,13 @@ pub extern fn roc_files_metadata(arg0: u64, arg1: RocStr, arg2: RocStr) callconv
 pub extern fn roc_files_open_root(arg0: u64, arg1: AppCacheOrAppConfigOrAppDataOrBesideExecutableOrDeclaredOrWorkingDirectory, arg2: bool) callconv(.c) HostFiles_open_rootResult;
 
 /// Hosted symbol for Host.files_read_bytes!
-/// Roc signature: Resource.Authority, Str, Str => Try(List(U8), [Busy, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
+/// Roc signature: Resource.Authority, Str, Str, U64 => Try(List(U8), [Busy, LimitExceedsMax, NotFound, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);
 ///     arg2.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
-pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr, arg2: RocStr) callconv(.c) HostFiles_read_bytesResult;
+pub extern fn roc_files_read_bytes(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: u64) callconv(.c) HostFiles_read_bytesResult;
 
 /// Hosted symbol for Host.files_read_text!
 /// Roc signature: Resource.Authority, Str, Str => Try(Str, [Busy, NotFound, NotUtf8, PathInvalid, PermissionDenied, ReadFailed, TooLarge, Unavailable])

@@ -87,6 +87,8 @@ Every handle has:
 
 * `read_text!(path)`: a UTF-8 file as a `Str`, up to 64 KiB;
 * `read_bytes!(path)`: a file as a `List(U8)`, up to 16 MiB;
+* `read_bytes_with!({ path, max_bytes })` reads the whole file if it fits the
+  requested byte ceiling.
 * `list!(path)`: the entries of a directory, each a name and a kind (`File`,
   `Dir`, or `Other`);
 * `metadata!(path)`: a path's kind, size in bytes, and modification time.
@@ -102,16 +104,32 @@ repo = model.repo
 Task.spawn!(input, || SmallReadFinished(repo.read_text!("README.md")))
 ----
 
+For an asset the app keeps in memory, set the ceiling to its largest expected
+file size.
+
+[source,roc]
+----
+rom = assets.read_bytes_with!({ path: "game.gba", max_bytes: 32 * 1024 * 1024 })?
+----
+
+Omit `max_bytes` for the same 16 MiB default as `read_bytes!`. A file exactly
+at the ceiling succeeds if capacity is available. A ceiling of zero permits
+an empty file. For a user-designated file, pass only options, for example
+`item.read_bytes_with!({ max_bytes: 32 * 1024 * 1024 })`.
+
 Each returns a typed error the app can `match` on. For a read:
 
 * `NotFound`: no file at that path;
 * `TooLarge`: a file past the size limit;
+* `LimitExceedsMax` means the requested ceiling is above the native host
+  maximum of 64 MiB.
 * `NotUtf8`: a file that is not valid text (`read_text!` only);
 * `PathInvalid` and `PermissionDenied`: see below;
 * `ReadFailed`: anything else, including the operating system refusing the
   read;
-* `Busy`: the host's 32 file-delivery slots are all held by byte lists the
-  app has kept, so nothing was read and the same call can succeed later;
+* `Busy` means a byte read could not start. The host reserves a delivery slot and
+  memory before reading. Retained lists and their slices keep that storage
+  in use. The same call can succeed later.
 * `Unavailable`: the app was shutting down.
 
 The https://lukewilliamboswell.github.io/roc-ray/api/[API reference] lists every error for every effect.

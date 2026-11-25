@@ -27,7 +27,7 @@ init! = App.init(App.default.with_title("file write").with_permission(Directory(
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which half of the probe went wrong.
 expected_score : U64
-expected_score = 255
+expected_score = 511
 
 ## The text written, read back, and compared. Multi-line and non-ASCII on
 ## purpose: a write that went through a C string would truncate at the NUL a
@@ -46,7 +46,7 @@ score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 4) == 4
 expect score(Bool.False, 4) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 == expected_score
 
 ## Write, read back, compare. Runs on a task, where every call parks.
 check! : App.Io => Msg
@@ -67,6 +67,13 @@ check! = |io| {
 	replaced =
 		out.write_bytes!("blob.bin", [1, 2, 3]) == Ok({})
 			and out.read_bytes!("blob.bin") == Ok([1, 2, 3])
+
+	# The named ceiling is inclusive, and the omitted field uses the default.
+	bounded =
+		out.read_bytes_with!({ path: "blob.bin" }) == Ok([1, 2, 3])
+			and out.read_only().read_bytes_with!({ path: "blob.bin", max_bytes: 3 }) == Ok([1, 2, 3])
+			and out.read_bytes_with!({ path: "blob.bin", max_bytes: 2 }) == Err(TooLarge)
+			and out.read_bytes_with!({ path: "blob.bin", max_bytes: 65 * 1024 * 1024 }) == Err(LimitExceedsMax)
 
 	# Missing parent directories are created, so a first save does not need a
 	# separate step to make its directory.
@@ -91,7 +98,8 @@ check! = |io| {
 			+ score(replaced, 16)
 			+ score(made_parents, 32)
 			+ score(refused, 64)
-			+ score(escaped, 128),
+			+ score(escaped, 128)
+			+ score(bounded, 256),
 	)
 }
 

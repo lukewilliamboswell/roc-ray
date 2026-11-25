@@ -97,6 +97,23 @@ Files := [].{
 	## exactly the same way.
 	ReadBytesError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
+	## Options for a whole-file read. The ceiling includes the entire file.
+	## Zero permits only an empty file.
+	ReadBytesRequest := {
+		path : Str,
+		max_bytes : U64 ?? default_read_bytes_max,
+	}
+
+	## Whole-file read options for a file that was already designated.
+	ReadBytesOptions := {
+		max_bytes : U64 ?? default_read_bytes_max,
+	}
+
+	## `TooLarge` means the file exceeds the request's limit.
+	## `LimitExceedsMax` means the requested limit exceeds the host's 64 MiB
+	## per-file maximum. `Busy` means the host cannot admit this read now.
+	ReadBytesWithError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, LimitExceedsMax]
+
 	## Why `list!` produced no directory entries.
 	##
 	## `NotADirectory` is a path that is there and is a file. `TooLarge` is a
@@ -188,16 +205,22 @@ Files := [].{
 		## Read a bounded file as ordinary Roc bytes: at most 16 mebibytes, and
 		## a file past that is `TooLarge`.
 		##
-		## Nothing is copied, so the list owns host-backed storage; at most 32
-		## such allocations are live at once, and a read made while all 32 are
-		## held returns `Busy` without touching the disk. Retaining a sublist
-		## retains the whole allocation, which `List.release_excess_capacity`
-		## releases by copying out the part worth keeping.
+		## As with `read_bytes_with!`, a sublist retains the entire backing
+		## allocation. `List.release_excess_capacity` copies out the part worth
+		## keeping.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
 		read_bytes! : ReadDir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |ReadDir.(handle), path| perform_read_bytes!(handle, path)
+
+		## Read the entire file within the request's ceiling. The worker hands
+		## its buffer to Roc without a payload copy.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		read_bytes_with! : ReadDir, ReadBytesRequest => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |ReadDir.(handle), { path, max_bytes }| perform_read_bytes_with!(handle, path, max_bytes)
 
 		## List one directory without walking its children; `""` lists this
 		## handle's own directory. Entry order is the filesystem's, unsorted.
@@ -259,6 +282,12 @@ Files := [].{
 		## the task; refused in `update!` and `render!`.
 		read_bytes! : Dir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |Dir.(handle), path| perform_read_bytes!(handle, path)
+
+		## As `ReadDir.read_bytes_with!`.
+		##
+		## Legal in `init!` and tasks; refused in `update!` and `render!`.
+		read_bytes_with! : Dir, ReadBytesRequest => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |Dir.(handle), { path, max_bytes }| perform_read_bytes_with!(handle, path, max_bytes)
 
 		## As `ReadDir.list!`.
 		##
@@ -329,6 +358,12 @@ Files := [].{
 		## the task; refused in `update!` and `render!`.
 		read_bytes! : Designated => Try(List(U8), ReadBytesError)
 		read_bytes! = |Designated.(item)| perform_read_bytes!(parent_handle(item), item.name)
+
+		## Read this designated file within an explicit byte ceiling.
+		##
+		## Legal in `init!` and tasks; refused in `update!` and `render!`.
+		read_bytes_with! : Designated, ReadBytesOptions => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |Designated.(item), { max_bytes }| perform_read_bytes_with!(parent_handle(item), item.name, max_bytes)
 
 		## What the designated item is, how big it is, and when it last changed.
 		##
@@ -666,10 +701,26 @@ perform_read_text! = |handle, path|
 		Err(Unavailable) => Err(Unavailable)
 	}
 
+default_read_bytes_max : U64
+default_read_bytes_max = 16 * 1024 * 1024
+
 perform_read_bytes! : Handle, Str => Try(List(U8), Files.ReadBytesError)
 perform_read_bytes! = |handle, path|
-	match Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path)) {
-		# closed error union to open error union
+	read_bytes_result(
+		Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path), default_read_bytes_max),
+		|| crash "Files.read_bytes!: the host must admit the default per-file limit",
+	)
+
+perform_read_bytes_with! : Handle, Str, U64 => Try(List(U8), Files.ReadBytesWithError)
+perform_read_bytes_with! = |handle, path, max_bytes|
+	read_bytes_result(
+		Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path), max_bytes),
+		|| Err(LimitExceedsMax),
+	)
+
+read_bytes_result : Try(List(U8), Host.FilesReadBytesError), (() -> Try(List(U8), _)) -> Try(List(U8), _)
+read_bytes_result = |result, on_limit_exceeded|
+	match result {
 		Ok(bytes) => Ok(bytes)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(PathInvalid) => Err(PathInvalid)
@@ -678,6 +729,7 @@ perform_read_bytes! = |handle, path|
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(TooLarge) => Err(TooLarge)
 		Err(Unavailable) => Err(Unavailable)
+		Err(LimitExceedsMax) => on_limit_exceeded()
 	}
 
 perform_list! : Handle, Str => Try(List(Files.Entry), Files.ListError)

@@ -548,7 +548,7 @@ Host := [].{
 	FilesReadTextError : [PermissionDenied, PathInvalid, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while reading a file as bytes.
-	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable, LimitExceedsMax]
 
 	## Failures while listing one directory.
 	FilesListError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
@@ -574,7 +574,7 @@ Host := [].{
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Resource.Authority, Str, Str => Try(List(U8), FilesReadBytesError)
+	files_read_bytes! : Resource.Authority, Str, Str, U64 => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.

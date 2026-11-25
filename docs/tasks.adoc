@@ -116,7 +116,9 @@ means, such as showing a message rather than stopping the app.
 
 `read_text!` reads files of up to 64 KiB, which suits level and settings
 files; for a larger file it returns `TooLarge`. For bigger or binary files, use
-`read_bytes!`, which reads up to 16 MiB into a `List(U8)`.
+`read_bytes!`, which reads up to 16 MiB into a `List(U8)`. Use
+`read_bytes_with!` when a whole file needs an explicit byte ceiling. See
+xref:files-and-assets.adoc#files-and-assets[Files, assets, and databases].
 
 The task needs `levels` but not the whole model, so `update!` takes it out of
 the model first and the task body _captures_ just that value. A task cannot

@@ -831,7 +831,7 @@ Host := [].{
 
 	## Replace the clipboard with UTF-8 text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	window_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied])
+	window_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied, TooLarge, Unavailable])
 
 	## Suggest a logical size; `NotSupported` means a fixed-size target.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.

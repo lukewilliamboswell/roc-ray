@@ -123,6 +123,7 @@ const TRY_TAG_OK: u8 = 1;
 const MAX_FILE_READ_BYTES: usize = 64 * 1024 * 1024;
 const FILE_READ_BYTE_BUDGET: usize = 512 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
+const MAX_CLIPBOARD_READ_BYTES: usize = 64 * 1024;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(authority: u64) callconv(.c) RocResult;
@@ -10171,22 +10172,22 @@ fn captureStateForStep() CaptureFromHost {
     };
 }
 
-/// `Window.Clipboard.read_text!`: the clipboard as text, or why not.
-///
-/// The windowing backend only answers on the thread that owns the window, and
-/// the read is a pointer copy rather than I/O, so there is nothing to move off
-/// the frame thread and nothing to wait for -- this is a state read, legal
-/// wherever host state is read, and it never parks.
-///
-/// The clipboard is arbitrary content from outside the app: another process
-/// decides how big it is, and turning it into a `Str` is a copy and a UTF-8
-/// scan on this thread. Cap it where a text read is capped, and for the same
-/// reason.
+/// Find the terminator without scanning arbitrary backend data. Stop at the
+/// first NUL so the scan stays within the allocation even for short strings.
+fn boundedClipboardText(text: [*:0]const u8) ?[]const u8 {
+    for (0..MAX_CLIPBOARD_READ_BYTES + 1) |length| {
+        if (text[length] == 0) return text[0..length];
+    }
+    return null;
+}
+
+/// Get clipboard text on the window's thread. The acquisition is the backend's
+/// work. Once the pointer comes back, bound our scan and copy into Roc.
 fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clipboardResult {
     const Result = abi.HostWindow_read_clipboardResult;
     const Error = abi.HostWindow_read_clipboardErr;
     enforcePhase("Window.Clipboard.read_text!", during_update);
-    const effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
+    var effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
     defer effect.end();
 
     if (headlessMode()) {
@@ -10194,12 +10195,12 @@ fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clip
         return abiTryOk(Result, abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host));
     }
 
-    // The pointer belongs to the windowing backend: it is null when the
-    // clipboard is empty or holds non-text content, must never be freed, and is
-    // invalidated by the next clipboard call -- so copy it out now.
+    // The backend owns the pointer and invalidates it on the next clipboard call.
     const text = raylib.getClipboardText() orelse return abiTryErr(Result, Error.unavailable);
-    const contents = std.mem.span(text);
-    if (contents.len > MAX_INLINE_READ_BYTES) return abiTryErr(Result, Error.too_large);
+    const contents = boundedClipboardText(text) orelse {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Error.too_large);
+    };
     return abiTryOk(Result, abi.RocStr.fromSlice(contents, roc_host));
 }
 
@@ -10207,32 +10208,38 @@ fn exportedReadClipboard() callconv(.c) abi.HostWindow_read_clipboardResult {
     return hostedReadClipboard(activeHost());
 }
 
-fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
+fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
+    const Result = abi.HostWindow_set_clipboard_textResult;
+    const Error = abi.HostWindow_set_clipboard_textErr;
     enforcePhase("Window.Clipboard.set_text!", during_update);
-    const effect = EffectScope.begin("Window.Clipboard.set_text!", text_arg.asSlice().len);
+    var effect = EffectScope.begin("Window.Clipboard.set_text!", text_arg.asSlice().len);
     defer effect.end();
-    // Roc transfers ownership of refcounted args to the hosted fn; release it
-    // on every path, including the early returns below.
     defer text_arg.decref(roc_host);
 
     const text_slice = text_arg.asSlice();
 
     if (headlessMode()) {
-        if (text_slice.len > headless_clipboard.len) return;
+        if (text_slice.len > headless_clipboard.len) {
+            effect.setOutcome(.refused);
+            return abiTryErr(Result, Error.too_large);
+        }
         @memcpy(headless_clipboard[0..text_slice.len], text_slice);
         headless_clipboard_len = text_slice.len;
         headless_clipboard_set = true;
-        return;
+    } else {
+        var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+        var text = makeTempCString(allocatorFromHost(roc_host), &stack, text_slice) catch {
+            effect.setOutcome(.runtime_error);
+            return abiTryErr(Result, Error.unavailable);
+        };
+        defer text.deinit();
+        raylib.setClipboardText(text.ptr);
     }
-
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromHost(roc_host), &stack, text_slice) catch return;
-    defer text.deinit();
-    raylib.setClipboardText(text.ptr);
+    return abiTryEmptyOk(Result);
 }
 
-fn exportedSetClipboardText(text_arg: abi.RocStr) callconv(.c) void {
-    hostedSetClipboardText(activeHost(), text_arg);
+fn exportedSetClipboardText(text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
+    return hostedSetClipboardText(activeHost(), text_arg);
 }
 
 const CursorMode = enum {
@@ -10370,10 +10377,31 @@ test "window minimums and exit keys clamp negatives to the no-op zero" {
     try std.testing.expectEqual(@as(c_int, 640), nonNegativeCInt(640));
 }
 
-test "headless clipboard round-trips text and refuses oversized writes" {
+test "clipboard scan accepts only a terminator at or before the byte limit" {
+    try std.testing.expectEqualStrings("", boundedClipboardText("").?);
+    try std.testing.expectEqualStrings("short", boundedClipboardText("short").?);
+
+    const exact: [MAX_CLIPBOARD_READ_BYTES:0]u8 = @splat('x');
+    try std.testing.expectEqualStrings(&exact, boundedClipboardText(&exact).?);
+
+    const excessive: [MAX_CLIPBOARD_READ_BYTES + 1:0]u8 = @splat('x');
+    try std.testing.expect(boundedClipboardText(&excessive) == null);
+}
+
+test "headless clipboard round-trips full text and refuses oversized writes" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
     roc_host.roc_dealloc = &nativeRocDealloc;
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    var policy: permissions.Policy = .{};
+    try policy.add(.clipboard_read);
+    try policy.add(.clipboard_write);
+    beginIoLifetime(&policy);
+    defer endIoLifetime();
+    const phase = PhaseScope.enter(.update);
+    defer phase.leave();
     defer {
         headless_clipboard_len = 0;
         headless_clipboard_set = false;
@@ -10381,24 +10409,29 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     headless_clipboard_len = 0;
     headless_clipboard_set = false;
 
-    // Nothing written yet, so a read reports the clipboard as unavailable
-    // rather than handing back an empty string.
-    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Err, hostedReadClipboard(&roc_host).tag);
+    const authority = active_io_authority;
+    const before = capsExportedReadClipboard(authority);
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Err, before.tag);
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardErr.unavailable, before.payload_err());
 
-    hostedSetClipboardText(&roc_host, abi.RocStr.fromSlice("copied", &roc_host));
-    const stored = hostedReadClipboard(&roc_host);
+    const full: [HEADLESS_CLIPBOARD_CAPACITY]u8 = @splat('a');
+    const written = capsExportedSetClipboardText(authority, abi.RocStr.fromSlice(&full, &roc_host));
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textResultTag.Ok, written.tag);
+
+    const stored = capsExportedReadClipboard(authority);
     try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, stored.tag);
     defer stored.payload_ok().decref(&roc_host);
-    try std.testing.expectEqualStrings("copied", stored.payload_ok().asSlice());
+    try std.testing.expectEqualStrings(&full, stored.payload_ok().asSlice());
 
-    // A write that cannot fit leaves the previous contents intact, and still
-    // releases the Roc string it was handed.
-    const oversized = abi.RocStr.fromSlice(&(@as([(HEADLESS_CLIPBOARD_CAPACITY + 1)]u8, @splat('x'))), &roc_host);
-    hostedSetClipboardText(&roc_host, oversized);
-    const unchanged = hostedReadClipboard(&roc_host);
+    const excessive: [HEADLESS_CLIPBOARD_CAPACITY + 1]u8 = @splat('b');
+    const refused = capsExportedSetClipboardText(authority, abi.RocStr.fromSlice(&excessive, &roc_host));
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textErr.too_large, refused.payload_err());
+
+    const unchanged = capsExportedReadClipboard(authority);
     try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, unchanged.tag);
     defer unchanged.payload_ok().decref(&roc_host);
-    try std.testing.expectEqualStrings("copied", unchanged.payload_ok().asSlice());
+    try std.testing.expectEqualStrings(&full, unchanged.payload_ok().asSlice());
 }
 
 /// `App.Io.entropy!`: one draw from the operating system's entropy.
@@ -16684,8 +16717,7 @@ fn capsExportedSetClipboardText(authority: u64, text_arg: abi.RocStr) callconv(.
     if (!authorityIsLive(authority) or !admitDeclared(name, .clipboard_write, active_policy.admitClipboard(true))) {
         return refuseEffect(abi.HostWindow_set_clipboard_textResult, name, .{text_arg});
     }
-    exportedSetClipboardText(text_arg);
-    return .ok;
+    return exportedSetClipboardText(text_arg);
 }
 
 // Captures are the app's own output, confined beneath the output directory

@@ -80,6 +80,11 @@ Window := [].{
 	## and `Busy` is another process holding the clipboard.
 	ClipboardReadError : [PermissionDenied, Unavailable, TooLarge, Busy]
 
+	## Why a clipboard write was refused. `TooLarge` means the headless clipboard
+	## cannot hold the text. `Unavailable` means the host could not prepare it
+	## for the windowing backend.
+	ClipboardWriteError : [PermissionDenied, TooLarge, Unavailable]
+
 	## Set raylib's CPU-side frame-rate cap.
 	##
 	## Values at or below zero render uncapped. This neither selects a software
@@ -160,20 +165,23 @@ Window := [].{
 		## Read the system clipboard as text.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
-		## backend only responds on the thread that owns the window, and the read is a
-		## pointer copy rather than I/O, so this does not wait.
+		## backend only responds on the thread that owns the window.
 		##
-		## Content that is not text, or is larger than the host will copy into a
-		## `Str`, is refused rather than truncated.
+		## The native host scans and copies at most 64 KiB of text, plus one byte
+		## to check the terminator. Oversized text returns `TooLarge`. This
+		## bounds the host's scan and copy after the backend supplies the text.
 		read_text! : Clipboard => Try(Str, ClipboardReadError)
 		read_text! = |Clipboard.(authority)| perform_read_clipboard!(authority)
 
-		## Replace the system clipboard contents.
+		## Replace the system clipboard contents. The headless clipboard holds
+		## up to 4 KiB of UTF-8 text; a larger write returns `TooLarge` without
+		## changing its contents.
 		##
-		## Read it back with `Window.Clipboard.read_text!`.
+		## On a windowed host, success means the text was passed to the windowing
+		## backend. Read the current contents with `Window.Clipboard.read_text!`.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		set_text! : Clipboard, Str => Try({}, [PermissionDenied])
+		set_text! : Clipboard, Str => Try({}, ClipboardWriteError)
 		set_text! = |Clipboard.(authority), text| perform_set_clipboard_text!(authority, text)
 
 	}
@@ -207,8 +215,10 @@ perform_read_clipboard! = |authority|
 		Err(Unavailable) => Err(Unavailable)
 	}
 
-perform_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied])
+perform_set_clipboard_text! : Resource.Authority, Str => Try({}, Window.ClipboardWriteError)
 perform_set_clipboard_text! = |authority, text| match Host.window_set_clipboard_text!(authority, text) {
 	Ok({}) => Ok({})
 	Err(PermissionDenied) => Err(PermissionDenied)
+	Err(TooLarge) => Err(TooLarge)
+	Err(Unavailable) => Err(Unavailable)
 }

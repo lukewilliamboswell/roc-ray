@@ -10215,10 +10215,70 @@ comptime {
     }
 }
 
+/// Tag discriminant for Try.
+pub const HostWindow_set_clipboard_textResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostWindow_set_clipboard_textResultPayload = extern union {
+    err: PermissionDeniedOrTooLargeOrUnavailable,
+    ok: [0]u8,
+};
+
 /// Tag union: Try
-pub const HostWindow_set_clipboard_textResult = enum(u8) {
-    err = 0,
-    ok = 1,
+pub const HostWindow_set_clipboard_textResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [1]u8 align(1),
+    tag: HostWindow_set_clipboard_textResultTag,
+    pub fn payload_err(self: *const @This()) PermissionDeniedOrTooLargeOrUnavailable {
+        const ptr: *const PermissionDeniedOrTooLargeOrUnavailable = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostWindow_set_clipboard_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostWindow_set_clipboard_textResult(self, amount);
+    }
+} else extern struct {
+    payload: HostWindow_set_clipboard_textResultPayload,
+    tag: HostWindow_set_clipboard_textResultTag,
+    pub fn payload_err(self: *const @This()) PermissionDeniedOrTooLargeOrUnavailable {
+        return self.payload.err;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostWindow_set_clipboard_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostWindow_set_clipboard_textResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostWindow_set_clipboard_textResult) != 2) @compileError("HostWindow_set_clipboard_textResult size mismatch");
+        if (@alignOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult alignment mismatch");
+        if (@offsetOf(HostWindow_set_clipboard_textResult, "tag") != 1) @compileError("HostWindow_set_clipboard_textResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostWindow_set_clipboard_textResult) != 2) @compileError("HostWindow_set_clipboard_textResult size mismatch");
+        if (@alignOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult alignment mismatch");
+        if (@offsetOf(HostWindow_set_clipboard_textResult, "tag") != 1) @compileError("HostWindow_set_clipboard_textResult tag offset mismatch");
+    }
+}
+
+/// Tag union: PermissionDeniedOrTooLargeOrUnavailable
+pub const PermissionDeniedOrTooLargeOrUnavailable = enum(u8) {
+    permission_denied = 0,
+    too_large = 1,
+    unavailable = 2,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -10234,12 +10294,12 @@ pub const HostWindow_set_clipboard_textResult = enum(u8) {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult size mismatch");
-        if (@alignOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult alignment mismatch");
+        if (@sizeOf(PermissionDeniedOrTooLargeOrUnavailable) != 1) @compileError("PermissionDeniedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(PermissionDeniedOrTooLargeOrUnavailable) != 1) @compileError("PermissionDeniedOrTooLargeOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult size mismatch");
-        if (@alignOf(HostWindow_set_clipboard_textResult) != 1) @compileError("HostWindow_set_clipboard_textResult alignment mismatch");
+        if (@sizeOf(PermissionDeniedOrTooLargeOrUnavailable) != 1) @compileError("PermissionDeniedOrTooLargeOrUnavailable size mismatch");
+        if (@alignOf(PermissionDeniedOrTooLargeOrUnavailable) != 1) @compileError("PermissionDeniedOrTooLargeOrUnavailable alignment mismatch");
     }
 }
 
@@ -15739,7 +15799,7 @@ pub const HostWindow_read_clipboardArgs = extern struct {
 };
 
 /// Arguments for Host.window_set_clipboard_text!
-/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
+/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied, TooLarge, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostWindow_set_clipboard_textArgs = extern struct {
     arg0: u64,
@@ -16154,6 +16214,7 @@ pub const HostUdp_sendErr = AccessRefusedOrInvalidAddressOrNoRouteOrPermissionDe
 pub const HostWindow_monitors = __AnonStruct_dae0ce24e748c0cf;
 pub const HostWindow_read_clipboardErr = BusyOrPermissionDeniedOrTooLargeOrUnavailable;
 pub const HostWindow_scale_dpi = __AnonStruct_2818a50bdccefb1e;
+pub const HostWindow_set_clipboard_textErr = PermissionDeniedOrTooLargeOrUnavailable;
 pub const HostWindow_suggest_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostWindow_suggest_positionArg0 = __AnonStruct_3560e04f2553d83d;
 pub const HostWindow_suggest_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
@@ -17490,6 +17551,30 @@ fn increfHostWindow_read_clipboardResult(value: HostWindow_read_clipboardResult,
 
 pub const HostWindow_read_clipboardResultRelease = struct {
     pub fn release(value: HostWindow_read_clipboardResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostWindow_set_clipboard_textResult(value: HostWindow_set_clipboard_textResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().decref(roc_host);
+        },
+        .Ok => {},
+    }
+}
+
+fn increfHostWindow_set_clipboard_textResult(value: HostWindow_set_clipboard_textResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+            value.payload_err().incref(amount);
+        },
+        .Ok => {},
+    }
+}
+
+pub const HostWindow_set_clipboard_textResultRelease = struct {
+    pub fn release(value: HostWindow_set_clipboard_textResult, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -19672,7 +19757,7 @@ pub extern fn roc_window_read_clipboard(arg0: u64) callconv(.c) HostWindow_read_
 pub extern fn roc_window_scale_dpi() callconv(.c) __AnonStruct_2818a50bdccefb1e;
 
 /// Hosted symbol for Host.window_set_clipboard_text!
-/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied])
+/// Roc signature: Resource.Authority, Str => Try({}, [PermissionDenied, TooLarge, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);

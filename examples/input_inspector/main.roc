@@ -163,6 +163,8 @@ update! = |model, input, io| {
 		status = match io.clipboard().set_text!(buffered) {
 			Ok({}) => "copied to clipboard"
 			Err(PermissionDenied) => "clipboard access was not granted"
+			Err(TooLarge) => "text is too large for the clipboard"
+			Err(Unavailable) => "clipboard write is unavailable"
 		}
 		{ typed: buffered, clipboard_status: status }
 	} else if ctrl_held and devices.key_pressed(KeyV) {

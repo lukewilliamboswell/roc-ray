@@ -96,9 +96,13 @@ pasted = io.clipboard().read_text!()
 _ = io.clipboard().set_text!("copied")
 ----
 
-Both are legal in `init!`, `update!`, and tasks; neither waits. Reading needs
-`ClipboardRead` and writing needs `ClipboardWrite`. Content that is not text,
-or is too large to copy, is refused rather than truncated.
+Both calls are legal in `init!`, `update!`, and tasks. Reading needs
+`ClipboardRead` and writing needs `ClipboardWrite`.
+
+On a windowed host, RocRay scans up to 64 KiB of clipboard text plus one byte
+after the backend supplies the text. A longer value returns `TooLarge` before
+the host copies it. On a headless run, the clipboard holds up to 4 KiB of text.
+A larger write returns `TooLarge` and preserves the previous contents.
 https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] uses both.
 
 == Further reading

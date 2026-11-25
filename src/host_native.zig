@@ -3024,6 +3024,8 @@ fn sqliteError(comptime Union: type, roc_host: *RocHost, err: i64, message: abi.
         .{ "TooManyStatements", sqlite_effect.ERR_TOO_MANY_STATEMENTS },
         .{ "MultipleStatements", sqlite_effect.ERR_MULTIPLE_STATEMENTS },
         .{ "ResultTooLarge", sqlite_effect.ERR_RESULT_TOO_LARGE },
+        .{ "PathInvalid", sqlite_effect.ERR_PATH_INVALID },
+        .{ "PermissionDenied", sqlite_effect.ERR_PERMISSION_DENIED },
     }) |refusal| {
         if (comptime Names != void and abiVariantName(Names, refusal[0]) != null) {
             if (err == refusal[1]) {
@@ -3078,27 +3080,12 @@ fn sqliteQueryResult(
 /// this is parked, so the task must see its own phase again when the answer
 /// arrives. Roc's own arguments are decref'd here; everything a worker reads
 /// was copied out of them first.
-/// SQLite's in-memory database name. It touches no file, so it is accepted
-/// only with no root, which is what `Sqlite.Service.open_memory!` sends.
-const sqlite_memory_path = ":memory:";
-
-/// SQLite's `SQLITE_CANTOPEN`, for a database whose directory could not be
-/// reached before SQLite was asked.
-const SQLITE_CANTOPEN: u8 = 14;
-
-/// A database path resolved beneath its root: the absolute path SQLite opens,
-/// or the error that stopped it.
-const SqlitePath = union(enum) { path: []u8, failed: anyerror };
-
-fn resolveSqlitePathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, create_parents: bool) SqlitePath {
-    var threaded: std.Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
-    var dir = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = err };
-    defer dir.close(io);
-    const resolved = confined_path.checkedPath(io, root, dir, path, create_parents, allocator) catch |err| return .{ .failed = err };
-    return .{ .path = resolved };
+fn sqliteExecution(phase: Phase) sqlite_effect.Execution {
+    if (AppTasks.currentRuntime()) |runtime| return .{ .pool = runtime };
+    return if (phase == .startup) .startup else .unavailable;
 }
+
+const sqlite_open_phase_name = "Sqlite.Service.open!, open_with!, open_configured!, open_read!, open_read_with!, open_memory!, or open_memory_with!";
 
 fn hostedSqliteOpen(
     root_arg: abi.RocStr,
@@ -3108,44 +3095,12 @@ fn hostedSqliteOpen(
     max_result_bytes: u64,
 ) callconv(.c) abi.HostSqlite_openResult {
     const Result = abi.HostSqlite_openResult;
-    enforcePhase("Sqlite.Service.open!", during_wait);
+    enforcePhase(sqlite_open_phase_name, during_wait);
     var effect = EffectScope.begin("Sqlite.Service.open!", path_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const allocator = allocatorFromHost(roc_host);
-
-    // SQLite takes a path, not a directory handle, so the path is checked
-    // beneath its root first -- no escape, no link -- and SQLite is handed
-    // the absolute result. `ATTACH` is disabled on every connection, so the
-    // database cannot reach a second file afterwards.
-    const in_memory = root_arg.asSlice().len == 0 and std.mem.eql(u8, path_arg.asSlice(), sqlite_memory_path);
-    var resolved_path: ?[]u8 = null;
-    defer if (resolved_path) |path| allocator.free(path);
-    if (!in_memory) {
-        const create = mode == sqlite_effect.MODE_READ_WRITE_CREATE;
-        switch (runBeneath("sqlite.resolve", resolveSqlitePathBlocking, .{ allocator, root_arg.asSlice(), path_arg.asSlice(), create })) {
-            .path => |path| resolved_path = path,
-            .failed => |err| switch (err) {
-                error.PathInvalid => {
-                    effect.setOutcome(.refused);
-                    return abiTryErr(Result, abiUnionNamed(abi.HostSqlite_openErr, "PathInvalid"));
-                },
-                error.NotGranted => {
-                    effect.setOutcome(.refused);
-                    return permissionDenied(Result);
-                },
-                else => {
-                    effect.setOutcome(.runtime_error);
-                    const message = abi.RocStr.fromSlice("the directory for this database could not be opened", roc_host);
-                    return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, SQLITE_CANTOPEN, message));
-                },
-            },
-        }
-    }
-    const open_path = if (resolved_path) |path| abi.RocStr.fromSlice(path, roc_host) else abi.RocStr.fromSlice(sqlite_memory_path, roc_host);
-    defer open_path.decref(roc_host);
 
     const scope = WaitScope.enter();
     defer scope.leave();
@@ -3154,15 +3109,19 @@ fn hostedSqliteOpen(
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.open(
         roc_host,
-        AppTasks.currentRuntime(),
-        open_path,
+        sqliteExecution(scope.resumed),
+        root_arg,
+        path_arg,
         mode,
         busy_timeout_ms,
         max_result_bytes,
     );
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
-        effect.setOutcome(.runtime_error);
+        effect.setOutcome(switch (result.err) {
+            sqlite_effect.ERR_PATH_INVALID, sqlite_effect.ERR_PERMISSION_DENIED, sqlite_effect.ERR_TOO_MANY_CONNECTIONS => .refused,
+            else => .runtime_error,
+        });
         return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, result.err, result.message));
     }
     result.message.decref(roc_host);
@@ -3181,7 +3140,7 @@ fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_closeResult {
     const park = AppTasks.observePark("sqlite.close", 0);
     defer AppTasks.observeResume(park, "sqlite.close");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+    const result = sqlite_effect.close(roc_host, sqliteExecution(scope.resumed), db_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -3204,7 +3163,7 @@ fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostS
     const park = AppTasks.observePark("sqlite.prepare", 0);
     defer AppTasks.observeResume(park, "sqlite.prepare");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const result = sqlite_effect.prepare(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -3229,7 +3188,7 @@ fn hostedSqliteRunStmt(
     const park = AppTasks.observePark("sqlite.run", 0);
     defer AppTasks.observeResume(park, "sqlite.run");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+    const result = sqlite_effect.runStmt(roc_host, sqliteExecution(scope.resumed), stmt_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
     return sqliteQueryResult(abi.HostSqlite_run_stmtResult, roc_host, &effect, result);
 }
@@ -3251,7 +3210,7 @@ fn hostedSqliteRunOnce(
     const park = AppTasks.observePark("sqlite.run", 0);
     defer AppTasks.observeResume(park, "sqlite.run");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+    const result = sqlite_effect.runOnce(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
     return sqliteQueryResult(abi.HostSqlite_run_onceResult, roc_host, &effect, result);
 }
@@ -3269,7 +3228,7 @@ fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.Ho
     const park = AppTasks.observePark("sqlite.script", 0);
     defer AppTasks.observeResume(park, "sqlite.script");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const result = sqlite_effect.execScript(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -10802,6 +10761,9 @@ fn deinitResources() void {
     // *released* its handles rather than about when the host got round to the
     // driver calls. Shutdown drains the complete retirement queue.
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    // Frame retirement limits SQLite closes to one because a close can do
+    // disk work. There is no next frame to drain the other connections here.
+    _ = sqlite_effect.db_heap.drainRetired(std.math.maxInt(usize));
 
     // Roc should have released every handle by the time the final model is
     // dropped. Keep a shutdown drain for optimized builds, but catch lifecycle
@@ -14738,6 +14700,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
+    defer sqlite_effect.interruptAll();
     app_tasks.activate();
     // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -14983,6 +14946,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, options: RuntimeOpt
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
+    defer sqlite_effect.interruptAll();
     app_tasks.activate();
     // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -16434,7 +16398,7 @@ fn capsExportedUdpBind(authority: u64, args: abi.HostUdp_bindArg1) callconv(.c) 
 /// and the in-memory database needs none.
 fn capsHostedSqliteOpen(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
     const name = "Sqlite.Service.open!";
-    enforcePhase(name, during_wait);
+    enforcePhase(sqlite_open_phase_name, during_wait);
     if (!authorityIsLive(authority)) return refuseEffect(abi.HostSqlite_openResult, name, .{ root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes });
     return hostedSqliteOpen(root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes);
 }

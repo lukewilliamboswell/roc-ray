@@ -290,6 +290,24 @@ byte limit (16 MiB by default), is refused rather than truncated.
 Databases and statements close automatically when their last reference goes
 away; `Db.close!` closes one early.
 
+The configured methods accept the same per-connection limits on each kind
+of handle:
+
+[source,roc]
+----
+writable = io.sqlite().open_configured!(data, { path: "scores.db", busy_timeout_ms: 0 })?
+readonly = io.sqlite().open_read_with!(data.read_only(), {
+    path: "scores.db",
+    max_result_bytes: 4 * 1024 * 1024,
+})?
+scratch = io.sqlite().open_memory_with!({ max_result_bytes: 0 })?
+----
+
+The lock timeout defaults to five seconds. Zero means try acquiring the
+lock once. The result ceiling defaults to 16 MiB, with a maximum of 64 MiB.
+A ceiling of zero allows integer, real, null, empty text, and empty blob
+results. The one-million-cell limit applies to every result.
+
 https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sqlite_scores/main.roc[SQLite Scores] keeps a high-score table
 that survives a restart.
 

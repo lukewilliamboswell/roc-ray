@@ -102,7 +102,9 @@ Sqlite := [].{
 	## symbolic link, as for a `Files` read. `PermissionDenied` is a stub
 	## directory handle, which gives no access. `TooManyConnections` means
 	## eight are already open; releasing a `Db` the app no longer needs frees
-	## a slot.
+	## a slot. An unsupported result ceiling or lock timeout is
+	## SqliteErr(OutOfRange, _). If the blocking pool cannot accept work, the
+	## operation returns SqliteErr(Busy, _) and performs no I/O.
 	OpenErr : [PermissionDenied, PathInvalid, SqliteErr(ErrCode, Str), TooManyConnections]
 
 	## Why a statement was not prepared.
@@ -153,7 +155,9 @@ Sqlite := [].{
 	##
 	## `max_result_bytes` caps the text and blob payload of one query. A query
 	## that would exceed it fails with `ResultTooLarge` rather than returning
-	## part of its rows.
+	## part of its rows. Zero permits results without any text or blob bytes.
+	## The supported payload ceiling is at most 64 MiB. The maximum
+	## busy_timeout_ms is 2_147_483_647; zero attempts the lock once.
 	##
 	## A plain record; build one with
 	## `{ ..Sqlite.default_config, mode: ReadOnly }` rather than a chain of
@@ -165,8 +169,30 @@ Sqlite := [].{
 	default_config : Config
 	default_config = {
 		mode: ReadWriteCreate,
-		busy_timeout_ms: 5_000,
-		max_result_bytes: 16 * 1024 * 1024,
+		busy_timeout_ms: default_busy_timeout_ms,
+		max_result_bytes: default_max_result_bytes,
+	}
+
+	## Open a database beneath a writable directory with defaulted options.
+	OpenRequest := {
+		path : Str,
+		mode : Mode ?? ReadWriteCreate,
+		busy_timeout_ms : U64 ?? default_busy_timeout_ms,
+		max_result_bytes : U64 ?? default_max_result_bytes,
+	}
+
+	## Open an existing database beneath a read-only directory. The mode is
+	## always read-only and follows from the handle.
+	OpenReadRequest := {
+		path : Str,
+		busy_timeout_ms : U64 ?? default_busy_timeout_ms,
+		max_result_bytes : U64 ?? default_max_result_bytes,
+	}
+
+	## Limits for a private in-memory connection.
+	MemoryOptions := {
+		busy_timeout_ms : U64 ?? default_busy_timeout_ms,
+		max_result_bytes : U64 ?? default_max_result_bytes,
 	}
 
 	## What a statement that changes data did.
@@ -192,8 +218,9 @@ Sqlite := [].{
 		## a task, keeps it off the frame the last handle happened to be
 		## dropped in.
 		##
-		## Statements prepared against this connection keep working until they
-		## are released; SQLite defers the close until the last one is gone.
+		## Prepared statements retain the connection. Explicitly closing it
+		## makes later queries fail with SqliteErr(Misuse, _); SQLite defers
+		## releasing its native handle until its statements are finalized.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
@@ -522,6 +549,12 @@ Sqlite := [].{
 		open_with! : Service, Files.Dir, Str, Config => Try(Db, OpenErr)
 		open_with! = |Service.(authority), dir, path, config| perform_open!(authority, dir.for_host(), path, config)
 
+		## Open a database beneath a writable directory with a named path and
+		## defaulted options. Legal in init! and tasks.
+		open_configured! : Service, Files.Dir, OpenRequest => Try(Db, OpenErr)
+		open_configured! = |Service.(authority), dir, { path, mode, busy_timeout_ms, max_result_bytes }|
+			perform_open!(authority, dir.for_host(), path, { mode, busy_timeout_ms, max_result_bytes })
+
 		## Open an existing database read-only beneath any directory handle.
 		## The connection is locked down so it cannot be turned into a writer.
 		##
@@ -530,15 +563,38 @@ Sqlite := [].{
 		open_read! : Service, Files.ReadDir, Str => Try(Db, OpenErr)
 		open_read! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, { ..Sqlite.default_config, mode: ReadOnly })
 
+		## Open a read-only database with explicit connection limits.
+		## Legal in init! and tasks.
+		open_read_with! : Service, Files.ReadDir, OpenReadRequest => Try(Db, OpenErr)
+		open_read_with! = |Service.(authority), dir, { path, busy_timeout_ms, max_result_bytes }|
+			perform_open!(authority, dir.for_host(), path, { mode: ReadOnly, busy_timeout_ms, max_result_bytes })
+
 		## Open a private in-memory database, gone when its last reference is.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
 		open_memory! : Service => Try(Db, OpenErr)
 		open_memory! = |Service.(authority)| perform_open!(authority, { authority, root: "", path: "" }, memory_path, Sqlite.default_config)
+
+		## Create a private in-memory database with explicit connection limits.
+		## Legal in init! and tasks.
+		open_memory_with! : Service, MemoryOptions => Try(Db, OpenErr)
+		open_memory_with! = |Service.(authority), { busy_timeout_ms, max_result_bytes }|
+			perform_open!(
+				authority,
+				{ authority, root: "", path: "" },
+				memory_path,
+				{ mode: ReadWriteCreate, busy_timeout_ms, max_result_bytes },
+			)
 	}
 
 }
+
+default_busy_timeout_ms : U64
+default_busy_timeout_ms = 5_000
+
+default_max_result_bytes : U64
+default_max_result_bytes = 16 * 1024 * 1024
 
 ## Access mode as the host numbers it. Mirrored in `src/sqlite_effect.zig`.
 mode_code : Sqlite.Mode -> U8

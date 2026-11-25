@@ -125,7 +125,7 @@ frees its place for another.
 |HTTP request deadline and response body |30 seconds and 8 MiB by default; at most 64 MiB per response |A deadline or oversized decoded body fails the request; configurable per send
 |HTTP response working budget |256 MiB in total, reserving twice each in-flight request's response limit |`HttpErr(Busy)` before any network work if the requested reservation is temporarily unavailable
 |HTTP redirects followed |3 |The request fails
-|SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default |The query is refused, never truncated
+|SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default, configurable up to 64 MiB |The query is refused, never truncated
 |Permission declarations |64 |The app stops before `init!`
 |===
 

@@ -62,65 +62,34 @@ capture_scale_ratio = |value|
 			}
 	}
 
-# TODO(follow up): Restore derived equality when Roc handles it through type aliases
-# without looping during compilation (nightly-2026-09-18-1d982dc).
 CaptureFormat := [Png, Gif, WebM].{
 
 	## Compare two of these values.
-	is_eq : CaptureFormat, CaptureFormat -> Bool
-	is_eq = |a, b| match (a, b) {
-		(Png, Png) => Bool.True
-		(Gif, Gif) => Bool.True
-		(WebM, WebM) => Bool.True
-		_ => Bool.False
-	}
+	is_eq : _
 }
 
 CaptureScale := [Full, Half, Quarter, Ratio({ numerator : U32, denominator : U32 })].{
 
 	## Compare two of these values.
-	is_eq : CaptureScale, CaptureScale -> Bool
-	is_eq = |a, b| match (a, b) {
-		(Full, Full) => Bool.True
-		(Half, Half) => Bool.True
-		(Quarter, Quarter) => Bool.True
-		(Ratio(left), Ratio(right)) => left.numerator == right.numerator and left.denominator == right.denominator
-		_ => Bool.False
-	}
+	is_eq : _
 }
 
 CaptureTiming := [RealTime, FixedStep].{
 
 	## Compare two of these values.
-	is_eq : CaptureTiming, CaptureTiming -> Bool
-	is_eq = |a, b| match (a, b) {
-		(RealTime, RealTime) => Bool.True
-		(FixedStep, FixedStep) => Bool.True
-		_ => Bool.False
-	}
+	is_eq : _
 }
 
 CaptureCursor := [NoCursor, DrawCursor].{
 
 	## Compare two of these values.
-	is_eq : CaptureCursor, CaptureCursor -> Bool
-	is_eq = |a, b| match (a, b) {
-		(NoCursor, NoCursor) => Bool.True
-		(DrawCursor, DrawCursor) => Bool.True
-		_ => Bool.False
-	}
+	is_eq : _
 }
 
 CaptureQuality := [Fast, Balanced, Best].{
 
 	## Compare two of these values.
-	is_eq : CaptureQuality, CaptureQuality -> Bool
-	is_eq = |a, b| match (a, b) {
-		(Fast, Fast) => Bool.True
-		(Balanced, Balanced) => Bool.True
-		(Best, Best) => Bool.True
-		_ => Bool.False
-	}
+	is_eq : _
 }
 
 Capture := [].{

@@ -213,23 +213,6 @@ Host := [].{
 	ShaderUniformKind : [Float, Int, Bool, Vec2, Vec3, Vec4, Sampler2D]
 	ShaderUniformSchema : { kind : ShaderUniformKind, name : Str }
 
-	## Compiler workaround: current Roc nightly crashes on imported closed-union
-	## constructors in Shader.roc; move these aliases there when fixed.
-	shader_uniform_kind_float : ShaderUniformKind
-	shader_uniform_kind_float = Float
-	shader_uniform_kind_int : ShaderUniformKind
-	shader_uniform_kind_int = Int
-	shader_uniform_kind_bool : ShaderUniformKind
-	shader_uniform_kind_bool = Bool
-	shader_uniform_kind_vec2 : ShaderUniformKind
-	shader_uniform_kind_vec2 = Vec2
-	shader_uniform_kind_vec3 : ShaderUniformKind
-	shader_uniform_kind_vec3 = Vec3
-	shader_uniform_kind_vec4 : ShaderUniformKind
-	shader_uniform_kind_vec4 = Vec4
-	shader_uniform_kind_sampler2d : ShaderUniformKind
-	shader_uniform_kind_sampler2d = Sampler2D
-
 	## One application-uniform value in cached schema order. The variant is
 	## already the transport-level type, so no unused payload lanes are carried.
 	ShaderUniformValue := [

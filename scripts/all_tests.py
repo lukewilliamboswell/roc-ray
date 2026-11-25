@@ -1330,6 +1330,7 @@ def run_file_write_probe(
     wrote. The probe writes text and bytes, reads the same paths back, compares
     them, and also checks that missing parent directories are created and that
     a path whose parent is a file is refused by name.
+    The directory cursor checks the files were created beneath the handle.
 
     It runs from the staged scratch directory and only touches `probe_out/`
     beneath it, so it never writes into the tree. Exit 3 means a property did

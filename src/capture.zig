@@ -52,7 +52,7 @@ pub const err_already_recording: u8 = 3;
 pub const err_not_recording: u8 = 4;
 /// The requested format is not compiled into this host.
 pub const err_unsupported_format: u8 = 5;
-/// The recording would exceed the host's in-memory encoding budget.
+/// One request exceeds the host's capture buffer budget.
 pub const err_budget_exceeded: u8 = 6;
 /// A frame buffer could not be allocated.
 pub const err_out_of_memory: u8 = 7;
@@ -84,8 +84,7 @@ pub const err_readback_failed: u8 = 12;
 /// Runtime data rather than a programmer error, because that is how every other
 /// unresolved render-target handle is already reported.
 pub const err_target_unavailable: u8 = 13;
-/// The rectangle asked for is not entirely inside the source, or is larger
-/// than one readback is allowed to deliver.
+/// The requested point or rectangle is not entirely inside the source.
 pub const err_region_out_of_bounds: u8 = 14;
 
 /// No recording is active.
@@ -193,12 +192,9 @@ pub const StillBudget = struct {
 
 /// Largest RGBA payload one pixel readback may hand to Roc, in bytes.
 ///
-/// The same number as `still_budget_bytes`, and metered by the same
-/// `StillBudget`: a readback and a still export each hold one RGBA image alive
-/// in host memory, so they compete for one budget rather than two. The name is
-/// separate because the two count different things. A still export is metered
-/// by the whole source it reads; a readback is metered by the region asked
-/// for, which is the number the app chose.
+/// The delivery ceiling has the same value as the still-capture budget.
+/// Before reading pixels, screen snapshots and target readbacks also need
+/// room for the entire source in the shared `StillBudget`.
 ///
 /// 128 MiB is 8192 by 4096 pixels, well past a window and past any region a
 /// per-frame read can afford. A region above it is refused outright rather
@@ -235,21 +231,16 @@ pub fn validatePoint(x: i32, y: i32, width: u32, height: u32) u8 {
     return err_none;
 }
 
-/// Is `region` entirely inside a `width` by `height` source, and small enough
-/// to deliver?
+/// Is the rectangle inside the source and within the delivery byte ceiling?
 ///
-/// Both refusals are `err_region_out_of_bounds`: a region past the edge of the
-/// source and a region past `max_readback_bytes` are the same kind of mistake
-/// -- an app asking for pixels the platform will not produce -- and neither
-/// becomes possible on a later frame. The corner and the extent are added in
-/// `i64` so that a pair that overflows `i32` is arithmetic this function does
-/// rather than undefined behaviour.
+/// Coordinates are added in i64 so even a pair that exceeds i32 can be
+/// checked. Geometry and the host budget have their own refusal codes.
 pub fn validateRegion(region: Region, width: u32, height: u32) u8 {
     const bytes = regionBytes(region) orelse return err_region_out_of_bounds;
-    if (bytes > max_readback_bytes) return err_region_out_of_bounds;
     if (region.x < 0 or region.y < 0) return err_region_out_of_bounds;
     if (@as(i64, region.x) + @as(i64, region.width) > @as(i64, width)) return err_region_out_of_bounds;
     if (@as(i64, region.y) + @as(i64, region.height) > @as(i64, height)) return err_region_out_of_bounds;
+    if (bytes > max_readback_bytes) return err_budget_exceeded;
     return err_none;
 }
 
@@ -298,7 +289,7 @@ test "a region past the readback cap is refused before anything is read" {
     // 8192 by 4096 is exactly `max_readback_bytes`; one row more is not.
     try std.testing.expectEqual(err_none, validateRegion(.{ .x = 0, .y = 0, .width = 8192, .height = 4096 }, 8192, 4096));
     try std.testing.expectEqual(
-        err_region_out_of_bounds,
+        err_budget_exceeded,
         validateRegion(.{ .x = 0, .y = 0, .width = 8192, .height = 4097 }, 8192, 4097),
     );
     // The corner plus the extent overflows `i32`; the check must survive it.

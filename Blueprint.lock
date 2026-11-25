@@ -1,28 +1,28 @@
 (
 	(fetched ((
 		(name "roc-stable")
-		(obtained Published)
-		(served ())
-		(sha256 "d9395495f9dd07c39629c33f156f7fee68e8d22f8a764522e5cdd1cc30879b51")
-		(size 95010092)
-		(system "x86_64-linux")
-		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-18-a520eed/roc_nightly-linux_x86_64-2026-11-18-a520eed.tar.gz"))
-		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-18-a520eed")) (
-		(name "roc-stable")
 		(obtained Both)
 		(served ("release-assets.githubusercontent.com"))
-		(sha256 "3b9ba3cc7357e47916f03689979be6c35c1986a1fd5a54bf0d06ea609fe0648d")
-		(size 91000550)
+		(sha256 "471d88b0af6747ac9654f2f7a0b426080bd4ec929a8ab519a111e8f54e98654e")
+		(size 95075869)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-24-ff5e544/roc_nightly-linux_x86_64-2026-11-24-ff5e544.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-24-ff5e544")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "69d144fc4a89ac1b1f91a58eaf60616715a26d3b6b598eefe0bffc9724e60fa3")
+		(size 92682232)
 		(system "aarch64-darwin")
-		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-18-a520eed/roc_nightly-macos_apple_silicon-2026-11-18-a520eed.tar.gz"))
-		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-18-a520eed")) (
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-24-ff5e544/roc_nightly-macos_apple_silicon-2026-11-24-ff5e544.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-11-24-ff5e544")) (
 		(name "zig")
 		(obtained Computed)
-		(served ("ziglang.org"))
+		(served ("pkg.hexops.org"))
 		(sha256 "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a")
 		(size 57411036)
 		(system "x86_64-linux")
-		(urls ("https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"))
+		(urls ("https://pkg.hexops.org/zig/zig-x86_64-linux-0.17.1.tar.xz" "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"))
 		(witness "")) (
 		(name "zig")
 		(obtained Computed)

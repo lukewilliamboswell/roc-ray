@@ -39,9 +39,13 @@ The client, `io.http()`, offers:
 * `get!(url)`: fetch a URL and decode its JSON body, with the type inferred
   from where the result is used;
 * `send!(request)`: send a full request and return the response;
-* `send_json!(request, value)`: send a value encoded as JSON;
-* `send_with!(config, request)`: send with a different time limit or size
-  limit.
+* `send_json!(request, value)`: send a value encoded as JSON.
+
+Each operation also takes per-send props through `get_utf8_with!`,
+`get_with!`, `send_with!`, or `send_json_with!`. Set only the fields you
+want to override. For example, `get_utf8_with!({ max_response_bytes: 64 * 1024 }, url)`
+accepts a 64 KiB response and uses the default deadline. For a JSON request,
+pass the request and its value together as `send_json_with!(config, { request, value })`.
 
 `get!` and `get_utf8!` need no package other than the platform. An app that builds
 `Request` values or reads `Response` values itself uses the
@@ -50,11 +54,20 @@ that package in its own header beside the platform.
 
 === What to expect
 
-* **Every request has limits.** By default a request must finish within thirty
-  seconds, and its response body, measured after decompression, may not exceed
-  8 MiB. A response over the limit fails rather than being truncated.
-  Pass a `Config` to `send_with!` to change either limit, or `0` to disable
-  one.
+* **Response size.** The default is 8 MiB of decompressed response data.
+  `HttpErr(ResponseTooLarge)` says the response exceeded the request's
+  `max_response_bytes`, and no partial response is delivered. Zero accepts
+  only an empty body. A requested limit above 64 MiB returns
+  `HttpErr(ResponseLimitUnsupported)` before the exchange starts.
+* **Capacity.** Before an exchange starts, the host reserves twice the
+  requested size from a shared 256 MiB response working budget. This covers
+  the decoded buffer and temporary copies while it grows or is delivered.
+  `HttpErr(Busy)` says the request made no network connection. The app can
+  try again after an in-flight exchange finishes. The result's lifetime is
+  ordinary Roc ownership once delivered.
+* **Deadline.** The default is 30 seconds for the whole exchange. A
+  request's own `TimeoutMilliseconds` overrides `Config.timeout_ms`.
+  Zero disables the deadline.
 * **A status code is not an error.** A 404 or a 503 arrives as `Ok(response)`
   with that status. Only a request that gets no complete response is
   `HttpErr`.

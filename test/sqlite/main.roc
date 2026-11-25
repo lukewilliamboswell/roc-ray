@@ -29,14 +29,14 @@ init! = App.init(App.default.with_title("sqlite").with_permission(Directory("pro
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which property went wrong.
 expected_score : U64
-expected_score = 4095
+expected_score = 8191
 
 score : Bool, U64 -> U64
 score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 8) == 8
 expect score(Bool.False, 8) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 + 2048 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 + 2048 + 4096 == expected_score
 
 ## Text with a NUL-unsafe shape on purpose: a binding that went through a C
 ## string would truncate at the newline-free tail, and a length-confused one
@@ -141,7 +141,35 @@ check! = |io| {
 			_ => 0
 		}
 
-	Checked(changed + rowid + read_back + names + missing + reused + escaped + error_paths!(db))
+	Checked(changed + rowid + read_back + names + missing + reused + escaped + error_paths!(db) + score(open_options!(io.sqlite(), out), 4096))
+}
+
+## Check shared limits across each authority and the read-only open mode.
+open_options! : Sqlite.Service, Files.Dir => Bool
+open_options! = |sqlite, out| {
+	writable =
+		match sqlite.open_configured!(out, { path: "probe.db", max_result_bytes: 0 }) {
+			Ok(db) => db.query!("SELECT 'x' AS payload", []) == Err(ResultTooLarge)
+			Err(_) => Bool.False
+		}
+	read_only =
+		match sqlite.open_read_with!(out.read_only(), { path: "probe.db", busy_timeout_ms: 0, max_result_bytes: 1 }) {
+			Ok(db) =>
+				db.query!("SELECT 'xx' AS payload", []) == Err(ResultTooLarge)
+					and match db.execute!("DELETE FROM kinds", []) {
+						Err(SqliteErr(ReadOnly, _)) => Bool.True
+						_ => Bool.False
+					}
+			Err(_) => Bool.False
+		}
+	memory =
+		match sqlite.open_memory_with!({ max_result_bytes: 0 }) {
+			Ok(db) =>
+				db.query!("SELECT '' AS empty, x'' AS empty_blob, 1 AS number", []).is_ok()
+					and db.query!("SELECT x'00' AS payload", []) == Err(ResultTooLarge)
+			Err(_) => Bool.False
+		}
+	writable and read_only and memory
 }
 
 ## The failures an app is most likely to meet, each as its own typed outcome.

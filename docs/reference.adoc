@@ -104,6 +104,7 @@ frees its place for another.
 |Application uniforms per shader |32 |`ResourceLimit`
 |Prepared texts |256 |`ResourceLimit`
 |Asset stores |16 |`ResourceLimit`
+|Directory cursors |16 |`Busy`; release a cursor to make room
 |UDP sockets |8 |`ResourceLimit`
 |SQLite connections and statements |8 and 64 |`TooManyConnections` or `TooManyStatements`
 |===
@@ -114,16 +115,19 @@ frees its place for another.
 |===
 |What |Limit |At the limit
 |`read_text!` file size |64 KiB |`TooLarge`
-|`read_bytes!` file size |16 MiB |`TooLarge`
-|Byte lists from `read_bytes!` the app keeps at once |32 |`Busy`; nothing is read, and the same call can succeed once the app lets one go
+|Whole-file byte reads |16 MiB by default, up to 64 MiB with `read_bytes_with!` |`TooLarge` for a larger file, `LimitExceedsMax` for a request above 64 MiB
+|Byte delivery slots shared by file reads, directory listings, and capture readbacks |32 |`Busy`. The same call can succeed when a slot is free.
+|Host buffers for whole-file byte reads in progress and retained by Roc lists or their slices |512 MiB |`Busy`. Reads reserve room for their maximum working storage and keep the actual allocation charged on delivery.
 |`list!` directory listing |8192 entries or 1 MiB of names |`TooLarge`
+|`DirectoryCursor.next!` batch |64 entries |Read the next batch through the same cursor
 |Sound or music file read by `Audio` |64 MiB |The load fails
 |Any other asset file |128 MiB |The load fails
 |`Audio.gen_sound!` and `gen_tone!` length |1 ms to 5 seconds (`Audio.max_generated_ms`) |Any other `ms` stops the app, naming the fix
 |Standard output and standard error queues |256 KiB each |`TooLarge` for one payload bigger than the queue, `BufferFull` for a full queue
-|HTTP request deadline and response body |30 seconds, 8 MiB by default |The request fails; configurable with `send_with!`
+|HTTP request deadline and response body |30 seconds and 8 MiB by default; at most 64 MiB per response |A deadline or oversized decoded body fails the request; configurable per send
+|HTTP response working budget |256 MiB in total, reserving twice each in-flight request's response limit |`HttpErr(Busy)` before any network work if the requested reservation is temporarily unavailable
 |HTTP redirects followed |3 |The request fails
-|SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default |The query is refused, never truncated
+|SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default, configurable up to 64 MiB |The query is refused, never truncated
 |Permission declarations |64 |The app stops before `init!`
 |===
 

@@ -163,6 +163,8 @@ update! = |model, input, io| {
 		status = match io.clipboard().set_text!(buffered) {
 			Ok({}) => "copied to clipboard"
 			Err(PermissionDenied) => "clipboard access was not granted"
+			Err(TooLarge) => "text is too large for the clipboard"
+			Err(Unavailable) => "clipboard write is unavailable"
 		}
 		{ typed: buffered, clipboard_status: status }
 	} else if ctrl_held and devices.key_pressed(KeyV) {
@@ -274,6 +276,7 @@ eyedropper_label = |picked|
 		Err(RegionOutOfBounds) => "Under the pointer: off screen"
 		# Nothing has been presented yet, or this run has no framebuffer at all.
 		Err(Unavailable) => "Under the pointer: no frame to read yet"
+		Err(BudgetExceeded) => "Under the pointer: source exceeds the readback budget"
 		Err(Busy) => "Under the pointer: host busy, try again"
 		Err(TargetUnavailable) => "Under the pointer: no source"
 		Err(ReadbackFailed) => "Under the pointer: readback failed"

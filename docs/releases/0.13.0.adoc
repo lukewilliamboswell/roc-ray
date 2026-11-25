@@ -1,0 +1,36 @@
+= RocRay 0.13.0
+
+== Files and databases
+
+* `read_bytes_with!` accepts a per-file ceiling up to 64 MiB. The existing
+  `read_bytes!` still defaults to 16 MiB. Retained byte lists and in-flight
+  reads share a bounded host memory budget.
+* Open a directory with `open_cursor!` and call `next!` to enumerate it in
+  batches of up to 64 entries. A cursor keeps its directory authority and
+  is released automatically.
+* SQLite exposes defaulted options for writable, read-only, and in-memory
+  databases. A `max_result_bytes` of zero permits no text or blob payload.
+  SQLite waiting effects return a typed refusal if worker dispatch fails.
+
+== HTTP, capture, and clipboard
+
+* HTTP accepts defaulted request options on the raw, JSON, and UTF-8 paths.
+  The default decoded body limit is 8 MiB, and explicit limits can reach
+  64 MiB. Zero permits only an empty body. Oversized responses, unsupported
+  limits, and temporary capacity pressure have distinct errors.
+* Capture readbacks report `BudgetExceeded` when the source or result is
+  too large for the host. `Busy` indicates temporary capacity pressure.
+* The headless clipboard returns `TooLarge` for writes over 4 KiB and
+  preserves its previous contents. Native clipboard scanning stops at the
+  read size limit after the backend supplies the text.
+
+Review exhaustive matches on HTTP transport, capture readback, and clipboard
+write errors for the new variants.
+
+== macOS and tooling
+
+The vendored raylib archive reports the actual initial logical window size
+on macOS before the first event poll. Layout and screenshots can use the
+correct size when AppKit clamps a requested window to the work area.
+
+Repository scripts use the November 24 Roc nightly and Blueprint 0.15.0-rc.1.

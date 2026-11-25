@@ -44,6 +44,7 @@ const zio = @import("zio");
 
 const abi = @import("roc_platform_abi.zig");
 const host_resource = @import("host_resource.zig");
+const confined_path = @import("confined_path.zig");
 
 const RocHost = abi.RocHost;
 
@@ -58,9 +59,15 @@ pub const max_statements: usize = 64;
 /// result proportional to rows times columns rather than to payload bytes.
 pub const max_result_cells: u64 = 1_000_000;
 
+/// Upper bound for text and blob bytes, regardless of the connection options.
+pub const max_result_payload_bytes: u64 = 64 * 1024 * 1024;
+
 /// SQLite result codes this file needs by name. From sqlite3.h, whose numbering
 /// is a compatibility guarantee.
 const SQLITE_OK: c_int = 0;
+const SQLITE_BUSY: c_int = 5;
+const SQLITE_INTERRUPT: c_int = 9;
+const SQLITE_CANTOPEN: c_int = 14;
 const SQLITE_ROW: c_int = 100;
 const SQLITE_DONE: c_int = 101;
 const SQLITE_MISUSE: c_int = 21;
@@ -88,6 +95,12 @@ pub const ERR_RESULT_TOO_LARGE: i64 = -3;
 /// One query string held more than one statement.
 pub const ERR_MULTIPLE_STATEMENTS: i64 = -4;
 
+/// A database path was invalid for a confined lookup.
+pub const ERR_PATH_INVALID: i64 = -5;
+
+/// The supplied directory handle cannot reach a filesystem root.
+pub const ERR_PERMISSION_DENIED: i64 = -6;
+
 extern fn rocray_sqlite_init() c_int;
 extern fn rocray_sqlite_shutdown() void;
 extern fn rocray_sqlite_open(path: [*:0]const u8, mode: c_int, busy_timeout_ms: c_int, out_db: *?*anyopaque) c_int;
@@ -100,6 +113,13 @@ extern fn sqlite3_limit(db: ?*anyopaque, id: c_int, new_value: c_int) c_int;
 
 /// `SQLITE_LIMIT_ATTACHED` from `sqlite3.h`.
 const SQLITE_LIMIT_ATTACHED: c_int = 7;
+
+extern fn sqlite3_progress_handler(
+    db: ?*anyopaque,
+    operations: c_int,
+    callback: ?*const fn (?*anyopaque) callconv(.c) c_int,
+    context: ?*anyopaque,
+) void;
 extern fn rocray_sqlite_interrupt(db: ?*anyopaque) void;
 extern fn rocray_sqlite_errmsg(db: ?*anyopaque) ?[*:0]const u8;
 extern fn rocray_sqlite_extended_errcode(db: ?*anyopaque) c_int;
@@ -163,7 +183,31 @@ pub const DbResource = struct {
     db: ?*anyopaque,
     mutex: ConnectionLock,
     in_flight: bool,
+    control: ConnectionLock = .{},
     max_result_bytes: u64,
+
+    /// The operation lock has already been acquired. Publish a stable handle
+    /// for shutdown to interrupt without waiting for the SQLite operation.
+    fn beginOperation(self: *DbResource, result: *Result) ?*anyopaque {
+        self.control.lock();
+        defer self.control.unlock();
+        if (shutting_down.load(.acquire)) {
+            result.failWith(SQLITE_INTERRUPT, "SQLite is shutting down");
+            return null;
+        }
+        const db = self.db orelse {
+            result.failWith(SQLITE_MISUSE, "database handle is closed");
+            return null;
+        };
+        self.in_flight = true;
+        return db;
+    }
+
+    fn finishOperation(self: *DbResource) void {
+        self.control.lock();
+        defer self.control.unlock();
+        self.in_flight = false;
+    }
 };
 
 /// One prepared statement, and the connection it belongs to.
@@ -174,6 +218,7 @@ pub const DbResource = struct {
 pub const StmtResource = struct {
     stmt: ?*anyopaque,
     db_token: u64,
+    owner: ?struct { db: *u64, roc_host: *RocHost } = null,
 };
 
 fn writeU64Token(payload: *u64, token: u64) void {
@@ -196,6 +241,10 @@ fn destroyStmt(resource: *StmtResource) void {
         _ = rocray_sqlite_finalize(stmt);
         resource.stmt = null;
     }
+    if (resource.owner) |owner| {
+        abi.decrefBoxWith(@ptrCast(owner.db), @alignOf(u64), false, null, owner.roc_host);
+        resource.owner = null;
+    }
 }
 
 /// The connection heap's type. Its capacity is the connection bound.
@@ -212,21 +261,24 @@ pub var db_heap: DbHeap = .{};
 pub var stmt_heap: StmtHeap = .{};
 
 /// Set once, so a second `sqlite3_initialize` is not paid per connection.
-var initialized: bool = false;
+var initialized: std.atomic.Value(bool) = .init(false);
+var shutting_down: std.atomic.Value(bool) = .init(false);
+var pending_opens: usize = 0;
+var pending_prepares: usize = 0;
 
 /// Bring SQLite up. Idempotent, and cheap after the first call.
 pub fn initialize() bool {
-    if (initialized) return true;
+    if (initialized.load(.acquire)) return true;
     if (rocray_sqlite_init() != SQLITE_OK) return false;
-    initialized = true;
+    initialized.store(true, .release);
     return true;
 }
 
 /// Release SQLite's own global state, after every connection is closed.
 pub fn shutdown() void {
-    if (!initialized) return;
-    rocray_sqlite_shutdown();
-    initialized = false;
+    std.debug.assert(pending_opens == 0 and pending_prepares == 0);
+    if (initialized.swap(false, .acq_rel)) rocray_sqlite_shutdown();
+    shutting_down.store(false, .release);
 }
 
 /// Interrupt every query still running, so shutdown does not wait on one.
@@ -235,8 +287,11 @@ pub fn shutdown() void {
 /// exactly the use `sqlite3_interrupt` is documented for, and serialized
 /// threading mode is what makes it safe without further argument.
 pub fn interruptAll() void {
+    shutting_down.store(true, .release);
     const Interrupter = struct {
         fn call(resource: *DbResource) void {
+            resource.control.lock();
+            defer resource.control.unlock();
             if (resource.in_flight) {
                 if (resource.db) |db| rocray_sqlite_interrupt(db);
             }
@@ -336,13 +391,8 @@ fn runBlocking(job: *Job) void {
     resource.mutex.lock();
     defer resource.mutex.unlock();
 
-    const db = resource.db orelse {
-        job.result.failWith(@intCast(SQLITE_MISUSE), "database handle is closed");
-        return;
-    };
-
-    resource.in_flight = true;
-    defer resource.in_flight = false;
+    const db = resource.beginOperation(job.result) orelse return;
+    defer resource.finishOperation();
 
     if (job.script) {
         const sql = job.sql.?;
@@ -501,7 +551,7 @@ fn encodeCell(result: *Result, stmt: ?*anyopaque, column: c_int, max_payload: u6
             else
                 rocray_sqlite_column_blob(stmt, column);
             const size: usize = @intCast(@max(rocray_sqlite_column_bytes(stmt, column), 0));
-            if (max_payload != 0 and result.payload.items.len + size > max_payload) {
+            if (size > max_payload - result.payload.items.len) {
                 result.failWith(ERR_RESULT_TOO_LARGE, "query returned more text and blob bytes than this connection will deliver");
                 break :blk null;
             }
@@ -541,17 +591,28 @@ fn workerAllocator() std.mem.Allocator {
     return std.heap.smp_allocator;
 }
 
-/// Run a job, on the blocking pool when there is a runtime to spawn on.
-fn dispatch(rt: ?*zio.Runtime, job: *Job) void {
-    if (rt) |runtime| {
-        var blocking = runtime.spawnBlocking(runBlocking, .{job}) catch {
-            runBlocking(job);
-            return;
-        };
-        blocking.join();
-        return;
+/// Where waiting work can run for the current application phase.
+pub const Execution = union(enum) {
+    startup,
+    pool: *zio.Runtime,
+    unavailable,
+};
+
+fn dispatch(execution: Execution, comptime work: anytype, args: anytype, result: *Result) void {
+    switch (execution) {
+        .startup => @call(.auto, work, args),
+        .unavailable => result.failWith(SQLITE_INTERRUPT, "SQLite worker runtime is unavailable"),
+        .pool => |runtime| {
+            var blocking = runtime.spawnBlocking(work, args) catch |err| {
+                switch (err) {
+                    error.RuntimeShutdown => result.failWith(SQLITE_INTERRUPT, "SQLite worker runtime is shutting down"),
+                    else => result.failWith(SQLITE_BUSY, "SQLite worker could not be started"),
+                }
+                return;
+            };
+            blocking.join();
+        },
     }
-    runBlocking(job);
 }
 
 /// The token handed back when there is no resource to hand back.
@@ -711,187 +772,235 @@ pub const MODE_READ_WRITE: u8 = 1;
 /// read-only directory declaration admits.
 pub const MODE_READ_ONLY: u8 = 2;
 
-/// `Sqlite.Db.open_with!`: open or create a database.
+const memory_path = ":memory:";
+
+fn stopIfShuttingDown(_: ?*anyopaque) callconv(.c) c_int {
+    // An interrupt requested just before SQLite begins running a statement
+    // has no effect on that statement. The progress hook covers that window.
+    return @intFromBool(shutting_down.load(.acquire));
+}
+
+const OpenJob = struct {
+    root: []const u8,
+    path: []const u8,
+    mode: u8,
+    busy_timeout_ms: c_int,
+    result: *Result,
+    handle: ?*anyopaque = null,
+
+    fn run(self: *OpenJob) void {
+        const result = self.result;
+        if (shutting_down.load(.acquire)) {
+            result.failWith(SQLITE_INTERRUPT, "SQLite is shutting down");
+            return;
+        }
+        if (!initialize()) {
+            result.failWith(SQLITE_MISUSE, "SQLite could not be initialized");
+            return;
+        }
+
+        const allocator = result.allocator;
+        const path = self.resolve(allocator) catch |err| {
+            switch (err) {
+                error.PathInvalid => result.failWith(ERR_PATH_INVALID, "database path is not permitted beneath its directory"),
+                error.NotGranted => result.failWith(ERR_PERMISSION_DENIED, "database directory handle has no authority"),
+                else => result.failWith(SQLITE_CANTOPEN, "the directory for this database could not be opened"),
+            }
+            return;
+        };
+        defer allocator.free(path);
+
+        var handle: ?*anyopaque = null;
+        const rc = rocray_sqlite_open(path.ptr, @intCast(self.mode), self.busy_timeout_ms, &handle);
+        if (rc != SQLITE_OK) {
+            result.fail(@intCast(rc), handle);
+            if (handle) |failed| _ = rocray_sqlite_close(failed);
+            return;
+        }
+
+        // SQLite opens one file beneath the granted root. ATTACH must never
+        // extend that authority to another file.
+        _ = sqlite3_limit(handle, SQLITE_LIMIT_ATTACHED, 0);
+        sqlite3_progress_handler(handle, 1000, stopIfShuttingDown, null);
+        self.handle = handle;
+    }
+
+    fn resolve(self: *const OpenJob, allocator: std.mem.Allocator) ![:0]u8 {
+        if (self.root.len == 0 and std.mem.eql(u8, self.path, memory_path)) {
+            return allocator.dupeSentinel(u8, memory_path, 0);
+        }
+        var threaded: std.Io.Threaded = .init(allocator, .{});
+        defer threaded.deinit();
+        const io = threaded.io();
+        const dir = try confined_path.openRoot(io, self.root, false);
+        defer dir.close(io);
+        const create = self.mode == MODE_READ_WRITE_CREATE;
+        const resolved = try confined_path.checkedPath(io, self.root, dir, self.path, create, allocator);
+        defer allocator.free(resolved);
+        return allocator.dupeSentinel(u8, resolved, 0);
+    }
+};
+
+fn openFailure(roc_host: *RocHost, code: i64, message: []const u8) OpenOutcome {
+    return .{ .err = code, .message = abi.RocStr.fromSlice(message, roc_host), .db = invalidHandle() };
+}
+
+/// Open a connection within a reservation made before its filesystem work.
 pub fn open(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
+    root_arg: abi.RocStr,
     path_arg: abi.RocStr,
     mode: u8,
     busy_timeout_ms: u64,
     max_result_bytes: u64,
 ) OpenOutcome {
-    _ = rt;
-    const allocator = workerAllocator();
-
-    if (!initialize()) {
-        return .{
-            .err = @intCast(SQLITE_MISUSE),
-            .message = abi.RocStr.fromSlice("SQLite could not be initialized", roc_host),
-            .db = invalidHandle(),
-        };
+    if (max_result_bytes > max_result_payload_bytes) {
+        return openFailure(roc_host, SQLITE_RANGE, "SQLite result payload limit exceeds 64 MiB");
     }
+    if (busy_timeout_ms > std.math.maxInt(c_int)) {
+        return openFailure(roc_host, SQLITE_RANGE, "SQLite busy timeout exceeds 2147483647 milliseconds");
+    }
+    if (db_heap.active() + pending_opens >= max_connections) {
+        return openFailure(roc_host, ERR_TOO_MANY_CONNECTIONS, "too many open database connections");
+    }
+    pending_opens += 1;
+    defer pending_opens -= 1;
 
-    const path = dupeZ(allocator, path_arg) orelse return .{
-        .err = @intCast(SQLITE_MISUSE),
-        .message = abi.RocStr.fromSlice("not enough memory to open this database", roc_host),
-        .db = invalidHandle(),
-    };
+    const allocator = workerAllocator();
+    const root = allocator.dupe(u8, root_arg.asSlice()) catch
+        return openFailure(roc_host, SQLITE_BUSY, "not enough memory to copy this database directory");
+    defer allocator.free(root);
+    const path = allocator.dupe(u8, path_arg.asSlice()) catch
+        return openFailure(roc_host, SQLITE_BUSY, "not enough memory to copy this database path");
     defer allocator.free(path);
 
-    var handle: ?*anyopaque = null;
-    const rc = rocray_sqlite_open(path.ptr, @intCast(mode), @intCast(@min(busy_timeout_ms, std.math.maxInt(c_int))), &handle);
-    if (rc != SQLITE_OK) {
-        var message = abi.RocStr.empty();
-        if (rocray_sqlite_errmsg(handle)) |text| {
-            message = abi.RocStr.fromSlice(std.mem.span(text), roc_host);
-        }
-        // sqlite3_open_v2 hands back a handle even when it failed, so the
-        // message could be read off it; it still has to be closed.
-        if (handle) |failed| _ = rocray_sqlite_close(failed);
-        return .{ .err = @intCast(rc), .message = message, .db = invalidHandle() };
-    }
-
-    // An app opens a database beneath a directory handle, and that file is the
-    // only one it gets: with no attached-database slots, `ATTACH` cannot reach
-    // a second file anywhere else. The shim already did this for read-only
-    // connections; every connection needs it.
-    _ = sqlite3_limit(handle, SQLITE_LIMIT_ATTACHED, 0);
+    var result = Result.init(allocator);
+    defer result.deinit();
+    var job = OpenJob{
+        .root = root,
+        .path = path,
+        .mode = mode,
+        .busy_timeout_ms = @intCast(busy_timeout_ms),
+        .result = &result,
+    };
+    dispatch(execution, OpenJob.run, .{&job}, &result);
+    if (result.err != 0) return openFailure(roc_host, result.err, result.message.items);
 
     const stored = db_heap.insert(0, .{
-        .db = handle,
+        .db = job.handle.?,
         .mutex = .{},
         .in_flight = false,
         .max_result_bytes = max_result_bytes,
-    }) orelse {
-        _ = rocray_sqlite_close(handle);
-        return .{
-            .err = ERR_TOO_MANY_CONNECTIONS,
-            .message = abi.RocStr.fromSlice("too many open database connections", roc_host),
-            .db = invalidHandle(),
-        };
-    };
-
+    }) orelse unreachable; // reserved before dispatch
     return .{ .err = 0, .message = abi.RocStr.empty(), .db = stored };
 }
 
-/// `Sqlite.Db.close!`: close now rather than at the final handle release.
+/// Explicitly close a connection on a worker.
 pub fn close(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
     db_arg: *u64,
 ) StatusOutcome {
     const resource = db_heap.get(db_arg.*) orelse return .{
-        .err = @intCast(SQLITE_MISUSE),
+        .err = SQLITE_MISUSE,
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
     };
 
     var result = Result.init(workerAllocator());
     defer result.deinit();
-
-    // Closing takes the connection's mutex like any other operation, so a
-    // query already in flight finishes first rather than having its database
-    // freed underneath it. That wait belongs on the pool, not on the frame.
-    var job = Job{
-        .resource = resource,
-        .borrowed_stmt = null,
-        .sql = null,
-        .bindings = &.{},
-        .script = false,
-        .result = &result,
-    };
     const Closer = struct {
-        fn run(inner: *Job) void {
-            inner.resource.mutex.lock();
-            defer inner.resource.mutex.unlock();
-            const db = inner.resource.db orelse return;
-            const rc = rocray_sqlite_close(db);
-            inner.resource.db = null;
-            if (rc != SQLITE_OK) inner.result.err = @intCast(rc);
+        fn run(db_resource: *DbResource, outcome: *Result) void {
+            db_resource.mutex.lock();
+            defer db_resource.mutex.unlock();
+            db_resource.control.lock();
+            const db = db_resource.db;
+            db_resource.db = null;
+            db_resource.control.unlock();
+            if (db) |handle| {
+                const rc = rocray_sqlite_close(handle);
+                if (rc != SQLITE_OK) outcome.err = @intCast(rc);
+            }
         }
     };
-    if (rt) |runtime| {
-        var blocking = runtime.spawnBlocking(Closer.run, .{&job}) catch {
-            Closer.run(&job);
-            return toRocStatus(StatusOutcome, roc_host, &result);
-        };
-        blocking.join();
-    } else {
-        Closer.run(&job);
-    }
-
+    dispatch(execution, Closer.run, .{ resource, &result }, &result);
     return toRocStatus(StatusOutcome, roc_host, &result);
 }
 
-/// `Db.prepare!`: compile one statement for reuse.
+const PrepareJob = struct {
+    resource: *DbResource,
+    sql: [:0]const u8,
+    result: *Result,
+    statement: ?*anyopaque = null,
+
+    fn run(self: *PrepareJob) void {
+        const resource = self.resource;
+        resource.mutex.lock();
+        defer resource.mutex.unlock();
+        const db = resource.beginOperation(self.result) orelse return;
+        defer resource.finishOperation();
+
+        var compiled: ?*anyopaque = null;
+        var tail_used: c_int = 0;
+        if (rocray_sqlite_prepare(db, self.sql.ptr, &compiled, &tail_used) != SQLITE_OK) {
+            self.result.fail(@intCast(rocray_sqlite_extended_errcode(db)), db);
+            if (compiled) |partial| _ = rocray_sqlite_finalize(partial);
+            return;
+        }
+        if (tail_used != 0) {
+            if (compiled) |extra| _ = rocray_sqlite_finalize(extra);
+            self.result.failWith(ERR_MULTIPLE_STATEMENTS, "more than one statement in this query");
+            return;
+        }
+        self.statement = compiled;
+    }
+};
+
+fn prepareFailure(roc_host: *RocHost, code: i64, message: []const u8) PrepareOutcome {
+    return .{ .err = code, .message = abi.RocStr.fromSlice(message, roc_host), .stmt = invalidHandle() };
+}
+
+/// Compile a statement on a worker within a reserved statement slot.
 pub fn prepare(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
     db_arg: *u64,
     sql_arg: abi.RocStr,
 ) PrepareOutcome {
-    _ = rt;
+    const resource = db_heap.get(db_arg.*) orelse
+        return prepareFailure(roc_host, SQLITE_MISUSE, "database handle is closed");
+    if (stmt_heap.active() + pending_prepares >= max_statements) {
+        return prepareFailure(roc_host, ERR_TOO_MANY_STATEMENTS, "too many prepared statements");
+    }
+    pending_prepares += 1;
+    defer pending_prepares -= 1;
+
     const allocator = workerAllocator();
-
-    const resource = db_heap.get(db_arg.*) orelse return .{
-        .err = @intCast(SQLITE_MISUSE),
-        .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
-        .stmt = invalidHandle(),
-    };
-    const db = resource.db orelse return .{
-        .err = @intCast(SQLITE_MISUSE),
-        .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
-        .stmt = invalidHandle(),
-    };
-
-    const sql = dupeZ(allocator, sql_arg) orelse return .{
-        .err = @intCast(SQLITE_MISUSE),
-        .message = abi.RocStr.fromSlice("not enough memory to prepare this statement", roc_host),
-        .stmt = invalidHandle(),
-    };
+    const sql = dupeZ(allocator, sql_arg) orelse
+        return prepareFailure(roc_host, SQLITE_BUSY, "not enough memory to prepare this statement");
     defer allocator.free(sql);
 
-    // Compiling parses SQL and reads the schema; it does not run the statement,
-    // so it stays on the calling thread under the connection's mutex rather
-    // than paying for a pool round trip.
-    resource.mutex.lock();
-    defer resource.mutex.unlock();
+    var result = Result.init(allocator);
+    defer result.deinit();
+    var job = PrepareJob{ .resource = resource, .sql = sql, .result = &result };
+    dispatch(execution, PrepareJob.run, .{&job}, &result);
+    if (result.err != 0) return prepareFailure(roc_host, result.err, result.message.items);
 
-    var compiled: ?*anyopaque = null;
-    var tail_used: c_int = 0;
-    const rc = rocray_sqlite_prepare(db, sql.ptr, &compiled, &tail_used);
-    if (rc != SQLITE_OK) {
-        var message = abi.RocStr.empty();
-        if (rocray_sqlite_errmsg(db)) |text| {
-            message = abi.RocStr.fromSlice(std.mem.span(text), roc_host);
-        }
-        if (compiled) |partial| _ = rocray_sqlite_finalize(partial);
-        return .{ .err = @intCast(rocray_sqlite_extended_errcode(db)), .message = message, .stmt = invalidHandle() };
-    }
-    if (tail_used != 0) {
-        if (compiled) |extra| _ = rocray_sqlite_finalize(extra);
-        return .{
-            .err = ERR_MULTIPLE_STATEMENTS,
-            .message = abi.RocStr.fromSlice("more than one statement in this query", roc_host),
-            .stmt = invalidHandle(),
-        };
-    }
-
-    const stored = stmt_heap.insert(0, .{ .stmt = compiled, .db_token = db_arg.* }) orelse {
-        if (compiled) |rejected| _ = rocray_sqlite_finalize(rejected);
-        return .{
-            .err = ERR_TOO_MANY_STATEMENTS,
-            .message = abi.RocStr.fromSlice("too many prepared statements", roc_host),
-            .stmt = invalidHandle(),
-        };
-    };
-
+    // A statement can dispatch after the application drops its Db. Keep the
+    // connection slot live while a statement can give its worker a pointer.
+    abi.increfBox(@ptrCast(db_arg), 1);
+    const stored = stmt_heap.insert(0, .{
+        .stmt = job.statement,
+        .db_token = db_arg.*,
+        .owner = .{ .db = db_arg, .roc_host = roc_host },
+    }) orelse unreachable; // reserved before dispatch
     return .{ .err = 0, .message = abi.RocStr.empty(), .stmt = stored };
 }
 
 /// `Stmt.execute!` / `Stmt.query!`: run an already-compiled statement.
 pub fn runStmt(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
     stmt_arg: *u64,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
 ) QueryOutcome {
@@ -922,14 +1031,14 @@ pub fn runStmt(
         .script = false,
         .result = &result,
     };
-    dispatch(rt, &job);
+    dispatch(execution, runBlocking, .{&job}, &result);
     return toRocQuery(Record, roc_host, &result);
 }
 
 /// `Db.execute!` / `Db.query!`: compile, run and finalize in one call.
 pub fn runOnce(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
     db_arg: *u64,
     sql_arg: abi.RocStr,
     bindings_arg: abi.RocList(abi.HostSqlite_run_stmtArg1),
@@ -961,14 +1070,14 @@ pub fn runOnce(
         .script = false,
         .result = &result,
     };
-    dispatch(rt, &job);
+    dispatch(execution, runBlocking, .{&job}, &result);
     return toRocQuery(Record, roc_host, &result);
 }
 
 /// `Db.exec_script!`: run every statement in a script.
 pub fn execScript(
     roc_host: *RocHost,
-    rt: ?*zio.Runtime,
+    execution: Execution,
     db_arg: *u64,
     sql_arg: abi.RocStr,
 ) StatusOutcome {
@@ -996,7 +1105,7 @@ pub fn execScript(
         .script = true,
         .result = &result,
     };
-    dispatch(rt, &job);
+    dispatch(execution, runBlocking, .{&job}, &result);
     return toRocStatus(Record, roc_host, &result);
 }
 
@@ -1178,6 +1287,47 @@ test "a query encodes every column type into cells and one payload" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 2 }, blob);
 }
 
+test "worker unavailability does not run a waiting SQLite operation inline" {
+    const Operation = struct {
+        fn run(called: *bool) void {
+            called.* = true;
+        }
+    };
+    var called = false;
+    var result = Result.init(std.testing.allocator);
+    defer result.deinit();
+    dispatch(.unavailable, Operation.run, .{&called}, &result);
+    try std.testing.expect(!called);
+    try std.testing.expectEqual(@as(i64, SQLITE_INTERRUPT), result.err);
+}
+
+test "a zero result limit permits only empty text and blob payloads" {
+    defer db_heap.deinitAll();
+    const db = try testOpenMemory();
+    const resource = db_heap.get(db.*).?;
+    resource.max_result_bytes = 0;
+    var result = Result.init(std.testing.allocator);
+    defer result.deinit();
+    var job = Job{
+        .resource = resource,
+        .borrowed_stmt = null,
+        .sql = "SELECT '', x'', 7",
+        .bindings = &.{},
+        .script = false,
+        .result = &result,
+    };
+    runBlocking(&job);
+    try std.testing.expectEqual(@as(i64, 0), result.err);
+    try std.testing.expectEqual(@as(u64, 1), result.row_count);
+    try std.testing.expectEqual(@as(usize, 0), result.payload.items.len);
+
+    job.sql = "SELECT 'one byte would be too many'";
+    runBlocking(&job);
+    try std.testing.expectEqual(ERR_RESULT_TOO_LARGE, result.err);
+    try std.testing.expectEqual(@as(u64, 0), result.row_count);
+    try std.testing.expectEqual(@as(usize, 0), result.cells.items.len);
+}
+
 test "a payload cap refuses the result rather than truncating it" {
     defer db_heap.deinitAll();
     const db = try testOpenMemory();
@@ -1273,10 +1423,25 @@ test "a closed connection answers misuse rather than reaching freed memory" {
     try std.testing.expectEqual(@as(i64, SQLITE_MISUSE), result.err);
 }
 
-test "interrupting a connection with nothing in flight is harmless" {
+test "shutdown refuses new SQLite work on an idle connection" {
+    defer shutdown();
     defer db_heap.deinitAll();
-    _ = try testOpenMemory();
+    const db = try testOpenMemory();
+    var result = Result.init(std.testing.allocator);
+    defer result.deinit();
+    var job = Job{
+        .resource = db_heap.get(db.*).?,
+        .borrowed_stmt = null,
+        .sql = "SELECT 1",
+        .bindings = &.{},
+        .script = false,
+        .result = &result,
+    };
+
     interruptAll();
+    runBlocking(&job);
+    try std.testing.expectEqual(@as(i64, SQLITE_INTERRUPT), result.err);
+    try std.testing.expectEqual(@as(u64, 0), result.row_count);
 }
 
 test "a prepared statement can be run twice with different bindings" {

@@ -27,9 +27,11 @@ import http.Response
 ##     --http-expect-error TEXT    pass when the send fails and says TEXT
 ##     --http-timeout-ms N         override Http.default_config.timeout_ms
 ##     --http-max-bytes N          override Http.default_config.max_response_bytes
+##     --http-get-utf8 yes         exercise the UTF-8 convenience method
 Model : {
 	url : Str,
 	config : Http.Config,
+	method : [Raw, Utf8],
 	expectation : Expectation,
 	cycle : U64,
 	outcome : Outcome,
@@ -67,6 +69,7 @@ init! = App.init_for_args(
 				timeout_ms: flag_number(args, "--http-timeout-ms", Http.default_config.timeout_ms),
 				max_response_bytes: flag_number(args, "--http-max-bytes", Http.default_config.max_response_bytes),
 			},
+			method: if (flag_value(args, "--http-get-utf8", "") == "yes") Utf8 else Raw,
 			expectation: if (expected_error == "") Body(flag_value(args, "--http-expect", "")) else Failure(expected_error),
 			cycle: 0,
 			outcome: Pending,
@@ -104,7 +107,14 @@ update! = |model, input, io| {
 	if model.cycle == 0 {
 		url = model.url
 		config = model.config
-		Task.spawn!(input, || fetch!(io, config, url))
+		method = model.method
+		Task.spawn!(
+			input,
+			|| match method {
+				Raw => fetch!(io, config, url)
+				Utf8 => fetch_utf8!(io, config, url)
+			},
+		)
 	}
 	outcome = List.fold(input.messages, model.outcome, |current, message| judge(current, message, model.expectation))
 	next = { ..model, cycle: model.cycle + 1, outcome }
@@ -131,6 +141,20 @@ fetch! = |io, config, url|
 				Err(_) => Failed("the response body was not valid UTF-8")
 			}
 		Err(err) => Failed(describe(err))
+	}
+
+## An error in the convenience method must still be named by its typed tag.
+fetch_utf8! : App.Io, Http.Config, Str => Msg
+fetch_utf8! = |io, config, url|
+	match Url.parse(url) {
+		Err(_) => Failed("the URL was rejected before any host effect ran")
+		Ok(parsed) => match io.http().get_utf8_with!(config, parsed) {
+			Err(BadBody(_)) => Failed("the response body was not valid UTF-8")
+			Err(HttpErr(err)) => Failed(describe_transport(err))
+			Err(PermissionDenied) => Failed("the origin was not declared")
+			Err(InvalidUrl(_)) => Failed("the URL was rejected before any host effect ran")
+			Ok(_) => Failed("the UTF-8 fetch was expected to fail but it succeeded")
+		}
 	}
 
 ## Decide the run's verdict from one delivered message.
@@ -163,15 +187,25 @@ judge = |current, message, expectation|
 	}
 
 ## Name a send failure without depending on how the platform renders it.
-describe : [PermissionDenied, InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str
+describe : [PermissionDenied, InvalidUrl(_), HttpErr(Http.TransportErr)] -> Str
 describe = |err|
 	match err {
 		PermissionDenied => "the origin was not declared"
 		InvalidUrl(_) => "the URL was rejected before any host effect ran"
-		HttpErr(Timeout) => "the request timed out"
-		HttpErr(NetworkError) => "the request failed at the network layer"
-		HttpErr(MalformedResponse) => "the reply was not a well-formed HTTP response"
-		HttpErr(Other(bytes)) => Str.from_utf8(bytes) ?? "the host reported an unprintable failure"
+		HttpErr(transport) => describe_transport(transport)
+	}
+
+describe_transport : Http.TransportErr -> Str
+describe_transport = |err|
+	match err {
+		Busy => "the HTTP response budget is busy"
+		ResponseLimitUnsupported => "the requested response limit is unsupported"
+		ResponseTooLarge => "the response body is larger than max_response_bytes"
+		Unavailable => "the HTTP runtime is unavailable"
+		Timeout => "the request timed out"
+		NetworkError => "the request failed at the network layer"
+		MalformedResponse => "the reply was not a well-formed HTTP response"
+		Other(bytes) => Str.from_utf8(bytes) ?? "the host reported an unprintable failure"
 	}
 
 render! : Model, _ => Try({}, [Exit(I64)])

@@ -13,7 +13,7 @@
 # nightly named below; it runs the scripts under scripts/. Bare `roc` is the
 # latest nightly, which the machine provides: the platform, its examples and
 # its tests name no compiler.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/DBtzmMfrSgt6nCGVAcZYCVPxWbhpqw3MXpm6sdQzMn4v.tar.zst" }
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.15.0-rc.1/FwWWY6PczB7QsUoWKgaLTuBGGajLjfA4MhaLD36sJxrN.tar.zst" }
 
 import pf.Recipes
 
@@ -24,7 +24,7 @@ config = [
 	Environment(
 		"scripts",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-18-a520eed"))]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-11-24-ff5e544"))]),
 			# Every bundle the scripts depend on, including dependencies of
 			# dependencies: `roc-stable deps scripts/check_glue.roc` lists them.
 			RocPackages([
@@ -45,7 +45,7 @@ config = [
 					"zig",
 					|system|
 						match system {
-							"x86_64-linux" => Archive("https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz", TarXz, "zig-x86_64-linux-0.17.1/zig")
+							"x86_64-linux" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-x86_64-linux-0.17.1.tar.xz", TarXz, "zig-x86_64-linux-0.17.1/zig"), ["https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"])
 							"aarch64-darwin" => Archive("https://ziglang.org/download/0.17.1/zig-aarch64-macos-0.17.1.tar.xz", TarXz, "zig-aarch64-macos-0.17.1/zig")
 							_ => Unavailable
 						},

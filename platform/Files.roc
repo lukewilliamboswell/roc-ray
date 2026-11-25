@@ -64,7 +64,7 @@ import Time
 
 Files := [].{
 
-	## One entry returned by `list!`.
+	## One entry returned by `list!` or `DirectoryCursor.next!`.
 	Entry : { name : Str, kind : EntryKind }
 
 	## The filesystem kind relevant to a non-recursive directory walk.
@@ -97,6 +97,23 @@ Files := [].{
 	## exactly the same way.
 	ReadBytesError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
+	## Options for a whole-file read. The ceiling includes the entire file.
+	## Zero permits only an empty file.
+	ReadBytesRequest := {
+		path : Str,
+		max_bytes : U64 ?? default_read_bytes_max,
+	}
+
+	## Whole-file read options for a file that was already designated.
+	ReadBytesOptions := {
+		max_bytes : U64 ?? default_read_bytes_max,
+	}
+
+	## `TooLarge` means the file exceeds the request's limit.
+	## `LimitExceedsMax` means the requested limit exceeds the host's 64 MiB
+	## per-file maximum. `Busy` means the host cannot admit this read now.
+	ReadBytesWithError : [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, LimitExceedsMax]
+
 	## Why `list!` produced no directory entries.
 	##
 	## `NotADirectory` is a path that is there and is a file. `TooLarge` is a
@@ -104,6 +121,52 @@ Files := [].{
 	## encoded names, whichever binds first. The rest mean what they mean for a
 	## read, `ReadFailed` included.
 	ListError : [PermissionDenied, PathInvalid, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+
+	## Why a directory cursor could not be opened. `Busy` means the host
+	## has no cursor slot or could not admit the worker operation.
+	CursorOpenError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, Unavailable]
+
+	## A nonempty batch in filesystem order, or the end of the directory.
+	CursorBatch : [Entries(List(Entry)), End]
+
+	## Why a cursor could not deliver its next batch.
+	##
+	## `Busy` means a call already has the cursor or the host could not admit
+	## the work. The refused call consumes no entries.
+	## `PermissionDenied` is a resource-free stub. `Unavailable` means the
+	## app is shutting down. `InvalidName` means the filesystem supplied a
+	## name this API cannot represent as UTF-8. `InvalidName` and `ReadFailed`
+	## end the enumeration and are returned again by subsequent calls.
+	CursorReadError : [PermissionDenied, Busy, InvalidName, ReadFailed, Unavailable]
+
+	## One open, non-recursive directory enumeration. Copies share its
+	## position. Drop the final reference to release it, including before
+	## reaching the end. This is a live view in filesystem order. While the
+	## directory is unchanged it yields each entry once. Concurrent changes
+	## may cause entries to be omitted or repeated.
+	DirectoryCursor :: Resource.DirectoryCursor.{
+
+		## Resource-free handle for pure tests.
+		stub : DirectoryCursor
+		stub = DirectoryCursor.(Resource.Handle.stub({}))
+
+		## Advance by up to 64 entries. Once `End` arrives it is returned
+		## again on subsequent calls. If a read encounters a terminal error
+		## after obtaining entries, those entries are returned first.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		next! : DirectoryCursor => Try(CursorBatch, CursorReadError)
+		next! = |DirectoryCursor.(handle)|
+			match Host.files_cursor_next!(handle) {
+				Ok(bytes) => if (List.is_empty(bytes)) Ok(End) else Ok(Entries(decode_listing(bytes)))
+				Err(PermissionDenied) => Err(PermissionDenied)
+				Err(Busy) => Err(Busy)
+				Err(InvalidName) => Err(InvalidName)
+				Err(ReadFailed) => Err(ReadFailed)
+				Err(Unavailable) => Err(Unavailable)
+			}
+	}
 
 	## What one path is, how big it is, and when it last changed.
 	##
@@ -188,16 +251,22 @@ Files := [].{
 		## Read a bounded file as ordinary Roc bytes: at most 16 mebibytes, and
 		## a file past that is `TooLarge`.
 		##
-		## Nothing is copied, so the list owns host-backed storage; at most 32
-		## such allocations are live at once, and a read made while all 32 are
-		## held returns `Busy` without touching the disk. Retaining a sublist
-		## retains the whole allocation, which `List.release_excess_capacity`
-		## releases by copying out the part worth keeping.
+		## As with `read_bytes_with!`, a sublist retains the entire backing
+		## allocation. `List.release_excess_capacity` copies out the part worth
+		## keeping.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
 		read_bytes! : ReadDir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |ReadDir.(handle), path| perform_read_bytes!(handle, path)
+
+		## Read the entire file within the request's ceiling. The worker hands
+		## its buffer to Roc without a payload copy.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		read_bytes_with! : ReadDir, ReadBytesRequest => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |ReadDir.(handle), { path, max_bytes }| perform_read_bytes_with!(handle, path, max_bytes)
 
 		## List one directory without walking its children; `""` lists this
 		## handle's own directory. Entry order is the filesystem's, unsorted.
@@ -208,6 +277,15 @@ Files := [].{
 		## the task; refused in `update!` and `render!`.
 		list! : ReadDir, Str => Try(List(Entry), ListError)
 		list! = |ReadDir.(handle), path| perform_list!(handle, path)
+
+		## Open a cursor beneath this handle. Use `""` to enumerate the
+		## handle's own directory. The host admits up to 16 open or opening
+		## cursors, including cursors retained at end of input.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_cursor! : ReadDir, Str => Try(DirectoryCursor, CursorOpenError)
+		open_cursor! = |ReadDir.(handle), path| perform_open_cursor!(handle, path)
 
 		## What one path is, how big it is, and when it last changed; `""` is
 		## this handle's own directory. A symbolic link is reported as `Other`
@@ -260,12 +338,26 @@ Files := [].{
 		read_bytes! : Dir, Str => Try(List(U8), ReadBytesError)
 		read_bytes! = |Dir.(handle), path| perform_read_bytes!(handle, path)
 
+		## As `ReadDir.read_bytes_with!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		read_bytes_with! : Dir, ReadBytesRequest => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |Dir.(handle), { path, max_bytes }| perform_read_bytes_with!(handle, path, max_bytes)
+
 		## As `ReadDir.list!`.
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 		## the task; refused in `update!` and `render!`.
 		list! : Dir, Str => Try(List(Entry), ListError)
 		list! = |Dir.(handle), path| perform_list!(handle, path)
+
+		## As `ReadDir.open_cursor!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_cursor! : Dir, Str => Try(DirectoryCursor, CursorOpenError)
+		open_cursor! = |Dir.(handle), path| perform_open_cursor!(handle, path)
 
 		## As `ReadDir.metadata!`.
 		##
@@ -329,6 +421,13 @@ Files := [].{
 		## the task; refused in `update!` and `render!`.
 		read_bytes! : Designated => Try(List(U8), ReadBytesError)
 		read_bytes! = |Designated.(item)| perform_read_bytes!(parent_handle(item), item.name)
+
+		## Read this designated file within an explicit byte ceiling.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
+		read_bytes_with! : Designated, ReadBytesOptions => Try(List(U8), ReadBytesWithError)
+		read_bytes_with! = |Designated.(item), { max_bytes }| perform_read_bytes_with!(parent_handle(item), item.name, max_bytes)
 
 		## What the designated item is, how big it is, and when it last changed.
 		##
@@ -666,10 +765,26 @@ perform_read_text! = |handle, path|
 		Err(Unavailable) => Err(Unavailable)
 	}
 
+default_read_bytes_max : U64
+default_read_bytes_max = 16 * 1024 * 1024
+
 perform_read_bytes! : Handle, Str => Try(List(U8), Files.ReadBytesError)
 perform_read_bytes! = |handle, path|
-	match Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path)) {
-		# closed error union to open error union
+	read_bytes_result(
+		Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path), default_read_bytes_max),
+		|| crash "Files.read_bytes!: the host must admit the default per-file limit",
+	)
+
+perform_read_bytes_with! : Handle, Str, U64 => Try(List(U8), Files.ReadBytesWithError)
+perform_read_bytes_with! = |handle, path, max_bytes|
+	read_bytes_result(
+		Host.files_read_bytes!(handle.authority, handle.root, joined(handle.prefix, path), max_bytes),
+		|| Err(LimitExceedsMax),
+	)
+
+read_bytes_result : Try(List(U8), Host.FilesReadBytesError), (() -> Try(List(U8), _)) -> Try(List(U8), _)
+read_bytes_result = |result, on_limit_exceeded|
+	match result {
 		Ok(bytes) => Ok(bytes)
 		Err(PermissionDenied) => Err(PermissionDenied)
 		Err(PathInvalid) => Err(PathInvalid)
@@ -678,6 +793,7 @@ perform_read_bytes! = |handle, path|
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(TooLarge) => Err(TooLarge)
 		Err(Unavailable) => Err(Unavailable)
+		Err(LimitExceedsMax) => on_limit_exceeded()
 	}
 
 perform_list! : Handle, Str => Try(List(Files.Entry), Files.ListError)
@@ -692,6 +808,19 @@ perform_list! = |handle, path|
 		Err(NotFound) => Err(NotFound)
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_open_cursor! : Handle, Str => Try(Files.DirectoryCursor, Files.CursorOpenError)
+perform_open_cursor! = |handle, path|
+	match Host.files_open_cursor!(handle.authority, handle.root, joined(handle.prefix, path)) {
+		Ok(cursor) => Ok(Files.DirectoryCursor.(cursor))
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(Busy) => Err(Busy)
+		Err(NotADirectory) => Err(NotADirectory)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
 		Err(Unavailable) => Err(Unavailable)
 	}
 

@@ -548,7 +548,7 @@ Host := [].{
 	FilesReadTextError : [PermissionDenied, PathInvalid, Busy, NotFound, NotUtf8, ReadFailed, TooLarge, Unavailable]
 
 	## Failures while reading a file as bytes.
-	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable]
+	FilesReadBytesError : [PermissionDenied, PathInvalid, Busy, NotFound, ReadFailed, TooLarge, Unavailable, LimitExceedsMax]
 
 	## Failures while listing one directory.
 	FilesListError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, TooLarge, Unavailable]
@@ -574,11 +574,19 @@ Host := [].{
 
 	## Read bounded bytes without copying the payload.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
-	files_read_bytes! : Resource.Authority, Str, Str => Try(List(U8), FilesReadBytesError)
+	files_read_bytes! : Resource.Authority, Str, Str, U64 => Try(List(U8), FilesReadBytesError)
 
 	## List one directory into the encoded form `Files` decodes.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_list! : Resource.Authority, Str, Str => Try(List(U8), FilesListError)
+
+	## Open a non-recursive directory enumeration beneath an existing grant.
+	## Legal in `init!` and tasks.
+	files_open_cursor! : Resource.Authority, Str, Str => Try(Resource.DirectoryCursor, [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, Unavailable])
+
+	## Read one encoded batch. An empty batch marks the end.
+	## Legal in `init!` and tasks.
+	files_cursor_next! : Resource.DirectoryCursor => Try(List(U8), [PermissionDenied, Busy, InvalidName, ReadFailed, Unavailable])
 
 	## Failures while replacing a whole file.
 	##
@@ -607,7 +615,7 @@ Host := [].{
 	## empty because `Http` rejects extended methods first.
 	##
 	## `timeout_ms == 0` means no deadline. `max_response_bytes` caps the
-	## decompressed body.
+	## decompressed body, including a zero-byte limit for an empty response.
 	HttpRequestToHost : {
 		method : U8,
 		method_ext : Str,
@@ -629,7 +637,7 @@ Host := [].{
 	##
 	## `Other` carries the host's own description, so a host that learns to
 	## distinguish a new failure still reports something an app can print.
-	HttpSendError : [PermissionDenied, MalformedResponse, NetworkError, Other(Str), Timeout]
+	HttpSendError : [Busy, MalformedResponse, NetworkError, Other(Str), PermissionDenied, ResponseLimitUnsupported, ResponseTooLarge, Timeout, Unavailable]
 
 	## Send one request and wait for the whole response.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
@@ -823,7 +831,7 @@ Host := [].{
 
 	## Replace the clipboard with UTF-8 text.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	window_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied])
+	window_set_clipboard_text! : Resource.Authority, Str => Try({}, [PermissionDenied, TooLarge, Unavailable])
 
 	## Suggest a logical size; `NotSupported` means a fixed-size target.
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
@@ -1458,7 +1466,7 @@ Host := [].{
 	}
 
 	## Failures while reading pixels back from a source.
-	CapturePixelError : [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable]
+	CapturePixelError : [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable]
 
 	## A source-relative pixel coordinate.
 	CapturePixelProbe : {

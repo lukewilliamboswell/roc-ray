@@ -36,8 +36,12 @@ def compiler_args(roc: str, command: str, source: Path) -> list[str]:
     if not cached_test_oom and (command, name) not in CACHE_EXCEPTIONS and not (command in ("build", "test") and name == "top_down"):
         return []
     version = compiler_version(roc)
-    # The November 23 nightly still hits both top_down failures.
-    if name == "top_down" and version == "Roc compiler version nightly-2026-11-23-b5c77fc":
+    # These nightlies still crash in Boxy lowering with cached checks or
+    # unspecialized builds and tests of top_down.
+    if name == "top_down" and version in {
+        "Roc compiler version nightly-2026-11-23-b5c77fc",
+        "Roc compiler version nightly-2026-11-24-ff5e544",
+    }:
         return ["--no-cache"] if command == "check" else ["--specialize=yes"]
     if version != f"Roc compiler version {AFFECTED_NIGHTLY}":
         return []

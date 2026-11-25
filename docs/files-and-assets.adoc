@@ -87,6 +87,8 @@ Every handle has:
 
 * `read_text!(path)`: a UTF-8 file as a `Str`, up to 64 KiB;
 * `read_bytes!(path)`: a file as a `List(U8)`, up to 16 MiB;
+* `read_bytes_with!({ path, max_bytes })` reads the whole file if it fits the
+  requested byte ceiling.
 * `list!(path)`: the entries of a directory, each a name and a kind (`File`,
   `Dir`, or `Other`);
 * `metadata!(path)`: a path's kind, size in bytes, and modification time.
@@ -102,19 +104,65 @@ repo = model.repo
 Task.spawn!(input, || SmallReadFinished(repo.read_text!("README.md")))
 ----
 
+For an asset the app keeps in memory, set the ceiling to its largest expected
+file size.
+
+[source,roc]
+----
+rom = assets.read_bytes_with!({ path: "game.gba", max_bytes: 32 * 1024 * 1024 })?
+----
+
+Omit `max_bytes` for the same 16 MiB default as `read_bytes!`. A file exactly
+at the ceiling succeeds if capacity is available. A ceiling of zero permits
+an empty file. For a user-designated file, pass only options, for example
+`item.read_bytes_with!({ max_bytes: 32 * 1024 * 1024 })`.
+
 Each returns a typed error the app can `match` on. For a read:
 
 * `NotFound`: no file at that path;
 * `TooLarge`: a file past the size limit;
+* `LimitExceedsMax` means the requested ceiling is above the native host
+  maximum of 64 MiB.
 * `NotUtf8`: a file that is not valid text (`read_text!` only);
 * `PathInvalid` and `PermissionDenied`: see below;
 * `ReadFailed`: anything else, including the operating system refusing the
   read;
-* `Busy`: the host's 32 file-delivery slots are all held by byte lists the
-  app has kept, so nothing was read and the same call can succeed later;
+* `Busy` means a byte read could not start. The host reserves a delivery slot and
+  memory before reading. Retained lists and their slices keep that storage
+  in use. The same call can succeed later.
 * `Unavailable`: the app was shutting down.
 
 The https://lukewilliamboswell.github.io/roc-ray/api/[API reference] lists every error for every effect.
+
+=== Listing a large directory
+
+`list!` returns an entire directory and refuses a listing above 8192 entries
+or 1 MiB of encoded names. To walk a larger directory, open a cursor beneath
+a `Dir` or `ReadDir` and read a batch at a time. Use `""` to open the handle's
+own directory.
+
+[source,roc]
+----
+start_listing! : Files.ReadDir => Try(_, _)
+start_listing! = |repo| {
+    cursor = repo.open_cursor!("levels")?
+    batch = cursor.next!()?
+    Ok({ cursor, batch })
+}
+----
+
+Each call delivers up to 64 entries in filesystem order. Call again on the
+same cursor until it returns `End`. The cursor opens the directory once and
+each copy shares the same position. This is a live enumeration. Concurrent
+changes can cause entries to be omitted or repeated. Both operations wait and
+belong in `init!` or a task.
+
+The host admits at most 16 cursors, including ones still opening or held after
+`End`. Drop the last reference when you finish with one. `Busy` also reports
+another call already advancing that cursor and leaves its position untouched
+by the refused call. `InvalidName` reports a name that cannot be represented
+as UTF-8. It and `ReadFailed` end the cursor after any earlier entries from
+the batch have been delivered.
 
 === Paths beneath a handle
 
@@ -271,6 +319,24 @@ may be open. A query whose result exceeds one million cells, or the configured
 byte limit (16 MiB by default), is refused rather than truncated.
 Databases and statements close automatically when their last reference goes
 away; `Db.close!` closes one early.
+
+The configured methods accept the same per-connection limits on each kind
+of handle:
+
+[source,roc]
+----
+writable = io.sqlite().open_configured!(data, { path: "scores.db", busy_timeout_ms: 0 })?
+readonly = io.sqlite().open_read_with!(data.read_only(), {
+    path: "scores.db",
+    max_result_bytes: 4 * 1024 * 1024,
+})?
+scratch = io.sqlite().open_memory_with!({ max_result_bytes: 0 })?
+----
+
+The lock timeout defaults to five seconds. Zero means try acquiring the
+lock once. The result ceiling defaults to 16 MiB, with a maximum of 64 MiB.
+A ceiling of zero allows integer, real, null, empty text, and empty blob
+results. The one-million-cell limit applies to every result.
 
 https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/sqlite_scores/main.roc[SQLite Scores] keeps a high-score table
 that survives a restart.

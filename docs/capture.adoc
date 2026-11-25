@@ -154,9 +154,15 @@ without writing a file. The `source` is `Screen`, the last frame shown, or
 `Target(render_texture)`. Both are legal in `init!`, `update!`, and tasks, not
 in `render!`.
 
-The host only keeps a copy of the screen once an app starts reading it, so the
-first `Screen` read of a run returns `Unavailable` and later reads succeed. A
-headless run has no pixels and always returns `Unavailable`.
+The host keeps a screen snapshot once an app asks to read it. The first
+screen read and a read in a headless run return `Unavailable`. An oversized
+source or RGBA result returns `BudgetExceeded`. Choose a smaller source or a
+smaller region, depending on which exceeded the budget. A target read
+needs the whole source even when the requested region is small. `Busy` means
+other captures or retained byte lists are occupying capacity, so the same
+read may succeed later. A point or rectangle outside the source returns
+`RegionOutOfBounds`.
+
 https://github.com/lukewilliamboswell/roc-ray/blob/main/examples/input_inspector/main.roc[Input Inspector] uses one as an
 eyedropper.
 

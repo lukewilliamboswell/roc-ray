@@ -22,6 +22,7 @@ const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
 const cmd_effect = @import("cmd_effect.zig");
 const confined_path = @import("confined_path.zig");
+const directory_cursor = @import("directory_cursor.zig");
 const permissions = @import("permissions.zig");
 const observatory = @import("observatory.zig");
 const build_metadata = @import("build_metadata");
@@ -43,6 +44,7 @@ test {
     _ = cmd_effect;
     _ = permissions;
     _ = confined_path;
+    _ = directory_cursor;
 }
 
 // Import backend
@@ -118,8 +120,10 @@ const TEXTURE_UPDATE_OUT_OF_BOUNDS: u8 = 3;
 // upload is never refused for host capacity now; keeping the remaining codes
 // stable avoids needless transport churn for the checkable errors.
 const TRY_TAG_OK: u8 = 1;
-const MAX_FILE_READ_BYTES: usize = 16 * 1024 * 1024;
+const MAX_FILE_READ_BYTES: usize = 64 * 1024 * 1024;
+const FILE_READ_BYTE_BUDGET: usize = 512 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
+const MAX_CLIPBOARD_READ_BYTES: usize = 64 * 1024;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(authority: u64) callconv(.c) RocResult;
@@ -185,9 +189,9 @@ const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 
 /// How many host-owned file-byte allocations may be live at once.
 ///
-/// Small on purpose. This bounds what an app can pin by retaining ordinary
-/// `List(U8)` values or their seamless sublists. With the 16 MiB per-file
-/// ceiling this is a few hundred megabytes, refused rather than unbounded.
+/// These slots are shared by file reads, listings, and capture readbacks.
+/// Each kind has its own per-result size limit. File reads additionally
+/// account for payload bytes so an app can choose a larger file ceiling.
 const MAX_LIVE_FILE_BYTE_LISTS: usize = 32;
 
 /// Name a failed read in the app's vocabulary.
@@ -197,6 +201,7 @@ const MAX_LIVE_FILE_BYTE_LISTS: usize = 32;
 /// those are different things for an app deciding what to do next.
 fn readErrorCode(err: anyerror) u8 {
     return switch (err) {
+        error.Canceled => READ_ERR_UNAVAILABLE,
         error.FileNotFound => READ_ERR_NOT_FOUND,
         error.StreamTooLong => READ_ERR_TOO_LARGE,
         else => READ_ERR_FAILED,
@@ -257,11 +262,7 @@ fn encodeListingIn(base: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator, p
             encoded.deinit(allocator);
             return READ_ERR_TOO_LARGE;
         }
-        const kind: u8 = switch (entry.kind) {
-            .file => DIR_ENTRY_FILE,
-            .directory => DIR_ENTRY_DIR,
-            else => DIR_ENTRY_OTHER,
-        };
+        const kind = @backingInt(directory_cursor.entryKind(entry.kind));
         encoded.append(allocator, kind) catch return READ_ERR_FAILED;
         encoded.appendSlice(allocator, entry.name) catch return READ_ERR_FAILED;
         encoded.append(allocator, 0) catch return READ_ERR_FAILED;
@@ -298,6 +299,8 @@ var last_wall_nanos: u64 = 0;
 /// collide with a new app.
 fn beginAppLifetime() void {
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
+    std.debug.assert(file_bytes_delivery_reservations.in_flight_bytes == 0);
+    std.debug.assert(file_bytes_delivery_reservations.retained_bytes == 0);
     trace_tracks = @as([TRACE_TRACK_CAPACITY]TraceTrack, @splat(.{}));
     task_trace_owners = @as([tasks_mod.max_live_tasks]TaskTraceOwner, @splat(.{}));
     resource_correlations = @as([resource_correlation_capacity]ResourceCorrelation, @splat(.{}));
@@ -993,12 +996,20 @@ fn hostedTaskSleep(millis: u64) callconv(.c) void {
 /// worker sees only host-owned strings and bytes -- never a Roc value. Without
 /// a runtime (unit tests) the work runs on the calling thread.
 fn runBeneath(comptime label: []const u8, comptime work: anytype, args: anytype) @typeInfo(@TypeOf(work)).@"fn".return_type.? {
+    return runBeneathWorker(label, work, args) catch @call(.auto, work, args);
+}
+
+fn runBeneathWorker(comptime label: []const u8, comptime work: anytype, args: anytype) error{ Busy, Unavailable }!@typeInfo(@TypeOf(work)).@"fn".return_type.? {
+    const rt = AppTasks.currentRuntime() orelse
+        return if (active_phase == .task) error.Unavailable else @call(.auto, work, args);
+    var blocking = rt.spawnBlocking(work, args) catch |err| return switch (err) {
+        error.RuntimeShutdown => error.Unavailable,
+        else => error.Busy,
+    };
     const scope = WaitScope.enter();
     defer scope.leave();
     const park = AppTasks.observePark(label, 0);
     defer AppTasks.observeResume(park, label);
-    const rt = AppTasks.currentRuntime() orelse return @call(.auto, work, args);
-    var blocking = rt.spawnBlocking(work, args) catch return @call(.auto, work, args);
     return blocking.join();
 }
 
@@ -1010,6 +1021,7 @@ const READ_ERR_NOT_PERMITTED: u8 = 10;
 /// a link on the way, or an existing link where a write would land. Mirrored
 /// in `Files.roc` as `PathInvalid`.
 const READ_ERR_PATH_INVALID: u8 = 11;
+const READ_ERR_LIMIT_EXCEEDS_MAX: u8 = 12;
 
 /// Name a confined-resolution failure, deferring to `base` for the
 /// filesystem's own errors.
@@ -1037,12 +1049,51 @@ fn readBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []c
 
 /// Read a whole file beneath a root, parked rather than blocking.
 ///
-/// `limit` is the operation's own ceiling: a text read stops one byte past the
-/// largest string the host will build, a byte read one past the per-file
-/// ceiling, so a file of exactly the limit succeeds and one byte more is
-/// `TooLarge` without the whole file having been read first.
+/// The text read stops one byte past the largest string the host will build.
+/// A file of exactly the public limit succeeds, while one byte more is
+/// `TooLarge`.
 fn readBeneathWaiting(allocator: std.mem.Allocator, root: []const u8, path: []const u8, limit: usize) BeneathRead {
     return runBeneath("read", readBeneathBlocking, .{ allocator, root, path, limit });
+}
+
+/// Allocate from the file's reported length, growing only if the byte stream
+/// outlives it. The read enforces the ceiling independently of that length:
+/// the last one-byte probe distinguishes an exact fit from an oversized file.
+/// Up to two buffers can coexist briefly during a grow or shrink.
+fn readFileBytes(io: std.Io, file: std.Io.File, allocator: std.mem.Allocator, max_bytes: usize) ![]u8 {
+    const initial_size = try file.length(io);
+    if (initial_size > max_bytes) return error.StreamTooLong;
+    var bytes = try allocator.alloc(u8, @intCast(initial_size));
+    errdefer allocator.free(bytes);
+    var file_reader = file.reader(io, &.{});
+    const reader = &file_reader.interface;
+
+    var used: usize = 0;
+    while (true) {
+        used += reader.readSliceShort(bytes[used..]) catch return file_reader.err orelse error.ReadFailed;
+        if (used < bytes.len) return allocator.realloc(bytes, used);
+
+        var extra: [1]u8 = undefined;
+        if ((reader.readSliceShort(&extra) catch return file_reader.err orelse error.ReadFailed) == 0) return bytes;
+        if (used == max_bytes) return error.StreamTooLong;
+
+        const next_size = @min(max_bytes, @max(4096, bytes.len * 2));
+        bytes = try allocator.realloc(bytes, next_size);
+        bytes[used] = extra[0];
+        used += 1;
+    }
+}
+
+fn readFileBytesBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, max_bytes: usize) BeneathRead {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var dir = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = beneathErrorCode(err, readErrorCode) };
+    defer dir.close(io);
+    const file = confined_path.openFile(io, dir, path) catch |err| return .{ .failed = beneathErrorCode(err, readErrorCode) };
+    defer file.close(io);
+    const bytes = readFileBytes(io, file, allocator, max_bytes) catch |err| return .{ .failed = readErrorCode(err) };
+    return .{ .bytes = bytes };
 }
 
 fn listBeneathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) BeneathRead {
@@ -1114,7 +1165,7 @@ fn filesReadTextError(code: u8) abi.HostFiles_read_textErr {
 /// A refused outcome is the host declining or the app leaving; anything else
 /// is the filesystem's answer.
 fn filesOutcome(code: u8) observatory.EffectOutcome {
-    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED or code == READ_ERR_PATH_INVALID) .refused else .runtime_error;
+    return if (code == READ_ERR_BUSY or code == READ_ERR_UNAVAILABLE or code == READ_ERR_NOT_PERMITTED or code == READ_ERR_PATH_INVALID or code == READ_ERR_LIMIT_EXCEEDS_MAX) .refused else .runtime_error;
 }
 
 fn hostedFilesReadText(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_textResult {
@@ -1170,20 +1221,23 @@ fn filesReadBytesError(code: u8) abi.HostFiles_read_bytesErr {
         READ_ERR_BUSY => .busy,
         READ_ERR_UNAVAILABLE => .unavailable,
         READ_ERR_TOO_LARGE => .too_large,
+        READ_ERR_LIMIT_EXCEEDS_MAX => .limit_exceeds_max,
         READ_ERR_NOT_PERMITTED => .permission_denied,
         READ_ERR_PATH_INVALID => .path_invalid,
         else => .read_failed,
     };
 }
 
-fn hostedFilesReadBytes(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+const file_bytes_read_phase_name = "Files.ReadDir.read_bytes! / Files.ReadDir.read_bytes_with!";
+
+fn hostedFilesReadBytes(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr, max_bytes: u64) callconv(.c) abi.HostFiles_read_bytesResult {
     const Result = abi.HostFiles_read_bytesResult;
-    enforcePhase("Files.ReadDir.read_bytes!", during_wait);
+    enforcePhase(file_bytes_read_phase_name, during_wait);
     var effect = EffectScope.begin("Files.ReadDir.read_bytes!", path_arg.asSlice().len);
     defer effect.end();
     defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const result = readByteListWaiting(roc_host, root_arg.asSlice(), path_arg.asSlice(), .read);
+    const result = readByteListWaiting(roc_host, root_arg.asSlice(), path_arg.asSlice(), .{ .read = max_bytes });
     if (result.err != 0) {
         effect.setOutcome(filesOutcome(result.err));
         return abiTryErr(Result, filesReadBytesError(result.err));
@@ -1192,8 +1246,8 @@ fn hostedFilesReadBytes(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.
     return abiTryOk(Result, result.bytes);
 }
 
-fn exportedFilesReadBytes(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
-    return hostedFilesReadBytes(activeHost(), root_arg, path_arg);
+fn exportedFilesReadBytes(root_arg: abi.RocStr, path_arg: abi.RocStr, max_bytes: u64) callconv(.c) abi.HostFiles_read_bytesResult {
+    return hostedFilesReadBytes(activeHost(), root_arg, path_arg, max_bytes);
 }
 
 /// `Files.ReadDir.list!`: one directory's entries, encoded into the same byte
@@ -1232,6 +1286,161 @@ fn hostedFilesList(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocSt
 
 fn exportedFilesList(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
     return hostedFilesList(activeHost(), root_arg, path_arg);
+}
+
+/// A cursor effect may run inline during startup if there is no runtime.
+/// A task never does filesystem work inline.
+fn runDirectoryWork(
+    comptime label: []const u8,
+    comptime work: anytype,
+    args: anytype,
+) error{ Busy, Unavailable }!@typeInfo(@TypeOf(work)).@"fn".return_type.? {
+    const in_task = active_phase == .task;
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    const park = AppTasks.observePark(label, 0);
+    defer AppTasks.observeResume(park, label);
+    const rt = AppTasks.currentRuntime() orelse {
+        if (in_task) return error.Unavailable;
+        return @call(.auto, work, args);
+    };
+    var blocking = rt.spawnBlocking(work, args) catch |err| return switch (err) {
+        error.RuntimeShutdown => error.Unavailable,
+        else => error.Busy,
+    };
+    return blocking.join();
+}
+
+const DirectoryCursorOpen = union(enum) {
+    cursor: directory_cursor.Cursor,
+    failed: abi.HostFiles_open_cursorErr,
+};
+
+fn openDirectoryCursorBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) DirectoryCursorOpen {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const cursor = directory_cursor.Cursor.open(threaded.io(), root, path) catch |err| return .{
+        .failed = switch (err) {
+            error.Canceled => .unavailable,
+            else => switch (beneathErrorCode(err, listErrorCode)) {
+                READ_ERR_NOT_FOUND => .not_found,
+                READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
+                READ_ERR_NOT_PERMITTED => .permission_denied,
+                READ_ERR_PATH_INVALID => .path_invalid,
+                else => .read_failed,
+            },
+        },
+    };
+    return .{ .cursor = cursor };
+}
+
+fn openDirectoryCursor(
+    allocator: std.mem.Allocator,
+    root: []const u8,
+    path: []const u8,
+) abi.HostFiles_open_cursorResult {
+    const Result = abi.HostFiles_open_cursorResult;
+    // A cursor owns one descriptor. Reserve its slot before opening the path
+    // and keep that slot charged until the last alias is dropped and retired.
+    if (directory_cursor_heap.active() + directory_cursor_openings >= MAX_DIRECTORY_CURSORS) {
+        return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    }
+    directory_cursor_openings += 1;
+    defer directory_cursor_openings -= 1;
+
+    // A native worker may use these bytes after the frame resumes. Copy the
+    // exact caller-provided path lengths, and retain them only while waiting.
+    const owned_root = allocator.dupe(u8, root) catch return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    defer allocator.free(owned_root);
+    const owned_path = allocator.dupe(u8, path) catch return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    defer allocator.free(owned_path);
+
+    const opened = runDirectoryWork("open directory cursor", openDirectoryCursorBlocking, .{ allocator, owned_root, owned_path }) catch |err| {
+        return abiTryErr(Result, @as(abi.HostFiles_open_cursorErr, switch (err) {
+            error.Busy => .busy,
+            error.Unavailable => .unavailable,
+        }));
+    };
+    switch (opened) {
+        .failed => |err| return abiTryErr(Result, err),
+        .cursor => |opened_cursor| {
+            const handle = directory_cursor_heap.insert(0, .{ .cursor = opened_cursor }) orelse {
+                var cursor = opened_cursor;
+                cursor.close(mainThreadIo());
+                return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+            };
+            return abiTryOk(Result, handle);
+        },
+    }
+}
+
+fn hostedFilesOpenCursor(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) abi.HostFiles_open_cursorResult {
+    var effect = EffectScope.begin("Files.ReadDir.open_cursor!", path_arg.asSlice().len);
+    defer effect.end();
+    defer root_arg.decref(roc_host);
+    defer path_arg.decref(roc_host);
+
+    const result = openDirectoryCursor(allocatorFromHost(roc_host), root_arg.asSlice(), path_arg.asSlice());
+    if (result.tag == .Err) effect.setOutcome(switch (result.payload_err()) {
+        .busy, .unavailable, .path_invalid, .permission_denied => .refused,
+        else => .runtime_error,
+    });
+    return result;
+}
+
+fn nextDirectoryCursorBlocking(allocator: std.mem.Allocator, resource: *DirectoryCursorResource) directory_cursor.Next {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return resource.cursor.next(threaded.io(), &resource.batch);
+}
+
+fn exportedFilesCursorNext(handle: *u64) callconv(.c) abi.HostFiles_cursor_nextResult {
+    const name = "Files.DirectoryCursor.next!";
+    const Result = abi.HostFiles_cursor_nextResult;
+    const Err = abi.HostFiles_cursor_nextErr;
+    enforcePhase(name, during_wait);
+    var effect = EffectScope.begin(name, 0);
+    defer effect.end();
+    const host = activeHost();
+    defer releaseResourceBox(host, handle);
+
+    const resource = directory_cursor_heap.get(handle.*) orelse {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Err.permission_denied);
+    };
+    if (resource.busy) {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Err.busy);
+    }
+    resource.busy = true;
+    defer resource.busy = false;
+
+    const outcome = resource.cursor.terminalResult() orelse runDirectoryWork(
+        "next directory batch",
+        nextDirectoryCursorBlocking,
+        .{ allocatorFromHost(host), resource },
+    ) catch |err| {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, @as(Err, switch (err) {
+            error.Busy => .busy,
+            error.Unavailable => .unavailable,
+        }));
+    };
+    switch (outcome) {
+        .entries => |used| {
+            effect.addCopiedBytes(used);
+            return abiTryOk(Result, abi.RocListWith(u8, false).fromSlice(resource.batch[0..used], host));
+        },
+        .end => return abiTryOk(Result, abi.RocListWith(u8, false).empty()),
+        .invalid_name, .read_failed => {
+            effect.setOutcome(.runtime_error);
+            return abiTryErr(Result, if (outcome == .invalid_name) Err.invalid_name else Err.read_failed);
+        },
+        .unavailable => {
+            effect.setOutcome(.refused);
+            return abiTryErr(Result, Err.unavailable);
+        },
+    }
 }
 
 /// Name a failed stat in the app's vocabulary.
@@ -2182,6 +2391,8 @@ const ScreenSnapshot = struct {
     height: u32 = 0,
     /// What this snapshot reserved from `still_budget`, returned when it goes.
     reserved: u64 = 0,
+    /// The preceding presentation's result when it could not supply pixels.
+    failure: u8 = capture.err_unavailable,
 };
 var screen_snapshot: ScreenSnapshot = .{};
 
@@ -2194,23 +2405,30 @@ var screen_snapshot: ScreenSnapshot = .{};
 /// snapshot yet and is `Unavailable`.
 var screen_snapshot_requested = false;
 
-/// Keep this frame's pixels for the next cycle's `Screen` readbacks.
-///
-/// Copied out of the backend's allocation because that one is freed on this
-/// thread as the drawing scope closes, and this has to outlive the frame.
-/// A snapshot that cannot be admitted or allocated simply does not happen: the
-/// next read reports `Unavailable`, which is the same answer it would give
-/// before the first frame.
-fn storeScreenSnapshot(image: raylib.CaptureImage) void {
-    releaseScreenSnapshot();
-
+/// Admit a snapshot before the backend allocates its framebuffer image.
+fn reserveScreenSnapshot(width: u32, height: u32) u64 {
     var reserved: u64 = 0;
-    if (still_budget.admit(image.width(), image.height(), &reserved) != capture.err_none) return;
+    const status = still_budget.admit(width, height, &reserved);
+    if (status != capture.err_none) {
+        // Zero-sized screen geometry means there is no framebuffer.
+        screen_snapshot.failure = if (status == capture.err_target_unavailable) capture.err_unavailable else status;
+    }
+    return reserved;
+}
 
+/// Retain a copy for the next cycle's reads. The backend owns the source
+/// allocation and frees it as the current drawing scope closes.
+fn storeScreenSnapshot(image: raylib.CaptureImage, reserved: u64) void {
+    if (capture.stillCaptureBytes(image.width(), image.height()) != reserved) {
+        still_budget.release(reserved);
+        screen_snapshot.failure = capture.err_readback_failed;
+        return;
+    }
     const allocator = allocatorFromHost(activeHost());
     const source = image.pixels();
     const copy = allocator.alloc(u8, source.len) catch {
         still_budget.release(reserved);
+        screen_snapshot.failure = capture.err_busy;
         return;
     };
     @memcpy(copy, source);
@@ -2267,7 +2485,7 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
         // of it: that is what makes the read after this one succeed.
         screen_snapshot_requested = true;
         if (screen_snapshot.pixels.len == 0) {
-            err.* = capture.err_unavailable;
+            err.* = screen_snapshot.failure;
             return null;
         }
         return .{
@@ -2297,19 +2515,16 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
         return null;
     }
 
-    // The target's own dimensions rather than the ones the Roc value carries,
-    // for the reason `Capture.Writer.screenshot_texture!` gives: the readback is
-    // sized by what the GPU holds. A target too large for the whole budget and
-    // one that would fit but for other work in flight are both `err_busy`
-    // here; a readback reports one "not now" and the difference between them
-    // is in the documentation rather than in the tag.
+    // Budget the native source dimensions: the backend reads the whole
+    // target even when the caller asks for one pixel.
     var reserved: u64 = 0;
-    if (still_budget.admit(
+    const admission = still_budget.admit(
         @intCast(@max(target.texture.width, 0)),
         @intCast(@max(target.texture.height, 0)),
         &reserved,
-    ) != capture.err_none) {
-        err.* = capture.err_busy;
+    );
+    if (admission != capture.err_none) {
+        err.* = admission;
         return null;
     }
 
@@ -2334,6 +2549,7 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
 fn capturePixelError(code: u8) abi.HostCapture_pixel_atErr {
     return switch (code) {
         capture.err_busy => .busy,
+        capture.err_budget_exceeded => .budget_exceeded,
         capture.err_unavailable => .unavailable,
         capture.err_target_unavailable => .target_unavailable,
         capture.err_region_out_of_bounds => .region_out_of_bounds,
@@ -2341,12 +2557,9 @@ fn capturePixelError(code: u8) abi.HostCapture_pixel_atErr {
     };
 }
 
-fn pixelReadFailure(err: u8) abi.HostCapture_pixel_atResult {
-    return abiTryErr(abi.HostCapture_pixel_atResult, capturePixelError(err));
-}
-
-fn regionReadFailure(err: u8) abi.HostCapture_read_regionResult {
-    return abiTryErr(abi.HostCapture_read_regionResult, capturePixelError(err));
+fn captureReadFailure(comptime Result: type, effect: *EffectScope, err: u8) Result {
+    effect.setOutcome(if (err == capture.err_readback_failed) .runtime_error else .refused);
+    return abiTryErr(Result, capturePixelError(err));
 }
 
 /// `Capture.pixel_at!`: one pixel's colour, with nothing allocated to carry it.
@@ -2361,11 +2574,11 @@ fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.HostCapture_pixel_atArgs) 
     defer releaseResourceBox(roc_host, args.source.target.handle);
 
     var err: u8 = capture.err_readback_failed;
-    const pixels = resolveReadbackSource(args.source, &err) orelse return pixelReadFailure(err);
+    const pixels = resolveReadbackSource(args.source, &err) orelse return captureReadFailure(abi.HostCapture_pixel_atResult, &effect, err);
     defer pixels.deinit();
 
     const bounds = capture.validatePoint(args.x, args.y, pixels.width, pixels.height);
-    if (bounds != capture.err_none) return pixelReadFailure(bounds);
+    if (bounds != capture.err_none) return captureReadFailure(abi.HostCapture_pixel_atResult, &effect, bounds);
 
     const channels = capture.pixelAt(pixels.bytes, pixels.width, args.x, args.y);
     effect.setDrawMetrics(1, 4);
@@ -2393,30 +2606,32 @@ fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_region
     const region = capture.Region{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
 
     const bytes = capture.regionBytes(region) orelse
-        return regionReadFailure(capture.err_region_out_of_bounds);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_region_out_of_bounds);
+    if (region.x < 0 or region.y < 0)
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_region_out_of_bounds);
     if (bytes > capture.max_readback_bytes)
-        return regionReadFailure(capture.err_region_out_of_bounds);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_budget_exceeded);
 
-    if (!file_bytes_delivery_reservations.reserve()) return regionReadFailure(capture.err_busy);
-    defer file_bytes_delivery_reservations.release();
+    if (!file_bytes_delivery_reservations.reserve(0)) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
+    defer file_bytes_delivery_reservations.release(0);
 
     var err: u8 = capture.err_readback_failed;
-    const pixels = resolveReadbackSource(args.source, &err) orelse return regionReadFailure(err);
+    const pixels = resolveReadbackSource(args.source, &err) orelse return captureReadFailure(abi.HostCapture_read_regionResult, &effect, err);
     defer pixels.deinit();
 
     const bounds = capture.validateRegion(region, pixels.width, pixels.height);
-    if (bounds != capture.err_none) return regionReadFailure(bounds);
+    if (bounds != capture.err_none) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, bounds);
 
     const allocator = allocatorFromHost(roc_host);
     const copy = allocator.alloc(u8, @intCast(bytes)) catch
-        return regionReadFailure(capture.err_busy);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
     capture.copyRegion(copy, pixels.bytes, pixels.width, region);
 
     // The transfer itself, shared with every other handed-over byte list. Its
     // only refusal is a full heap, which is the same "no slot" this call
     // already reserved against and reports as `Busy`.
-    const installed = installReadBytes(allocator, copy);
-    if (installed.err != 0) return regionReadFailure(capture.err_busy);
+    const installed = installReadBytes(allocator, copy, 0);
+    if (installed.err != 0) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
     effect.addOwnershipTransferBytes(@intCast(bytes));
     effect.setDrawMetrics(@as(u64, @intCast(args.width)) *| @as(u64, @intCast(args.height)), bytes);
     return abiTryOk(abi.HostCapture_read_regionResult, installed.bytes);
@@ -2429,7 +2644,7 @@ fn exportedCaptureReadRegion(args: abi.HostCapture_read_regionArgs) callconv(.c)
 /// Which of the two byte-list producing waits to run. They share everything
 /// after the syscall: the same admission, the same ownership transfer, and the
 /// same list on the way out.
-const ByteListWait = enum { read, list };
+const ByteListWait = union(enum) { read: u64, list };
 
 /// A finished byte-list wait, before it is named in the app's vocabulary.
 ///
@@ -2439,28 +2654,50 @@ const ByteListWait = enum { read, list };
 const ByteListOutcome = struct {
     err: u8,
     bytes: abi.RocListWith(u8, false),
+
+    fn failed(code: u8) ByteListOutcome {
+        return .{ .err = code, .bytes = .empty() };
+    }
 };
 
 fn readByteListWaiting(roc_host: *RocHost, root: []const u8, path: []const u8, kind: ByteListWait) ByteListOutcome {
-    const empty = abi.RocListWith(u8, false).empty();
-    // Reserve before any filesystem work starts. A terminal `Busy` here means
-    // precisely that nothing was read.
-    if (!file_bytes_delivery_reservations.reserve()) {
-        return .{ .err = READ_ERR_BUSY, .bytes = empty };
-    }
-    defer file_bytes_delivery_reservations.release();
+    const reservation = switch (kind) {
+        .list => 0,
+        .read => |requested| bytes: {
+            if (requested > MAX_FILE_READ_BYTES) return .failed(READ_ERR_LIMIT_EXCEEDS_MAX);
+            // Cloned path data and up to two output buffers live on the worker.
+            const path_bytes = std.math.add(usize, root.len, path.len) catch return .failed(READ_ERR_PATH_INVALID);
+            const payload_bytes = @as(usize, @intCast(requested)) * 2;
+            if (path_bytes > FILE_READ_BYTE_BUDGET - payload_bytes) return .failed(READ_ERR_PATH_INVALID);
+            break :bytes path_bytes + payload_bytes;
+        },
+    };
+    if (!file_bytes_delivery_reservations.reserve(reservation)) return .failed(READ_ERR_BUSY);
+    defer file_bytes_delivery_reservations.release(reservation);
 
     const allocator = allocatorFromHost(roc_host);
     const outcome = switch (kind) {
-        .read => readBeneathWaiting(allocator, root, path, MAX_FILE_READ_BYTES + 1),
+        .read => |requested| result: {
+            // The worker reads only host-owned bytes, including the path and
+            // root. Even a Roc small string can point into an application stack.
+            const owned_root = allocator.dupe(u8, root) catch return .failed(READ_ERR_BUSY);
+            defer allocator.free(owned_root);
+            const owned_path = allocator.dupe(u8, path) catch return .failed(READ_ERR_BUSY);
+            defer allocator.free(owned_path);
+            break :result runBeneathWorker("read", readFileBytesBlocking, .{ allocator, owned_root, owned_path, @as(usize, @intCast(requested)) }) catch |err|
+                return .failed(switch (err) {
+                    error.Busy => READ_ERR_BUSY,
+                    error.Unavailable => READ_ERR_UNAVAILABLE,
+                });
+        },
         .list => runBeneath("list", listBeneathBlocking, .{ allocator, root, path }),
     };
     const bytes = switch (outcome) {
-        .failed => |code| return .{ .err = code, .bytes = empty },
+        .failed => |code| return .failed(code),
         .bytes => |bytes| bytes,
     };
 
-    return installReadBytes(allocator, bytes);
+    return installReadBytes(allocator, bytes, if (kind == .read) bytes.len else 0);
 }
 
 /// Move an owned buffer into a typed heap slot and hand it back as an owning
@@ -2476,16 +2713,17 @@ fn readByteListWaiting(roc_host: *RocHost, root: []const u8, path: []const u8, k
 /// An empty read becomes the canonical empty list rather than occupying a slot,
 /// and a full heap frees the buffer and reports `Busy` -- the read happened,
 /// but there is nowhere to hand it over.
-fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) ByteListOutcome {
+fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8, charged_bytes: usize) ByteListOutcome {
     const empty = abi.RocListWith(u8, false).empty();
     if (bytes.len == 0) {
         allocator.free(bytes);
         return .{ .err = 0, .bytes = empty };
     }
-    const resource = file_bytes_heap.insert(0, .{ .allocator = allocator, .bytes = bytes }) orelse {
+    const resource = file_bytes_heap.insert(0, .{ .allocator = allocator, .bytes = bytes, .charged_bytes = charged_bytes }) orelse {
         allocator.free(bytes);
-        return .{ .err = READ_ERR_BUSY, .bytes = empty };
+        return .failed(READ_ERR_BUSY);
     };
+    file_bytes_delivery_reservations.retained_bytes += charged_bytes;
     return .{ .err = 0, .bytes = seamlessByteList(resource, bytes) };
 }
 
@@ -2515,30 +2753,26 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendRe
             .body = result.body,
         });
     }
-    effect.setOutcome(.runtime_error);
+    effect.setOutcome(switch (result.err) {
+        http_effect.ERR_BUSY, http_effect.ERR_RESPONSE_LIMIT_UNSUPPORTED, http_effect.ERR_NOT_PERMITTED, http_effect.ERR_UNAVAILABLE => .refused,
+        else => .runtime_error,
+    });
     result.headers.decref(roc_host);
     result.body.decref(roc_host);
-    // Only `Other` carries the host's description; the three named failures
-    // say everything they have to say in their own name, so their message is
-    // released rather than passed along.
+    if (result.err == http_effect.ERR_OTHER) {
+        return abiTryErr(Result, abiUnionPayload(Union, .Other, "other", result.err_message));
+    }
+    result.err_message.decref(roc_host);
     return abiTryErr(Result, switch (result.err) {
-        http_effect.ERR_TIMEOUT => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .Timeout);
-        },
-        http_effect.ERR_NETWORK => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .NetworkError);
-        },
-        http_effect.ERR_BAD_BODY => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .MalformedResponse);
-        },
-        http_effect.ERR_NOT_PERMITTED => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .PermissionDenied);
-        },
-        else => abiUnionPayload(Union, .Other, "other", result.err_message),
+        http_effect.ERR_BUSY => abiUnion(Union, .Busy),
+        http_effect.ERR_TIMEOUT => abiUnion(Union, .Timeout),
+        http_effect.ERR_NETWORK => abiUnion(Union, .NetworkError),
+        http_effect.ERR_BAD_BODY => abiUnion(Union, .MalformedResponse),
+        http_effect.ERR_NOT_PERMITTED => abiUnion(Union, .PermissionDenied),
+        http_effect.ERR_RESPONSE_LIMIT_UNSUPPORTED => abiUnion(Union, .ResponseLimitUnsupported),
+        http_effect.ERR_RESPONSE_TOO_LARGE => abiUnion(Union, .ResponseTooLarge),
+        http_effect.ERR_UNAVAILABLE => abiUnion(Union, .Unavailable),
+        else => unreachable,
     });
 }
 
@@ -2950,6 +3184,8 @@ fn sqliteError(comptime Union: type, roc_host: *RocHost, err: i64, message: abi.
         .{ "TooManyStatements", sqlite_effect.ERR_TOO_MANY_STATEMENTS },
         .{ "MultipleStatements", sqlite_effect.ERR_MULTIPLE_STATEMENTS },
         .{ "ResultTooLarge", sqlite_effect.ERR_RESULT_TOO_LARGE },
+        .{ "PathInvalid", sqlite_effect.ERR_PATH_INVALID },
+        .{ "PermissionDenied", sqlite_effect.ERR_PERMISSION_DENIED },
     }) |refusal| {
         if (comptime Names != void and abiVariantName(Names, refusal[0]) != null) {
             if (err == refusal[1]) {
@@ -3004,27 +3240,12 @@ fn sqliteQueryResult(
 /// this is parked, so the task must see its own phase again when the answer
 /// arrives. Roc's own arguments are decref'd here; everything a worker reads
 /// was copied out of them first.
-/// SQLite's in-memory database name. It touches no file, so it is accepted
-/// only with no root, which is what `Sqlite.Service.open_memory!` sends.
-const sqlite_memory_path = ":memory:";
-
-/// SQLite's `SQLITE_CANTOPEN`, for a database whose directory could not be
-/// reached before SQLite was asked.
-const SQLITE_CANTOPEN: u8 = 14;
-
-/// A database path resolved beneath its root: the absolute path SQLite opens,
-/// or the error that stopped it.
-const SqlitePath = union(enum) { path: []u8, failed: anyerror };
-
-fn resolveSqlitePathBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8, create_parents: bool) SqlitePath {
-    var threaded: std.Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
-    var dir = confined_path.openRoot(io, root, false) catch |err| return .{ .failed = err };
-    defer dir.close(io);
-    const resolved = confined_path.checkedPath(io, root, dir, path, create_parents, allocator) catch |err| return .{ .failed = err };
-    return .{ .path = resolved };
+fn sqliteExecution(phase: Phase) sqlite_effect.Execution {
+    if (AppTasks.currentRuntime()) |runtime| return .{ .pool = runtime };
+    return if (phase == .startup) .startup else .unavailable;
 }
+
+const sqlite_open_phase_name = "Sqlite.Service.open!, open_with!, open_configured!, open_read!, open_read_with!, open_memory!, or open_memory_with!";
 
 fn hostedSqliteOpen(
     root_arg: abi.RocStr,
@@ -3034,44 +3255,12 @@ fn hostedSqliteOpen(
     max_result_bytes: u64,
 ) callconv(.c) abi.HostSqlite_openResult {
     const Result = abi.HostSqlite_openResult;
-    enforcePhase("Sqlite.Service.open!", during_wait);
+    enforcePhase(sqlite_open_phase_name, during_wait);
     var effect = EffectScope.begin("Sqlite.Service.open!", path_arg.asSlice().len);
     defer effect.end();
     const roc_host = activeHost();
     defer root_arg.decref(roc_host);
     defer path_arg.decref(roc_host);
-    const allocator = allocatorFromHost(roc_host);
-
-    // SQLite takes a path, not a directory handle, so the path is checked
-    // beneath its root first -- no escape, no link -- and SQLite is handed
-    // the absolute result. `ATTACH` is disabled on every connection, so the
-    // database cannot reach a second file afterwards.
-    const in_memory = root_arg.asSlice().len == 0 and std.mem.eql(u8, path_arg.asSlice(), sqlite_memory_path);
-    var resolved_path: ?[]u8 = null;
-    defer if (resolved_path) |path| allocator.free(path);
-    if (!in_memory) {
-        const create = mode == sqlite_effect.MODE_READ_WRITE_CREATE;
-        switch (runBeneath("sqlite.resolve", resolveSqlitePathBlocking, .{ allocator, root_arg.asSlice(), path_arg.asSlice(), create })) {
-            .path => |path| resolved_path = path,
-            .failed => |err| switch (err) {
-                error.PathInvalid => {
-                    effect.setOutcome(.refused);
-                    return abiTryErr(Result, abiUnionNamed(abi.HostSqlite_openErr, "PathInvalid"));
-                },
-                error.NotGranted => {
-                    effect.setOutcome(.refused);
-                    return permissionDenied(Result);
-                },
-                else => {
-                    effect.setOutcome(.runtime_error);
-                    const message = abi.RocStr.fromSlice("the directory for this database could not be opened", roc_host);
-                    return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, SQLITE_CANTOPEN, message));
-                },
-            },
-        }
-    }
-    const open_path = if (resolved_path) |path| abi.RocStr.fromSlice(path, roc_host) else abi.RocStr.fromSlice(sqlite_memory_path, roc_host);
-    defer open_path.decref(roc_host);
 
     const scope = WaitScope.enter();
     defer scope.leave();
@@ -3080,15 +3269,19 @@ fn hostedSqliteOpen(
     const worker_started = observatoryMeasurementStart();
     const result = sqlite_effect.open(
         roc_host,
-        AppTasks.currentRuntime(),
-        open_path,
+        sqliteExecution(scope.resumed),
+        root_arg,
+        path_arg,
         mode,
         busy_timeout_ms,
         max_result_bytes,
     );
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
-        effect.setOutcome(.runtime_error);
+        effect.setOutcome(switch (result.err) {
+            sqlite_effect.ERR_PATH_INVALID, sqlite_effect.ERR_PERMISSION_DENIED, sqlite_effect.ERR_TOO_MANY_CONNECTIONS => .refused,
+            else => .runtime_error,
+        });
         return abiTryErr(Result, sqliteError(abi.HostSqlite_openErr, roc_host, result.err, result.message));
     }
     result.message.decref(roc_host);
@@ -3107,7 +3300,7 @@ fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.HostSqlite_closeResult {
     const park = AppTasks.observePark("sqlite.close", 0);
     defer AppTasks.observeResume(park, "sqlite.close");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+    const result = sqlite_effect.close(roc_host, sqliteExecution(scope.resumed), db_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -3130,7 +3323,7 @@ fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.HostS
     const park = AppTasks.observePark("sqlite.prepare", 0);
     defer AppTasks.observeResume(park, "sqlite.prepare");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const result = sqlite_effect.prepare(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -3155,7 +3348,7 @@ fn hostedSqliteRunStmt(
     const park = AppTasks.observePark("sqlite.run", 0);
     defer AppTasks.observeResume(park, "sqlite.run");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+    const result = sqlite_effect.runStmt(roc_host, sqliteExecution(scope.resumed), stmt_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
     return sqliteQueryResult(abi.HostSqlite_run_stmtResult, roc_host, &effect, result);
 }
@@ -3177,7 +3370,7 @@ fn hostedSqliteRunOnce(
     const park = AppTasks.observePark("sqlite.run", 0);
     defer AppTasks.observeResume(park, "sqlite.run");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+    const result = sqlite_effect.runOnce(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg, bindings_arg);
     effect.setWorkerElapsed(worker_started);
     return sqliteQueryResult(abi.HostSqlite_run_onceResult, roc_host, &effect, result);
 }
@@ -3195,7 +3388,7 @@ fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.Ho
     const park = AppTasks.observePark("sqlite.script", 0);
     defer AppTasks.observeResume(park, "sqlite.script");
     const worker_started = observatoryMeasurementStart();
-    const result = sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+    const result = sqlite_effect.execScript(roc_host, sqliteExecution(scope.resumed), db_arg, sql_arg);
     effect.setWorkerElapsed(worker_started);
     if (result.err != 0) {
         effect.setOutcome(.runtime_error);
@@ -4478,6 +4671,30 @@ const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, .t
 const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, .render_texture, writeU64Token, readU64Token, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, .shader, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, .prepared_text, writeU64Token, readU64Token, destroyPreparedText);
+const MAX_DIRECTORY_CURSORS = 16;
+
+const DirectoryCursorResource = struct {
+    cursor: directory_cursor.Cursor,
+    batch: [directory_cursor.max_batch_bytes]u8 = undefined,
+    // The Box held by the effect pins this slot. Only the admitted worker
+    // accesses the cursor and batch until the frame thread joins it again.
+    busy: bool = false,
+};
+
+fn destroyDirectoryCursor(resource: *DirectoryCursorResource) void {
+    resource.cursor.close(mainThreadIo());
+}
+
+const DirectoryCursorHeap = host_resource.HostResourceHeap(
+    u64,
+    DirectoryCursorResource,
+    MAX_DIRECTORY_CURSORS,
+    .directory_cursor,
+    writeU64Token,
+    readU64Token,
+    destroyDirectoryCursor,
+);
+
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, .store, writeU64Token, readU64Token, destroyStore);
 
 /// How many UDP sockets an app may hold open at once.
@@ -4499,10 +4716,12 @@ const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX
 const FileBytesResource = struct {
     allocator: std.mem.Allocator,
     bytes: []u8,
+    charged_bytes: usize,
 };
 
 fn destroyFileBytes(resource: *FileBytesResource) void {
     resource.allocator.free(resource.bytes);
+    file_bytes_delivery_reservations.retained_bytes -= resource.charged_bytes;
     resource.bytes = &.{};
 }
 
@@ -4531,37 +4750,33 @@ fn seamlessByteList(resource: *u64, bytes: []u8) abi.RocListWith(u8, false) {
     };
 }
 
-/// Slots promised to reads that have started but have not yet handed their
-/// bytes over. `Files.ReadDir.read_bytes!` has to reserve one before it opens the
-/// path: otherwise a full heap could let `MAX_LIVE_FILE_BYTE_LISTS` large
-/// files be read only to discard each one when there is no slot to install it
-/// in, so the app would pay for the I/O and still get `Busy`.
-///
-/// This is deliberately just a count. Every read runs on the frame thread, so
-/// there is one reader and writer and nothing to synchronize, and
-/// `MAX_LIVE_FILE_BYTE_LISTS` bounds it. No read admission allocates.
+/// Every producer reserves a slot before starting. File reads also reserve
+/// their maximum in-flight allocation. Handing over the result swaps that
+/// reservation for its actual backing length, which stays charged until
+/// the ARC-owned allocation is freed. Listings and capture have separate
+/// size ceilings and share the slot count.
 const FileBytesDeliveryReservations = struct {
     count: usize = 0,
+    in_flight_bytes: usize = 0,
+    retained_bytes: usize = 0,
 
-    fn reserve(self: *FileBytesDeliveryReservations) bool {
-        const live = file_bytes_heap.active();
-        std.debug.assert(live <= MAX_LIVE_FILE_BYTE_LISTS);
-        std.debug.assert(self.count <= MAX_LIVE_FILE_BYTE_LISTS);
-        if (live + self.count >= MAX_LIVE_FILE_BYTE_LISTS) return false;
+    fn reserve(self: *FileBytesDeliveryReservations, bytes: usize) bool {
+        if (file_bytes_heap.active() + self.count >= MAX_LIVE_FILE_BYTE_LISTS) return false;
+        if (bytes > FILE_READ_BYTE_BUDGET - self.in_flight_bytes - self.retained_bytes) return false;
         self.count += 1;
+        self.in_flight_bytes += bytes;
         return true;
     }
 
-    fn release(self: *FileBytesDeliveryReservations) void {
-        std.debug.assert(self.count != 0);
+    fn release(self: *FileBytesDeliveryReservations, bytes: usize) void {
         self.count -= 1;
+        self.in_flight_bytes -= bytes;
     }
 
-    /// Shutdown has cancelled every task that could still have been reading.
-    /// The reads they were parked in will never resume to release their own
-    /// promises, so forget them all before another app lifetime can begin.
+    /// The worker pool has stopped. No pending read can use its reservation.
     fn clearAfterWorkStops(self: *FileBytesDeliveryReservations) void {
         self.count = 0;
+        self.in_flight_bytes = 0;
     }
 };
 
@@ -4583,6 +4798,8 @@ var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
+var directory_cursor_heap: DirectoryCursorHeap = .{};
+var directory_cursor_openings: usize = 0;
 var udp_socket_heap: UdpSocketHeap = .{};
 
 /// Every typed resource heap the host owns: what a Roc deallocation is offered
@@ -4597,6 +4814,7 @@ const resource_heaps = .{
     &prepared_text_heap,
     &file_bytes_heap,
     &store_heap,
+    &directory_cursor_heap,
     &udp_socket_heap,
     &sqlite_effect.stmt_heap,
     &sqlite_effect.db_heap,
@@ -9960,22 +10178,22 @@ fn captureStateForStep() CaptureFromHost {
     };
 }
 
-/// `Window.Clipboard.read_text!`: the clipboard as text, or why not.
-///
-/// The windowing backend only answers on the thread that owns the window, and
-/// the read is a pointer copy rather than I/O, so there is nothing to move off
-/// the frame thread and nothing to wait for -- this is a state read, legal
-/// wherever host state is read, and it never parks.
-///
-/// The clipboard is arbitrary content from outside the app: another process
-/// decides how big it is, and turning it into a `Str` is a copy and a UTF-8
-/// scan on this thread. Cap it where a text read is capped, and for the same
-/// reason.
+/// Find the terminator without scanning arbitrary backend data. Stop at the
+/// first NUL so the scan stays within the allocation even for short strings.
+fn boundedClipboardText(text: [*:0]const u8) ?[]const u8 {
+    for (0..MAX_CLIPBOARD_READ_BYTES + 1) |length| {
+        if (text[length] == 0) return text[0..length];
+    }
+    return null;
+}
+
+/// Get clipboard text on the window's thread. The acquisition is the backend's
+/// work. Once the pointer comes back, bound our scan and copy into Roc.
 fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clipboardResult {
     const Result = abi.HostWindow_read_clipboardResult;
     const Error = abi.HostWindow_read_clipboardErr;
     enforcePhase("Window.Clipboard.read_text!", during_update);
-    const effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
+    var effect = EffectScope.begin("Window.Clipboard.read_text!", 0);
     defer effect.end();
 
     if (headlessMode()) {
@@ -9983,12 +10201,12 @@ fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostWindow_read_clip
         return abiTryOk(Result, abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host));
     }
 
-    // The pointer belongs to the windowing backend: it is null when the
-    // clipboard is empty or holds non-text content, must never be freed, and is
-    // invalidated by the next clipboard call -- so copy it out now.
+    // The backend owns the pointer and invalidates it on the next clipboard call.
     const text = raylib.getClipboardText() orelse return abiTryErr(Result, Error.unavailable);
-    const contents = std.mem.span(text);
-    if (contents.len > MAX_INLINE_READ_BYTES) return abiTryErr(Result, Error.too_large);
+    const contents = boundedClipboardText(text) orelse {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Error.too_large);
+    };
     return abiTryOk(Result, abi.RocStr.fromSlice(contents, roc_host));
 }
 
@@ -9996,32 +10214,38 @@ fn exportedReadClipboard() callconv(.c) abi.HostWindow_read_clipboardResult {
     return hostedReadClipboard(activeHost());
 }
 
-fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
+fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
+    const Result = abi.HostWindow_set_clipboard_textResult;
+    const Error = abi.HostWindow_set_clipboard_textErr;
     enforcePhase("Window.Clipboard.set_text!", during_update);
-    const effect = EffectScope.begin("Window.Clipboard.set_text!", text_arg.asSlice().len);
+    var effect = EffectScope.begin("Window.Clipboard.set_text!", text_arg.asSlice().len);
     defer effect.end();
-    // Roc transfers ownership of refcounted args to the hosted fn; release it
-    // on every path, including the early returns below.
     defer text_arg.decref(roc_host);
 
     const text_slice = text_arg.asSlice();
 
     if (headlessMode()) {
-        if (text_slice.len > headless_clipboard.len) return;
+        if (text_slice.len > headless_clipboard.len) {
+            effect.setOutcome(.refused);
+            return abiTryErr(Result, Error.too_large);
+        }
         @memcpy(headless_clipboard[0..text_slice.len], text_slice);
         headless_clipboard_len = text_slice.len;
         headless_clipboard_set = true;
-        return;
+    } else {
+        var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+        var text = makeTempCString(allocatorFromHost(roc_host), &stack, text_slice) catch {
+            effect.setOutcome(.runtime_error);
+            return abiTryErr(Result, Error.unavailable);
+        };
+        defer text.deinit();
+        raylib.setClipboardText(text.ptr);
     }
-
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromHost(roc_host), &stack, text_slice) catch return;
-    defer text.deinit();
-    raylib.setClipboardText(text.ptr);
+    return abiTryEmptyOk(Result);
 }
 
-fn exportedSetClipboardText(text_arg: abi.RocStr) callconv(.c) void {
-    hostedSetClipboardText(activeHost(), text_arg);
+fn exportedSetClipboardText(text_arg: abi.RocStr) callconv(.c) abi.HostWindow_set_clipboard_textResult {
+    return hostedSetClipboardText(activeHost(), text_arg);
 }
 
 const CursorMode = enum {
@@ -10159,10 +10383,31 @@ test "window minimums and exit keys clamp negatives to the no-op zero" {
     try std.testing.expectEqual(@as(c_int, 640), nonNegativeCInt(640));
 }
 
-test "headless clipboard round-trips text and refuses oversized writes" {
+test "clipboard scan accepts only a terminator at or before the byte limit" {
+    try std.testing.expectEqualStrings("", boundedClipboardText("").?);
+    try std.testing.expectEqualStrings("short", boundedClipboardText("short").?);
+
+    const exact: [MAX_CLIPBOARD_READ_BYTES:0]u8 = @splat('x');
+    try std.testing.expectEqualStrings(&exact, boundedClipboardText(&exact).?);
+
+    const excessive: [MAX_CLIPBOARD_READ_BYTES + 1:0]u8 = @splat('x');
+    try std.testing.expect(boundedClipboardText(&excessive) == null);
+}
+
+test "headless clipboard round-trips full text and refuses oversized writes" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
     roc_host.roc_dealloc = &nativeRocDealloc;
+    const previous_host = active_roc_host;
+    active_roc_host = &roc_host;
+    defer active_roc_host = previous_host;
+    var policy: permissions.Policy = .{};
+    try policy.add(.clipboard_read);
+    try policy.add(.clipboard_write);
+    beginIoLifetime(&policy);
+    defer endIoLifetime();
+    const phase = PhaseScope.enter(.update);
+    defer phase.leave();
     defer {
         headless_clipboard_len = 0;
         headless_clipboard_set = false;
@@ -10170,24 +10415,29 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     headless_clipboard_len = 0;
     headless_clipboard_set = false;
 
-    // Nothing written yet, so a read reports the clipboard as unavailable
-    // rather than handing back an empty string.
-    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Err, hostedReadClipboard(&roc_host).tag);
+    const authority = active_io_authority;
+    const before = capsExportedReadClipboard(authority);
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Err, before.tag);
+    try std.testing.expectEqual(abi.HostWindow_read_clipboardErr.unavailable, before.payload_err());
 
-    hostedSetClipboardText(&roc_host, abi.RocStr.fromSlice("copied", &roc_host));
-    const stored = hostedReadClipboard(&roc_host);
+    const full: [HEADLESS_CLIPBOARD_CAPACITY]u8 = @splat('a');
+    const written = capsExportedSetClipboardText(authority, abi.RocStr.fromSlice(&full, &roc_host));
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textResultTag.Ok, written.tag);
+
+    const stored = capsExportedReadClipboard(authority);
     try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, stored.tag);
     defer stored.payload_ok().decref(&roc_host);
-    try std.testing.expectEqualStrings("copied", stored.payload_ok().asSlice());
+    try std.testing.expectEqualStrings(&full, stored.payload_ok().asSlice());
 
-    // A write that cannot fit leaves the previous contents intact, and still
-    // releases the Roc string it was handed.
-    const oversized = abi.RocStr.fromSlice(&(@as([(HEADLESS_CLIPBOARD_CAPACITY + 1)]u8, @splat('x'))), &roc_host);
-    hostedSetClipboardText(&roc_host, oversized);
-    const unchanged = hostedReadClipboard(&roc_host);
+    const excessive: [HEADLESS_CLIPBOARD_CAPACITY + 1]u8 = @splat('b');
+    const refused = capsExportedSetClipboardText(authority, abi.RocStr.fromSlice(&excessive, &roc_host));
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textResultTag.Err, refused.tag);
+    try std.testing.expectEqual(abi.HostWindow_set_clipboard_textErr.too_large, refused.payload_err());
+
+    const unchanged = capsExportedReadClipboard(authority);
     try std.testing.expectEqual(abi.HostWindow_read_clipboardResultTag.Ok, unchanged.tag);
     defer unchanged.payload_ok().decref(&roc_host);
-    try std.testing.expectEqualStrings("copied", unchanged.payload_ok().asSlice());
+    try std.testing.expectEqualStrings(&full, unchanged.payload_ok().asSlice());
 }
 
 /// `App.Io.entropy!`: one draw from the operating system's entropy.
@@ -10730,6 +10980,9 @@ fn deinitResources() void {
     // *released* its handles rather than about when the host got round to the
     // driver calls. Shutdown drains the complete retirement queue.
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    // Frame retirement limits SQLite closes to one because a close can do
+    // disk work. There is no next frame to drain the other connections here.
+    _ = sqlite_effect.db_heap.drainRetired(std.math.maxInt(usize));
 
     // Roc should have released every handle by the time the final model is
     // dropped. Keep a shutdown drain for optimized builds, but catch lifecycle
@@ -10754,6 +11007,9 @@ fn deinitResources() void {
     std.debug.assert(sound_heap.active() == 0);
     std.debug.assert(file_bytes_heap.active() == 0);
     std.debug.assert(store_heap.active() == 0);
+    std.debug.assert(directory_cursor_heap.active() == 0);
+    std.debug.assert(directory_cursor_openings == 0);
+    directory_cursor_heap.deinitAll();
     std.debug.assert(udp_socket_heap.active() == 0);
     udp_socket_heap.deinitAll();
     std.debug.assert(sqlite_effect.stmt_heap.active() == 0);
@@ -10892,6 +11148,8 @@ comptime {
         @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&capsExportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&capsExportedFilesList, .{ .name = "roc_files_list" });
+        @export(&capsExportedFilesOpenCursor, .{ .name = "roc_files_open_cursor" });
+        @export(&exportedFilesCursorNext, .{ .name = "roc_files_cursor_next" });
         @export(&capsExportedFilesMetadata, .{ .name = "roc_files_metadata" });
         @export(&capsExportedFilesWriteText, .{ .name = "roc_files_write_text" });
         @export(&capsExportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
@@ -12097,9 +12355,18 @@ fn serviceCaptureRequests() void {
     // per-frame readback exists only while an app is still reading pixels.
     const wants_snapshot = screen_snapshot_requested;
     screen_snapshot_requested = false;
-    if (!wants_snapshot) releaseScreenSnapshot();
+    releaseScreenSnapshot();
+    var snapshot_reservation = if (wants_snapshot)
+        reserveScreenSnapshot(
+            @intCast(@max(raylib.getRenderWidth(), 0)),
+            @intCast(@max(raylib.getRenderHeight(), 0)),
+        )
+    else
+        0;
+    defer if (snapshot_reservation != 0) still_budget.release(snapshot_reservation);
+    const can_snapshot = snapshot_reservation != 0;
 
-    if (!wants_screenshot and !wants_frame and !wants_snapshot) return;
+    if (!wants_screenshot and !wants_frame and !can_snapshot) return;
 
     capture_screenshot_pending = false;
 
@@ -12115,7 +12382,7 @@ fn serviceCaptureRequests() void {
     // full resolution, so a frame that has both falls through to the
     // full-resolution readback and the CPU resize below rather than reading
     // twice.
-    if (wants_frame and !wants_screenshot and !wants_snapshot) {
+    if (wants_frame and !wants_screenshot and !can_snapshot) {
         if (captureScaledFrame()) |scaled| {
             var frame = scaled;
             defer frame.deinit();
@@ -12128,7 +12395,7 @@ fn serviceCaptureRequests() void {
     var image = raylib.captureFramebuffer() orelse {
         // A snapshot that could not be taken must not leave the previous
         // frame's pixels behind for the app to read as if they were this one's.
-        if (wants_snapshot) releaseScreenSnapshot();
+        if (can_snapshot) screen_snapshot.failure = capture.err_readback_failed;
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
         if (wants_screenshot) {
             if (screenshot_wait) |wait| {
@@ -12140,7 +12407,10 @@ fn serviceCaptureRequests() void {
     };
     defer image.deinit();
 
-    if (wants_snapshot) storeScreenSnapshot(image);
+    if (can_snapshot) {
+        storeScreenSnapshot(image, snapshot_reservation);
+        snapshot_reservation = 0;
+    }
 
     if (wants_screenshot) {
         if (screenshot_wait) |wait| handOverScreenshot(wait, image);
@@ -12312,6 +12582,7 @@ fn drainRetiredResourcesUpTo(limit: usize) void {
     // how an app pays a large one on a task instead.
     budget -= sqlite_effect.db_heap.drainRetired(@min(budget, 1));
     budget -= store_heap.drainRetired(budget);
+    budget -= directory_cursor_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);
     budget -= shader_heap.drainRetired(budget);
@@ -13155,7 +13426,7 @@ test "completing a large read transfers the read's allocation without copying" {
     const read_ptr = read_bytes.ptr;
 
     counter.allocated_bytes = 0;
-    const large = installReadBytes(std.testing.allocator, read_bytes);
+    const large = installReadBytes(std.testing.allocator, read_bytes, 0);
     const large_cost = counter.allocated_bytes;
 
     try std.testing.expectEqual(@as(u8, 0), large.err);
@@ -13170,7 +13441,7 @@ test "completing a large read transfers the read's allocation without copying" {
     // thread exactly the same, which is the property being claimed.
     const small_bytes = try std.testing.allocator.dupe(u8, "four bytes worth, near enough");
     counter.allocated_bytes = 0;
-    const small = installReadBytes(std.testing.allocator, small_bytes);
+    const small = installReadBytes(std.testing.allocator, small_bytes, 0);
     try std.testing.expectEqual(large_cost, counter.allocated_bytes);
 
     // The control. `Files.ReadDir.read_text!` copies its whole payload through the Roc
@@ -13232,7 +13503,7 @@ test "seamless byte lists retain their typed slot through List and Str ARC in ev
 
     for (orders) |order| {
         const owned = try std.testing.allocator.dupe(u8, payload);
-        const installed = installReadBytes(std.testing.allocator, owned);
+        const installed = installReadBytes(std.testing.allocator, owned, 0);
         const whole = installed.bytes;
 
         // The read owns the first list reference. Give the three aliases below
@@ -13293,7 +13564,7 @@ test "an empty file transfers to the canonical empty list without a resource slo
     }
 
     const owned = try std.testing.allocator.alloc(u8, 0);
-    const installed = installReadBytes(std.testing.allocator, owned);
+    const installed = installReadBytes(std.testing.allocator, owned, 0);
     try std.testing.expect(installed.bytes.isEmpty());
     try std.testing.expect(!installed.bytes.isSeamlessSlice());
 
@@ -13304,18 +13575,78 @@ test "an empty file transfers to the canonical empty list without a resource slo
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 }
 
+test "directory cursor tasks never fall back to inline filesystem work" {
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    const Work = struct {
+        fn unexpected() void {
+            @panic("directory worker call executed inline");
+        }
+    };
+    try std.testing.expectError(error.Unavailable, runDirectoryWork("test directory cursor", Work.unexpected, .{}));
+}
+
+test "directory cursor capacity is reserved before opening and recovered on final release" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const startup = PhaseScope.enter(.startup);
+    defer {
+        startup.leave();
+        directory_cursor_heap.deinitAll();
+        active_roc_host = null;
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
+
+    var handles: [MAX_DIRECTORY_CURSORS]*u64 = undefined;
+    for (&handles) |*handle| {
+        const opened = openDirectoryCursor(std.testing.allocator, root, "");
+        try std.testing.expectEqual(.Ok, opened.tag);
+        handle.* = opened.payload_ok();
+    }
+    try std.testing.expectEqual(MAX_DIRECTORY_CURSORS, directory_cursor_heap.active());
+    const full = openDirectoryCursor(std.testing.allocator, root, "missing");
+    try std.testing.expectEqual(.Err, full.tag);
+    try std.testing.expectEqual(.busy, full.payload_err());
+    try std.testing.expectEqual(@as(usize, 0), directory_cursor_openings);
+
+    const handle = handles[0];
+    const resource = directory_cursor_heap.get(handle.*).?;
+    resource.busy = true;
+    abi.increfBox(@ptrCast(handle), 1);
+    const concurrent = exportedFilesCursorNext(handle);
+    try std.testing.expectEqual(.Err, concurrent.tag);
+    try std.testing.expectEqual(.busy, concurrent.payload_err());
+    try std.testing.expect(resource.cursor.terminalResult() == null);
+    resource.busy = false;
+
+    releaseResourceBox(&roc_host, handle);
+    try std.testing.expectEqual(@as(usize, 1), directory_cursor_heap.drainRetired(1));
+    const reopened = openDirectoryCursor(std.testing.allocator, root, "");
+    try std.testing.expectEqual(.Ok, reopened.tag);
+    handles[0] = reopened.payload_ok();
+
+    for (handles) |held| releaseResourceBox(&roc_host, held);
+    try std.testing.expectEqual(MAX_DIRECTORY_CURSORS, directory_cursor_heap.drainRetired(MAX_DIRECTORY_CURSORS));
+    try std.testing.expectEqual(@as(usize, 0), directory_cursor_heap.active());
+}
+
 test "byte-list delivery reservations bound reads before they can start" {
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 
     var reserved: usize = 0;
     while (reserved < MAX_LIVE_FILE_BYTE_LISTS) : (reserved += 1) {
-        try std.testing.expect(file_bytes_delivery_reservations.reserve());
+        try std.testing.expect(file_bytes_delivery_reservations.reserve(0));
     }
     try std.testing.expectEqual(MAX_LIVE_FILE_BYTE_LISTS, file_bytes_delivery_reservations.count);
-    try std.testing.expect(!file_bytes_delivery_reservations.reserve());
+    try std.testing.expect(!file_bytes_delivery_reservations.reserve(0));
 
-    while (file_bytes_delivery_reservations.count != 0) file_bytes_delivery_reservations.release();
+    while (file_bytes_delivery_reservations.count != 0) file_bytes_delivery_reservations.release(0);
 }
 
 test "a full byte-list heap refuses a read before it opens the path" {
@@ -13333,7 +13664,7 @@ test "a full byte-list heap refuses a read before it opens the path" {
     var filled: usize = 0;
     while (filled < MAX_LIVE_FILE_BYTE_LISTS) : (filled += 1) {
         const owned = try std.testing.allocator.dupe(u8, "held");
-        const installed = installReadBytes(std.testing.allocator, owned);
+        const installed = installReadBytes(std.testing.allocator, owned, 0);
         try std.testing.expectEqual(@as(u8, 0), installed.err);
         held[filled] = installed.bytes;
     }
@@ -13341,7 +13672,7 @@ test "a full byte-list heap refuses a read before it opens the path" {
 
     // This must report `Busy`, not `NotFound`: admission happens before the
     // path is opened, so a doomed read never starts.
-    const refused = readByteListWaiting(&roc_host, "/", "definitely-not-here.txt", .read);
+    const refused = readByteListWaiting(&roc_host, "/", "definitely-not-here.txt", .{ .read = 1024 });
     try std.testing.expectEqual(READ_ERR_BUSY, refused.err);
     try std.testing.expectEqual(@as(usize, 0), refused.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
@@ -13350,7 +13681,7 @@ test "a full byte-list heap refuses a read before it opens the path" {
     // Installation stays defensive for a caller that already owns bytes: the
     // buffer is freed rather than leaked when there is no slot for it.
     const doomed = try std.testing.allocator.dupe(u8, "no slot for this");
-    const no_slot = installReadBytes(std.testing.allocator, doomed);
+    const no_slot = installReadBytes(std.testing.allocator, doomed, 0);
     try std.testing.expectEqual(READ_ERR_BUSY, no_slot.err);
     try std.testing.expectEqual(@as(usize, 0), no_slot.bytes.len());
     try std.testing.expectEqual(MAX_LIVE_FILE_BYTE_LISTS, file_bytes_heap.active());
@@ -13358,6 +13689,72 @@ test "a full byte-list heap refuses a read before it opens the path" {
     for (held) |item| item.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
+}
+
+test "file read limits include the entire file and retain the actual allocation" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer drainRetiredResourcesUpTo(std.math.maxInt(usize));
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
+
+    const rom_size = 32 * 1024 * 1024;
+    {
+        const rom = try tmp.dir.createFile(std.testing.io, "game.gba", .{});
+        defer rom.close(std.testing.io);
+        try rom.setLength(std.testing.io, rom_size);
+    }
+
+    try std.testing.expectEqual(READ_ERR_TOO_LARGE, readByteListWaiting(&roc_host, root, "game.gba", .{ .read = rom_size - 1 }).err);
+    try std.testing.expectEqual(READ_ERR_LIMIT_EXCEEDS_MAX, readByteListWaiting(&roc_host, root, "game.gba", .{ .read = MAX_FILE_READ_BYTES + 1 }).err);
+    const result = readByteListWaiting(&roc_host, root, "game.gba", .{ .read = rom_size });
+    try std.testing.expectEqual(@as(u8, 0), result.err);
+    try std.testing.expectEqual(@as(usize, rom_size), result.bytes.len());
+    try std.testing.expectEqual(@as(u8, 0), result.bytes.items()[rom_size - 1]);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.in_flight_bytes);
+    try std.testing.expectEqual(@as(usize, rom_size), file_bytes_delivery_reservations.retained_bytes);
+
+    result.bytes.incref(1);
+    result.bytes.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, rom_size), file_bytes_delivery_reservations.retained_bytes);
+
+    const remaining = FILE_READ_BYTE_BUDGET - rom_size;
+    try std.testing.expect(!file_bytes_delivery_reservations.reserve(remaining + 1));
+    try std.testing.expect(file_bytes_delivery_reservations.reserve(remaining));
+    try std.testing.expectEqual(READ_ERR_BUSY, readByteListWaiting(&roc_host, root, "game.gba", .{ .read = rom_size }).err);
+    file_bytes_delivery_reservations.release(remaining);
+
+    result.bytes.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.retained_bytes);
+    try std.testing.expect(file_bytes_delivery_reservations.reserve(remaining + 1));
+    file_bytes_delivery_reservations.release(remaining + 1);
+
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "empty", .data = "" });
+    const empty = readByteListWaiting(&roc_host, root, "empty", .{ .read = 0 });
+    try std.testing.expectEqual(@as(u8, 0), empty.err);
+    try std.testing.expect(empty.bytes.isEmpty());
+    try std.testing.expectEqual(READ_ERR_TOO_LARGE, readByteListWaiting(&roc_host, root, "game.gba", .{ .read = 0 }).err);
+}
+
+test "a file read in a task without a worker never falls back to inline I/O" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const prev = active_phase;
+    active_phase = .task;
+    defer active_phase = prev;
+
+    // An inline read would return NotFound. A worker refusal must come first.
+    const refused = readByteListWaiting(&roc_host, "/", "definitely-not-here.txt", .{ .read = 16 });
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, refused.err);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.in_flight_bytes);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.retained_bytes);
+    try std.testing.expectEqual(Phase.task, active_phase);
 }
 
 test "a parked read delivers bytes and releases its reservation either way" {
@@ -13380,20 +13777,20 @@ test "a parked read delivers bytes and releases its reservation either way" {
     const root = try tmpRootAlloc(&tmp);
     defer std.testing.allocator.free(root);
 
-    const read = readByteListWaiting(&roc_host, root, "bytes.txt", .read);
+    const read = readByteListWaiting(&roc_host, root, "bytes.txt", .{ .read = 1024 });
     try std.testing.expectEqual(@as(u8, 0), read.err);
     try std.testing.expectEqualStrings(payload, read.bytes.items());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
-    const missing = readByteListWaiting(&roc_host, root, "definitely-not-here.txt", .read);
+    const missing = readByteListWaiting(&roc_host, root, "definitely-not-here.txt", .{ .read = 1024 });
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
 
     // A path that is not plainly relative is refused before anything is
     // opened, as a path problem rather than a missing grant.
-    const escaping = readByteListWaiting(&roc_host, root, "../bytes.txt", .read);
+    const escaping = readByteListWaiting(&roc_host, root, "../bytes.txt", .{ .read = 1024 });
     try std.testing.expectEqual(READ_ERR_PATH_INVALID, escaping.err);
     // A stub handle's empty root reaches nothing: that is the missing grant.
-    const stub_read = readByteListWaiting(&roc_host, "", "bytes.txt", .read);
+    const stub_read = readByteListWaiting(&roc_host, "", "bytes.txt", .{ .read = 1024 });
     try std.testing.expectEqual(READ_ERR_NOT_PERMITTED, stub_read.err);
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
     try std.testing.expectEqual(@as(usize, 0), missing.bytes.len());
@@ -14582,10 +14979,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     configureCapture(app_config);
     defer finalizeCapture();
 
-    // A read parks its own coroutine on the event loop, so there is no worker
-    // thread to start. What is left of the lifetime is the byte-list delivery
-    // reservations, cleared before capture and resource teardown can touch the
-    // buffers they bound.
+    // The task registry joins its workers before delivery reservations and
+    // byte-list heap resources are torn down.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
     defer cmd_effect.clearAfterWorkStops();
 
@@ -14602,6 +14997,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
+    defer sqlite_effect.interruptAll();
     app_tasks.activate();
     // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -14847,6 +15243,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, options: RuntimeOpt
     // waiting on, so every child is ended before the runtime tries to join
     // the worker holding one.
     defer cmd_effect.killLiveChildren();
+    defer sqlite_effect.interruptAll();
     app_tasks.activate();
     // `Http.Client.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -15817,7 +16214,7 @@ test "a region past the readback cap never reaches a source" {
         .height = 4097,
     });
     try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, read.tag);
-    try std.testing.expectEqual(abi.HostCapture_read_regionErr.region_out_of_bounds, read.payload_err());
+    try std.testing.expectEqual(abi.HostCapture_read_regionErr.budget_exceeded, read.payload_err());
     try std.testing.expect(!screen_snapshot_requested);
 }
 
@@ -15854,6 +16251,38 @@ test "a screen readback with no presented frame is unavailable and arms the next
     try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, region.tag);
     try std.testing.expectEqual(abi.HostCapture_read_regionErr.unavailable, region.payload_err());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+}
+
+test "screen readback distinguishes oversized sources from temporary capture pressure" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        still_budget.reset();
+        active_roc_host = null;
+    }
+
+    try std.testing.expectEqual(@as(u64, 0), reserveScreenSnapshot(8192, 4097));
+    const oversized = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, oversized.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.budget_exceeded, oversized.payload_err());
+
+    var taken: u64 = 0;
+    try std.testing.expectEqual(capture.err_none, still_budget.admit(8192, 4096, &taken));
+    try std.testing.expectEqual(@as(u64, 0), reserveScreenSnapshot(4, 4));
+    const busy = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, busy.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.busy, busy.payload_err());
+    try std.testing.expect(screen_snapshot_requested);
+
+    still_budget.release(taken);
+    const admitted = reserveScreenSnapshot(4, 4);
+    try std.testing.expectEqual(@as(u64, 64), admitted);
+    still_budget.release(admitted);
 }
 
 test "a render-target readback reports what the handle resolves to" {
@@ -15917,7 +16346,7 @@ test "a full byte-list heap refuses a region read before it reads any pixels" {
     var filled: usize = 0;
     while (filled < MAX_LIVE_FILE_BYTE_LISTS) : (filled += 1) {
         const owned = try std.testing.allocator.dupe(u8, "held");
-        const installed = installReadBytes(std.testing.allocator, owned);
+        const installed = installReadBytes(std.testing.allocator, owned, 0);
         try std.testing.expectEqual(@as(u8, 0), installed.err);
         held[filled] = installed.bytes;
     }
@@ -16179,11 +16608,11 @@ fn capsExportedFilesReadText(authority: u64, root_arg: abi.RocStr, path_arg: abi
 }
 
 /// Capability boundary for files_read_bytes!; the implementation below it is trusted host code.
-fn capsExportedFilesReadBytes(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_read_bytesResult {
+fn capsExportedFilesReadBytes(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, max_bytes: u64) callconv(.c) abi.HostFiles_read_bytesResult {
     const name = "Files.ReadDir.read_bytes!";
-    enforcePhase(name, during_wait);
+    enforcePhase(file_bytes_read_phase_name, during_wait);
     if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_read_bytesResult, name, .{ root_arg, path_arg });
-    return exportedFilesReadBytes(root_arg, path_arg);
+    return exportedFilesReadBytes(root_arg, path_arg, max_bytes);
 }
 
 /// Capability boundary for files_list!; the implementation below it is trusted host code.
@@ -16192,6 +16621,14 @@ fn capsExportedFilesList(authority: u64, root_arg: abi.RocStr, path_arg: abi.Roc
     enforcePhase(name, during_wait);
     if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_listResult, name, .{ root_arg, path_arg });
     return exportedFilesList(root_arg, path_arg);
+}
+
+/// Capability boundary for opening an enumeration through the directory grant.
+fn capsExportedFilesOpenCursor(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_open_cursorResult {
+    const name = "Files.ReadDir.open_cursor!";
+    enforcePhase(name, during_wait);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_open_cursorResult, name, .{ root_arg, path_arg });
+    return hostedFilesOpenCursor(activeHost(), root_arg, path_arg);
 }
 
 /// Capability boundary for files_metadata!; the implementation below it is trusted host code.
@@ -16298,7 +16735,7 @@ fn capsExportedUdpBind(authority: u64, args: abi.HostUdp_bindArg1) callconv(.c) 
 /// and the in-memory database needs none.
 fn capsHostedSqliteOpen(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr, mode: u8, busy_timeout_ms: u64, max_result_bytes: u64) callconv(.c) abi.HostSqlite_openResult {
     const name = "Sqlite.Service.open!";
-    enforcePhase(name, during_wait);
+    enforcePhase(sqlite_open_phase_name, during_wait);
     if (!authorityIsLive(authority)) return refuseEffect(abi.HostSqlite_openResult, name, .{ root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes });
     return hostedSqliteOpen(root_arg, path_arg, mode, busy_timeout_ms, max_result_bytes);
 }
@@ -16330,8 +16767,7 @@ fn capsExportedSetClipboardText(authority: u64, text_arg: abi.RocStr) callconv(.
     if (!authorityIsLive(authority) or !admitDeclared(name, .clipboard_write, active_policy.admitClipboard(true))) {
         return refuseEffect(abi.HostWindow_set_clipboard_textResult, name, .{text_arg});
     }
-    exportedSetClipboardText(text_arg);
-    return .ok;
+    return exportedSetClipboardText(text_arg);
 }
 
 // Captures are the app's own output, confined beneath the output directory
@@ -16517,7 +16953,7 @@ test "every gated entry point refuses a stub authority and consumes arguments" {
     const stub: u64 = 0;
     try expectPermissionDenied(capsExportedFilesOpenRoot(stub, testFilesRoot(.Declared, long_test_text, &roc_host), true));
     try expectPermissionDenied(capsExportedFilesReadText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
-    try expectPermissionDenied(capsExportedFilesReadBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
+    try expectPermissionDenied(capsExportedFilesReadBytes(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host), MAX_FILE_READ_BYTES));
     try expectPermissionDenied(capsExportedFilesList(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
     try expectPermissionDenied(capsExportedFilesMetadata(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));
     try expectPermissionDenied(capsExportedFilesWriteText(stub, abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host), abi.RocStr.fromSlice(long_test_text, &roc_host)));

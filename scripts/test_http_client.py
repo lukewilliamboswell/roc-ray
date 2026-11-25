@@ -7,12 +7,13 @@ expected text and whose headers survived the boundary. Everything is checked
 inside the app, so a host that truncates a body, drops the status, or loses the
 header list fails this test rather than passing it quietly.
 
-Three runs, because the client's two limits are the parts most likely to be
-wrong and most expensive to get wrong:
+Exercise the client's limits and redirect policy:
 
 * a plain fetch, which must succeed;
-* the same fetch under `max_response_bytes` smaller than the body, which must
-  fail rather than hand the app a truncated body;
+* exact-limit and oversized bodies, including a compressed response measured
+  after decompression;
+* empty responses under a zero-byte limit, and unsupported requests for more
+  response storage than the host can provide;
 * a fetch of a deliberately slow route under a short `timeout_ms`, which must
   fail as a timeout rather than as some other transport error;
 * a redirect within the declared origin, which must be followed;
@@ -29,6 +30,7 @@ script.
 
 from __future__ import annotations
 
+import gzip
 import http.server
 import os
 import socket
@@ -49,6 +51,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Distinctive enough that finding it in the output cannot be a coincidence.
 SERVED_BODY = b"HTTP_PAYLOAD_SECRET_178\nsecond line of the served file\n"
+GZIP_BODY = gzip.compress(SERVED_BODY * 32)
 
 # Long enough that a 200 ms deadline cannot be met, short enough not to slow the
 # suite down: the client gives up well before the handler replies.
@@ -75,15 +78,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path == "/slow":
             time.sleep(SLOW_ROUTE_SECONDS)
-        elif self.path != "/data.txt":
+        elif self.path not in ("/data.txt", "/gzip", "/empty"):
             self.send_error(404)
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(SERVED_BODY)))
+        if self.path == "/gzip":
+            self.send_header("Content-Encoding", "gzip")
+            body = GZIP_BODY
+        elif self.path == "/empty":
+            body = b""
+        else:
+            body = SERVED_BODY
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         try:
-            self.wfile.write(SERVED_BODY)
+            self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError):
             # Expected on the timeout case: the client hung up while waiting.
             pass
@@ -119,7 +129,7 @@ def _free_port_is_available() -> bool:
 
 
 def _run_case(
-    executable: Path, name: str, args: list[str], expected_trace: str, verbose: bool
+    executable: Path, name: str, args: list[str], expected_trace: str | None, verbose: bool
 ) -> str | None:
     """Run one probe invocation; return a failure description or None."""
     command = [
@@ -142,7 +152,11 @@ def _run_case(
     if result.returncode != 0:
         print(output, file=sys.stderr)
         return f"http client {name} (exit {result.returncode})"
-    if expected_trace not in output:
+    if expected_trace is None:
+        if "http GET" in output:
+            print(output, file=sys.stderr)
+            return f"http client {name} made a network request"
+    elif expected_trace not in output:
         print(output, file=sys.stderr)
         return f"http client {name} (no {expected_trace!r} in the task trace)"
     return None
@@ -206,6 +220,56 @@ def run_http_client_test(
                     "larger than max_response_bytes",
                 ],
                 "http GET failed: ResponseTooLarge",
+            ),
+            (
+                "exact response limit",
+                [
+                    "--http-url",
+                    f"{base_url}/data.txt",
+                    "--http-max-bytes",
+                    str(len(SERVED_BODY)),
+                    "--http-expect",
+                    token,
+                ],
+                f"http body: {token}",
+            ),
+            (
+                "decompressed limit via UTF-8 helper",
+                [
+                    "--http-url",
+                    f"{base_url}/gzip",
+                    "--http-get-utf8",
+                    "yes",
+                    "--http-max-bytes",
+                    str(len(GZIP_BODY)),
+                    "--http-expect-error",
+                    "larger than max_response_bytes",
+                ],
+                "http GET failed: ResponseTooLarge",
+            ),
+            (
+                "empty body at zero limit",
+                [
+                    "--http-url",
+                    f"{base_url}/empty",
+                    "--http-max-bytes",
+                    "0",
+                    "--http-expect",
+                    "",
+                ],
+                "resumed with 0 byte body",
+            ),
+            (
+                "unsupported response limit",
+                [
+                    "--http-url",
+                    f"{base_url}/data.txt",
+                    "--http-max-bytes",
+                    str(64 * 1024 * 1024 + 1),
+                    "--http-expect-error",
+                    "requested response limit is unsupported",
+                ],
+                None,
             ),
             (
                 "timeout",

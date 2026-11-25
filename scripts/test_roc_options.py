@@ -25,14 +25,15 @@ class CompilerOptionsTests(unittest.TestCase):
                 with self.subTest(command=command, source=source):
                     self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", command, Path(source)))
 
-    def test_november_23_workarounds_are_confined_to_top_down(self):
+    def test_november_23_and_24_workarounds_are_confined_to_top_down(self):
         top_down = Path("examples/top_down/main.roc")
-        version = "Roc compiler version nightly-2026-11-23-b5c77fc"
-        with patch.object(roc_options, "compiler_version", return_value=version):
-            self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", "check", top_down))
-            for command in ["build", "test"]:
-                self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", command, top_down))
-            self.assertEqual([], roc_options.compiler_args("roc", "test", Path("platform/Devices.roc")))
+        for nightly in ["nightly-2026-11-23-b5c77fc", "nightly-2026-11-24-ff5e544"]:
+            version = f"Roc compiler version {nightly}"
+            with self.subTest(nightly=nightly), patch.object(roc_options, "compiler_version", return_value=version):
+                self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", "check", top_down))
+                for command in ["build", "test"]:
+                    self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", command, top_down))
+                self.assertEqual([], roc_options.compiler_args("roc", "test", Path("platform/Devices.roc")))
 
     def test_native_lowering_workaround_retains_cache(self):
         with patch.object(roc_options, "compiler_version", return_value="Roc compiler version nightly-2026-11-18-a520eed"):

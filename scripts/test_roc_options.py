@@ -25,9 +25,13 @@ class CompilerOptionsTests(unittest.TestCase):
                 with self.subTest(command=command, source=source):
                     self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", command, Path(source)))
 
-    def test_november_23_and_24_workarounds_are_confined_to_top_down(self):
+    def test_recent_nightly_workarounds_are_confined_to_top_down(self):
         top_down = Path("examples/top_down/main.roc")
-        for nightly in ["nightly-2026-11-23-b5c77fc", "nightly-2026-11-24-ff5e544"]:
+        for nightly in [
+            "nightly-2026-11-23-b5c77fc",
+            "nightly-2026-11-24-ff5e544",
+            "nightly-2026-11-25-d5a4f1e",
+        ]:
             version = f"Roc compiler version {nightly}"
             with self.subTest(nightly=nightly), patch.object(roc_options, "compiler_version", return_value=version):
                 self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", "check", top_down))

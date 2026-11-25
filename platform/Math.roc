@@ -69,8 +69,7 @@ MathVec2 := {
 	}
 
 	## Compare two of these values.
-	is_eq : MathVec2, MathVec2 -> Bool
-	is_eq = |a, b| a.x == b.x and a.y == b.y
+	is_eq : _
 }
 
 MathRect := {
@@ -113,8 +112,7 @@ MathRect := {
 	overlaps = Math.overlaps
 
 	## Compare two of these values.
-	is_eq : MathRect, MathRect -> Bool
-	is_eq = |a, b| a.x == b.x and a.y == b.y and a.width == b.width and a.height == b.height
+	is_eq : _
 }
 
 MathCircle := {
@@ -146,14 +144,11 @@ MathCircle := {
 	overlaps_rect = Math.overlaps_rect
 
 	## Compare two of these values.
-	is_eq : MathCircle, MathCircle -> Bool
-	is_eq = |a, b| a.center == b.center and a.radius == b.radius
+	is_eq : _
 }
 
 Math := [].{
 
-	# TODO(follow up): Restore derived equality once Roc compiles comparisons
-	# through platform aliases without looping (nightly-2026-09-18-1d982dc).
 	## Two-dimensional floating-point vector, also named `Draw.Vector2`.
 	Vec2 : MathVec2
 

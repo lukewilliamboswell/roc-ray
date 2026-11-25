@@ -453,8 +453,7 @@ stopped! = |callback, error| {
 ## Drop the final boxed model at host shutdown.
 ##
 ## The host owns the model box returned by init!/render! and must release it.
-## Box refcounting depends on the Model layout, which only the compiler knows.
-## Roc therefore owns the unused argument and decrefs it at scope end.
-## TODO: remove once roc glue emits box refcount helpers (roc#9536).
+## Only Roc knows the model's alignment and how to release its fields.
+## Taking ownership of this argument lets Roc release it at scope end.
 drop_model_for_host! : Box(Model) => {}
 drop_model_for_host! = |_boxed_model| {}

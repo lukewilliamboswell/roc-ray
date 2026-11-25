@@ -115,25 +115,25 @@ UniformFormat := [Default].{
 		}
 
 	encode_f32 : F32, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_f32 = |value, state| record_uniform(state, Host.shader_uniform_kind_float, Host.ShaderUniformValue.Float(value))
+	encode_f32 = |value, state| record_uniform(state, Float, Host.ShaderUniformValue.Float(value))
 	encode_i32 : I32, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_i32 = |value, state| record_uniform(state, Host.shader_uniform_kind_int, Host.ShaderUniformValue.Int(value))
+	encode_i32 = |value, state| record_uniform(state, Int, Host.ShaderUniformValue.Int(value))
 	encode_bool : Bool, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_bool = |value, state| record_uniform(state, Host.shader_uniform_kind_bool, Host.ShaderUniformValue.Bool(value))
+	encode_bool = |value, state| record_uniform(state, Bool, Host.ShaderUniformValue.Bool(value))
 	encode_vec2 : Math.Vec2, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_vec2 = |value, state| record_uniform(state, Host.shader_uniform_kind_vec2, Host.ShaderUniformValue.Vec2({ x: value.x, y: value.y }))
+	encode_vec2 = |value, state| record_uniform(state, Vec2, Host.ShaderUniformValue.Vec2({ x: value.x, y: value.y }))
 	encode_vec3 : Math.Vec3, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_vec3 = |value, state| record_uniform(state, Host.shader_uniform_kind_vec3, Host.ShaderUniformValue.Vec3({ x: value.x, y: value.y, z: value.z }))
+	encode_vec3 = |value, state| record_uniform(state, Vec3, Host.ShaderUniformValue.Vec3({ x: value.x, y: value.y, z: value.z }))
 	encode_vec4 : Math.Vec4, UniformState -> Try(UniformState, UniformEncodeError)
-	encode_vec4 = |value, state| record_uniform(state, Host.shader_uniform_kind_vec4, Host.ShaderUniformValue.Vec4({ x: value.x, y: value.y, z: value.z, w: value.w }))
+	encode_vec4 = |value, state| record_uniform(state, Vec4, Host.ShaderUniformValue.Vec4({ x: value.x, y: value.y, z: value.z, w: value.w }))
 	encode_color : Color.Rgba, UniformState -> Try(UniformState, UniformEncodeError)
 	encode_color = |color, state| {
 		value = normalized_color(color)
-		record_uniform(state, Host.shader_uniform_kind_vec4, Host.ShaderUniformValue.Vec4({ x: value.x, y: value.y, z: value.z, w: value.w }))
+		record_uniform(state, Vec4, Host.ShaderUniformValue.Vec4({ x: value.x, y: value.y, z: value.z, w: value.w }))
 	}
 	encode_texture : Assets.Texture, UniformState -> Try(UniformState, UniformEncodeError)
 	encode_texture = |texture, state| {
-		record_uniform(state, Host.shader_uniform_kind_sampler2d, Host.ShaderUniformValue.Sampler2D(texture))
+		record_uniform(state, Sampler2D, Host.ShaderUniformValue.Sampler2D(texture))
 	}
 }
 
@@ -243,8 +243,8 @@ expect {
 	uniforms : { amount : F32, enabled : Bool, index : I32 }
 	uniforms = { amount: 1.5, enabled: Bool.True, index: 2 }
 	uniform_schema(uniforms) == Ok([
-		{ kind: Host.shader_uniform_kind_float, name: "amount" },
-		{ kind: Host.shader_uniform_kind_bool, name: "enabled" },
-		{ kind: Host.shader_uniform_kind_int, name: "index" },
+		{ kind: Float, name: "amount" },
+		{ kind: Bool, name: "enabled" },
+		{ kind: Int, name: "index" },
 	])
 }

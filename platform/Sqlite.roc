@@ -550,7 +550,10 @@ Sqlite := [].{
 		open_with! = |Service.(authority), dir, path, config| perform_open!(authority, dir.for_host(), path, config)
 
 		## Open a database beneath a writable directory with a named path and
-		## defaulted options. Legal in init! and tasks.
+		## defaulted options.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		open_configured! : Service, Files.Dir, OpenRequest => Try(Db, OpenErr)
 		open_configured! = |Service.(authority), dir, { path, mode, busy_timeout_ms, max_result_bytes }|
 			perform_open!(authority, dir.for_host(), path, { mode, busy_timeout_ms, max_result_bytes })
@@ -564,7 +567,9 @@ Sqlite := [].{
 		open_read! = |Service.(authority), dir, path| perform_open!(authority, dir.for_host(), path, { ..Sqlite.default_config, mode: ReadOnly })
 
 		## Open a read-only database with explicit connection limits.
-		## Legal in init! and tasks.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		open_read_with! : Service, Files.ReadDir, OpenReadRequest => Try(Db, OpenErr)
 		open_read_with! = |Service.(authority), dir, { path, busy_timeout_ms, max_result_bytes }|
 			perform_open!(authority, dir.for_host(), path, { mode: ReadOnly, busy_timeout_ms, max_result_bytes })
@@ -577,7 +582,9 @@ Sqlite := [].{
 		open_memory! = |Service.(authority)| perform_open!(authority, { authority, root: "", path: "" }, memory_path, Sqlite.default_config)
 
 		## Create a private in-memory database with explicit connection limits.
-		## Legal in init! and tasks.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		open_memory_with! : Service, MemoryOptions => Try(Db, OpenErr)
 		open_memory_with! = |Service.(authority), { busy_timeout_ms, max_result_bytes }|
 			perform_open!(

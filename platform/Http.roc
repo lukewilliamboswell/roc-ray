@@ -189,7 +189,10 @@ Http := [].{
 		send_json! : Client, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		send_json! = |Client.(authority), request, value| perform_send_json!(authority, Http.default_config, request, value)
 
-		## As `send_json!` with explicit limits. Legal in `init!` and tasks.
+		## As `send_json!` with explicit limits.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		send_json_with! : Client, Config, { request : Request, value : _ } => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		send_json_with! = |Client.(authority), config, { request, value }|
 			perform_send_json!(authority, config, request, value)
@@ -215,7 +218,10 @@ Http := [].{
 		get_utf8! : Client, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		get_utf8! = |Client.(authority), url| perform_get_utf8!(authority, Http.default_config, url)
 
-		## As `get_utf8!` with explicit limits. Legal in `init!` and tasks.
+		## As `get_utf8!` with explicit limits.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		get_utf8_with! : Client, Config, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
 		get_utf8_with! = |Client.(authority), config, url| perform_get_utf8!(authority, config, url)
 
@@ -235,7 +241,10 @@ Http := [].{
 		get! : Client, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_)])
 		get! = |Client.(authority), url| perform_get!(authority, Http.default_config, url)
 
-		## As `get!` with explicit limits. Legal in `init!` and tasks.
+		## As `get!` with explicit limits.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		get_with! : Client, Config, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_)])
 		get_with! = |Client.(authority), config, url| perform_get!(authority, config, url)
 

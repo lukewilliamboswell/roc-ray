@@ -340,7 +340,8 @@ Files := [].{
 
 		## As `ReadDir.read_bytes_with!`.
 		##
-		## Legal in `init!` and tasks; refused in `update!` and `render!`.
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_bytes_with! : Dir, ReadBytesRequest => Try(List(U8), ReadBytesWithError)
 		read_bytes_with! = |Dir.(handle), { path, max_bytes }| perform_read_bytes_with!(handle, path, max_bytes)
 
@@ -423,7 +424,8 @@ Files := [].{
 
 		## Read this designated file within an explicit byte ceiling.
 		##
-		## Legal in `init!` and tasks; refused in `update!` and `render!`.
+		## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+		## the task; refused in `update!` and `render!`.
 		read_bytes_with! : Designated, ReadBytesOptions => Try(List(U8), ReadBytesWithError)
 		read_bytes_with! = |Designated.(item), { max_bytes }| perform_read_bytes_with!(parent_handle(item), item.name, max_bytes)
 

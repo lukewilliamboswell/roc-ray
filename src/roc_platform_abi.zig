@@ -9182,7 +9182,7 @@ pub const HostHttp_sendResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostHttp_sendResultPayload = extern union {
-    err: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout,
+    err: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable,
     ok: __AnonStruct_a14cd3b7d5755441,
 };
 
@@ -9190,8 +9190,8 @@ pub const HostHttp_sendResultPayload = extern union {
 pub const HostHttp_sendResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [28]u8 align(4),
     tag: HostHttp_sendResultTag,
-    pub fn payload_err(self: *const @This()) MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout {
-        const ptr: *const MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable {
+        const ptr: *const BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_a14cd3b7d5755441 {
@@ -9210,7 +9210,7 @@ pub const HostHttp_sendResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostHttp_sendResultPayload,
     tag: HostHttp_sendResultTag,
-    pub fn payload_err(self: *const @This()) MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout {
+    pub fn payload_err(self: *const @This()) BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_a14cd3b7d5755441 {
@@ -9240,68 +9240,76 @@ comptime {
     }
 }
 
-/// Tag discriminant for MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout.
-pub const MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag = enum(u8) {
-    MalformedResponse = 0,
-    NetworkError = 1,
-    Other = 2,
-    PermissionDenied = 3,
-    Timeout = 4,
+/// Tag discriminant for BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable.
+pub const BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableTag = enum(u8) {
+    Busy = 0,
+    MalformedResponse = 1,
+    NetworkError = 2,
+    Other = 3,
+    PermissionDenied = 4,
+    ResponseLimitUnsupported = 5,
+    ResponseTooLarge = 6,
+    Timeout = 7,
+    Unavailable = 8,
 };
 
-/// Payload union for MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout.
-pub const MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutPayload = extern union {
+/// Payload union for BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable.
+pub const BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailablePayload = extern union {
+    busy: [0]u8,
     malformed_response: [0]u8,
     network_error: [0]u8,
     other: RocStr,
     permission_denied: [0]u8,
+    response_limit_unsupported: [0]u8,
+    response_too_large: [0]u8,
     timeout: [0]u8,
+    unavailable: [0]u8,
 };
 
-/// Tag union: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout
-pub const MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout = if (@sizeOf(usize) == 4) extern struct {
+/// Tag union: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable
+pub const BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
-    tag: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag,
+    tag: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableTag,
     pub fn payload_other(self: *const @This()) RocStr {
         const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(self, roc_host);
+        decrefBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(self, amount);
+        increfBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(self, amount);
     }
 } else extern struct {
-    payload: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutPayload,
-    tag: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag,
+    payload: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailablePayload,
+    tag: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableTag,
     pub fn payload_other(self: *const @This()) RocStr {
         return self.payload.other;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(self, roc_host);
+        decrefBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(self, amount);
+        increfBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout) != 32) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout size mismatch");
-        if (@alignOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout) != 8) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout alignment mismatch");
-        if (@offsetOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout, "tag") != 24) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout tag offset mismatch");
+        if (@sizeOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable) != 32) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable size mismatch");
+        if (@alignOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable) != 8) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable alignment mismatch");
+        if (@offsetOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable, "tag") != 24) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout) != 16) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout size mismatch");
-        if (@alignOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout) != 4) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout alignment mismatch");
-        if (@offsetOf(MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout, "tag") != 12) @compileError("MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout tag offset mismatch");
+        if (@sizeOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable) != 16) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable size mismatch");
+        if (@alignOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable) != 4) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable alignment mismatch");
+        if (@offsetOf(BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable, "tag") != 12) @compileError("BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable tag offset mismatch");
     }
 }
 
@@ -14474,7 +14482,7 @@ pub const HostFiles_write_textArgs = extern struct {
 };
 
 /// Arguments for Host.http_send!
-/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
+/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [Busy, MalformedResponse, NetworkError, Other(Str), PermissionDenied, ResponseLimitUnsupported, ResponseTooLarge, Timeout, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostHttp_sendArgs = extern struct {
     arg0: u64,
@@ -15809,9 +15817,9 @@ pub const HostFiles_write_textResultTag = HostFiles_write_bytesResultTag;
 pub const HostFiles_write_textErr = AccessRefusedOrNoSpaceOrNotFoundOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
 pub const HostHttp_sendArg1 = __AnonStruct_85380e02323174c5;
 pub const HostHttp_sendArg1Headers = __AnonStruct_82a96c5d55d63488;
-pub const HostHttp_sendErr = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout;
-pub const HostHttp_sendErrPayload = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutPayload;
-pub const HostHttp_sendErrTag = MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutTag;
+pub const HostHttp_sendErr = BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable;
+pub const HostHttp_sendErrPayload = BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailablePayload;
+pub const HostHttp_sendErrTag = BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableTag;
 pub const HostHttp_sendOk = __AnonStruct_a14cd3b7d5755441;
 pub const HostHttp_sendOkHeaders = __AnonStruct_82a96c5d55d63488;
 pub const HostShader_bind_uniformsArg1 = __AnonStruct_a3e1a06b0ef2a409;
@@ -16886,32 +16894,40 @@ pub const HostHttp_sendResultRelease = struct {
     }
 };
 
-fn decrefMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(value: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout, roc_host: *RocHost) void {
+fn decrefBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(value: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable, roc_host: *RocHost) void {
     switch (value.tag) {
+        .Busy => {},
         .MalformedResponse => {},
         .NetworkError => {},
         .Other => {
             value.payload_other().decref(roc_host);
         },
         .PermissionDenied => {},
+        .ResponseLimitUnsupported => {},
+        .ResponseTooLarge => {},
         .Timeout => {},
+        .Unavailable => {},
     }
 }
 
-fn increfMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout(value: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout, amount: isize) void {
+fn increfBusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable(value: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable, amount: isize) void {
     switch (value.tag) {
+        .Busy => {},
         .MalformedResponse => {},
         .NetworkError => {},
         .Other => {
             value.payload_other().incref(amount);
         },
         .PermissionDenied => {},
+        .ResponseLimitUnsupported => {},
+        .ResponseTooLarge => {},
         .Timeout => {},
+        .Unavailable => {},
     }
 }
 
-pub const MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutRelease = struct {
-    pub fn release(value: MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout, roc_host: *RocHost) void {
+pub const BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableRelease = struct {
+    pub fn release(value: BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -18365,7 +18381,7 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == HostFiles_read_bytesResult) return HostFiles_read_bytesResultRelease;
     if (T == HostFiles_listResult) return HostFiles_listResultRelease;
     if (T == HostHttp_sendResult) return HostHttp_sendResultRelease;
-    if (T == MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeout) return MalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrTimeoutRelease;
+    if (T == BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailable) return BusyOrMalformedResponseOrNetworkErrorOrOtherOrPermissionDeniedOrResponseLimitUnsupportedOrResponseTooLargeOrTimeoutOrUnavailableRelease;
     if (T == __AnonStruct_a14cd3b7d5755441) return __AnonStruct_a14cd3b7d5755441Release;
     if (T == RocList(__AnonStruct_82a96c5d55d63488)) return RocListRelease(RocList(__AnonStruct_82a96c5d55d63488), __AnonStruct_82a96c5d55d63488Release);
     if (T == __AnonStruct_82a96c5d55d63488) return __AnonStruct_82a96c5d55d63488Release;
@@ -19040,7 +19056,7 @@ pub extern fn roc_files_write_bytes(arg0: u64, arg1: RocStr, arg2: RocStr, arg3:
 pub extern fn roc_files_write_text(arg0: u64, arg1: RocStr, arg2: RocStr, arg3: RocStr) callconv(.c) HostFiles_write_bytesResult;
 
 /// Hosted symbol for Host.http_send!
-/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [MalformedResponse, NetworkError, Other(Str), PermissionDenied, Timeout])
+/// Roc signature: Resource.Authority, { body : List(U8), headers : List({ name : Str, value : Str }), max_response_bytes : U64, method : U8, method_ext : Str, timeout_ms : U64, uri : Str } => Try({ body : List(U8), headers : List({ name : Str, value : Str }), status : U16 }, [Busy, MalformedResponse, NetworkError, Other(Str), PermissionDenied, ResponseLimitUnsupported, ResponseTooLarge, Timeout, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg1.decref(roc_host);

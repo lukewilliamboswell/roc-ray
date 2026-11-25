@@ -2593,30 +2593,26 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) abi.HostHttp_sendRe
             .body = result.body,
         });
     }
-    effect.setOutcome(.runtime_error);
+    effect.setOutcome(switch (result.err) {
+        http_effect.ERR_BUSY, http_effect.ERR_RESPONSE_LIMIT_UNSUPPORTED, http_effect.ERR_NOT_PERMITTED, http_effect.ERR_UNAVAILABLE => .refused,
+        else => .runtime_error,
+    });
     result.headers.decref(roc_host);
     result.body.decref(roc_host);
-    // Only `Other` carries the host's description; the three named failures
-    // say everything they have to say in their own name, so their message is
-    // released rather than passed along.
+    if (result.err == http_effect.ERR_OTHER) {
+        return abiTryErr(Result, abiUnionPayload(Union, .Other, "other", result.err_message));
+    }
+    result.err_message.decref(roc_host);
     return abiTryErr(Result, switch (result.err) {
-        http_effect.ERR_TIMEOUT => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .Timeout);
-        },
-        http_effect.ERR_NETWORK => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .NetworkError);
-        },
-        http_effect.ERR_BAD_BODY => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .MalformedResponse);
-        },
-        http_effect.ERR_NOT_PERMITTED => blk: {
-            result.err_message.decref(roc_host);
-            break :blk abiUnion(Union, .PermissionDenied);
-        },
-        else => abiUnionPayload(Union, .Other, "other", result.err_message),
+        http_effect.ERR_BUSY => abiUnion(Union, .Busy),
+        http_effect.ERR_TIMEOUT => abiUnion(Union, .Timeout),
+        http_effect.ERR_NETWORK => abiUnion(Union, .NetworkError),
+        http_effect.ERR_BAD_BODY => abiUnion(Union, .MalformedResponse),
+        http_effect.ERR_NOT_PERMITTED => abiUnion(Union, .PermissionDenied),
+        http_effect.ERR_RESPONSE_LIMIT_UNSUPPORTED => abiUnion(Union, .ResponseLimitUnsupported),
+        http_effect.ERR_RESPONSE_TOO_LARGE => abiUnion(Union, .ResponseTooLarge),
+        http_effect.ERR_UNAVAILABLE => abiUnion(Union, .Unavailable),
+        else => unreachable,
     });
 }
 

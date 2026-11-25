@@ -15,17 +15,19 @@
 //!
 //! `send` consumes the request record Roc hands it -- the ABI transfers owned
 //! refcounted arguments to the hosted function -- and returns a response record
-//! whose strings and lists Roc then owns. Everything in between lives in an
-//! arena that is discarded before the Roc values are built, so a timeout or a
-//! cancellation cannot leave a half-built Roc value behind.
+//! whose strings and lists Roc then owns. The response body has its own
+//! bounded scratch buffer. The arena for the exchange and the body buffer are
+//! released before the call returns, including on timeout or cancellation.
 //!
 //! ## Limits
 //!
 //! The request carries both limits: `timeout_ms` bounds the whole exchange
 //! through `runWithDeadline`, and `max_response_bytes` bounds the decompressed
-//! body through the reader's own limit. Zero disables either one. The body cap
-//! is a refusal, not a truncation: a body over the cap fails the send, because
-//! a truncated body decodes into wrong data rather than into an error.
+//! body. A zero deadline means no timer and a zero byte limit admits an empty
+//! body. Before starting any network work, reserve room for this limit and one
+//! equally sized temporary buffer in the shared response budget. The second
+//! buffer accounts for resizing and copying back into Roc. A response over its
+//! limit fails the entire send.
 
 const std = @import("std");
 const zio = @import("zio");
@@ -69,6 +71,41 @@ pub const ERR_OTHER: u8 = 4;
 /// A redirect led to an origin the app did not declare. `Http` maps this to
 /// `PermissionDenied`.
 pub const ERR_NOT_PERMITTED: u8 = 5;
+
+/// The decoded body exceeded the request's response limit.
+pub const ERR_RESPONSE_TOO_LARGE: u8 = 6;
+/// The requested limit exceeds the host's maximum per response.
+pub const ERR_RESPONSE_LIMIT_UNSUPPORTED: u8 = 7;
+/// Other exchanges have reserved the response working budget.
+pub const ERR_BUSY: u8 = 8;
+/// The app's runtime is inactive or cancelling this request.
+pub const ERR_UNAVAILABLE: u8 = 9;
+
+/// A per-exchange cap for the decoded body and a shared cap for working
+/// allocations. The task runtime independently bounds simultaneous exchanges.
+const max_response_bytes = 64 * 1024 * 1024;
+const response_working_budget_bytes = 256 * 1024 * 1024;
+
+const ResponseBudget = struct {
+    reserved: usize = 0,
+
+    fn reserve(self: *ResponseBudget, limit: u64) error{ ResponseLimitUnsupported, Busy }!usize {
+        if (limit > max_response_bytes) return error.ResponseLimitUnsupported;
+        // A resize can overlap the old allocation and a completed exchange
+        // can overlap the Roc result, so account for both at admission.
+        const charge = @as(usize, @intCast(limit)) * 2;
+        if (charge > response_working_budget_bytes - self.reserved) return error.Busy;
+        self.reserved += charge;
+        return charge;
+    }
+
+    fn release(self: *ResponseBudget, charge: usize) void {
+        self.reserved -= charge;
+    }
+};
+
+// All accesses are on the frame thread, including when tasks resume.
+var response_budget: ResponseBudget = .{};
 
 /// Redirects followed before the exchange gives up, as `std.http.Client`'s
 /// own default did.
@@ -115,6 +152,7 @@ var trace: bool = false;
 /// Publish the runtime this effect sends on. Called by the frame loop next to
 /// the task registry's own `activate`.
 pub fn activate(rt: *zio.Runtime, trace_requests: bool) void {
+    std.debug.assert(response_budget.reserved == 0);
     runtime = rt;
     trace = trace_requests;
 }
@@ -155,6 +193,7 @@ const OutHeader = struct { name: []const u8, value: []const u8 };
 /// around by reference and fill in the output fields in place.
 const Exchange = struct {
     arena: std.mem.Allocator,
+    body_allocator: std.mem.Allocator,
     io: std.Io,
     method: std.http.Method,
     uri: std.Uri,
@@ -164,14 +203,13 @@ const Exchange = struct {
     standard_headers: std.http.Client.Request.Headers,
     /// Owned by the arena: `sendBodyComplete` writes through this buffer.
     body: []u8,
-    /// Zero means no cap.
-    max_response_bytes: u64,
+    max_response_bytes: usize,
     /// Asked before following each redirect.
     admit_hop: AdmitHop,
 
     status: u16 = 0,
     headers: []OutHeader = &.{},
-    response_body: []u8 = &.{},
+    response_body: std.ArrayList(u8) = .empty,
 };
 
 /// Send one request and wait for the whole response.
@@ -182,17 +220,16 @@ const Exchange = struct {
 pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request, admit_hop: AdmitHop) Response {
     defer args.decref(roc_host);
 
-    const rt = runtime orelse return failure(
-        roc_host,
-        ERR_OTHER,
-        "Http.Client.send! is only available while the app is running",
-    );
+    const rt = runtime orelse return failure(roc_host, ERR_UNAVAILABLE, "");
+    const charge = response_budget.reserve(args.max_response_bytes) catch |err| return describe(roc_host, err);
+    defer response_budget.release(charge);
 
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var exchange = prepare(arena, rt.io(), args, admit_hop) catch |err| return describe(roc_host, err, args, 0);
+    var exchange = prepare(arena, allocator, rt.io(), args, admit_hop) catch |err| return describe(roc_host, err);
+    defer exchange.response_body.deinit(allocator);
 
     if (trace) std.log.info("[TASK] http {s} {s} parking", .{
         @tagName(exchange.method),
@@ -202,16 +239,16 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request,
     const timeout: zio.Timeout = if (args.timeout_ms == 0) .none else .fromMilliseconds(args.timeout_ms);
     runWithDeadline(&exchange, timeout) catch |err| {
         if (trace) std.log.info("[TASK] http {s} failed: {s}", .{ @tagName(exchange.method), @errorName(err) });
-        return describe(roc_host, err, args, exchange.max_response_bytes);
+        return describe(roc_host, err);
     };
 
     if (trace) {
         std.log.info("[TASK] http {d} resumed with {d} byte body from {s}", .{
             exchange.status,
-            exchange.response_body.len,
+            exchange.response_body.items.len,
             args.uri.asSlice(),
         });
-        tracePreview(exchange.response_body);
+        tracePreview(exchange.response_body.items);
     }
 
     return .{
@@ -219,7 +256,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request,
         .err_message = abi.RocStr.empty(),
         .status = exchange.status,
         .headers = toRocHeaders(roc_host, exchange.headers),
-        .body = abi.RocListWith(u8, false).fromSlice(exchange.response_body, roc_host),
+        .body = abi.RocListWith(u8, false).fromSlice(exchange.response_body.items, roc_host),
     };
 }
 
@@ -227,7 +264,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request,
 ///
 /// Every slice this produces is copied into the arena, so the Roc strings the
 /// caller owns can be released the moment `send` returns whatever happens.
-fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request, admit_hop: AdmitHop) ExchangeError!Exchange {
+fn prepare(arena: std.mem.Allocator, body_allocator: std.mem.Allocator, io: std.Io, args: Request, admit_hop: AdmitHop) ExchangeError!Exchange {
     const method = try methodFromCode(args.method);
     const uri = std.Uri.parse(try arena.dupe(u8, args.uri.asSlice())) catch return error.UnsupportedUri;
 
@@ -246,13 +283,14 @@ fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request, admit_hop: Admit
 
     return .{
         .arena = arena,
+        .body_allocator = body_allocator,
         .io = io,
         .method = method,
         .uri = uri,
         .extra_headers = extra.items,
         .standard_headers = standard,
         .body = body,
-        .max_response_bytes = args.max_response_bytes,
+        .max_response_bytes = @intCast(args.max_response_bytes),
         .admit_hop = admit_hop,
     };
 }
@@ -326,20 +364,33 @@ fn run(exchange: *Exchange) ExchangeError!void {
         const decompress_buffer = try exchange.arena.alloc(u8, std.compress.flate.max_window_len);
         const reader = response.readerDecompressing(transfer_buffer, decompress, decompress_buffer);
 
-        // `allocRemaining` fails only once the limit is *exceeded*, so a body of
-        // exactly `max_response_bytes` succeeds.
-        const limit: std.Io.Limit = if (exchange.max_response_bytes == 0)
-            .unlimited
-        else
-            .limited(@intCast(@min(exchange.max_response_bytes, std.math.maxInt(usize))));
-
-        exchange.response_body = reader.allocRemaining(exchange.arena, limit) catch |err| switch (err) {
-            error.StreamTooLong => return error.ResponseTooLarge,
-            error.OutOfMemory => return error.OutOfMemory,
+        readBoundedBody(reader, exchange.body_allocator, &exchange.response_body, exchange.max_response_bytes) catch |err| switch (err) {
             error.ReadFailed => return translate(response.bodyErr() orelse error.ReadFailed),
+            error.OutOfMemory, error.ResponseTooLarge => |e| return e,
         };
         return;
     }
+}
+
+/// Grow the decoded body without allocating more than its admitted capacity.
+fn readBoundedBody(
+    reader: *std.Io.Reader,
+    allocator: std.mem.Allocator,
+    body: *std.ArrayList(u8),
+    limit: usize,
+) (std.mem.Allocator.Error || std.Io.Reader.ShortError || error{ResponseTooLarge})!void {
+    while (body.items.len < limit) {
+        const capacity = @min(limit, @max(transfer_buffer_bytes, body.capacity * 2));
+        try body.ensureTotalCapacityPrecise(allocator, capacity);
+        const destination = body.unusedCapacitySlice();
+        const read = try reader.readSliceShort(destination);
+        body.items.len += read;
+        if (read < destination.len) return;
+    }
+
+    // Exactly the requested limit is a complete response if nothing follows.
+    var overflow: [1]u8 = undefined;
+    if (try reader.readSliceShort(&overflow) != 0) return error.ResponseTooLarge;
 }
 
 /// Follow one redirect in place, or report that `head` is the final answer.
@@ -546,29 +597,17 @@ fn translate(err: anyerror) ExchangeError {
 /// Turn an exchange failure into the response record, with a message the app
 /// can print. Nothing is allocated in the arena at this point, so the message
 /// is built straight into a Roc string.
-fn describe(roc_host: *abi.RocHost, err: anyerror, args: Request, max_response_bytes: u64) Response {
-    var buffer: [256]u8 = undefined;
+fn describe(roc_host: *abi.RocHost, err: anyerror) Response {
     return switch (err) {
-        error.Timeout => failure(roc_host, ERR_TIMEOUT, "the request did not finish in time"),
-        error.Canceled => failure(roc_host, ERR_NETWORK, "the request was cancelled while the app shut down"),
-        error.MalformedResponse => failure(roc_host, ERR_BAD_BODY, "the reply was not a well-formed HTTP response"),
-        error.NetworkFailure => failure(
-            roc_host,
-            ERR_NETWORK,
-            std.fmt.bufPrint(&buffer, "could not complete the request to {s}", .{args.uri.asSlice()}) catch
-                "could not complete the request",
-        ),
-        error.ResponseTooLarge => failure(
-            roc_host,
-            ERR_OTHER,
-            std.fmt.bufPrint(
-                &buffer,
-                "the response body is larger than max_response_bytes ({d})",
-                .{max_response_bytes},
-            ) catch "the response body is larger than max_response_bytes",
-        ),
+        error.Timeout => failure(roc_host, ERR_TIMEOUT, ""),
+        error.Canceled => failure(roc_host, ERR_UNAVAILABLE, ""),
+        error.MalformedResponse => failure(roc_host, ERR_BAD_BODY, ""),
+        error.NetworkFailure => failure(roc_host, ERR_NETWORK, ""),
+        error.ResponseTooLarge => failure(roc_host, ERR_RESPONSE_TOO_LARGE, ""),
+        error.ResponseLimitUnsupported => failure(roc_host, ERR_RESPONSE_LIMIT_UNSUPPORTED, ""),
+        error.Busy => failure(roc_host, ERR_BUSY, ""),
         error.UnsupportedUri => failure(roc_host, ERR_OTHER, "the host could not use this URI"),
-        error.RedirectNotPermitted => failure(roc_host, ERR_NOT_PERMITTED, "a redirect led to an origin the app did not declare"),
+        error.RedirectNotPermitted => failure(roc_host, ERR_NOT_PERMITTED, ""),
         error.UnsupportedMethod => failure(
             roc_host,
             ERR_OTHER,
@@ -578,11 +617,7 @@ fn describe(roc_host: *abi.RocHost, err: anyerror, args: Request, max_response_b
         error.InvalidHeader => failure(roc_host, ERR_OTHER, "a request header name or value is not legal on the wire"),
         error.TlsFailure => failure(roc_host, ERR_OTHER, "the system certificate store could not be loaded for TLS"),
         error.OutOfMemory => failure(roc_host, ERR_OTHER, "out of memory while sending the request"),
-        else => failure(
-            roc_host,
-            ERR_OTHER,
-            std.fmt.bufPrint(&buffer, "{s}", .{@errorName(err)}) catch "the request failed",
-        ),
+        else => failure(roc_host, ERR_OTHER, @errorName(err)),
     };
 }
 
@@ -665,4 +700,42 @@ test "std's error sets fold onto the transport codes Http maps" {
     try std.testing.expectEqual(error.UnsupportedUri, translate(error.UnsupportedUriScheme));
     try std.testing.expectEqual(error.TlsFailure, translate(error.CertificateBundleLoadFailure));
     try std.testing.expectEqual(error.NetworkFailure, translate(error.ConnectionRefused));
+}
+
+test "HTTP response admission distinguishes saturation from an unsupported limit" {
+    var budget: ResponseBudget = .{};
+    try std.testing.expectError(error.ResponseLimitUnsupported, budget.reserve(max_response_bytes + 1));
+    const first = try budget.reserve(max_response_bytes);
+    const second = try budget.reserve(max_response_bytes);
+    try std.testing.expectError(error.Busy, budget.reserve(1));
+    try std.testing.expectEqual(@as(usize, 0), try budget.reserve(0));
+
+    budget.release(first);
+    const next = try budget.reserve(max_response_bytes);
+    budget.release(second);
+    budget.release(next);
+    try std.testing.expectEqual(@as(usize, 0), budget.reserved);
+}
+
+test "HTTP body collection admits exact and empty limits and refuses excess bytes" {
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(std.testing.allocator);
+
+    var empty = std.Io.Reader.fixed("");
+    try readBoundedBody(&empty, std.testing.allocator, &body, 0);
+    try std.testing.expectEqual(@as(usize, 0), body.capacity);
+
+    var unadmitted = std.Io.Reader.fixed("a");
+    try std.testing.expectError(error.ResponseTooLarge, readBoundedBody(&unadmitted, std.testing.allocator, &body, 0));
+    try std.testing.expectEqual(@as(usize, 0), body.capacity);
+
+    var exact = std.Io.Reader.fixed("abc");
+    try readBoundedBody(&exact, std.testing.allocator, &body, 3);
+    try std.testing.expectEqualStrings("abc", body.items);
+    try std.testing.expectEqual(@as(usize, 3), body.capacity);
+
+    body.clearRetainingCapacity();
+    var excessive = std.Io.Reader.fixed("abcd");
+    try std.testing.expectError(error.ResponseTooLarge, readBoundedBody(&excessive, std.testing.allocator, &body, 3));
+    try std.testing.expectEqual(@as(usize, 3), body.capacity);
 }

@@ -607,7 +607,7 @@ Host := [].{
 	## empty because `Http` rejects extended methods first.
 	##
 	## `timeout_ms == 0` means no deadline. `max_response_bytes` caps the
-	## decompressed body.
+	## decompressed body, including a zero-byte limit for an empty response.
 	HttpRequestToHost : {
 		method : U8,
 		method_ext : Str,
@@ -629,7 +629,7 @@ Host := [].{
 	##
 	## `Other` carries the host's own description, so a host that learns to
 	## distinguish a new failure still reports something an app can print.
-	HttpSendError : [PermissionDenied, MalformedResponse, NetworkError, Other(Str), Timeout]
+	HttpSendError : [Busy, MalformedResponse, NetworkError, Other(Str), PermissionDenied, ResponseLimitUnsupported, ResponseTooLarge, Timeout, Unavailable]
 
 	## Send one request and wait for the whole response.
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.

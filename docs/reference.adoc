@@ -122,7 +122,8 @@ frees its place for another.
 |Any other asset file |128 MiB |The load fails
 |`Audio.gen_sound!` and `gen_tone!` length |1 ms to 5 seconds (`Audio.max_generated_ms`) |Any other `ms` stops the app, naming the fix
 |Standard output and standard error queues |256 KiB each |`TooLarge` for one payload bigger than the queue, `BufferFull` for a full queue
-|HTTP request deadline and response body |30 seconds, 8 MiB by default |The request fails; configurable with `send_with!`
+|HTTP request deadline and response body |30 seconds and 8 MiB by default; at most 64 MiB per response |A deadline or oversized decoded body fails the request; configurable per send
+|HTTP response working budget |256 MiB in total, reserving twice each in-flight request's response limit |`HttpErr(Busy)` before any network work if the requested reservation is temporarily unavailable
 |HTTP redirects followed |3 |The request fails
 |SQLite query result |1,000,000 cells; 16 MiB of text and blob data by default |The query is refused, never truncated
 |Permission declarations |64 |The app stops before `init!`

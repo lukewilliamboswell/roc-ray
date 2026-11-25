@@ -164,6 +164,10 @@ fetch! = |http, id, url|
 			}
 		Err(PermissionDenied) => Broke(id, "the server redirected to an origin this app did not declare")
 		Err(InvalidUrl(_)) => Broke(id, "that is not a URL this platform will fetch")
+		Err(HttpErr(Busy)) => Broke(id, "the host has other large responses in flight")
+		Err(HttpErr(ResponseLimitUnsupported)) => Broke(id, "the requested response limit is too high")
+		Err(HttpErr(ResponseTooLarge)) => Broke(id, "the response exceeded the byte limit")
+		Err(HttpErr(Unavailable)) => Broke(id, "the HTTP runtime has stopped")
 		Err(HttpErr(Timeout)) => Broke(id, "the request timed out")
 		Err(HttpErr(NetworkError)) => Broke(id, "the request failed at the network layer")
 		Err(HttpErr(MalformedResponse)) => Broke(id, "the reply was not a well-formed HTTP response")

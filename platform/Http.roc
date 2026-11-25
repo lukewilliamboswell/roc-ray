@@ -48,15 +48,13 @@
 ## Up to three redirects are followed, and the `Response` is the one at the end
 ## of that chain.
 ##
-## Every send has a deadline and a hard limit on the response body, taken
-## from `Http.default_config`: thirty seconds, and eight megabytes. Pass a
-## `Config` to `send_with!` for different ones, and `0` in either field to
-## disable that limit. A request that sets `TimeoutMilliseconds` itself
-## overrides the config's deadline; `NoTimeout` on a request means the config's
-## deadline applies, so an ordinarily built request is never sent without one.
+## Every send defaults to a thirty-second deadline and an eight-MiB response
+## limit. Use `send_with!`, `send_json_with!`, `get_utf8_with!`, or `get_with!`
+## to override either field in `Config`.
 ##
-## The body cap is measured after decompression. A response over the cap fails
-## rather than being truncated.
+## The body limit is measured after decompression. A response over the limit
+## fails with `HttpErr(ResponseTooLarge)`. A requested limit above 64 MiB is
+## refused with `HttpErr(ResponseLimitUnsupported)` before any network work.
 ##
 ## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
 ## with that status. Only a request that gets no complete response is `HttpErr`.
@@ -85,42 +83,30 @@ Http := [].{
 	## `NetworkError` is a connection that could not be made or did not survive
 	## the exchange -- a refused port, a dropped socket, an unreachable host.
 	## `MalformedResponse` is a reply that arrived but was not a well-formed
-	## HTTP response. `Other` holds the host's own description as UTF-8 bytes: a
-	## name that would not resolve, a body over `max_response_bytes`, a
-	## certificate store that could not be loaded, or a method this platform
-	## cannot send.
-	TransportErr : [Timeout, NetworkError, MalformedResponse, Other(List(U8))]
+	## HTTP response. `ResponseTooLarge` means the decoded response exceeded
+	## the request's byte limit. `ResponseLimitUnsupported` means the requested
+	## limit exceeds the supported 64 MiB per-response maximum. `Busy` means the
+	## host could not reserve room in its shared response budget. It made no
+	## network request, and the application may try again after one finishes.
+	## `Unavailable` means the HTTP runtime has stopped.
+	## `Other` carries a UTF-8 description of remaining failures.
+	TransportErr : [Busy, Timeout, NetworkError, MalformedResponse, ResponseLimitUnsupported, ResponseTooLarge, Unavailable, Other(List(U8))]
 
-	## Per-send limits.
+	## Per-send props with defaults of 30 seconds and 8 MiB.
 	##
-	## `timeout_ms` is the deadline for the whole exchange: connect, send,
-	## response head, and body. `0` means no deadline, which is only ever
-	## appropriate against a server you control. A request that sets
-	## `TimeoutMilliseconds` itself overrides this value.
+	## `timeout_ms` covers connection, request, and the complete response. A
+	## request's own `TimeoutMilliseconds` overrides it. Zero disables the
+	## deadline in either place.
 	##
-	## `max_response_bytes` caps the decompressed response body, and `0` means
-	## no cap. A response that would exceed it fails with `Other` rather than
-	## being truncated, because a truncated body silently decodes into wrong
-	## data.
-	##
-	## A plain record; build one with
-	## `{ ..Http.default_config, timeout_ms: 5_000 }` rather than a chain of
-	## `with_*` calls.
-	Config : {
-		timeout_ms : U64,
-		max_response_bytes : U64,
+	## `max_response_bytes` caps the decompressed response body. A zero limit
+	## accepts only an empty body.
+	Config := {
+		timeout_ms : U64 ?? 30_000,
+		max_response_bytes : U64 ?? 8 * 1024 * 1024,
 	}
 
-	## Thirty seconds, and eight megabytes of response body.
-	##
-	## The timeout is generous enough for a slow dashboard endpoint and short
-	## enough that a task waiting on a dead server is eventually collected. The
-	## body cap holds a large JSON payload but not an accidental video.
 	default_config : Config
-	default_config = {
-		timeout_ms: 30_000,
-		max_response_bytes: 8 * 1024 * 1024,
-	}
+	default_config = {}
 
 	## Encode a value as JSON and set it as the request body.
 	##
@@ -188,8 +174,7 @@ Http := [].{
 		## only the deadline and the body cap differ.
 		##
 		## ```roc
-		## slow = { ..Http.default_config, timeout_ms: 2_000 }
-		## response = io.http().send_with!(slow, request)?
+		## response = io.http().send_with!({ timeout_ms: 2_000 }, request)?
 		## ```
 		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
@@ -202,7 +187,12 @@ Http := [].{
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
 		send_json! : Client, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
-		send_json! = |Client.(authority), request, value| perform_send_json!(authority, request, value)
+		send_json! = |Client.(authority), request, value| perform_send_json!(authority, Http.default_config, request, value)
+
+		## As `send_json!` with explicit limits. Legal in `init!` and tasks.
+		send_json_with! : Client, Config, { request : Request, value : _ } => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
+		send_json_with! = |Client.(authority), config, { request, value }|
+			perform_send_json!(authority, config, request, value)
 
 		## Perform an HTTP GET and decode the response body as a UTF-8 `Str`.
 		##
@@ -223,7 +213,11 @@ Http := [].{
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
 		get_utf8! : Client, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
-		get_utf8! = |Client.(authority), url| perform_get_utf8!(authority, url)
+		get_utf8! = |Client.(authority), url| perform_get_utf8!(authority, Http.default_config, url)
+
+		## As `get_utf8!` with explicit limits. Legal in `init!` and tasks.
+		get_utf8_with! : Client, Config, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr)])
+		get_utf8_with! = |Client.(authority), config, url| perform_get_utf8!(authority, config, url)
 
 		## Perform an HTTP GET and decode the response body as JSON.
 		##
@@ -239,7 +233,11 @@ Http := [].{
 		## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
 		## task; refused in `update!` and `render!`.
 		get! : Client, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_)])
-		get! = |Client.(authority), url| perform_get!(authority, url)
+		get! = |Client.(authority), url| perform_get!(authority, Http.default_config, url)
+
+		## As `get!` with explicit limits. Legal in `init!` and tasks.
+		get_with! : Client, Config, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_)])
+		get_with! = |Client.(authority), config, url| perform_get!(authority, config, url)
 
 	}
 
@@ -370,31 +368,35 @@ perform_send_with! = |authority, config, request| {
 	match Host.http_send!(authority, to_host_request(config, request, Url.to_str(canonical))) {
 		Ok(raw) => Ok(from_host_response(raw))
 		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(Busy) => Err(HttpErr(Busy))
 		Err(MalformedResponse) => Err(HttpErr(MalformedResponse))
 		Err(NetworkError) => Err(HttpErr(NetworkError))
 		Err(Other(message)) => Err(HttpErr(Other(Str.to_utf8(message))))
+		Err(ResponseLimitUnsupported) => Err(HttpErr(ResponseLimitUnsupported))
+		Err(ResponseTooLarge) => Err(HttpErr(ResponseTooLarge))
 		Err(Timeout) => Err(HttpErr(Timeout))
+		Err(Unavailable) => Err(HttpErr(Unavailable))
 	}
 }
 
-perform_send_json! : Resource.Authority, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
-perform_send_json! = |authority, request, value| {
+perform_send_json! : Resource.Authority, Http.Config, Request, _ => Try(Response, [PermissionDenied, JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
+perform_send_json! = |authority, config, request, value| {
 	json_request = Http.with_json_body(request, value)?
 
-	perform_send!(authority, json_request)
+	perform_send_with!(authority, config, json_request)
 }
 
-perform_get_utf8! : Resource.Authority, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
-perform_get_utf8! = |authority, url| {
-	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
+perform_get_utf8! : Resource.Authority, Http.Config, Url.Url => Try(Str, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr)])
+perform_get_utf8! = |authority, config, url| {
+	response = perform_send_with!(authority, config, Request.from_method(GET).with_uri(Url.to_str(url)))?
 	body = Str.from_utf8(Response.body(response)) ? |_| BadBody("perform_get_utf8!: response body was not valid UTF-8")
 
 	Ok(body)
 }
 
-perform_get! : Resource.Authority, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), JsonErr(_)])
-perform_get! = |authority, url| {
-	response = perform_send!(authority, Request.from_method(GET).with_uri(Url.to_str(url)))?
+perform_get! : Resource.Authority, Http.Config, Url.Url => Try(_, [PermissionDenied, BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(Http.TransportErr), JsonErr(_)])
+perform_get! = |authority, config, url| {
+	response = perform_send_with!(authority, config, Request.from_method(GET).with_uri(Url.to_str(url)))?
 
 	Http.decode_json_response(response)
 }

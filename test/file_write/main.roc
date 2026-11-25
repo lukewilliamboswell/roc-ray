@@ -11,7 +11,7 @@ import rr.Permission
 ## nothing -- or wrote to somewhere else, or appended instead of replacing --
 ## would still pass every other stage of the suite. This probe writes, reads
 ## the same path back, and compares, and it exits non-zero unless every one of
-## the seven properties below holds.
+## the properties below holds.
 ##
 ## It runs from a scratch directory and only ever touches paths under
 ## `probe_out/`, so it leaves nothing behind in the tree.
@@ -27,7 +27,7 @@ init! = App.init(App.default.with_title("file write").with_permission(Directory(
 ## A correct run scores every bit. Any property that does not hold subtracts
 ## its own bit, so the exit code says which half of the probe went wrong.
 expected_score : U64
-expected_score = 511
+expected_score = 1023
 
 ## The text written, read back, and compared. Multi-line and non-ASCII on
 ## purpose: a write that went through a C string would truncate at the NUL a
@@ -46,7 +46,31 @@ score = |held, bit| if (held) bit else 0
 
 expect score(Bool.True, 4) == 4
 expect score(Bool.False, 4) == 0
-expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 == expected_score
+expect 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 == expected_score
+
+## Read an opened directory in a task. The alias must advance the same
+## enumeration, and the cursor stays at the end reached by either reference.
+check_cursor! : Files.Dir => Try(Bool, _)
+check_cursor! = |out| {
+	read_dir = out.read_only()
+	cursor = read_dir.open_cursor!("")?
+	alias = cursor
+	first = alias.next!()?
+	second = cursor.next!()?
+	third = alias.next!()?
+	Ok(
+		match first {
+			End => Bool.False
+			Entries(entries) =>
+				entries.len() == 3
+					and entries.any(|entry| entry.name == "text.txt" and entry.kind == File)
+					and entries.any(|entry| entry.name == "blob.bin" and entry.kind == File)
+					and entries.any(|entry| entry.name == "nested" and entry.kind == Dir)
+					and second == End
+					and third == End
+		},
+	)
+}
 
 ## Write, read back, compare. Runs on a task, where every call parks.
 check! : App.Io => Msg
@@ -89,6 +113,7 @@ check! = |io| {
 	# written. Its shape is the problem, not a missing grant, so the answer
 	# is `PathInvalid` rather than `PermissionDenied`.
 	escaped = out.write_text!("../escaped.txt", "x") == Err(PathInvalid)
+	listed = check_cursor!(out) == Ok(Bool.True)
 
 	Checked(
 		score(wrote_text, 1)
@@ -99,7 +124,8 @@ check! = |io| {
 			+ score(made_parents, 32)
 			+ score(refused, 64)
 			+ score(escaped, 128)
-			+ score(bounded, 256),
+			+ score(bounded, 256)
+			+ score(listed, 512),
 	)
 }
 

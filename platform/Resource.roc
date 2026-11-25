@@ -39,6 +39,8 @@ Resource := [].{
 
 	Store : Handle([StoreResource])
 
+	DirectoryCursor : Handle([DirectoryCursorResource])
+
 	Shader : Handle([ShaderResource])
 
 	Socket : Handle([UdpSocketResource])

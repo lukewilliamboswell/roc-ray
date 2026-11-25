@@ -580,6 +580,14 @@ Host := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the task; refused in `update!` and `render!`.
 	files_list! : Resource.Authority, Str, Str => Try(List(U8), FilesListError)
 
+	## Open a non-recursive directory enumeration beneath an existing grant.
+	## Legal in `init!` and tasks.
+	files_open_cursor! : Resource.Authority, Str, Str => Try(Resource.DirectoryCursor, [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, Unavailable])
+
+	## Read one encoded batch. An empty batch marks the end.
+	## Legal in `init!` and tasks.
+	files_cursor_next! : Resource.DirectoryCursor => Try(List(U8), [PermissionDenied, Busy, InvalidName, ReadFailed, Unavailable])
+
 	## Failures while replacing a whole file.
 	##
 	## A write fails for reasons a read cannot, so it has a union of its own

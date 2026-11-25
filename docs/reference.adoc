@@ -104,6 +104,7 @@ frees its place for another.
 |Application uniforms per shader |32 |`ResourceLimit`
 |Prepared texts |256 |`ResourceLimit`
 |Asset stores |16 |`ResourceLimit`
+|Directory cursors |16 |`Busy`; release a cursor to make room
 |UDP sockets |8 |`ResourceLimit`
 |SQLite connections and statements |8 and 64 |`TooManyConnections` or `TooManyStatements`
 |===
@@ -118,6 +119,7 @@ frees its place for another.
 |Byte delivery slots shared by file reads, directory listings, and capture readbacks |32 |`Busy`. The same call can succeed when a slot is free.
 |Host buffers for whole-file byte reads in progress and retained by Roc lists or their slices |512 MiB |`Busy`. Reads reserve room for their maximum working storage and keep the actual allocation charged on delivery.
 |`list!` directory listing |8192 entries or 1 MiB of names |`TooLarge`
+|`DirectoryCursor.next!` batch |64 entries |Read the next batch through the same cursor
 |Sound or music file read by `Audio` |64 MiB |The load fails
 |Any other asset file |128 MiB |The load fails
 |`Audio.gen_sound!` and `gen_tone!` length |1 ms to 5 seconds (`Audio.max_generated_ms`) |Any other `ms` stops the app, naming the fix

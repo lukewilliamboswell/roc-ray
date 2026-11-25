@@ -22,6 +22,7 @@ const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
 const cmd_effect = @import("cmd_effect.zig");
 const confined_path = @import("confined_path.zig");
+const directory_cursor = @import("directory_cursor.zig");
 const permissions = @import("permissions.zig");
 const observatory = @import("observatory.zig");
 const build_metadata = @import("build_metadata");
@@ -43,6 +44,7 @@ test {
     _ = cmd_effect;
     _ = permissions;
     _ = confined_path;
+    _ = directory_cursor;
 }
 
 // Import backend
@@ -259,11 +261,7 @@ fn encodeListingIn(base: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator, p
             encoded.deinit(allocator);
             return READ_ERR_TOO_LARGE;
         }
-        const kind: u8 = switch (entry.kind) {
-            .file => DIR_ENTRY_FILE,
-            .directory => DIR_ENTRY_DIR,
-            else => DIR_ENTRY_OTHER,
-        };
+        const kind = @backingInt(directory_cursor.entryKind(entry.kind));
         encoded.append(allocator, kind) catch return READ_ERR_FAILED;
         encoded.appendSlice(allocator, entry.name) catch return READ_ERR_FAILED;
         encoded.append(allocator, 0) catch return READ_ERR_FAILED;
@@ -1287,6 +1285,161 @@ fn hostedFilesList(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocSt
 
 fn exportedFilesList(root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_listResult {
     return hostedFilesList(activeHost(), root_arg, path_arg);
+}
+
+/// A cursor effect may run inline during startup if there is no runtime.
+/// A task never does filesystem work inline.
+fn runDirectoryWork(
+    comptime label: []const u8,
+    comptime work: anytype,
+    args: anytype,
+) error{ Busy, Unavailable }!@typeInfo(@TypeOf(work)).@"fn".return_type.? {
+    const in_task = active_phase == .task;
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    const park = AppTasks.observePark(label, 0);
+    defer AppTasks.observeResume(park, label);
+    const rt = AppTasks.currentRuntime() orelse {
+        if (in_task) return error.Unavailable;
+        return @call(.auto, work, args);
+    };
+    var blocking = rt.spawnBlocking(work, args) catch |err| return switch (err) {
+        error.RuntimeShutdown => error.Unavailable,
+        else => error.Busy,
+    };
+    return blocking.join();
+}
+
+const DirectoryCursorOpen = union(enum) {
+    cursor: directory_cursor.Cursor,
+    failed: abi.HostFiles_open_cursorErr,
+};
+
+fn openDirectoryCursorBlocking(allocator: std.mem.Allocator, root: []const u8, path: []const u8) DirectoryCursorOpen {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const cursor = directory_cursor.Cursor.open(threaded.io(), root, path) catch |err| return .{
+        .failed = switch (err) {
+            error.Canceled => .unavailable,
+            else => switch (beneathErrorCode(err, listErrorCode)) {
+                READ_ERR_NOT_FOUND => .not_found,
+                READ_ERR_NOT_A_DIRECTORY => .not_adirectory,
+                READ_ERR_NOT_PERMITTED => .permission_denied,
+                READ_ERR_PATH_INVALID => .path_invalid,
+                else => .read_failed,
+            },
+        },
+    };
+    return .{ .cursor = cursor };
+}
+
+fn openDirectoryCursor(
+    allocator: std.mem.Allocator,
+    root: []const u8,
+    path: []const u8,
+) abi.HostFiles_open_cursorResult {
+    const Result = abi.HostFiles_open_cursorResult;
+    // A cursor owns one descriptor. Reserve its slot before opening the path
+    // and keep that slot charged until the last alias is dropped and retired.
+    if (directory_cursor_heap.active() + directory_cursor_openings >= MAX_DIRECTORY_CURSORS) {
+        return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    }
+    directory_cursor_openings += 1;
+    defer directory_cursor_openings -= 1;
+
+    // A native worker may use these bytes after the frame resumes. Copy the
+    // exact caller-provided path lengths, and retain them only while waiting.
+    const owned_root = allocator.dupe(u8, root) catch return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    defer allocator.free(owned_root);
+    const owned_path = allocator.dupe(u8, path) catch return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+    defer allocator.free(owned_path);
+
+    const opened = runDirectoryWork("open directory cursor", openDirectoryCursorBlocking, .{ allocator, owned_root, owned_path }) catch |err| {
+        return abiTryErr(Result, @as(abi.HostFiles_open_cursorErr, switch (err) {
+            error.Busy => .busy,
+            error.Unavailable => .unavailable,
+        }));
+    };
+    switch (opened) {
+        .failed => |err| return abiTryErr(Result, err),
+        .cursor => |opened_cursor| {
+            const handle = directory_cursor_heap.insert(0, .{ .cursor = opened_cursor }) orelse {
+                var cursor = opened_cursor;
+                cursor.close(mainThreadIo());
+                return abiTryErr(Result, abi.HostFiles_open_cursorErr.busy);
+            };
+            return abiTryOk(Result, handle);
+        },
+    }
+}
+
+fn hostedFilesOpenCursor(roc_host: *RocHost, root_arg: abi.RocStr, path_arg: abi.RocStr) abi.HostFiles_open_cursorResult {
+    var effect = EffectScope.begin("Files.ReadDir.open_cursor!", path_arg.asSlice().len);
+    defer effect.end();
+    defer root_arg.decref(roc_host);
+    defer path_arg.decref(roc_host);
+
+    const result = openDirectoryCursor(allocatorFromHost(roc_host), root_arg.asSlice(), path_arg.asSlice());
+    if (result.tag == .Err) effect.setOutcome(switch (result.payload_err()) {
+        .busy, .unavailable, .path_invalid, .permission_denied => .refused,
+        else => .runtime_error,
+    });
+    return result;
+}
+
+fn nextDirectoryCursorBlocking(allocator: std.mem.Allocator, resource: *DirectoryCursorResource) directory_cursor.Next {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return resource.cursor.next(threaded.io(), &resource.batch);
+}
+
+fn exportedFilesCursorNext(handle: *u64) callconv(.c) abi.HostFiles_cursor_nextResult {
+    const name = "Files.DirectoryCursor.next!";
+    const Result = abi.HostFiles_cursor_nextResult;
+    const Err = abi.HostFiles_cursor_nextErr;
+    enforcePhase(name, during_wait);
+    var effect = EffectScope.begin(name, 0);
+    defer effect.end();
+    const host = activeHost();
+    defer releaseResourceBox(host, handle);
+
+    const resource = directory_cursor_heap.get(handle.*) orelse {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Err.permission_denied);
+    };
+    if (resource.busy) {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, Err.busy);
+    }
+    resource.busy = true;
+    defer resource.busy = false;
+
+    const outcome = resource.cursor.terminalResult() orelse runDirectoryWork(
+        "next directory batch",
+        nextDirectoryCursorBlocking,
+        .{ allocatorFromHost(host), resource },
+    ) catch |err| {
+        effect.setOutcome(.refused);
+        return abiTryErr(Result, @as(Err, switch (err) {
+            error.Busy => .busy,
+            error.Unavailable => .unavailable,
+        }));
+    };
+    switch (outcome) {
+        .entries => |used| {
+            effect.addCopiedBytes(used);
+            return abiTryOk(Result, abi.RocListWith(u8, false).fromSlice(resource.batch[0..used], host));
+        },
+        .end => return abiTryOk(Result, abi.RocListWith(u8, false).empty()),
+        .invalid_name, .read_failed => {
+            effect.setOutcome(.runtime_error);
+            return abiTryErr(Result, if (outcome == .invalid_name) Err.invalid_name else Err.read_failed);
+        },
+        .unavailable => {
+            effect.setOutcome(.refused);
+            return abiTryErr(Result, Err.unavailable);
+        },
+    }
 }
 
 /// Name a failed stat in the app's vocabulary.
@@ -4511,6 +4664,30 @@ const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, .t
 const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, .render_texture, writeU64Token, readU64Token, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, .shader, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, .prepared_text, writeU64Token, readU64Token, destroyPreparedText);
+const MAX_DIRECTORY_CURSORS = 16;
+
+const DirectoryCursorResource = struct {
+    cursor: directory_cursor.Cursor,
+    batch: [directory_cursor.max_batch_bytes]u8 = undefined,
+    // The Box held by the effect pins this slot. Only the admitted worker
+    // accesses the cursor and batch until the frame thread joins it again.
+    busy: bool = false,
+};
+
+fn destroyDirectoryCursor(resource: *DirectoryCursorResource) void {
+    resource.cursor.close(mainThreadIo());
+}
+
+const DirectoryCursorHeap = host_resource.HostResourceHeap(
+    u64,
+    DirectoryCursorResource,
+    MAX_DIRECTORY_CURSORS,
+    .directory_cursor,
+    writeU64Token,
+    readU64Token,
+    destroyDirectoryCursor,
+);
+
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, .store, writeU64Token, readU64Token, destroyStore);
 
 /// How many UDP sockets an app may hold open at once.
@@ -4614,6 +4791,8 @@ var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
+var directory_cursor_heap: DirectoryCursorHeap = .{};
+var directory_cursor_openings: usize = 0;
 var udp_socket_heap: UdpSocketHeap = .{};
 
 /// Every typed resource heap the host owns: what a Roc deallocation is offered
@@ -4628,6 +4807,7 @@ const resource_heaps = .{
     &prepared_text_heap,
     &file_bytes_heap,
     &store_heap,
+    &directory_cursor_heap,
     &udp_socket_heap,
     &sqlite_effect.stmt_heap,
     &sqlite_effect.db_heap,
@@ -10788,6 +10968,9 @@ fn deinitResources() void {
     std.debug.assert(sound_heap.active() == 0);
     std.debug.assert(file_bytes_heap.active() == 0);
     std.debug.assert(store_heap.active() == 0);
+    std.debug.assert(directory_cursor_heap.active() == 0);
+    std.debug.assert(directory_cursor_openings == 0);
+    directory_cursor_heap.deinitAll();
     std.debug.assert(udp_socket_heap.active() == 0);
     udp_socket_heap.deinitAll();
     std.debug.assert(sqlite_effect.stmt_heap.active() == 0);
@@ -10926,6 +11109,8 @@ comptime {
         @export(&capsExportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&capsExportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&capsExportedFilesList, .{ .name = "roc_files_list" });
+        @export(&capsExportedFilesOpenCursor, .{ .name = "roc_files_open_cursor" });
+        @export(&exportedFilesCursorNext, .{ .name = "roc_files_cursor_next" });
         @export(&capsExportedFilesMetadata, .{ .name = "roc_files_metadata" });
         @export(&capsExportedFilesWriteText, .{ .name = "roc_files_write_text" });
         @export(&capsExportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
@@ -12346,6 +12531,7 @@ fn drainRetiredResourcesUpTo(limit: usize) void {
     // how an app pays a large one on a task instead.
     budget -= sqlite_effect.db_heap.drainRetired(@min(budget, 1));
     budget -= store_heap.drainRetired(budget);
+    budget -= directory_cursor_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);
     budget -= shader_heap.drainRetired(budget);
@@ -13336,6 +13522,66 @@ test "an empty file transfers to the canonical empty list without a resource slo
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.retiredCount());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
+}
+
+test "directory cursor tasks never fall back to inline filesystem work" {
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    const Work = struct {
+        fn unexpected() void {
+            @panic("directory worker call executed inline");
+        }
+    };
+    try std.testing.expectError(error.Unavailable, runDirectoryWork("test directory cursor", Work.unexpected, .{}));
+}
+
+test "directory cursor capacity is reserved before opening and recovered on final release" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const startup = PhaseScope.enter(.startup);
+    defer {
+        startup.leave();
+        directory_cursor_heap.deinitAll();
+        active_roc_host = null;
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmpRootAlloc(&tmp);
+    defer std.testing.allocator.free(root);
+
+    var handles: [MAX_DIRECTORY_CURSORS]*u64 = undefined;
+    for (&handles) |*handle| {
+        const opened = openDirectoryCursor(std.testing.allocator, root, "");
+        try std.testing.expectEqual(.Ok, opened.tag);
+        handle.* = opened.payload_ok();
+    }
+    try std.testing.expectEqual(MAX_DIRECTORY_CURSORS, directory_cursor_heap.active());
+    const full = openDirectoryCursor(std.testing.allocator, root, "missing");
+    try std.testing.expectEqual(.Err, full.tag);
+    try std.testing.expectEqual(.busy, full.payload_err());
+    try std.testing.expectEqual(@as(usize, 0), directory_cursor_openings);
+
+    const handle = handles[0];
+    const resource = directory_cursor_heap.get(handle.*).?;
+    resource.busy = true;
+    abi.increfBox(@ptrCast(handle), 1);
+    const concurrent = exportedFilesCursorNext(handle);
+    try std.testing.expectEqual(.Err, concurrent.tag);
+    try std.testing.expectEqual(.busy, concurrent.payload_err());
+    try std.testing.expect(resource.cursor.terminalResult() == null);
+    resource.busy = false;
+
+    releaseResourceBox(&roc_host, handle);
+    try std.testing.expectEqual(@as(usize, 1), directory_cursor_heap.drainRetired(1));
+    const reopened = openDirectoryCursor(std.testing.allocator, root, "");
+    try std.testing.expectEqual(.Ok, reopened.tag);
+    handles[0] = reopened.payload_ok();
+
+    for (handles) |held| releaseResourceBox(&roc_host, held);
+    try std.testing.expectEqual(MAX_DIRECTORY_CURSORS, directory_cursor_heap.drainRetired(MAX_DIRECTORY_CURSORS));
+    try std.testing.expectEqual(@as(usize, 0), directory_cursor_heap.active());
 }
 
 test "byte-list delivery reservations bound reads before they can start" {
@@ -16292,6 +16538,14 @@ fn capsExportedFilesList(authority: u64, root_arg: abi.RocStr, path_arg: abi.Roc
     enforcePhase(name, during_wait);
     if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_listResult, name, .{ root_arg, path_arg });
     return exportedFilesList(root_arg, path_arg);
+}
+
+/// Capability boundary for opening an enumeration through the directory grant.
+fn capsExportedFilesOpenCursor(authority: u64, root_arg: abi.RocStr, path_arg: abi.RocStr) callconv(.c) abi.HostFiles_open_cursorResult {
+    const name = "Files.ReadDir.open_cursor!";
+    enforcePhase(name, during_wait);
+    if (!authorityIsLive(authority)) return refuseEffect(abi.HostFiles_open_cursorResult, name, .{ root_arg, path_arg });
+    return hostedFilesOpenCursor(activeHost(), root_arg, path_arg);
 }
 
 /// Capability boundary for files_metadata!; the implementation below it is trusted host code.

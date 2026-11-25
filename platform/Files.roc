@@ -64,7 +64,7 @@ import Time
 
 Files := [].{
 
-	## One entry returned by `list!`.
+	## One entry returned by `list!` or `DirectoryCursor.next!`.
 	Entry : { name : Str, kind : EntryKind }
 
 	## The filesystem kind relevant to a non-recursive directory walk.
@@ -121,6 +121,52 @@ Files := [].{
 	## encoded names, whichever binds first. The rest mean what they mean for a
 	## read, `ReadFailed` included.
 	ListError : [PermissionDenied, PathInvalid, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+
+	## Why a directory cursor could not be opened. `Busy` means the host
+	## has no cursor slot or could not admit the worker operation.
+	CursorOpenError : [PermissionDenied, PathInvalid, Busy, NotADirectory, NotFound, ReadFailed, Unavailable]
+
+	## A nonempty batch in filesystem order, or the end of the directory.
+	CursorBatch : [Entries(List(Entry)), End]
+
+	## Why a cursor could not deliver its next batch.
+	##
+	## `Busy` means a call already has the cursor or the host could not admit
+	## the work. The refused call consumes no entries.
+	## `PermissionDenied` is a resource-free stub. `Unavailable` means the
+	## app is shutting down. `InvalidName` means the filesystem supplied a
+	## name this API cannot represent as UTF-8. `InvalidName` and `ReadFailed`
+	## end the enumeration and are returned again by subsequent calls.
+	CursorReadError : [PermissionDenied, Busy, InvalidName, ReadFailed, Unavailable]
+
+	## One open, non-recursive directory enumeration. Copies share its
+	## position. Drop the final reference to release it, including before
+	## reaching the end. This is a live view in filesystem order. While the
+	## directory is unchanged it yields each entry once. Concurrent changes
+	## may cause entries to be omitted or repeated.
+	DirectoryCursor :: Resource.DirectoryCursor.{
+
+		## Resource-free handle for pure tests.
+		stub : DirectoryCursor
+		stub = DirectoryCursor.(Resource.Handle.stub({}))
+
+		## Advance by up to 64 entries. Once `End` arrives it is returned
+		## again on subsequent calls. If a read encounters a terminal error
+		## after obtaining entries, those entries are returned first.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		next! : DirectoryCursor => Try(CursorBatch, CursorReadError)
+		next! = |DirectoryCursor.(handle)|
+			match Host.files_cursor_next!(handle) {
+				Ok(bytes) => if (List.is_empty(bytes)) Ok(End) else Ok(Entries(decode_listing(bytes)))
+				Err(PermissionDenied) => Err(PermissionDenied)
+				Err(Busy) => Err(Busy)
+				Err(InvalidName) => Err(InvalidName)
+				Err(ReadFailed) => Err(ReadFailed)
+				Err(Unavailable) => Err(Unavailable)
+			}
+	}
 
 	## What one path is, how big it is, and when it last changed.
 	##
@@ -232,6 +278,15 @@ Files := [].{
 		list! : ReadDir, Str => Try(List(Entry), ListError)
 		list! = |ReadDir.(handle), path| perform_list!(handle, path)
 
+		## Open a cursor beneath this handle. Use `""` to enumerate the
+		## handle's own directory. The host admits up to 16 open or opening
+		## cursors, including cursors retained at end of input.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_cursor! : ReadDir, Str => Try(DirectoryCursor, CursorOpenError)
+		open_cursor! = |ReadDir.(handle), path| perform_open_cursor!(handle, path)
+
 		## What one path is, how big it is, and when it last changed; `""` is
 		## this handle's own directory. A symbolic link is reported as `Other`
 		## rather than followed.
@@ -295,6 +350,13 @@ Files := [].{
 		## the task; refused in `update!` and `render!`.
 		list! : Dir, Str => Try(List(Entry), ListError)
 		list! = |Dir.(handle), path| perform_list!(handle, path)
+
+		## As `ReadDir.open_cursor!`.
+		##
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`.
+		open_cursor! : Dir, Str => Try(DirectoryCursor, CursorOpenError)
+		open_cursor! = |Dir.(handle), path| perform_open_cursor!(handle, path)
 
 		## As `ReadDir.metadata!`.
 		##
@@ -744,6 +806,19 @@ perform_list! = |handle, path|
 		Err(NotFound) => Err(NotFound)
 		Err(ReadFailed) => Err(ReadFailed)
 		Err(TooLarge) => Err(TooLarge)
+		Err(Unavailable) => Err(Unavailable)
+	}
+
+perform_open_cursor! : Handle, Str => Try(Files.DirectoryCursor, Files.CursorOpenError)
+perform_open_cursor! = |handle, path|
+	match Host.files_open_cursor!(handle.authority, handle.root, joined(handle.prefix, path)) {
+		Ok(cursor) => Ok(Files.DirectoryCursor.(cursor))
+		Err(PermissionDenied) => Err(PermissionDenied)
+		Err(PathInvalid) => Err(PathInvalid)
+		Err(Busy) => Err(Busy)
+		Err(NotADirectory) => Err(NotADirectory)
+		Err(NotFound) => Err(NotFound)
+		Err(ReadFailed) => Err(ReadFailed)
 		Err(Unavailable) => Err(Unavailable)
 	}
 

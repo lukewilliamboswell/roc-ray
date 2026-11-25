@@ -1466,7 +1466,7 @@ Host := [].{
 	}
 
 	## Failures while reading pixels back from a source.
-	CapturePixelError : [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable]
+	CapturePixelError : [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable]
 
 	## A source-relative pixel coordinate.
 	CapturePixelProbe : {

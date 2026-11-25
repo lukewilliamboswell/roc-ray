@@ -11455,7 +11455,7 @@ pub const HostCapture_pixel_atResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostCapture_pixel_atResultPayload = extern union {
-    err: BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable,
+    err: BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable,
     ok: __AnonStruct_bda5c9dc6cabe78e,
 };
 
@@ -11463,8 +11463,8 @@ pub const HostCapture_pixel_atResultPayload = extern union {
 pub const HostCapture_pixel_atResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(1),
     tag: HostCapture_pixel_atResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
-        const ptr: *const BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
+        const ptr: *const BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_bda5c9dc6cabe78e {
@@ -11483,7 +11483,7 @@ pub const HostCapture_pixel_atResult = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     payload: HostCapture_pixel_atResultPayload,
     tag: HostCapture_pixel_atResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
+    pub fn payload_err(self: *const @This()) BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) __AnonStruct_bda5c9dc6cabe78e {
@@ -11513,13 +11513,14 @@ comptime {
     }
 }
 
-/// Tag union: BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable
-pub const BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = enum(u8) {
-    busy = 0,
-    readback_failed = 1,
-    region_out_of_bounds = 2,
-    target_unavailable = 3,
-    unavailable = 4,
+/// Tag union: BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable
+pub const BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = enum(u8) {
+    budget_exceeded = 0,
+    busy = 1,
+    readback_failed = 2,
+    region_out_of_bounds = 3,
+    target_unavailable = 4,
+    unavailable = 5,
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         _ = self;
@@ -11535,12 +11536,12 @@ pub const BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailabl
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable size mismatch");
-        if (@alignOf(BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable alignment mismatch");
+        if (@sizeOf(BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable size mismatch");
+        if (@alignOf(BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable size mismatch");
-        if (@alignOf(BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable alignment mismatch");
+        if (@sizeOf(BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable size mismatch");
+        if (@alignOf(BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable) != 1) @compileError("BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable alignment mismatch");
     }
 }
 
@@ -11552,7 +11553,7 @@ pub const HostCapture_read_regionResultTag = enum(u8) {
 
 /// Payload union for Try.
 pub const HostCapture_read_regionResultPayload = extern union {
-    err: BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable,
+    err: BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable,
     ok: RocListWith(u8, false),
 };
 
@@ -11560,8 +11561,8 @@ pub const HostCapture_read_regionResultPayload = extern union {
 pub const HostCapture_read_regionResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
     tag: HostCapture_read_regionResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
-        const ptr: *const BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = @ptrCast(@alignCast(&self.payload));
+    pub fn payload_err(self: *const @This()) BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
+        const ptr: *const BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -11580,7 +11581,7 @@ pub const HostCapture_read_regionResult = if (@sizeOf(usize) == 4) extern struct
 } else extern struct {
     payload: HostCapture_read_regionResultPayload,
     tag: HostCapture_read_regionResultTag,
-    pub fn payload_err(self: *const @This()) BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
+    pub fn payload_err(self: *const @This()) BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocListWith(u8, false) {
@@ -12433,7 +12434,7 @@ pub const HostAudio_stop_soundArgs = extern struct {
 };
 
 /// Arguments for Host.capture_pixel_at!
-/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostCapture_pixel_atArgs = if (@sizeOf(usize) == 4) extern struct {
     source: __AnonStruct_29524f9bb2f9574c,
@@ -12479,7 +12480,7 @@ comptime {
 }
 
 /// Arguments for Host.capture_read_region!
-/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
 /// Refcounted fields are owned by the hosted function.
 pub const HostCapture_read_regionArgs = if (@sizeOf(usize) == 4) extern struct {
     source: __AnonStruct_29524f9bb2f9574c,
@@ -15980,11 +15981,11 @@ pub const HostAudio_load_soundArg0 = __AnonStruct_e6634fb4c190c214;
 pub const HostAudio_load_soundErr = NotFoundOrPathInvalidOrReadFailedOrResourceLimitOrSoundLoadFailed;
 pub const HostCapture_pixel_atArg0 = __AnonStruct_30827bd86e7a53b3;
 pub const HostCapture_pixel_atArg0Source = __AnonStruct_29524f9bb2f9574c;
-pub const HostCapture_pixel_atErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
+pub const HostCapture_pixel_atErr = BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
 pub const HostCapture_pixel_atOk = __AnonStruct_bda5c9dc6cabe78e;
 pub const HostCapture_read_regionArg0 = __AnonStruct_7ea2de5aa3c18166;
 pub const HostCapture_read_regionArg0Source = __AnonStruct_29524f9bb2f9574c;
-pub const HostCapture_read_regionErr = BusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
+pub const HostCapture_read_regionErr = BudgetExceededOrBusyOrReadbackFailedOrRegionOutOfBoundsOrTargetUnavailableOrUnavailable;
 pub const HostCapture_screenshotErr = AlreadyPendingOrBusyOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrUnavailableOrWriteFailed;
 pub const HostCapture_screenshot_textureArg1 = __AnonStruct_aa2779af0bb79965;
 pub const HostCapture_screenshot_textureErr = BudgetExceededOrBusyOrOutOfMemoryOrPathEscapesOutputDirOrPathInvalidOrPermissionDeniedOrReadbackFailedOrTargetUnavailableOrUnavailableOrWriteFailed;
@@ -19046,14 +19047,14 @@ pub extern fn roc_audio_stop_music_raw(arg0: *u64) callconv(.c) void;
 pub extern fn roc_audio_stop_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for Host.capture_pixel_at!
-/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Roc signature: { source : { screen : Bool, target : Texture }, x : I32, y : I32 } => Try({ a : U8, b : U8, g : U8, r : U8 }, [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_capture_pixel_at(arg0: HostCapture_pixel_atArgs) callconv(.c) HostCapture_pixel_atResult;
 
 /// Hosted symbol for Host.capture_read_region!
-/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
+/// Roc signature: { height : I32, source : { screen : Bool, target : Texture }, width : I32, x : I32, y : I32 } => Try(List(U8), [BudgetExceeded, Busy, ReadbackFailed, RegionOutOfBounds, TargetUnavailable, Unavailable])
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);

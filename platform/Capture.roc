@@ -366,17 +366,15 @@ Capture := [].{
 
 	## Why a readback produced no pixels.
 	##
-	## `RegionOutOfBounds` is a point or rectangle that is not entirely inside
-	## the source, or a rectangle larger than one read may deliver; neither
-	## becomes possible on a later frame. `TargetUnavailable` is a render target
-	## that no longer resolves to a host resource -- a released one, or the
-	## `Draw.RenderTexture.stub` a pure test holds. `Busy` is the readback budget
-	## being committed elsewhere -- to still exports that are running, or to the
-	## delivery slots that pass byte lists to this app -- or, for a render
-	## target bigger than `max_readback_bytes` on its own, committed for good.
-	## `ReadbackFailed` is the graphics driver declining to return the pixels. `Unavailable` is there being nothing to read at all -- a headless
-	## run, or a `Screen` read before the host has a presented frame to read.
-	PixelReadError : [RegionOutOfBounds, TargetUnavailable, Busy, ReadbackFailed, Unavailable]
+	## RegionOutOfBounds means the requested point or rectangle is outside
+	## the source. BudgetExceeded means a source or requested RGBA result
+	## exceeds what a single readback can hold. Busy means other captures or
+	## retained byte lists are holding capacity that can become available.
+	## TargetUnavailable means the target handle no longer resolves.
+	## ReadbackFailed means the driver could not return the pixels.
+	## Unavailable means a headless run or a Screen read before the first
+	## requested frame has been presented.
+	PixelReadError : [RegionOutOfBounds, TargetUnavailable, BudgetExceeded, Busy, ReadbackFailed, Unavailable]
 
 	## Read the colour of one pixel.
 	##
@@ -413,6 +411,7 @@ Capture := [].{
 		# closed error union to open error union
 		match Host.capture_pixel_at!({ source: pixel_source(source), x: point.x, y: point.y }) {
 			Ok(pixel) => Ok(Color.rgba(pixel.r, pixel.g, pixel.b, pixel.a))
+			Err(BudgetExceeded) => Err(BudgetExceeded)
 			Err(Busy) => Err(Busy)
 			Err(ReadbackFailed) => Err(ReadbackFailed)
 			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)
@@ -441,7 +440,7 @@ Capture := [].{
 	## with no slot free is `Busy`.
 	##
 	## The bound is `Capture.max_readback_bytes`: a region above it is
-	## `RegionOutOfBounds` rather than something a later frame could take. The
+	## `BudgetExceeded`. The
 	## per-call and per-frame costs are the ones `pixel_at!` describes; this is
 	## not a per-frame operation on a whole window.
 	read_region! : Source, Region => Try(List(U8), PixelReadError)
@@ -456,6 +455,7 @@ Capture := [].{
 		# closed error union to open error union
 		match result {
 			Ok(bytes) => Ok(bytes)
+			Err(BudgetExceeded) => Err(BudgetExceeded)
 			Err(Busy) => Err(Busy)
 			Err(ReadbackFailed) => Err(ReadbackFailed)
 			Err(RegionOutOfBounds) => Err(RegionOutOfBounds)

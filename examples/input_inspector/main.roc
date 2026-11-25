@@ -276,6 +276,7 @@ eyedropper_label = |picked|
 		Err(RegionOutOfBounds) => "Under the pointer: off screen"
 		# Nothing has been presented yet, or this run has no framebuffer at all.
 		Err(Unavailable) => "Under the pointer: no frame to read yet"
+		Err(BudgetExceeded) => "Under the pointer: source exceeds the readback budget"
 		Err(Busy) => "Under the pointer: host busy, try again"
 		Err(TargetUnavailable) => "Under the pointer: no source"
 		Err(ReadbackFailed) => "Under the pointer: readback failed"

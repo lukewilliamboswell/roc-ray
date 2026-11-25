@@ -2391,6 +2391,8 @@ const ScreenSnapshot = struct {
     height: u32 = 0,
     /// What this snapshot reserved from `still_budget`, returned when it goes.
     reserved: u64 = 0,
+    /// The preceding presentation's result when it could not supply pixels.
+    failure: u8 = capture.err_unavailable,
 };
 var screen_snapshot: ScreenSnapshot = .{};
 
@@ -2403,23 +2405,30 @@ var screen_snapshot: ScreenSnapshot = .{};
 /// snapshot yet and is `Unavailable`.
 var screen_snapshot_requested = false;
 
-/// Keep this frame's pixels for the next cycle's `Screen` readbacks.
-///
-/// Copied out of the backend's allocation because that one is freed on this
-/// thread as the drawing scope closes, and this has to outlive the frame.
-/// A snapshot that cannot be admitted or allocated simply does not happen: the
-/// next read reports `Unavailable`, which is the same answer it would give
-/// before the first frame.
-fn storeScreenSnapshot(image: raylib.CaptureImage) void {
-    releaseScreenSnapshot();
-
+/// Admit a snapshot before the backend allocates its framebuffer image.
+fn reserveScreenSnapshot(width: u32, height: u32) u64 {
     var reserved: u64 = 0;
-    if (still_budget.admit(image.width(), image.height(), &reserved) != capture.err_none) return;
+    const status = still_budget.admit(width, height, &reserved);
+    if (status != capture.err_none) {
+        // Zero-sized screen geometry means there is no framebuffer.
+        screen_snapshot.failure = if (status == capture.err_target_unavailable) capture.err_unavailable else status;
+    }
+    return reserved;
+}
 
+/// Retain a copy for the next cycle's reads. The backend owns the source
+/// allocation and frees it as the current drawing scope closes.
+fn storeScreenSnapshot(image: raylib.CaptureImage, reserved: u64) void {
+    if (capture.stillCaptureBytes(image.width(), image.height()) != reserved) {
+        still_budget.release(reserved);
+        screen_snapshot.failure = capture.err_readback_failed;
+        return;
+    }
     const allocator = allocatorFromHost(activeHost());
     const source = image.pixels();
     const copy = allocator.alloc(u8, source.len) catch {
         still_budget.release(reserved);
+        screen_snapshot.failure = capture.err_busy;
         return;
     };
     @memcpy(copy, source);
@@ -2476,7 +2485,7 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
         // of it: that is what makes the read after this one succeed.
         screen_snapshot_requested = true;
         if (screen_snapshot.pixels.len == 0) {
-            err.* = capture.err_unavailable;
+            err.* = screen_snapshot.failure;
             return null;
         }
         return .{
@@ -2506,19 +2515,16 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
         return null;
     }
 
-    // The target's own dimensions rather than the ones the Roc value carries,
-    // for the reason `Capture.Writer.screenshot_texture!` gives: the readback is
-    // sized by what the GPU holds. A target too large for the whole budget and
-    // one that would fit but for other work in flight are both `err_busy`
-    // here; a readback reports one "not now" and the difference between them
-    // is in the documentation rather than in the tag.
+    // Budget the native source dimensions: the backend reads the whole
+    // target even when the caller asks for one pixel.
     var reserved: u64 = 0;
-    if (still_budget.admit(
+    const admission = still_budget.admit(
         @intCast(@max(target.texture.width, 0)),
         @intCast(@max(target.texture.height, 0)),
         &reserved,
-    ) != capture.err_none) {
-        err.* = capture.err_busy;
+    );
+    if (admission != capture.err_none) {
+        err.* = admission;
         return null;
     }
 
@@ -2543,6 +2549,7 @@ fn resolveReadbackSource(source: abi.HostCapture_pixel_atArg0Source, err: *u8) ?
 fn capturePixelError(code: u8) abi.HostCapture_pixel_atErr {
     return switch (code) {
         capture.err_busy => .busy,
+        capture.err_budget_exceeded => .budget_exceeded,
         capture.err_unavailable => .unavailable,
         capture.err_target_unavailable => .target_unavailable,
         capture.err_region_out_of_bounds => .region_out_of_bounds,
@@ -2550,12 +2557,9 @@ fn capturePixelError(code: u8) abi.HostCapture_pixel_atErr {
     };
 }
 
-fn pixelReadFailure(err: u8) abi.HostCapture_pixel_atResult {
-    return abiTryErr(abi.HostCapture_pixel_atResult, capturePixelError(err));
-}
-
-fn regionReadFailure(err: u8) abi.HostCapture_read_regionResult {
-    return abiTryErr(abi.HostCapture_read_regionResult, capturePixelError(err));
+fn captureReadFailure(comptime Result: type, effect: *EffectScope, err: u8) Result {
+    effect.setOutcome(if (err == capture.err_readback_failed) .runtime_error else .refused);
+    return abiTryErr(Result, capturePixelError(err));
 }
 
 /// `Capture.pixel_at!`: one pixel's colour, with nothing allocated to carry it.
@@ -2570,11 +2574,11 @@ fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.HostCapture_pixel_atArgs) 
     defer releaseResourceBox(roc_host, args.source.target.handle);
 
     var err: u8 = capture.err_readback_failed;
-    const pixels = resolveReadbackSource(args.source, &err) orelse return pixelReadFailure(err);
+    const pixels = resolveReadbackSource(args.source, &err) orelse return captureReadFailure(abi.HostCapture_pixel_atResult, &effect, err);
     defer pixels.deinit();
 
     const bounds = capture.validatePoint(args.x, args.y, pixels.width, pixels.height);
-    if (bounds != capture.err_none) return pixelReadFailure(bounds);
+    if (bounds != capture.err_none) return captureReadFailure(abi.HostCapture_pixel_atResult, &effect, bounds);
 
     const channels = capture.pixelAt(pixels.bytes, pixels.width, args.x, args.y);
     effect.setDrawMetrics(1, 4);
@@ -2602,30 +2606,32 @@ fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.HostCapture_read_region
     const region = capture.Region{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
 
     const bytes = capture.regionBytes(region) orelse
-        return regionReadFailure(capture.err_region_out_of_bounds);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_region_out_of_bounds);
+    if (region.x < 0 or region.y < 0)
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_region_out_of_bounds);
     if (bytes > capture.max_readback_bytes)
-        return regionReadFailure(capture.err_region_out_of_bounds);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_budget_exceeded);
 
-    if (!file_bytes_delivery_reservations.reserve(0)) return regionReadFailure(capture.err_busy);
+    if (!file_bytes_delivery_reservations.reserve(0)) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
     defer file_bytes_delivery_reservations.release(0);
 
     var err: u8 = capture.err_readback_failed;
-    const pixels = resolveReadbackSource(args.source, &err) orelse return regionReadFailure(err);
+    const pixels = resolveReadbackSource(args.source, &err) orelse return captureReadFailure(abi.HostCapture_read_regionResult, &effect, err);
     defer pixels.deinit();
 
     const bounds = capture.validateRegion(region, pixels.width, pixels.height);
-    if (bounds != capture.err_none) return regionReadFailure(bounds);
+    if (bounds != capture.err_none) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, bounds);
 
     const allocator = allocatorFromHost(roc_host);
     const copy = allocator.alloc(u8, @intCast(bytes)) catch
-        return regionReadFailure(capture.err_busy);
+        return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
     capture.copyRegion(copy, pixels.bytes, pixels.width, region);
 
     // The transfer itself, shared with every other handed-over byte list. Its
     // only refusal is a full heap, which is the same "no slot" this call
     // already reserved against and reports as `Busy`.
     const installed = installReadBytes(allocator, copy, 0);
-    if (installed.err != 0) return regionReadFailure(capture.err_busy);
+    if (installed.err != 0) return captureReadFailure(abi.HostCapture_read_regionResult, &effect, capture.err_busy);
     effect.addOwnershipTransferBytes(@intCast(bytes));
     effect.setDrawMetrics(@as(u64, @intCast(args.width)) *| @as(u64, @intCast(args.height)), bytes);
     return abiTryOk(abi.HostCapture_read_regionResult, installed.bytes);
@@ -12349,9 +12355,18 @@ fn serviceCaptureRequests() void {
     // per-frame readback exists only while an app is still reading pixels.
     const wants_snapshot = screen_snapshot_requested;
     screen_snapshot_requested = false;
-    if (!wants_snapshot) releaseScreenSnapshot();
+    releaseScreenSnapshot();
+    var snapshot_reservation = if (wants_snapshot)
+        reserveScreenSnapshot(
+            @intCast(@max(raylib.getRenderWidth(), 0)),
+            @intCast(@max(raylib.getRenderHeight(), 0)),
+        )
+    else
+        0;
+    defer if (snapshot_reservation != 0) still_budget.release(snapshot_reservation);
+    const can_snapshot = snapshot_reservation != 0;
 
-    if (!wants_screenshot and !wants_frame and !wants_snapshot) return;
+    if (!wants_screenshot and !wants_frame and !can_snapshot) return;
 
     capture_screenshot_pending = false;
 
@@ -12367,7 +12382,7 @@ fn serviceCaptureRequests() void {
     // full resolution, so a frame that has both falls through to the
     // full-resolution readback and the CPU resize below rather than reading
     // twice.
-    if (wants_frame and !wants_screenshot and !wants_snapshot) {
+    if (wants_frame and !wants_screenshot and !can_snapshot) {
         if (captureScaledFrame()) |scaled| {
             var frame = scaled;
             defer frame.deinit();
@@ -12380,7 +12395,7 @@ fn serviceCaptureRequests() void {
     var image = raylib.captureFramebuffer() orelse {
         // A snapshot that could not be taken must not leave the previous
         // frame's pixels behind for the app to read as if they were this one's.
-        if (wants_snapshot) releaseScreenSnapshot();
+        if (can_snapshot) screen_snapshot.failure = capture.err_readback_failed;
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
         if (wants_screenshot) {
             if (screenshot_wait) |wait| {
@@ -12392,7 +12407,10 @@ fn serviceCaptureRequests() void {
     };
     defer image.deinit();
 
-    if (wants_snapshot) storeScreenSnapshot(image);
+    if (can_snapshot) {
+        storeScreenSnapshot(image, snapshot_reservation);
+        snapshot_reservation = 0;
+    }
 
     if (wants_screenshot) {
         if (screenshot_wait) |wait| handOverScreenshot(wait, image);
@@ -16196,7 +16214,7 @@ test "a region past the readback cap never reaches a source" {
         .height = 4097,
     });
     try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, read.tag);
-    try std.testing.expectEqual(abi.HostCapture_read_regionErr.region_out_of_bounds, read.payload_err());
+    try std.testing.expectEqual(abi.HostCapture_read_regionErr.budget_exceeded, read.payload_err());
     try std.testing.expect(!screen_snapshot_requested);
 }
 
@@ -16233,6 +16251,38 @@ test "a screen readback with no presented frame is unavailable and arms the next
     try std.testing.expectEqual(abi.HostCapture_read_regionResultTag.Err, region.tag);
     try std.testing.expectEqual(abi.HostCapture_read_regionErr.unavailable, region.payload_err());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+}
+
+test "screen readback distinguishes oversized sources from temporary capture pressure" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        still_budget.reset();
+        active_roc_host = null;
+    }
+
+    try std.testing.expectEqual(@as(u64, 0), reserveScreenSnapshot(8192, 4097));
+    const oversized = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, oversized.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.budget_exceeded, oversized.payload_err());
+
+    var taken: u64 = 0;
+    try std.testing.expectEqual(capture.err_none, still_budget.admit(8192, 4096, &taken));
+    try std.testing.expectEqual(@as(u64, 0), reserveScreenSnapshot(4, 4));
+    const busy = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(abi.HostCapture_pixel_atResultTag.Err, busy.tag);
+    try std.testing.expectEqual(abi.HostCapture_pixel_atErr.busy, busy.payload_err());
+    try std.testing.expect(screen_snapshot_requested);
+
+    still_budget.release(taken);
+    const admitted = reserveScreenSnapshot(4, 4);
+    try std.testing.expectEqual(@as(u64, 64), admitted);
+    still_budget.release(admitted);
 }
 
 test "a render-target readback reports what the handle resolves to" {

@@ -520,14 +520,14 @@ def run_graphical_observatory_probe(
     executable = executable_for(staged)
     capture = staged.parent / "graphical-observatory.rrstats"
     print("\nRunning graphical Observatory probe...", end=" ", flush=True)
+    frames = 240 if example_name(example) == "http_fetch" else 3
     graphical_run = subprocess.run(
-        [
-            str(executable),
+        example_runtime(example.parent, executable, [
             "--host-hidden",
-            "--host-frames=3",
+            f"--host-frames={frames}",
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
-        ],
+        ]),
         # Match the ordinary windowed sweep and the published examples runner.
         cwd=example.parent,
         stdout=None if verbose else subprocess.PIPE,

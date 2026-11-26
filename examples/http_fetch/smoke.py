@@ -2,6 +2,7 @@
 
 import http.server
 import signal
+import socketserver
 import subprocess
 import sys
 import threading
@@ -28,10 +29,16 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class FixtureServer(socketserver.ThreadingTCPServer):
+    # HTTPServer resolves its own hostname on bind. This fixture uses only
+    # the numeric loopback address and leaves DNS out of startup too.
+    daemon_threads = True
+
+
 def main(executable, args):
     try:
-        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
-            url = f"http://127.0.0.1:{server.server_port}/fixture"
+        with FixtureServer(("127.0.0.1", 0), Fixture) as server:
+            url = f"http://127.0.0.1:{server.server_address[1]}/fixture"
             worker = threading.Thread(target=server.serve_forever, args=(0.05,))
             worker.start()
             try:

@@ -41,12 +41,9 @@ def compiler_args(roc: str, command: str, source: Path) -> list[str]:
     if name == "top_down" and version in {
         "Roc compiler version nightly-2026-11-23-b5c77fc",
         "Roc compiler version nightly-2026-11-24-ff5e544",
+        "Roc compiler version nightly-2026-11-25-d5a4f1e",
     }:
         return ["--no-cache"] if command == "check" else ["--specialize=yes"]
-    # November 25 still crashes in cached checks of the release archive and
-    # in unspecialized tests. The archive already requests a specialized build.
-    if name == "top_down" and version == "Roc compiler version nightly-2026-11-25-d5a4f1e":
-        return {"check": ["--no-cache"], "test": ["--specialize=yes"]}.get(command, [])
     if version != f"Roc compiler version {AFFECTED_NIGHTLY}":
         return []
     # The unspecialized dev lowering crashes intermittently on Linux/macOS/Windows,

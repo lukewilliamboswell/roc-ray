@@ -136,7 +136,8 @@ def run_cmd(
 
     merged_env = {**os.environ, **(env or {})}
 
-    # On Windows, use shell=True so subprocess can find executables in PATH
+    # On Windows, use the shell for PATH lookup when the executable is not
+    # the already-resolved Python interpreter.
     try:
         result = subprocess.run(
             cmd,
@@ -144,7 +145,7 @@ def run_cmd(
             text=True,
             env=merged_env,
             cwd=cwd,
-            shell=IS_WINDOWS,
+            shell=IS_WINDOWS and cmd[0] != sys.executable,
             timeout=COMMAND_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as timeout:
@@ -283,12 +284,11 @@ def run_headless_examples(
             failed.append(f"headless run {name} (missing executable)")
             continue
 
+        # The HTTP case allows the task to deliver its response before exiting.
+        case_frames = max(frames, 240) if name == "http_fetch" else frames
+        args = ["--host-headless", f"--host-headless-frames={case_frames}"]
         ok = run_cmd(
-            [
-                str(executable),
-                "--host-headless",
-                f"--host-headless-frames={frames}",
-            ],
+            example_runtime(example.parent, executable, args),
             f"headless run {name}",
             verbose,
             cwd=example.parent,
@@ -300,6 +300,12 @@ def run_headless_examples(
             failed.append(f"headless run {name}")
 
     return failed
+
+
+def example_runtime(directory: Path, executable: Path, args: list[str]) -> list[str]:
+    if directory.name == "http_fetch":
+        return [sys.executable, str(directory / "smoke.py"), str(executable), *args]
+    return [str(executable), *args]
 
 
 TEST_SPEC_PATH = Path(__file__).resolve().parent / "test_spec.json"
@@ -375,12 +381,13 @@ def _check_windowed_case(
         for stale in root.glob(expect_png["glob"]):
             stale.unlink()
 
-    cmd = [str(executable), "--host-hidden", f"--host-frames={frames}"]
+    args = ["--host-hidden", f"--host-frames={frames}"]
     if "keys" in case:
-        cmd.append(f"--host-keys={case['keys']}")
+        args.append(f"--host-keys={case['keys']}")
     if "text" in case:
-        cmd.append(f"--host-text={case['text']}")
-    cmd.extend(case.get("args", []))
+        args.append(f"--host-text={case['text']}")
+    args.extend(case.get("args", []))
+    cmd = example_runtime(root, executable, args)
 
     if verbose:
         print(f"    Running: {' '.join(cmd)}")
@@ -391,7 +398,7 @@ def _check_windowed_case(
             text=True,
             cwd=root,
             timeout=timeout,
-            shell=IS_WINDOWS,
+            shell=IS_WINDOWS and cmd[0] != sys.executable,
         )
     except subprocess.TimeoutExpired:
         return [f"timed out after {timeout}s"]
@@ -513,14 +520,14 @@ def run_graphical_observatory_probe(
     executable = executable_for(staged)
     capture = staged.parent / "graphical-observatory.rrstats"
     print("\nRunning graphical Observatory probe...", end=" ", flush=True)
+    frames = 240 if example_name(example) == "http_fetch" else 3
     graphical_run = subprocess.run(
-        [
-            str(executable),
+        example_runtime(example.parent, executable, [
             "--host-hidden",
-            "--host-frames=3",
+            f"--host-frames={frames}",
             f"--host-stats-output={capture}",
             "--host-stats-detail=full",
-        ],
+        ]),
         # Match the ordinary windowed sweep and the published examples runner.
         cwd=example.parent,
         stdout=None if verbose else subprocess.PIPE,

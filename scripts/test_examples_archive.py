@@ -103,6 +103,10 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
         path = app["path"]
         name = Path(path).parent.name
         executable = bin_dir / (name + (".exe" if IS_WINDOWS else ""))
+        runtime = [
+            arg.replace("{executable}", str(executable)).replace("{suite}", str(root))
+            for arg in app.get("run", [])
+        ] or [str(executable)]
         print(f"[{position}/{len(apps)}] {path}")
         built = True
         build_args = list(dict.fromkeys([*compiler_args(roc, "build", Path(path)), *app.get("build_args", [])]))
@@ -126,7 +130,7 @@ def run_suite(roc: str, root: Path, spec: dict, release_url: str, local_url: str
             if not built:
                 continue
             started = time.monotonic()
-            ran = run([str(executable), *case["args"]], (root / path).parent, env, case["stdin"].encode("utf-8"), CASE_TIMEOUT)
+            ran = run([*runtime, *case["args"]], (root / path).parent, env, case["stdin"].encode("utf-8"), CASE_TIMEOUT)
             elapsed = int((time.monotonic() - started) * 1000)
             problems = compare(case, ran)
             print(f"  {case['name']}: {'ok' if not problems else 'FAILED'} ({elapsed} ms)")

@@ -170,15 +170,16 @@
     },
     {
       "path": "examples/http_fetch/main.roc",
+      "run": ["python3", "{suite}/examples/http_fetch/smoke.py", "{executable}"],
       "cases": [
         {
           "name": "headless",
           "args": [
             "--host-headless",
-            "--host-headless-frames=60"
+            "--host-headless-frames=240"
           ],
           "stdin": "",
-          "stdout": "",
+          "stdout": "http_fetch: received the fixture response\n",
           "stderr": "",
           "exit_code": 0
         }

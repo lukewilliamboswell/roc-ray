@@ -178,22 +178,35 @@ class PackageExamplesTests(unittest.TestCase):
             )
             self.assertIn(NEXT_URL, readme)
 
-    def test_archive_case_reads_assets_beside_its_app(self) -> None:
+    def test_archived_launcher_runs_the_built_app_beside_its_assets(self) -> None:
         import test_examples_archive as runner
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.make_repo(root)
+            examples = self.make_repo(root)
+            launcher = examples / "pong" / "fixture.py"
+            launcher.write_text(
+                "import subprocess, sys\n"
+                "raise SystemExit(subprocess.call([sys.executable, *sys.argv[1:], 'fixture']))\n",
+                encoding="utf-8",
+            )
+            git(root, "add", "examples")
+            spec_path = root / "test" / "examples-spec.json"
+            recorded = json.loads(spec_path.read_text())
+            app = recorded["apps"][0]
+            app["run"] = [sys.executable, "{suite}/examples/pong/fixture.py", "{executable}"]
+            app["build_args"] = ["--specialize=yes"]
+            app["cases"][0].update(
+                args=["case"], stdin="input", stdout="89504e472062616c6c input case fixture\n",
+            )
+            spec_path.write_text(json.dumps(recorded), encoding="utf-8")
             output = root / f"{ARCHIVE}.zip"
             self.assertEqual(0, self.package(root, output).returncode)
             suite = runner.extract(output, root / "extracted")
             spec = json.loads((suite / "spec.json").read_text())
             # Execute a real asset reader. Only compiler work is simulated;
             # neither the case's working directory nor file access is mocked.
-            case = spec["apps"][0]["cases"][0]
-            case.update(stdin="input", stdout="89504e472062616c6c input\n")
             spec["apps"] = spec["apps"][:1]
-            spec["apps"][0]["build_args"] = ["--specialize=yes"]
             real_run = runner.run
             compiler_directories = []
 
@@ -209,10 +222,10 @@ class PackageExamplesTests(unittest.TestCase):
                         executable.write_text(
                             "from pathlib import Path\n"
                             "import sys\n"
-                            "print(Path('assets/ball.png').read_bytes().hex(), sys.stdin.read())\n"
+                            "print(Path('assets/ball.png').read_bytes().hex(), sys.stdin.read(), *sys.argv[1:])\n"
                         )
                     return subprocess.CompletedProcess(argv, 0, b"", b"")
-                return real_run([sys.executable, *argv], cwd, env, stdin, timeout)
+                return real_run(argv, cwd, env, stdin, timeout)
 
             with unittest.mock.patch.object(runner, "run", side_effect=compile_or_run):
                 failures = runner.run_suite(

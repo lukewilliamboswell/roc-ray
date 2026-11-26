@@ -35,6 +35,14 @@ class CompilerOptionsTests(unittest.TestCase):
                     self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", command, top_down))
                 self.assertEqual([], roc_options.compiler_args("roc", "test", Path("platform/Devices.roc")))
 
+    def test_november_25_workarounds_are_confined_to_top_down_checks_and_tests(self):
+        top_down = Path("examples/top_down/main.roc")
+        with patch.object(roc_options, "compiler_version", return_value="Roc compiler version nightly-2026-11-25-d5a4f1e"):
+            self.assertEqual(["--no-cache"], roc_options.compiler_args("roc", "check", top_down))
+            self.assertEqual(["--specialize=yes"], roc_options.compiler_args("roc", "test", top_down))
+            self.assertEqual([], roc_options.compiler_args("roc", "build", top_down))
+            self.assertEqual([], roc_options.compiler_args("roc", "test", Path("platform/Devices.roc")))
+
     def test_native_lowering_workaround_retains_cache(self):
         with patch.object(roc_options, "compiler_version", return_value="Roc compiler version nightly-2026-11-18-a520eed"):
             for command in ["build", "test"]:

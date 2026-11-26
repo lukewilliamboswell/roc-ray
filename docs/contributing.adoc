@@ -196,9 +196,11 @@ in `scripts/roc_options.py` apply only to the named commands and compiler:
 November 18's cached `Devices` tests stall, cached Doom tests crash, and cached
 `top_down` checks crash. Its unspecialized native builds and tests also crash with
 fresh compilation, so this one example enables development specialization
-while retaining the cache. The released examples specification carries that
-build option for nightly compatibility testing. Other compilers use the cache
-normally. On this compiler, cached Pong, Snake, and SQLite Scores tests also
+while retaining the cache. The November 23–25 nightlies still need uncached
+`top_down` checks and specialized tests. November 23 and 24 also need
+specialized builds. The released examples specification requests a
+specialized build for nightly compatibility testing. On November 18,
+cached Pong, Snake, and SQLite Scores tests also
 fail with `OutOfMemory` on Intel macOS, as do the eight tutorial tests on
 Windows; those exact test commands compile from source on those hosts.
 Privacy fixtures compile from source so cached results cannot stand

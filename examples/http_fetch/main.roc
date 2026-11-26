@@ -365,6 +365,8 @@ state_color = |state|
 expect chosen_url(["--url", "http://example.test/"]) == "http://example.test/"
 expect chosen_url([]) == default_url
 expect chosen_url(["--url"]) == default_url
+expect chosen_url(["--smoke"]) == ""
+expect chosen_url(["--smoke", "--url", "http://127.0.0.1:8000/fixture"]) == "http://127.0.0.1:8000/fixture"
 
 # The declared origin is the fetched URL's, whichever URL that is.
 expect startup_config(["--url", "http://example.test:8080/data.json"]).permissions() == [HttpOrigin("http://example.test:8080/data.json")]

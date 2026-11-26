@@ -1,0 +1,5 @@
+= RocRay 0.13.1
+
+The automated HTTP example now checks that the application receives a
+known response from a local test server. The published example suite can
+run the case without depending on a public website or DNS.

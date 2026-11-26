@@ -31,6 +31,7 @@ import http.Response
 Model : {
 	url : Str,
 	state : State,
+	smoke : Bool,
 
 	## Which fetch the panel is showing.
 	##
@@ -60,6 +61,8 @@ Msg : [Arrived(U64, U16, Str), Broke(U64, Str)]
 default_url : Str
 default_url = "https://www.roc-lang.org/"
 
+smoke_body = "RocRay HTTP smoke response"
+
 ## Lines of the body to show. More than this and the panel stops being a
 ## preview and starts being a bad text viewer.
 preview_lines = 12.U64
@@ -75,10 +78,11 @@ init! = App.init_for_args(
 	startup_config,
 	|io| {
 		font = Draw.default_font!()
-		url = chosen_url(io.args!())
+		args = io.args!()
 		Ok({
-			url,
+			url: chosen_url(args),
 			state: Waiting,
+			smoke: args.contains("--smoke"),
 			fetch: 0,
 			elapsed: 0,
 			started_waiting: 0,
@@ -100,7 +104,11 @@ chosen_url = |args| {
 		}
 		$index = $index + 1
 	}
-	if ($found != "") $found else default_url
+	if $found != "" or args.contains("--smoke") {
+		$found
+	} else {
+		default_url
+	}
 }
 
 ## Declare the one origin this run fetches from, and nothing else.
@@ -130,6 +138,29 @@ update! = |model, input, io| {
 	# Folded against the id being waited for, so whatever an abandoned fetch
 	# delivers on this cycle goes the same way the fetch itself did.
 	state = List.fold(input.messages, model.state, |current, message| apply(current, message, fetch, elapsed - model.started_waiting))
+
+	if model.smoke {
+		match state {
+			Loaded(response) if response.status == 200 and response.lines == [smoke_body] and response.bytes == List.len(Str.to_utf8(smoke_body)) => {
+				_ = io.stdout().line!("http_fetch: received the fixture response")
+				# The launcher distinguishes this from a normal exit at the host's frame cap.
+				return Err(Exit(42))
+			}
+			Loaded(_) => {
+				_ = io.stdout().line!("http_fetch: unexpected fixture response")
+				return Err(Exit(1))
+			}
+			Failed(reason) => {
+				_ = io.stdout().line!("http_fetch: ${reason}")
+				return Err(Exit(1))
+			}
+			Waiting if input.time.cycle_count >= 180 => {
+				_ = io.stdout().line!("http_fetch: fixture response did not arrive")
+				return Err(Exit(1))
+			}
+			Waiting => {}
+		}
+	}
 
 	if refetch {
 		url = model.url
